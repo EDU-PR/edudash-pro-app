@@ -14,10 +14,10 @@ export type {
   CallSignalPayload,
   CallSignal,
   OutgoingCallParams,
+  CallStartOptions,
   CallContextType,
   DailyParticipant,
   DailyCallState,
   DailyRoomResponse,
   DailyTokenResponse,
 } from '../../lib/calls/types';
-

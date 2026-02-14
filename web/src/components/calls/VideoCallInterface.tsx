@@ -28,9 +28,11 @@ interface VideoCallInterfaceProps {
   isOpen: boolean;
   onClose: () => void;
   roomName?: string;
+  meetingUrl?: string;
   userName?: string;
   isOwner?: boolean;
   calleeId?: string;
+  threadId?: string;
   callId?: string; // Call ID for tracking (callee gets this from answering call)
   onCallStateChange?: (state: CallState) => void;
 }
@@ -39,9 +41,11 @@ export const VideoCallInterface = ({
   isOpen,
   onClose,
   roomName,
+  meetingUrl,
   userName,
   isOwner = false,
   calleeId,
+  threadId,
   callId,
   onCallStateChange,
 }: VideoCallInterfaceProps) => {
@@ -210,7 +214,7 @@ export const VideoCallInterface = ({
 
   // Initialize call
   useEffect(() => {
-    if (!isOpen || !roomName) return;
+    if (!isOpen || (!roomName && !meetingUrl)) return;
 
     let isCleanedUp = false;
 
@@ -243,7 +247,9 @@ export const VideoCallInterface = ({
 
         let roomUrl: string;
 
-        if (isOwner) {
+        if (meetingUrl) {
+          roomUrl = meetingUrl;
+        } else if (isOwner) {
           // Create P2P room
           const roomResponse = await fetch('/api/daily/rooms', {
             method: 'POST',
@@ -284,6 +290,7 @@ export const VideoCallInterface = ({
               call_id: callId,
               caller_id: userId,
               callee_id: calleeId,
+              thread_id: threadId || null,
               call_type: 'video',
               status: 'ringing',
               caller_name: callerName,
@@ -299,6 +306,7 @@ export const VideoCallInterface = ({
                 meeting_url: roomUrl,
                 call_type: 'video',
                 caller_name: callerName,
+                thread_id: threadId,
               },
             });
 
@@ -318,9 +326,15 @@ export const VideoCallInterface = ({
                   data: { 
                     callId, 
                     callType: 'video', 
+                    call_id: callId,
+                    call_type: 'video',
                     callerId: userId, 
+                    caller_id: userId,
                     callerName, 
+                    caller_name: callerName,
                     roomUrl,
+                    threadId: threadId || undefined,
+                    thread_id: threadId || undefined,
                     type: 'call',
                   },
                 }),
@@ -342,7 +356,7 @@ export const VideoCallInterface = ({
           roomUrl = `https://edudashpro.daily.co/${roomName}`;
         }
 
-        const actualRoomName = roomUrl.split('/').pop() || roomName;
+        const actualRoomName = roomUrl.split('/').pop() || roomName || '';
 
         // Get token
         const response = await fetch('/api/daily/token', {
@@ -463,7 +477,7 @@ export const VideoCallInterface = ({
         dailyCallRef.current = null;
       }
     };
-  }, [isOpen, roomName, userName, isOwner, calleeId, supabase]);
+  }, [isOpen, roomName, meetingUrl, userName, isOwner, calleeId, threadId, supabase]);
 
   // Toggle video
   const toggleVideo = useCallback(async () => {

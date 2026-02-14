@@ -43,6 +43,7 @@ import { CALL_NOTIFICATION_EVENTS, setupForegroundEventListener } from './hooks/
 import { usePresence } from '@/hooks/usePresence';
 import type {
   ActiveCall,
+  CallStartOptions,
   CallContextType,
   CallSignal,
   CallSignalPayload,
@@ -90,6 +91,7 @@ export function CallProvider({ children }: CallProviderProps) {
   const [isCallInterfaceOpen, setIsCallInterfaceOpen] = useState(false);
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
+  const [isSwitchingMode, setIsSwitchingMode] = useState(false);
   const [callerPhotoUrl, setCallerPhotoUrl] = useState<string | null>(null);
   // appState tracked via ref only – setting React state here caused
   // full re-renders of the entire provider tree on every AppState flicker.
@@ -286,6 +288,7 @@ export function CallProvider({ children }: CallProviderProps) {
           call_id: pendingCall.call_id,
           caller_id: pendingCall.caller_id,
           callee_id: currentUserId || '',
+          thread_id: (pendingCall as any).thread_id || null,
           call_type: pendingCall.call_type,
           status: 'ringing',
           caller_name: pendingCall.caller_name,
@@ -518,6 +521,7 @@ export function CallProvider({ children }: CallProviderProps) {
         call_id: data.call_id as string,
         caller_id: data.caller_id as string,
         callee_id: currentUserIdRef.current || '',
+        thread_id: (data.thread_id as string | undefined) || null,
         caller_name: data.caller_name as string || 'Unknown',
         call_type: (data.call_type as 'voice' | 'video') || 'voice',
         status: 'ringing',
@@ -677,11 +681,68 @@ export function CallProvider({ children }: CallProviderProps) {
           table: 'call_signals',
           filter: `to_user_id=eq.${currentUserId}`,
         },
-        (payload: { new: CallSignal }) => {
+        async (payload: { new: CallSignal }) => {
           const signal = payload.new;
+          const signalPayload = signal.payload as CallSignalPayload | null;
+
+          if (signal.signal_type === 'upgrade_to_video' || signal.signal_type === 'upgrade_ack') {
+            const nextMeetingUrl = signalPayload?.meeting_url;
+            const nextThreadId = (signal.payload as any)?.thread_id as string | undefined;
+
+            setIncomingCall((prev) => {
+              if (!prev || prev.call_id !== signal.call_id) return prev;
+              return {
+                ...prev,
+                call_type: 'video',
+                meeting_url: nextMeetingUrl || prev.meeting_url,
+                thread_id: nextThreadId || prev.thread_id,
+              };
+            });
+
+            setAnsweringCall((prev) => {
+              if (!prev || prev.call_id !== signal.call_id) return prev;
+              return {
+                ...prev,
+                call_type: 'video',
+                meeting_url: nextMeetingUrl || prev.meeting_url,
+                thread_id: nextThreadId || prev.thread_id,
+              };
+            });
+
+            setOutgoingCall((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                callType: 'video',
+                callId: prev.callId || signal.call_id,
+                meetingUrl: nextMeetingUrl || prev.meetingUrl,
+                threadId: nextThreadId || prev.threadId,
+                roomName: prev.roomName || `call-${signal.call_id}`,
+              };
+            });
+
+            if (signal.signal_type === 'upgrade_to_video') {
+              try {
+                await getSupabase().from('call_signals').insert({
+                  call_id: signal.call_id,
+                  from_user_id: currentUserId,
+                  to_user_id: signal.from_user_id,
+                  signal_type: 'upgrade_ack',
+                  payload: {
+                    call_type: 'video',
+                    meeting_url: nextMeetingUrl,
+                    thread_id: nextThreadId,
+                  },
+                });
+              } catch (ackError) {
+                console.warn('[CallProvider] Failed to send upgrade ack:', ackError);
+              }
+            }
+            return;
+          }
+
           if (signal.signal_type !== 'offer') return;
 
-          const signalPayload = signal.payload as CallSignalPayload | null;
           const meetingUrl = signalPayload?.meeting_url;
           if (!meetingUrl) return;
 
@@ -703,6 +764,7 @@ export function CallProvider({ children }: CallProviderProps) {
               status: 'ringing',
               caller_name: signalPayload?.caller_name || 'Unknown',
               meeting_url: meetingUrl,
+              thread_id: (signal.payload as any)?.thread_id as string | undefined,
               started_at: signal.created_at,
             };
           });
@@ -717,7 +779,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Start voice call
   const startVoiceCall = useCallback(
-    async (userId: string, userName?: string) => {
+    async (userId: string, userName?: string, options?: CallStartOptions) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
@@ -751,7 +813,13 @@ export function CallProvider({ children }: CallProviderProps) {
       
       console.log('[CallProvider] Starting call (user online:', userOnline, ')');
       
-      setOutgoingCall({ userId, userName, callType: 'voice' });
+      setOutgoingCall({
+        userId,
+        userName,
+        callType: 'voice',
+        threadId: options?.threadId,
+        roomName: `voice-${Date.now()}`,
+      });
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
@@ -760,7 +828,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Start video call
   const startVideoCall = useCallback(
-    async (userId: string, userName?: string) => {
+    async (userId: string, userName?: string, options?: CallStartOptions) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
@@ -793,7 +861,13 @@ export function CallProvider({ children }: CallProviderProps) {
       
       console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
       
-      setOutgoingCall({ userId, userName, callType: 'video' });
+      setOutgoingCall({
+        userId,
+        userName,
+        callType: 'video',
+        threadId: options?.threadId,
+        roomName: `call-${Date.now()}`,
+      });
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
@@ -917,24 +991,90 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall, outgoingCall]);
 
-  // Switch from voice to video call
-  const switchToVideoCall = useCallback(() => {
-    if (outgoingCall && outgoingCall.callType === 'voice') {
-      console.log('[CallProvider] Switching from voice to video call');
-      // Update the call type to video - this will cause a re-render
-      // and switch to the video call interface
-      setOutgoingCall({
-        ...outgoingCall,
-        callType: 'video',
+  // Switch from voice to video without ending the active call session.
+  const switchToVideoCall = useCallback(async () => {
+    if (!currentUserId || isSwitchingMode) return;
+
+    const currentCallId = answeringCall?.call_id || outgoingCall?.callId || null;
+    const peerUserId = answeringCall?.caller_id || outgoingCall?.userId || null;
+    if (!peerUserId) return;
+
+    setIsSwitchingMode(true);
+    try {
+      let callRecord: Pick<ActiveCall, 'call_id' | 'meeting_url' | 'thread_id'> | null = null;
+
+      if (currentCallId) {
+        const { data } = await getSupabase()
+          .from('active_calls')
+          .select('call_id, meeting_url, thread_id')
+          .eq('call_id', currentCallId)
+          .maybeSingle();
+        callRecord = data as any;
+      }
+
+      if (!callRecord) {
+        const { data } = await getSupabase()
+          .from('active_calls')
+          .select('call_id, meeting_url, thread_id')
+          .eq('caller_id', currentUserId)
+          .eq('callee_id', peerUserId)
+          .in('status', ['ringing', 'connected'])
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        callRecord = data as any;
+      }
+
+      if (!callRecord?.call_id) {
+        toast.warn('Could not locate an active call to upgrade.');
+        return;
+      }
+
+      await getSupabase()
+        .from('active_calls')
+        .update({ call_type: 'video' })
+        .eq('call_id', callRecord.call_id);
+
+      await getSupabase().from('call_signals').insert({
+        call_id: callRecord.call_id,
+        from_user_id: currentUserId,
+        to_user_id: peerUserId,
+        signal_type: 'upgrade_to_video',
+        payload: {
+          call_type: 'video',
+          meeting_url: callRecord.meeting_url,
+          thread_id: callRecord.thread_id || outgoingCall?.threadId || answeringCall?.thread_id,
+        },
       });
-    } else if (answeringCall && answeringCall.call_type === 'voice') {
-      console.log('[CallProvider] Switching answered voice to video call');
-      setAnsweringCall({
-        ...answeringCall,
-        call_type: 'video',
+
+      setOutgoingCall((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          callType: 'video',
+          callId: callRecord?.call_id || prev.callId,
+          meetingUrl: callRecord?.meeting_url || prev.meetingUrl,
+          threadId: (callRecord?.thread_id as string | undefined) || prev.threadId,
+          roomName: prev.roomName || `call-${callRecord?.call_id}`,
+        };
       });
+
+      setAnsweringCall((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          call_type: 'video',
+          meeting_url: callRecord?.meeting_url || prev.meeting_url,
+          thread_id: (callRecord?.thread_id as string | undefined) || prev.thread_id,
+        };
+      });
+    } catch (error) {
+      console.warn('[CallProvider] Failed to switch to video:', error);
+      toast.error('Could not switch to video. Please try again.');
+    } finally {
+      setIsSwitchingMode(false);
     }
-  }, [outgoingCall, answeringCall]);
+  }, [answeringCall, currentUserId, isSwitchingMode, outgoingCall]);
 
   // Calculate derived state
   const isCallActive = isCallInterfaceOpen || !!incomingCall;
@@ -984,10 +1124,13 @@ export function CallProvider({ children }: CallProviderProps) {
         <VoiceCallInterface
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={endCall}
-          roomName={`voice-${Date.now()}`}
+          roomName={outgoingCall.roomName || `voice-${outgoingCall.userId}`}
           userName={outgoingCall.userName}
           isOwner={true}
           calleeId={outgoingCall.userId}
+          callId={outgoingCall.callId}
+          meetingUrl={outgoingCall.meetingUrl}
+          threadId={outgoingCall.threadId}
           onSwitchToVideo={switchToVideoCall}
         />
       )}
@@ -997,11 +1140,14 @@ export function CallProvider({ children }: CallProviderProps) {
         <WhatsAppStyleVideoCall
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={endCall}
-          roomName={`call-${Date.now()}`}
+          roomName={outgoingCall.roomName || `call-${outgoingCall.userId}`}
           userName={outgoingCall.userName}
           remoteUserName={outgoingCall.userName}
           isOwner={true}
           calleeId={outgoingCall.userId}
+          callId={outgoingCall.callId}
+          meetingUrl={outgoingCall.meetingUrl}
+          threadId={outgoingCall.threadId}
         />
       )}
 
@@ -1015,6 +1161,7 @@ export function CallProvider({ children }: CallProviderProps) {
           isOwner={false}
           callId={answeringCall.call_id}
           meetingUrl={answeringCall.meeting_url}
+          threadId={answeringCall.thread_id || undefined}
           onSwitchToVideo={switchToVideoCall}
         />
       )}
@@ -1037,6 +1184,7 @@ export function CallProvider({ children }: CallProviderProps) {
           isOwner={false}
           callId={answeringCall.call_id}
           meetingUrl={answeringCall.meeting_url}
+          threadId={answeringCall.thread_id || undefined}
         />
       )}
     </CallContext.Provider>

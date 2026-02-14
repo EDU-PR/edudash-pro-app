@@ -138,6 +138,14 @@ export default function TeacherMessageListScreen() {
     router.push('/screens/dash-assistant');
   }, []);
 
+  const handleHeaderSelectionToggle = useCallback(() => {
+    if (selectionMode) {
+      clearSelection();
+      return;
+    }
+    setSelectionMode(true);
+  }, [clearSelection, selectionMode]);
+
   const handleSettings = useCallback(() => {
     router.push('/screens/settings');
   }, []);
@@ -174,6 +182,8 @@ export default function TeacherMessageListScreen() {
     title: t('teacher.messages', { defaultValue: 'Messages' }),
     onNewMessage: handleStartNewMessage,
     onSettings: handleSettings,
+    rightActionLabel: selectionMode ? 'Done' : 'Select',
+    onRightActionPress: handleHeaderSelectionToggle,
   };
 
   const dashAIProps = {

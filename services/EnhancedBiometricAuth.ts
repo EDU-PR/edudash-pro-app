@@ -454,6 +454,55 @@ export class EnhancedBiometricAuth {
   }
 
   /**
+   * Restore a Supabase session for a specific user WITHOUT biometric verification.
+   * Used when biometrics aren't enrolled but the user has a stored refresh token.
+   * This is safe because the user is already authenticated on the device.
+   */
+  static async restoreSessionForUser(userId: string): Promise<{
+    success: boolean;
+    userData?: BiometricSessionData;
+    sessionRestored?: boolean;
+    error?: string;
+  }> {
+    try {
+      const sessions = await getSessionsMap();
+      const sessionData = sessions[userId];
+      if (!sessionData) {
+        return {
+          success: false,
+          error: 'No stored session found for this account. Please sign in with your password.',
+        };
+      }
+
+      // Check if session has expired (30-day biometric session window)
+      if (new Date(sessionData.expiresAt) < new Date()) {
+        return {
+          success: false,
+          error: 'Your saved session has expired. Please sign in with your password.',
+        };
+      }
+
+      // Delegate to the shared session restoration logic
+      const sessionRestored = await this.restoreSupabaseSession(sessionData);
+
+      // Update active user and last used timestamp
+      sessionData.lastUsed = new Date().toISOString();
+      const newMap = await getSessionsMap();
+      newMap[userId] = sessionData;
+      await setSessionsMap(newMap);
+      await setActiveUserId(userId);
+
+      return { success: true, userData: sessionData, sessionRestored };
+    } catch (error) {
+      console.error('restoreSessionForUser error:', error);
+      return {
+        success: false,
+        error: 'Failed to restore session. Please sign in manually.',
+      };
+    }
+  }
+
+  /**
    * Setup biometric authentication for a user after successful password login.
    * Returns { success, reason? } — callers should display alerts to the user.
    */

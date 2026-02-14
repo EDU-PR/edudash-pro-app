@@ -16,8 +16,7 @@ import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { router } from 'expo-router';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
-import { fetchEnhancedUserProfile } from '@/lib/rbac';
-import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
+import { clearAllNavigationLocks } from '@/lib/routeAfterLogin';
 import { signOutAndRedirect } from '@/lib/authActions';
 import { setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
@@ -108,42 +107,20 @@ export function ProfileSwitcher({
       return;
     }
 
-    if (!biometricAvailable) {
-      showAlert({
-        title: t('account.biometric_unavailable_title', { defaultValue: 'Biometrics Unavailable' }),
-        message: t('account.biometric_unavailable_message', {
-          defaultValue: 'This device does not have biometrics enabled. To switch accounts, please sign in manually.',
-        }),
-        type: 'warning',
-        buttons: [
-          { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-          {
-            text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
-            style: 'default',
-            onPress: () => {
-              onClose();
-              signOutAndRedirect({
-                clearBiometrics: false,
-                resetApp: false,
-                redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
-              });
-            },
-          },
-        ],
-      });
-      return;
-    }
-
     try {
       setSwitching(account.userId);
       
       track('account.switch_attempt', {
         from_user_id: user?.id,
         to_user_id: account.userId,
+        method: biometricAvailable ? 'biometric' : 'token',
       });
 
-      // Authenticate with biometrics and restore session
-      const result = await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId);
+      // Use biometric auth when available, otherwise restore via stored refresh token.
+      // Token-based restore is safe — the user is already authenticated on this device.
+      const result = biometricAvailable
+        ? await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId)
+        : await EnhancedBiometricAuth.restoreSessionForUser(account.userId);
 
       if (!result.success) {
         showAlert({
@@ -192,31 +169,10 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
-        const { data } = await assertSupabase().auth.getUser();
-        const authUser = data?.user || ({ id: account.userId, email: account.email } as any);
-
-        if (!authUser?.id) {
-          router.replace('/(auth)/sign-in');
-          return;
-        }
-
-        let enhancedProfile = null;
-        try {
-          enhancedProfile = await fetchEnhancedUserProfile(authUser.id || account.userId, authUser ? { user: authUser as any } : undefined);
-        } catch (profileError) {
-          console.warn('[ProfileSwitcher] Failed to fetch enhanced profile:', profileError);
-        }
-
-        try {
-          await routeAfterLogin(authUser, enhancedProfile);
-        } catch (routeError) {
-          console.error('[ProfileSwitcher] routeAfterLogin failed:', routeError);
-          if (Platform.OS === 'web') {
-            (globalThis as any)?.location?.replace?.('/profiles-gate');
-          } else {
-            router.replace('/profiles-gate');
-          }
-        }
+        // Routing is handled by the auth pipeline:
+        // session restore fires SIGNED_IN → handleSignedIn → routeAfterLogin.
+        // We do NOT call routeAfterLogin directly to avoid competing routes.
+        console.log('[ProfileSwitcher] Session restored, auth pipeline will handle routing');
       } else {
         // Session couldn't be restored - need to sign in again
         showAlert({
@@ -316,9 +272,9 @@ export function ProfileSwitcher({
     // won't redirect us back to the dashboard before the URL
     // search params propagate.
     setAccountSwitchPending();
-    // Navigate directly — DO NOT sign out. This keeps the current user's
-    // refresh token valid so biometric switching back works.
-    router.push('/(auth)/sign-in?switch=1&addAccount=1');
+    // Navigate with replace — removes old dashboard from back stack so
+    // users can't press back into a stale/wrong-user dashboard.
+    router.replace('/(auth)/sign-in?switch=1&addAccount=1' as any);
   }, [onClose, user?.id, user?.email, profile]);
 
   // Format last used date
@@ -400,10 +356,7 @@ export function ProfileSwitcher({
         {t('account.no_accounts', { defaultValue: 'No Saved Accounts' })}
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-        {biometricAvailable
-          ? t('account.enable_biometric_hint', { defaultValue: 'Enable biometric login to quickly switch between accounts' })
-          : t('account.biometric_not_available', { defaultValue: 'Set up biometrics on your device to use quick account switching' })
-        }
+        {t('account.no_accounts_hint', { defaultValue: 'Sign in with another account to enable quick switching' })}
       </Text>
     </View>
   );
@@ -425,7 +378,7 @@ export function ProfileSwitcher({
               {t('account.switch_account', { defaultValue: 'Switch Account' })}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {t('account.switch_account_desc', { defaultValue: 'Quick switch with biometric authentication' })}
+              {t('account.switch_account_desc', { defaultValue: 'Tap an account to switch instantly' })}
             </Text>
           </View>
 

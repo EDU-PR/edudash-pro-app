@@ -107,6 +107,7 @@ interface WhatsAppStyleVideoCallProps {
   calleeId?: string;
   callId?: string;
   meetingUrl?: string;
+  threadId?: string;
   onCallStateChange?: (state: CallState) => void;
   onMinimize?: () => void;
 }
@@ -123,6 +124,7 @@ export function WhatsAppStyleVideoCall({
   calleeId,
   callId,
   meetingUrl,
+  threadId,
   onCallStateChange,
   onMinimize,
 }: WhatsAppStyleVideoCallProps) {
@@ -901,6 +903,7 @@ export function WhatsAppStyleVideoCall({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
+              thread_id: threadId || null,
               call_type: 'video',
               status: 'ringing',
               caller_name: callerName,
@@ -922,6 +925,7 @@ export function WhatsAppStyleVideoCall({
                 caller_name: callerName,
                 call_type: 'video',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => res.json()).then(result => {
               if (result.success) {
@@ -954,6 +958,7 @@ export function WhatsAppStyleVideoCall({
                 caller_name: callerName,
                 call_type: 'video',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => {
               if (res.ok) {
@@ -976,6 +981,7 @@ export function WhatsAppStyleVideoCall({
                 meeting_url: roomUrl,
                 call_type: 'video',
                 caller_name: callerName,
+                thread_id: threadId,
               },
             });
 
@@ -1369,7 +1375,7 @@ export function WhatsAppStyleVideoCall({
       isCleanedUp = true;
       cleanupCall();
     };
-  }, [isOpen, meetingUrl, userName, isOwner, calleeId, cleanupCall, updateParticipants]);
+  }, [isOpen, meetingUrl, userName, isOwner, calleeId, threadId, cleanupCall, updateParticipants]);
 
   // Show controls on tap
   const handleScreenTap = useCallback(() => {

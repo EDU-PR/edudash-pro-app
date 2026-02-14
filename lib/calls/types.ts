@@ -24,6 +24,7 @@ export interface ActiveCall {
   call_id: string;
   caller_id: string;
   callee_id: string;
+  thread_id?: string | null;
   call_type: CallType;
   status: CallStatus;
   caller_name?: string;
@@ -52,6 +53,14 @@ export interface OutgoingCallParams {
   userId: string;
   userName?: string;
   callType: CallType;
+  threadId?: string;
+  roomName?: string;
+  callId?: string;
+  meetingUrl?: string;
+}
+
+export interface CallStartOptions {
+  threadId?: string;
 }
 
 // ============================================
@@ -60,8 +69,8 @@ export interface OutgoingCallParams {
 
 export interface CallContextType {
   // Actions
-  startVoiceCall: (userId: string, userName?: string) => void;
-  startVideoCall: (userId: string, userName?: string) => void;
+  startVoiceCall: (userId: string, userName?: string, options?: CallStartOptions) => void;
+  startVideoCall: (userId: string, userName?: string, options?: CallStartOptions) => void;
   answerCall: () => void;
   rejectCall: () => Promise<void> | void;
   endCall: () => Promise<void> | void;

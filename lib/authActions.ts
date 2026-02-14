@@ -23,7 +23,7 @@ const STALE_SIGNOUT_THRESHOLD = 35000; // Consider sign-out stale after 35 secon
 // URL search params have propagated.
 let _accountSwitchPending = false;
 let _accountSwitchTimestamp = 0;
-const ACCOUNT_SWITCH_STALE_MS = 15_000; // auto-expire after 15s
+const ACCOUNT_SWITCH_STALE_MS = 30_000; // auto-expire after 30s (slow networks need more time)
 
 /** Mark that an add-account navigation is about to happen. */
 export function setAccountSwitchPending(): void {
@@ -163,9 +163,7 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
   const shouldExitApp = Platform.OS === 'android' && options?.exitApp === true;
   const shouldResetApp = options?.resetApp !== false;
   const preserveOtherSessions =
-    options?.preserveOtherSessions === true ||
-    options?.clearBiometrics === false ||
-    targetRouteWithFresh.includes('switch=1');
+    options?.preserveOtherSessions !== false; // default: true (local sign-out preserves biometric sessions)
   
   // Overall timeout to prevent infinite hang - force navigation after 15 seconds
   const overallTimeoutId = setTimeout(() => {
@@ -338,21 +336,28 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     }
   } finally {
     clearTimeout(overallTimeoutId);
-    if (shouldExitApp) {
-      // Delay reset to avoid auth guard flicker before app exits
-      setTimeout(() => {
-        isSigningOut = false;
-        signOutStartTime = 0;
-        activeSignOutId = 0;
-        console.log('[authActions] Sign-out flag reset after exit delay');
-      }, 2500);
-      return;
+    // Only reset flags if THIS sign-out still owns them.
+    // Prevents sign-out A's finally from stomping sign-out B's state.
+    if (activeSignOutId === opId) {
+      if (shouldExitApp) {
+        // Delay reset to avoid auth guard flicker before app exits
+        setTimeout(() => {
+          if (activeSignOutId === opId) {
+            isSigningOut = false;
+            signOutStartTime = 0;
+            activeSignOutId = 0;
+            console.log('[authActions] Sign-out flag reset after exit delay');
+          }
+        }, 2500);
+        return;
+      }
+      // Reset flag immediately — allows immediate sign-in after sign-out
+      isSigningOut = false;
+      signOutStartTime = 0;
+      activeSignOutId = 0;
+      console.log('[authActions] Sign-out flag reset, ready for new sign-in');
+    } else {
+      console.log('[authActions] Sign-out superseded (opId', opId, 'vs active', activeSignOutId, '), skipping flag reset');
     }
-    // Reset flag immediately - no delay needed since we use timestamp tracking
-    // This allows immediate sign-in after sign-out completes
-    isSigningOut = false;
-    signOutStartTime = 0;
-    activeSignOutId = 0;
-    console.log('[authActions] Sign-out flag reset, ready for new sign-in');
   }
 }

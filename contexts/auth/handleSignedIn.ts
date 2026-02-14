@@ -14,7 +14,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
 import { track } from '@/lib/analytics';
 import { Platform } from 'react-native';
-import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
+import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import {
   fetchEnhancedUserProfile,
   createPermissionChecker,
@@ -48,6 +48,10 @@ export interface SignedInDeps {
   lastUserIdRef: { current: string | null };
   signedInGenerationRef: { current: number };
   orgNameRefreshTimerRef: { current: ReturnType<typeof setTimeout> | null };
+  /** Show branded loading overlay during profile resolution */
+  showLoadingOverlay?: (message?: string) => void;
+  /** Hide the loading overlay after routing completes */
+  hideLoadingOverlay?: () => void;
 }
 
 // ── Main handler ────────────────────────────────
@@ -77,23 +81,26 @@ export async function handleSignedIn(
   deps.setProfileLoading(true);
 
   // ── Profile resolution chain ──────────────
-  const QUICK_TIMEOUT = 4000;
+  // STRATEGY: Wait for the real profile (up to 6s total) before routing.
+  // This eliminates double-navigation — we route ONCE with the best profile.
+  const PROFILE_TIMEOUT = 6000;
   let enhancedProfile: EnhancedUserProfile | null = null;
   let profileSource: 'rpc' | 'stored' | 'fallback' = 'rpc';
   let needsOrgNameRefresh = false;
 
-  const profilePromise = fetchEnhancedUserProfile(userId, s);
+  // Show loading overlay while we resolve the profile
+  deps.showLoadingOverlay?.('Setting up your dashboard...');
 
-  // 1. Quick RPC fetch
+  // 1. Main RPC fetch — await with generous timeout
   try {
     enhancedProfile = await Promise.race([
-      profilePromise,
-      new Promise<null>((r) => setTimeout(() => r(null), QUICK_TIMEOUT)),
+      fetchEnhancedUserProfile(userId, s),
+      new Promise<null>((r) => setTimeout(() => r(null), PROFILE_TIMEOUT)),
     ]) as EnhancedUserProfile | null;
   } catch (err) {
-    logger.warn('handleSignedIn', 'Quick profile fetch failed:', err);
+    logger.warn('handleSignedIn', 'Profile fetch failed:', err);
   }
-  if (isStale()) return;
+  if (isStale()) { deps.hideLoadingOverlay?.(); return; }
 
   // Invalidate stale cached profile if user changed
   const safeExisting = isSameUserProfile(s.user, deps.profileRef.current)
@@ -104,7 +111,7 @@ export async function handleSignedIn(
     deps.setPermissions(createPermissionChecker(null));
   }
 
-  // 2. DB fallback
+  // 2. DB fallback (only if RPC returned nothing)
   if (!enhancedProfile) {
     try {
       enhancedProfile = await Promise.race([
@@ -113,7 +120,7 @@ export async function handleSignedIn(
       ]) as EnhancedUserProfile | null;
       if (enhancedProfile) profileSource = 'fallback';
     } catch { /* noop */ }
-    if (isStale()) return;
+    if (isStale()) { deps.hideLoadingOverlay?.(); return; }
   }
 
   // 3. Stored profile
@@ -126,7 +133,7 @@ export async function handleSignedIn(
         profileSource = 'stored';
       }
     } catch { /* noop */ }
-    if (isStale()) return;
+    if (isStale()) { deps.hideLoadingOverlay?.(); return; }
   }
 
   // 4. Emergency min profile
@@ -134,8 +141,6 @@ export async function handleSignedIn(
     enhancedProfile = buildMinimalProfile(s.user);
     profileSource = 'fallback';
   }
-
-  const usedFallback = profileSource !== 'rpc';
 
   // ── Apply profile to state ────────────────
   if (deps.mounted && enhancedProfile) {
@@ -174,16 +179,24 @@ export async function handleSignedIn(
 
   // ── Routing ───────────────────────────────
   if (deps.mounted && enhancedProfile) {
+    // Final stale check before routing — prevents superseded handler from navigating
+    if (isStale()) { deps.hideLoadingOverlay?.(); return; }
+
     const shouldSkipRouting = checkRecoverySession(s);
     if (shouldSkipRouting) {
       debugLog('Password recovery session detected, skipping auto-routing');
+      deps.hideLoadingOverlay?.();
     } else {
       debugLog('RouteAfterLogin-CALLING', JSON.stringify({ userId, role: enhancedProfile.role }));
       authDebug('routeAfterLogin.called', { userId });
 
-      void routeAfterLogin(s.user, enhancedProfile).catch((error) => {
-        logger.error('handleSignedIn', 'Post-login routing failed:', error);
-      });
+      void routeAfterLogin(s.user, enhancedProfile)
+        .catch((error) => {
+          logger.error('handleSignedIn', 'Post-login routing failed:', error);
+        })
+        .finally(() => {
+          deps.hideLoadingOverlay?.();
+        });
 
       // Store biometric session (fire-and-forget)
       import('@/services/EnhancedBiometricAuth')
@@ -229,20 +242,6 @@ export async function handleSignedIn(
   // ── Background operations ─────────────────
   void updateLastLogin();
   void registerPush(s.user);
-
-  // If fallback was used, attempt background refresh + re-route
-  if (usedFallback && deps.mounted) {
-    profilePromise
-      .then((fresh) => {
-        if (fresh && deps.mounted) {
-          deps.setProfile(fresh);
-          deps.setPermissions(createPermissionChecker(fresh));
-          clearAllNavigationLocks();
-          void routeAfterLogin(s.user, fresh);
-        }
-      })
-      .catch((err) => logger.warn('handleSignedIn', 'Background refresh failed:', err));
-  }
 }
 
 // ── Private helpers ─────────────────────────────

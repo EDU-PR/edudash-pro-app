@@ -32,6 +32,7 @@ import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
 import { useMarkAnnouncementsSeen } from '@/hooks/useNotificationCount';
 import { useNotificationsQuery } from '@/hooks/useNotificationsQuery';
+import { extractCallId, extractCallType, extractThreadId } from '@/lib/notifications/payload';
 import {
   markNotificationRead,
   markAllNotificationsRead,
@@ -212,11 +213,9 @@ export default function NotificationsScreen() {
 
     const fallbackText = `${notification.title} ${notification.body}`.trim();
     const dataType = getString(notification.data?.type)?.toLowerCase() || '';
-    const threadId =
-      getString(notification.data?.threadId) ||
-      getString(notification.data?.thread_id) ||
-      getString(notification.data?.conversation_id) ||
-      getString(notification.data?.conversationId);
+    const threadId = extractThreadId(notification.data as Record<string, unknown> | undefined);
+    const callId = extractCallId(notification.data as Record<string, unknown> | undefined);
+    const callType = extractCallType(notification.data as Record<string, unknown> | undefined);
     const combinedText = `${notification.title} ${notification.body} ${dataType}`.toLowerCase();
     const isCallLike =
       notification.type === 'call' ||
@@ -228,7 +227,10 @@ export default function NotificationsScreen() {
       (threadId ? true : /\bmessage\b/.test(combinedText));
 
     if (isCallLike) {
-      navigateSafe('/screens/calls');
+      navigateSafe('/screens/calls', {
+        ...(callId ? { callId } : {}),
+        ...(callType ? { callType } : {}),
+      });
       return;
     }
 
@@ -395,6 +397,41 @@ export default function NotificationsScreen() {
     );
   }, [alert, user?.id, t, queryClient, notifications]);
   
+  // Reply to a notification — navigate to the relevant thread
+  const handleReply = useCallback((notification: Notification) => {
+    const threadId = extractThreadId(notification.data as Record<string, unknown> | undefined);
+    if (threadId) {
+      navigateSafe(messageThreadPath, { threadId });
+    } else {
+      navigateSafe(messageListPath);
+    }
+  }, [messageThreadPath, messageListPath, navigateSafe]);
+
+  // Mute a notification source (thread)
+  const handleMute = useCallback(async (notification: Notification) => {
+    if (!user?.id) return;
+    const threadId = extractThreadId(notification.data as Record<string, unknown> | undefined);
+    if (!threadId) return;
+
+    try {
+      const client = assertSupabase();
+      await client
+        .from('message_participants')
+        .update({ is_muted: true })
+        .eq('thread_id', threadId)
+        .eq('user_id', user.id);
+
+      alert.show(
+        t('notifications.actions.muted_title', { defaultValue: 'Thread Muted' }),
+        t('notifications.actions.muted_desc', { defaultValue: 'You won\'t receive notifications from this conversation.' }),
+        [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+        { type: 'success' }
+      );
+    } catch {
+      // Silently fail — not critical
+    }
+  }, [user?.id, alert, t]);
+
   // Clear all notifications
   const handleClearAll = useCallback(() => {
     alert.showConfirm(
@@ -489,6 +526,8 @@ export default function NotificationsScreen() {
             notification={item}
             onPress={() => handleNotificationPress(item)}
             onMarkRead={() => handleMarkRead(item.id)}
+            onReply={item.type === 'message' || item.type === 'call' ? handleReply : undefined}
+            onMute={item.type === 'message' || item.type === 'announcement' ? handleMute : undefined}
           />
         )}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}

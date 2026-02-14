@@ -17,6 +17,7 @@ import {
   reactivateUserTokens as reactivateTokens 
 } from './pushTokenUtils';
 import { logger } from './logger';
+import { extractCallId, extractCallType, extractThreadId } from './notifications/payload';
 
 // Re-export for backwards compatibility
 export { 
@@ -196,13 +197,14 @@ export function setupNotificationRouter(): () => void {
       // This happens even if app is backgrounded - the notification delivery means message reached device
       if (data?.type === 'message' || data?.type === 'chat') {
         const currentUserId = await getCurrentUserId();
-        if (currentUserId && data.thread_id) {
+        const threadId = extractThreadId(data);
+        if (currentUserId && threadId) {
           try {
             await assertSupabase().rpc('mark_messages_delivered', {
-              p_thread_id: data.thread_id,
+              p_thread_id: threadId,
               p_user_id: currentUserId,
             });
-            logger.debug('NotificationRouter', '✅ Marked messages as delivered for thread:', data.thread_id);
+            logger.debug('NotificationRouter', '✅ Marked messages as delivered for thread:', threadId);
           } catch (err) {
             logger.warn('NotificationRouter', 'Failed to mark messages as delivered:', err);
           }
@@ -240,10 +242,11 @@ export function setupNotificationRouter(): () => void {
       // This handles the case where app was killed and notification wakes it
       if (data?.type === 'message' || data?.type === 'chat') {
         const currentUserId = await getCurrentUserId();
-        if (currentUserId && data.thread_id) {
+        const threadId = extractThreadId(data);
+        if (currentUserId && threadId) {
           try {
             await assertSupabase().rpc('mark_messages_delivered', {
-              p_thread_id: data.thread_id,
+              p_thread_id: threadId,
               p_user_id: currentUserId,
             });
             logger.debug('NotificationRouter', '✅ Marked messages as delivered (from notification tap)');
@@ -444,14 +447,18 @@ function handleNotificationInteraction(data: NotificationPayload): void {
   }
 
   // Route to appropriate screen based on notification type
+  const callId = extractCallId(data);
+  const callType = extractCallType(data);
   switch (data.type) {
     case 'message':
     case 'chat':
-      if (data.thread_id || data.conversation_id) {
-        const threadId = String(data.thread_id || data.conversation_id);
+      {
+        const threadId = extractThreadId(data);
+        if (threadId) {
         router.push({ pathname: '/screens/parent-message-thread', params: { threadId } } as any);
-      } else {
-        router.push('/screens/parent-messages' as any);
+        } else {
+          router.push('/screens/parent-messages' as any);
+        }
       }
       break;
       
@@ -460,7 +467,13 @@ function handleNotificationInteraction(data: NotificationPayload): void {
     case 'call':
     case 'video_call':
     case 'voice_call':
-      router.push('/screens/calls' as any);
+      router.push({
+        pathname: '/screens/calls',
+        params: {
+          ...(callId ? { callId } : {}),
+          ...(callType ? { callType } : {}),
+        },
+      } as any);
       break;
       
     case 'announcement':

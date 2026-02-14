@@ -232,6 +232,8 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       data: {
         type: 'message',
         thread_id: context.thread_id,
+        threadId: context.thread_id,
+        conversation_id: context.thread_id,
         message_id: context.message_id,
         screen: 'messages'
       },
@@ -542,9 +544,13 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       data: {
         type: 'incoming_call',
         call_id: context.call_id,
+        callId: context.call_id,
         caller_id: context.caller_id,
         caller_name: context.caller_name,
         call_type: context.call_type || 'voice',
+        callType: context.call_type || 'voice',
+        thread_id: context.thread_id,
+        threadId: context.thread_id,
         meeting_url: context.meeting_url,
         screen: 'incoming-call'
       },

@@ -33,7 +33,6 @@
     "create-*.sql",
     "lib/api/**/*",
     "lib/api/__tests__/**/*",
-    "tests/**/*",
     "lib/security/__tests__/**/*",
     "components/whatsapp/**/*",
     "components/settings/PushNotificationTester.tsx",
@@ -63,6 +62,7 @@
     "hooks/**/*",
     "contexts/**/*",
     "utils/**/*",
-    "app/**/*"
+    "app/**/*",
+    "tests/**/*"
   ]
 }

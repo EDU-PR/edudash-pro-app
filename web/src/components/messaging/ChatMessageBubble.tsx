@@ -1,4 +1,4 @@
-import { parseMessageContent } from '@/lib/messaging/messageContent';
+import { parseCallEventContent, parseMessageContent, type CallEventContent } from '@/lib/messaging/messageContent';
 import { User } from 'lucide-react';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { VoiceNotePlayer } from './VoiceNotePlayer';
@@ -78,6 +78,7 @@ interface ChatMessageBubbleProps {
   isDashAI?: boolean;
   onReactionClick?: (messageId: string, emoji: string) => void;
   onReplyClick?: (messageId: string) => void;
+  onCallEventPress?: (event: CallEventContent) => void;
 }
 
 // WhatsApp-style tick component
@@ -146,8 +147,10 @@ export const ChatMessageBubble = ({
   isDashAI = false,
   onReactionClick,
   onReplyClick,
+  onCallEventPress,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
+  const callEvent = parseCallEventContent(message.content);
   
   // Check if message is deleted
   if (message.deleted_at) {
@@ -243,6 +246,39 @@ export const ChatMessageBubble = ({
   };
 
   const renderBody = () => {
+    if (callEvent) {
+      return (
+        <div style={{ minWidth: 220 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 15 }}>
+            <span>{callEvent.callType === 'video' ? '📹' : '📞'}</span>
+            <span>{callEvent.callType === 'video' ? 'Missed video call' : 'Missed call'}</span>
+          </div>
+          {callEvent.callerName && (
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.78 }}>{callEvent.callerName}</div>
+          )}
+          {callEvent.callerId && onCallEventPress && (
+            <button
+              type="button"
+              onClick={() => onCallEventPress(callEvent)}
+              style={{
+                marginTop: 10,
+                borderRadius: 999,
+                border: '1px solid rgba(148,163,184,0.25)',
+                padding: '6px 10px',
+                background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(59,130,246,0.2)',
+                color: isOwn ? '#ffffff' : '#93c5fd',
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Call back
+            </button>
+          )}
+        </div>
+      );
+    }
+
     if (content.kind === 'media') {
       if (content.mediaType === 'image') {
         return (
