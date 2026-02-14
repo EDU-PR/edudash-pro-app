@@ -460,7 +460,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           {isToolOperation ? (
             <View
               style={{
-                flex: 1,
+                width: '100%',
                 padding: 12,
                 borderRadius: 14,
                 borderWidth: 1,
@@ -602,8 +602,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             <Text
               style={[
                 styles.messageText,
-                { color: isUser ? theme.onPrimary : theme.text, flex: 1 },
-                message.content?.length < 18 ? { textAlign: 'center' } : null,
+                { color: isUser ? theme.onPrimary : theme.text },
               ]}
               selectable={true}
               selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
@@ -611,7 +610,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               {isUser ? userContent : assistantDisplayText}
             </Text>
           ) : (
-            <View style={{ flex: 1 }}>
+            <View style={{ width: '100%' }}>
               {parseRichSegments(assistantDisplayText).map((segment, segmentIndex) => {
                 if (segment.type === 'math') {
                   return (

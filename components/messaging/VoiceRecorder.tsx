@@ -96,6 +96,7 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   const isRecordingRef = useRef(false);
   const hasPermissionsRef = useRef(false);
   const recordingStartTime = useRef(0);
+  const latestDurationRef = useRef(0);
   const initialX = useRef(0);
   const initialY = useRef(0);
 
@@ -134,7 +135,9 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   // Update duration + waveform from recorder state
   useEffect(() => {
     if (recorderState?.isRecording) {
-      setRecordingDuration(recorderState.durationMillis || 0);
+      const dur = recorderState.durationMillis || 0;
+      setRecordingDuration(dur);
+      latestDurationRef.current = dur;
       if (recorderState.metering !== undefined) {
         const normalized = Math.max(0, Math.min(1, (recorderState.metering + 60) / 60));
         const value = 0.2 + normalized * 0.6;
@@ -192,7 +195,8 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   const stopRecording = useCallback(async (shouldSend: boolean) => {
     if (!isRecordingRef.current) return;
     isRecordingRef.current = false;
-    const duration = recorderState?.durationMillis || (Date.now() - recordingStartTime.current);
+    // Use ref to avoid depending on recorderState (changes every 100ms)
+    const duration = latestDurationRef.current || (Date.now() - recordingStartTime.current);
     try {
       await recorder.stop();
       const uri = recorder.uri;
@@ -209,7 +213,7 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
       onRecordingCancel?.();
     }
     resetState();
-  }, [recorder, recorderState, onRecordingComplete, onRecordingCancel]);
+  }, [recorder, onRecordingComplete, onRecordingCancel]);
 
   const resetState = () => {
     setIsRecording(false);
