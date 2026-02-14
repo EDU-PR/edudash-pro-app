@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
@@ -169,15 +169,12 @@ export default function ExamPrepScreen() {
         {gradeInfo?.label} - CAPS Curriculum
       </Text>
 
-      <FlatList
-        data={subjects}
-        numColumns={2}
-        keyExtractor={(item) => item}
-        contentContainerStyle={styles.subjectGrid}
-        renderItem={({ item }) => {
+      <View style={styles.subjectGrid}>
+        {subjects.map((item) => {
           const isSelected = selectedSubject === item;
           return (
             <TouchableOpacity
+              key={item}
               style={[
                 styles.subjectCard,
                 {
@@ -203,8 +200,8 @@ export default function ExamPrepScreen() {
               </Text>
             </TouchableOpacity>
           );
-        }}
-      />
+        })}
+      </View>
 
       {selectedSubject && (
         <TouchableOpacity
@@ -618,6 +615,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   subjectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingVertical: 8,
   },
   subjectCard: {
