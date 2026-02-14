@@ -32,6 +32,7 @@ export interface DashAssistantMessagesProps {
   learnerContext?: LearnerContext | null;
   bottomInset?: number;
   onScroll?: (scrollY: number) => void;
+  compactBottomPadding?: boolean;
   /** Parent-specific: list of children */
   parentChildren?: ParentChild[];
   /** Parent-specific: currently selected child */
@@ -63,6 +64,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onAgeBandChange,
   learnerContext,
   onScroll,
+  compactBottomPadding = false,
   bottomInset = 0,
   keyboardVisible = false,
   parentChildren,
@@ -150,10 +152,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
     {
       backgroundColor: 'transparent',
       flexGrow: 1,
-      paddingBottom: Math.max(
-        keyboardVisible ? 80 : 104,
-        (styles.messagesContent?.paddingBottom || 0) + bottomInset + 16
-      ),
+      paddingBottom: compactBottomPadding
+        ? Math.max(8, (styles.messagesContent?.paddingBottom || 0))
+        : Math.max(
+            keyboardVisible ? 80 : 104,
+            (styles.messagesContent?.paddingBottom || 0) + bottomInset + 16
+          ),
     },
   ]) as ViewStyle;
 

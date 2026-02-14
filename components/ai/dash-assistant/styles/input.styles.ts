@@ -14,19 +14,22 @@ const { width: screenWidth } = Dimensions.get('window');
 export const inputStyles = StyleSheet.create({
   // Main Input Container
   inputContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderTopWidth: 1,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderTopWidth: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+    overflow: 'visible',
     ...Platform.select({
       ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
+        shadowColor: '#020617',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0,
+        shadowRadius: 0,
       },
       android: {
-        elevation: 6,
+        elevation: 0,
       },
     }),
   },
@@ -165,10 +168,10 @@ export const inputStyles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: 20,
     borderWidth: 1,
     position: 'relative',
-    minHeight: 44,
+    minHeight: 46,
   },
   inputAccessoryLeft: {
     flexDirection: 'row',
@@ -185,8 +188,8 @@ export const inputStyles = StyleSheet.create({
   textInput: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    maxHeight: 88,
+    paddingVertical: 9,
+    maxHeight: 104,
     fontSize: 15,
     lineHeight: 20,
     borderWidth: 0,

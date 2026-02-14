@@ -20,6 +20,8 @@ import React, {
 } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
 import { assertSupabase } from '../lib/supabase';
@@ -285,8 +287,30 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const queryClient = useQueryClient();
   const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
   const lastUserIdRef = useRef<string | null>(null);
+  const hapticsEnabledRef = useRef(true);
+  const soundEnabledRef = useRef(true);
 
   const userId = user?.id;
+
+  // Load notification/haptics preferences
+  useEffect(() => {
+    let mounted = true;
+    const loadPrefs = async () => {
+      try {
+        const [hapticsPref, soundPref] = await Promise.all([
+          AsyncStorage.getItem('pref_haptics_enabled'),
+          AsyncStorage.getItem('pref_sound_enabled'),
+        ]);
+        if (!mounted) return;
+        hapticsEnabledRef.current = hapticsPref !== 'false';
+        soundEnabledRef.current = soundPref !== 'false';
+      } catch {
+        // Keep defaults
+      }
+    };
+    void loadPrefs();
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const lastUserId = lastUserIdRef.current;
@@ -505,7 +529,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
 
     const client = assertSupabase();
 
-    // Subscribe to new messages
+    // Subscribe to new messages — show banner, mark delivered, refresh lists
     const messagesSubscription = client
       .channel(`notifications-messages-${userId}`)
       .on(
@@ -515,9 +539,85 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
           schema: 'public',
           table: 'messages',
         },
-        () => {
-          // Invalidate messages count when new message arrives
+        async (payload: any) => {
+          const msg = payload.new;
+          if (!msg) return;
+
+          // Skip own messages
+          if (msg.sender_id === userId) return;
+
+          // Verify user is a participant in this thread
+          const { data: participation } = await client
+            .from('message_participants')
+            .select('thread_id')
+            .eq('thread_id', msg.thread_id)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (!participation) return; // Not our thread
+
+          // ── 1. Invalidate counts + thread lists for realtime ──
           queryClient.invalidateQueries({ queryKey: QUERY_KEYS.messages(userId) });
+          queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+          queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+          queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count', userId] });
+
+          const isForeground = AppState.currentState === 'active';
+
+          // ── 2. Mark messages as delivered (updates sender's ticks) ──
+          if (isForeground) {
+            try {
+              await client.rpc('mark_messages_delivered', {
+                p_thread_id: msg.thread_id,
+                p_user_id: userId,
+              });
+              logger.debug('NotificationContext', `Marked messages delivered for thread ${msg.thread_id}`);
+            } catch (deliverError) {
+              logger.warn('NotificationContext', 'Failed to mark messages delivered:', deliverError);
+            }
+          }
+
+          // ── 3. Show in-app notification banner (WhatsApp-style) ──
+          try {
+            const { data: senderProfile } = await client
+              .from('profiles')
+              .select('first_name, last_name, role')
+              .eq('id', msg.sender_id)
+              .single();
+
+            const senderName = senderProfile
+              ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
+              : 'Someone';
+
+            const messagePreview = msg.content?.length > 50
+              ? `${msg.content.substring(0, 47)}...`
+              : msg.content || 'New message';
+
+            await Notifications.scheduleNotificationAsync({
+              identifier: `message-${msg.id}`,
+              content: {
+                title: `💬 ${senderName}`,
+                body: messagePreview,
+                data: {
+                  type: 'message',
+                  thread_id: msg.thread_id,
+                  message_id: msg.id,
+                  sender_id: msg.sender_id,
+                  sender_name: senderName,
+                },
+                sound: soundEnabledRef.current ? 'default' : undefined,
+              },
+              trigger: null,
+            });
+
+            if (hapticsEnabledRef.current) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            }
+
+            logger.debug('NotificationContext', `Showed notification for message from ${senderName}`);
+          } catch (notifError) {
+            logger.warn('NotificationContext', 'Failed to show message notification:', notifError);
+          }
         }
       )
       .subscribe();

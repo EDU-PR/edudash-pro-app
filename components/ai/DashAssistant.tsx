@@ -12,7 +12,7 @@
  * - DashTypingIndicator for loading states
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutStyles, headerStyles, messageStyles, inputStyles } from './dash-assistant/styles';
@@ -44,6 +44,10 @@ const styles = {
   ...inputStyles,
 };
 
+const COMPOSER_FLOAT_GAP = 2;
+const COMPOSER_OVERLAY_MIN_HEIGHT = 64;
+const COMPOSER_ANDROID_NAV_LIFT = 14;
+
 interface DashAssistantProps {
   conversationId?: string;
   onClose?: () => void;
@@ -71,13 +75,21 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const insets = useSafeAreaInsets();
   const [scannerVisible, setScannerVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_MIN_HEIGHT);
 
   // Keyboard listeners
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardVisible(true);
+      setKeyboardHeight(event?.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
@@ -214,8 +226,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     );
   }
 
-  const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
+  const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : undefined;
   const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
+  const composerBottomInset = Platform.OS === 'ios'
+    ? insets.bottom
+    : Math.max(insets.bottom, COMPOSER_ANDROID_NAV_LIFT);
+  const keyboardUp = keyboardHeight > 0;
+  const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_MIN_HEIGHT);
+  const composerExtraBottom = keyboardUp ? composerBottomInset : 0;
+  const messageViewportInset = keyboardHeight + COMPOSER_FLOAT_GAP + composerExtraBottom + safeComposerHeight;
   const backgroundBase: [string, string, string] = isDark
     ? ['#0B1020', '#0F172A', theme.background]
     : ['#F7FAFF', '#EEF2FF', '#F8FAFC'];
@@ -308,30 +327,33 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
 
           {/* Messages */}
-          <DashAssistantMessages
-            flashListRef={flashListRef}
-            messages={messages}
-            renderMessage={renderMessage}
-            styles={styles}
-            theme={theme}
-            isLoading={isTypingActive}
-            isNearBottom={isNearBottom}
-            setIsNearBottom={setIsNearBottom}
-            unreadCount={unreadCount}
-            setUnreadCount={setUnreadCount}
-            scrollToBottom={scrollToBottom}
-            renderTypingIndicator={renderTypingIndicator}
-            renderSuggestedActions={() => null}
-            onSendMessage={(text) => sendMessage(text)}
-            bottomInset={insets.bottom}
-            keyboardVisible={keyboardVisible}
-            userRole={String(profile?.role || '').toLowerCase()}
-          />
+          <View style={[layoutStyles.messagesClip, { marginBottom: messageViewportInset }]}>
+            <DashAssistantMessages
+              flashListRef={flashListRef}
+              messages={messages}
+              renderMessage={renderMessage}
+              styles={styles}
+              theme={theme}
+              isLoading={isTypingActive}
+              isNearBottom={isNearBottom}
+              setIsNearBottom={setIsNearBottom}
+              unreadCount={unreadCount}
+              setUnreadCount={setUnreadCount}
+              scrollToBottom={scrollToBottom}
+              renderTypingIndicator={renderTypingIndicator}
+              renderSuggestedActions={() => null}
+              onSendMessage={(text) => sendMessage(text)}
+              bottomInset={0}
+              keyboardVisible={keyboardVisible}
+              compactBottomPadding
+              userRole={String(profile?.role || '').toLowerCase()}
+            />
+          </View>
 
           {/* Jump to bottom FAB */}
           {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
             <TouchableOpacity
-              style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: (messageStyles.scrollToBottomFab?.bottom || 24) + 8 }]}
+              style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: messageViewportInset + 12 }]}
               onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0 }); }}
               accessibilityLabel="Jump to bottom"
               activeOpacity={0.8}
@@ -348,30 +370,41 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           )}
 
           {/* Input */}
-          <DashInputBar
-            inputRef={inputRef}
-            inputText={inputText}
-            setInputText={setInputText}
-            enterToSend={enterToSend}
-            selectedAttachments={selectedAttachments}
-            attachmentProgress={attachmentProgress}
-            isLoading={isLoading}
-            isUploading={isUploading}
-            isRecording={isRecording}
-            isSpeaking={isSpeaking}
-            partialTranscript={partialTranscript}
-            placeholder="Message Dash..."
-            messages={messages}
-            onSend={() => sendMessage()}
-            onMicPress={handleInputMicPress}
-            onTakePhoto={openScanner}
-            onAttachFile={handleAttachFile}
-            onRemoveAttachment={handleRemoveAttachment}
-            onQuickAction={(text) => sendMessage(text)}
-            onCancel={cancelGeneration}
-            bottomInset={insets.bottom}
-            hideQuickChips={false}
-          />
+          <View
+            style={[
+              layoutStyles.composerArea,
+              {
+                bottom: keyboardHeight + COMPOSER_FLOAT_GAP + composerExtraBottom,
+                paddingBottom: keyboardUp ? 0 : composerBottomInset,
+              },
+            ]}
+            onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
+          >
+            <DashInputBar
+              inputRef={inputRef}
+              inputText={inputText}
+              setInputText={setInputText}
+              enterToSend={enterToSend}
+              selectedAttachments={selectedAttachments}
+              attachmentProgress={attachmentProgress}
+              isLoading={isLoading}
+              isUploading={isUploading}
+              isRecording={isRecording}
+              isSpeaking={isSpeaking}
+              partialTranscript={partialTranscript}
+              placeholder="Message Dash..."
+              messages={messages}
+              onSend={() => sendMessage()}
+              onMicPress={handleInputMicPress}
+              onTakePhoto={openScanner}
+              onAttachFile={handleAttachFile}
+              onRemoveAttachment={handleRemoveAttachment}
+              onQuickAction={(text) => sendMessage(text)}
+              onCancel={cancelGeneration}
+              bottomInset={0}
+              hideQuickChips={false}
+            />
+          </View>
 
           {/* Modals */}
           <AlertModal
