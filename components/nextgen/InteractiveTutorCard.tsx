@@ -43,9 +43,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   robotImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 72,
+    height: 72,
+    borderRadius: 18,
     resizeMode: 'contain',
   },
   textBlock: {
