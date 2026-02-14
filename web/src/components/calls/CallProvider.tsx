@@ -83,6 +83,7 @@ interface ActiveCall {
   call_id: string;
   caller_id: string;
   callee_id: string;
+  thread_id?: string | null;
   call_type: 'voice' | 'video';
   status: 'ringing' | 'connected' | 'ended' | 'rejected' | 'missed' | 'busy';
   caller_name?: string;
@@ -94,6 +95,7 @@ interface CallSignalPayload {
   meeting_url?: string;
   call_type?: 'voice' | 'video';
   caller_name?: string;
+  thread_id?: string;
 }
 
 interface CallSignal {
@@ -107,14 +109,18 @@ interface CallSignal {
 }
 
 interface CallContextType {
-  startVoiceCall: (userId: string, userName?: string) => void;
-  startVideoCall: (userId: string, userName?: string) => void;
+  startVoiceCall: (userId: string, userName?: string, options?: CallStartOptions) => void;
+  startVideoCall: (userId: string, userName?: string, options?: CallStartOptions) => void;
   incomingCall: ActiveCall | null;
   isCallActive: boolean;
   isInActiveCall: boolean;
   returnToCall: () => void;
   isUserOnline: (userId: string) => boolean;
   getLastSeenText: (userId: string) => string;
+}
+
+interface CallStartOptions {
+  threadId?: string;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -140,6 +146,10 @@ export function CallProvider({ children }: CallProviderProps) {
     userId: string;
     userName?: string;
     callType: 'voice' | 'video';
+    threadId?: string;
+    roomName: string;
+    callId?: string;
+    meetingUrl?: string;
   } | null>(null);
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
   
@@ -360,9 +370,64 @@ export function CallProvider({ children }: CallProviderProps) {
         },
         (payload: { new: CallSignal }) => {
           const signal = payload.new;
+          const signalPayload = signal.payload || null;
+
+          if (signal.signal_type === 'upgrade_to_video' || signal.signal_type === 'upgrade_ack') {
+            const meetingUrl = signalPayload?.meeting_url;
+            const threadId = signalPayload?.thread_id;
+
+            setIncomingCall((prev) => {
+              if (!prev || prev.call_id !== signal.call_id) return prev;
+              return {
+                ...prev,
+                call_type: 'video',
+                meeting_url: meetingUrl || prev.meeting_url,
+                thread_id: threadId || prev.thread_id,
+              };
+            });
+
+            setAnsweringCall((prev) => {
+              if (!prev || prev.call_id !== signal.call_id) return prev;
+              return {
+                ...prev,
+                call_type: 'video',
+                meeting_url: meetingUrl || prev.meeting_url,
+                thread_id: threadId || prev.thread_id,
+              };
+            });
+
+            setOutgoingCall((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                callType: 'video',
+                callId: prev.callId || signal.call_id,
+                meetingUrl: meetingUrl || prev.meetingUrl,
+                threadId: threadId || prev.threadId,
+              };
+            });
+
+            if (signal.signal_type === 'upgrade_to_video' && currentUserId) {
+              supabase.from('call_signals').insert({
+                call_id: signal.call_id,
+                from_user_id: currentUserId,
+                to_user_id: signal.from_user_id,
+                signal_type: 'upgrade_ack',
+                payload: {
+                  call_type: 'video',
+                  meeting_url: meetingUrl,
+                  thread_id: threadId,
+                },
+              }).catch((ackErr: unknown) => {
+                console.warn('[CallProvider] Failed to send upgrade ack:', ackErr);
+              });
+            }
+            return;
+          }
+
           if (signal.signal_type !== 'offer') return;
 
-          const meetingUrl = signal.payload?.meeting_url;
+          const meetingUrl = signalPayload?.meeting_url;
           if (!meetingUrl) return;
 
           setIncomingCall((prev) => {
@@ -379,10 +444,11 @@ export function CallProvider({ children }: CallProviderProps) {
               call_id: signal.call_id,
               caller_id: signal.from_user_id,
               callee_id: signal.to_user_id,
-              call_type: (signal.payload?.call_type as 'voice' | 'video') || 'voice',
+              call_type: (signalPayload?.call_type as 'voice' | 'video') || 'voice',
               status: 'ringing',
-              caller_name: signal.payload?.caller_name || 'Unknown',
+              caller_name: signalPayload?.caller_name || 'Unknown',
               meeting_url: meetingUrl,
+              thread_id: signalPayload?.thread_id,
               started_at: signal.created_at,
             } as ActiveCall;
           });
@@ -396,7 +462,7 @@ export function CallProvider({ children }: CallProviderProps) {
   }, [currentUserId, supabase]);
 
   // Start voice call (Daily.co audio-only)
-  const startVoiceCall = useCallback((userId: string, userName?: string) => {
+  const startVoiceCall = useCallback((userId: string, userName?: string, options?: CallStartOptions) => {
     if (!currentUserId) {
       console.error('[CallProvider] Cannot start call - no current user');
       alert('Unable to start call. Please sign in and try again.');
@@ -417,12 +483,18 @@ export function CallProvider({ children }: CallProviderProps) {
     }
     
     // VoiceCallInterface will create the Daily.co room and active_calls record
-    setOutgoingCall({ userId, userName, callType: 'voice' });
+    setOutgoingCall({
+      userId,
+      userName,
+      callType: 'voice',
+      threadId: options?.threadId,
+      roomName: `voice-${Date.now()}`,
+    });
     setIsCallInterfaceOpen(true);
   }, [currentUserId, isUserOnline, getLastSeenText]);
 
   // Start video call (Daily.co-based)
-  const startVideoCall = useCallback((userId: string, userName?: string) => {
+  const startVideoCall = useCallback((userId: string, userName?: string, options?: CallStartOptions) => {
     if (!currentUserId) {
       console.error('[CallProvider] Cannot start call - no current user');
       alert('Unable to start call. Please sign in and try again.');
@@ -442,7 +514,13 @@ export function CallProvider({ children }: CallProviderProps) {
       }
     }
     
-    setOutgoingCall({ userId, userName, callType: 'video' });
+    setOutgoingCall({
+      userId,
+      userName,
+      callType: 'video',
+      threadId: options?.threadId,
+      roomName: `call-${Date.now()}`,
+    });
     setIsCallInterfaceOpen(true);
   }, [currentUserId, isUserOnline, getLastSeenText]);
 
@@ -635,10 +713,13 @@ export function CallProvider({ children }: CallProviderProps) {
           <VoiceCallInterface
             isOpen={isCallInterfaceOpen && !answeringCall}
             onClose={handleCallClose}
-            roomName={`voice-${Date.now()}`}
+            roomName={outgoingCall.roomName}
             userName={outgoingCall.userName}
             isOwner={true}
             calleeId={outgoingCall.userId}
+            threadId={outgoingCall.threadId}
+            callId={outgoingCall.callId}
+            meetingUrl={outgoingCall.meetingUrl}
           />
         )}
 
@@ -647,10 +728,13 @@ export function CallProvider({ children }: CallProviderProps) {
           <VideoCallInterface
             isOpen={isCallInterfaceOpen && !answeringCall}
             onClose={handleCallClose}
-            roomName={`call-${Date.now()}`}
+            roomName={outgoingCall.roomName}
             userName={outgoingCall.userName}
             isOwner={true}
             calleeId={outgoingCall.userId}
+            threadId={outgoingCall.threadId}
+            callId={outgoingCall.callId}
+            meetingUrl={outgoingCall.meetingUrl}
           />
         )}
 
@@ -663,6 +747,8 @@ export function CallProvider({ children }: CallProviderProps) {
             userName={answeringCall.caller_name}
             isOwner={false}
             callId={answeringCall.call_id}
+            threadId={answeringCall.thread_id || undefined}
+            meetingUrl={answeringCall.meeting_url}
           />
         )}
 
@@ -675,6 +761,8 @@ export function CallProvider({ children }: CallProviderProps) {
             userName={answeringCall.caller_name}
             isOwner={false}
             callId={answeringCall.call_id}
+            threadId={answeringCall.thread_id || undefined}
+            meetingUrl={answeringCall.meeting_url}
           />
         )}
       </CallErrorBoundary>

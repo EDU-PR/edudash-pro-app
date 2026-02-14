@@ -633,6 +633,7 @@
     "notifications": "Notifications",
     "noActivity": "No recent activity",
     "loading": "Loading dashboard...",
+    "checking_access": "Checking your access...",
     "connectionError": "Connection error. Please check your internet connection.",
     "loadError": "Unable to load data. Please try again.",
     "error_title": "Unable to load dashboard",
@@ -1211,7 +1212,10 @@
           "sample_supplied": "Sample supplied?",
           "returning_student": "Returning student?",
           "tshirt_number": "T-shirt Number",
-          "back_number": "Back number:"
+          "back_number": "Back number:",
+          "past_number_choice": "Previous back number? (Required)",
+          "past_number_yes": "Yes, has number",
+          "past_number_no": "No number"
         },
         "placeholders": {
           "child_name": "Child name",
@@ -1275,7 +1279,8 @@
           "complete_form": "Complete the uniform form below.",
           "sample_supplied": "Turn this on if you sent a sample T-shirt for sizing.",
           "returning_student": "Turn this on if your child is returning and already has a back number.",
-          "back_number": "Use the number that should appear on the back."
+          "back_number": "Use the number that should appear on the back.",
+          "past_number_choice": "Select one option before saving. If no number exists, choose \"No number\"."
         },
         "sections": {
           "details": "Details & Sizes",
@@ -2562,7 +2567,10 @@
       "dash_fab_subtitle": "Floating button to chat with Dash AI",
       "replay_tutorial_title": "Replay App Tutorial",
       "replay_tutorial_completed": "View the app introduction again",
-      "replay_tutorial_not_completed": "Tutorial not yet completed"
+      "replay_tutorial_not_completed": "Tutorial not yet completed",
+      "power_user_title": "Power User Mode",
+      "power_user_subtitle": "Enable advanced controls like the floating Dash FAB",
+      "dash_fab_locked": "Turn on Power User Mode to use this"
     },
     "parent": {
       "loading": "Loading...",
@@ -2777,7 +2785,19 @@
     "take_attendance": "Take Attendance",
     "threadCreateError": "Unable to start a message.",
     "today_overview": "Today",
-    "today_overview_hint": "Quick status at a glance"
+    "today_overview_hint": "Quick status at a glance",
+    "browse_lessons": "Browse Lessons",
+    "quick_lesson": "Quick Lesson",
+    "create_activity": "Create Activity",
+    "assign_homework": "Assign Homework",
+    "birthday_chart": "Birthday Chart",
+    "manage_groups": "Groups",
+    "request_petty_cash": "Request Petty Cash",
+    "family_activity_review": "Family Activity Review",
+    "reputation": "My Reputation",
+    "generate_image": "Generate Image",
+    "call_parent": "Call Parent",
+    "subtitle_upcoming_one": "You have 1 lesson coming up today"
   },
   "students": {
     "title": "Students",
@@ -2829,7 +2849,14 @@
     "clearAll": "Clear All Notifications",
     "clearAllConfirm": "This will remove all notifications from the list. This cannot be undone.",
     "empty": "No Notifications",
-    "emptyDesc": "You're all caught up! Check back later for updates."
+    "emptyDesc": "You're all caught up! Check back later for updates.",
+    "actions": {
+      "reply": "Reply",
+      "mark_read": "Mark Read",
+      "mute": "Mute",
+      "muted_title": "Thread Muted",
+      "muted_desc": "You won't receive notifications from this conversation."
+    }
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

@@ -351,6 +351,14 @@ export default function PrincipalMessagesScreen() {
     refetch();
   }, [refetch]);
 
+  const handleHeaderSelectionToggle = useCallback(() => {
+    if (selectionMode) {
+      clearSelection();
+      return;
+    }
+    setSelectionMode(true);
+  }, [clearSelection, selectionMode]);
+
   // Dropdown menu items for the header
   const headerMenuItems = useMemo(() => [
     {
@@ -573,6 +581,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.loadingContainer}>
@@ -599,6 +609,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.errorContainer}>
@@ -621,6 +633,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.emptyContainer}>
@@ -644,6 +658,8 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.searchContainer}>
@@ -691,6 +707,8 @@ export default function PrincipalMessagesScreen() {
         subtitle={selectionMode
           ? `${selectedThreadIds.length} selected`
           : `${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+        rightActionLabel={selectionMode ? 'Done' : 'Select'}
+        onRightActionPress={handleHeaderSelectionToggle}
         menuItems={headerMenuItems}
       />
       <View style={styles.searchContainer}>

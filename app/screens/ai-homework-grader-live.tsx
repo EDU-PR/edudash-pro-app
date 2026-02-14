@@ -339,8 +339,8 @@ export default function AIHomeworkGraderLive() {
             <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }]}>
               <Text style={[styles.sectionTitle, { color: '#111827' }]}>Model</Text>
               <View style={[styles.inlineRow, { gap: 8, flexWrap: 'wrap' }]}>
-                {models.map(m => (
-                  <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? '#8B5CF6' : '#E5E7EB', backgroundColor: selectedModel === m.id ? '#8B5CF6' : 'transparent' }}>
+                {models.map((m, idx) => (
+                  <TouchableOpacity key={`${m.id}-${idx}`} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? '#8B5CF6' : '#E5E7EB', backgroundColor: selectedModel === m.id ? '#8B5CF6' : 'transparent' }}>
                     <Text style={{ color: selectedModel === m.id ? '#fff' : '#111827' }}>
                       {`${m.name} · x${m.relativeCost} · ${m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$'}${m.notes ? ` · ${m.notes}` : ''}`}
                     </Text>

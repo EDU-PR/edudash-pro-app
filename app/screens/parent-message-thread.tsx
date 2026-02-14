@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { toast } from '@/components/ui/ToastProvider';
 import { useCallSafe } from '@/components/calls/CallProvider';
+import type { CallEventContent } from '@/lib/utils/messageContent';
 import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import { useMessageActions } from '@/hooks/useMessageActions';
 import { useThreadOptions } from '@/hooks/useThreadOptions';
@@ -94,14 +95,32 @@ export default function ParentMessageThreadScreen() {
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available.', 'Voice Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Voice Call'); return; }
-    callContext.startVoiceCall(recipientId, recipientName);
-  }, [callContext, recipientId, recipientName]);
+    callContext.startVoiceCall(recipientId, recipientName, { threadId });
+  }, [callContext, recipientId, recipientName, threadId]);
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) { toast.warn('Video calling is not available.', 'Video Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Video Call'); return; }
-    callContext.startVideoCall(recipientId, recipientName);
-  }, [callContext, recipientId, recipientName]);
+    callContext.startVideoCall(recipientId, recipientName, { threadId });
+  }, [callContext, recipientId, recipientName, threadId]);
+
+  const handleCallEventPress = useCallback((event: CallEventContent) => {
+    if (!callContext) {
+      toast.warn('Calling is not available right now.', 'Call');
+      return;
+    }
+    if (!event.callerId) {
+      toast.warn('Caller details are unavailable for this event.', 'Call');
+      return;
+    }
+
+    if (event.callType === 'video') {
+      callContext.startVideoCall(event.callerId, event.callerName || 'Contact', { threadId });
+      return;
+    }
+
+    callContext.startVoiceCall(event.callerId, event.callerName || 'Contact', { threadId });
+  }, [callContext, threadId]);
 
   // Scroll to a quoted message when tapped
   const handleScrollToMessage = useCallback((messageId: string) => {
@@ -131,12 +150,13 @@ export default function ParentMessageThreadScreen() {
           autoPlayVoice={!!msg.voice_url && h.currentlyPlayingVoiceId === msg.id}
           onReactionPress={actions.handleReactionPress}
           onReplyPress={handleScrollToMessage}
+          onCallEventPress={handleCallEventPress}
           isFirstInGroup={item.isFirstInGroup}
           isLastInGroup={item.isLastInGroup}
         />
       </SwipeableMessageRow>
     );
-  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, user?.id]);
+  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, handleCallEventPress, user?.id]);
 
   // Layout calculations
   const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);

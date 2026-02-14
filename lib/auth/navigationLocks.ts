@@ -14,7 +14,7 @@ const debugLog = (...args: unknown[]) => {
 // State
 // ──────────────────────────────────────────────
 const navigationLocks: Map<string, number> = new Map();
-export const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
+export const NAVIGATION_LOCK_TIMEOUT = 16000; // 16s — 1s longer than routeAfterLogin's 15s overall timeout
 
 // ──────────────────────────────────────────────
 // Public API

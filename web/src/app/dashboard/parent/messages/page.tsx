@@ -17,7 +17,7 @@ import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker'
 import { DashAIAvatar, DashAILoading } from '@/components/dash/DashAIAvatar';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
-import { getMessageDisplayText } from '@/lib/messaging/messageContent';
+import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image, Plus, Sparkles } from 'lucide-react';
 import { 
   type MessageThread, 
@@ -1282,6 +1282,16 @@ function ParentMessagesContent() {
     }
   };
 
+  const handleCallEventPress = (event: CallEventContent) => {
+    if (!event.callerId) return;
+    const callOptions = selectedThreadId ? { threadId: selectedThreadId } : undefined;
+    if (event.callType === 'video') {
+      startVideoCall(event.callerId, event.callerName || 'Contact', callOptions);
+      return;
+    }
+    startVoiceCall(event.callerId, event.callerName || 'Contact', callOptions);
+  };
+
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
   
   // Check if we're in the Dash AI thread
@@ -1684,7 +1694,7 @@ function ParentMessagesContent() {
                       {!isDashAISelected && (
                         <>
                           <button
-                            onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
+                            onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                             title="Voice call"
                             style={{
                               width: 36,
@@ -1705,7 +1715,7 @@ function ParentMessagesContent() {
                             <Phone size={16} color="white" />
                           </button>
                           <button
-                            onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
+                            onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                             title="Video call"
                             style={{
                               width: 36,
@@ -1916,6 +1926,7 @@ function ParentMessagesContent() {
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                               isDashAI={isDashAIMessage}
                               onReplyClick={scrollToMessage}
+                              onCallEventPress={handleCallEventPress}
                             />
                           </div>
                         </div>

@@ -140,14 +140,14 @@ export function useMessageThreadHandlers(state: ThreadState) {
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available', 'Voice Call'); return; }
     if (!parentId) { toast.warn('Cannot identify recipient', 'Voice Call'); return; }
-    callContext.startVoiceCall(parentId, displayName);
-  }, [callContext, parentId, displayName]);
+    callContext.startVoiceCall(parentId, displayName, { threadId });
+  }, [callContext, parentId, displayName, threadId]);
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) { toast.warn('Video calling is not available', 'Video Call'); return; }
     if (!parentId) { toast.warn('Cannot identify recipient', 'Video Call'); return; }
-    callContext.startVideoCall(parentId, displayName);
-  }, [callContext, parentId, displayName]);
+    callContext.startVideoCall(parentId, displayName, { threadId });
+  }, [callContext, parentId, displayName, threadId]);
 
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;

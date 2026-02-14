@@ -126,6 +126,13 @@ export default function ParentMessagesScreen() {
   const handleStartNewMessage = useCallback(() => router.push('/screens/parent-new-message'), []);
   const handleOpenDashAI = useCallback(() => router.push('/screens/dash-assistant'), []);
   const handleMarkAllRead = useCallback(() => { refetch(); }, [refetch]);
+  const handleHeaderSelectionToggle = useCallback(() => {
+    if (selectionMode) {
+      clearSelection();
+      return;
+    }
+    setSelectionMode(true);
+  }, [clearSelection, selectionMode]);
 
   const headerMenuItems = useMemo(() => [
     { icon: 'notifications-outline' as const, label: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }), onPress: () => router.push('/screens/settings') },
@@ -150,7 +157,12 @@ export default function ParentMessagesScreen() {
   if (isLoading && !threads) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         <View style={styles.loadingContainer}>
           {[1, 2, 3, 4].map(i => (
             <View key={i} style={styles.skeletonItem}><SkeletonLoader width="100%" height={90} borderRadius={16} /></View>
@@ -168,7 +180,12 @@ export default function ParentMessagesScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         <View style={styles.errorContainer}>
           <View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={40} color={theme.error} /></View>
           <Text style={styles.errorTitle}>{t('parent.messagesError', { defaultValue: 'Failed to Load Messages' })}</Text>
@@ -188,7 +205,12 @@ export default function ParentMessagesScreen() {
   if (!filteredThreads || filteredThreads.length === 0) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         {!isDashOrbUnlocked && (
           <View style={{ paddingTop: 8 }}>
             <DashAIItem onPress={handleOpenDashAI} title={dashCopy.navLabel}
@@ -215,6 +237,8 @@ export default function ParentMessagesScreen() {
       <MessagesListHeader
         title={t('parent.messages', { defaultValue: 'Messages' })}
         subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
+        rightActionLabel={selectionMode ? 'Done' : 'Select'}
+        onRightActionPress={handleHeaderSelectionToggle}
         menuItems={headerMenuItems}
       />
       <View style={styles.searchContainer}>

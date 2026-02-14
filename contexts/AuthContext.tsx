@@ -28,6 +28,7 @@ import {
 import { signOut, clearStoredAuthData, syncSessionFromSupabase } from '@/lib/sessionManager';
 import { destroyVisibilityHandler } from '@/lib/visibilityHandler';
 import { mark, measure } from '@/lib/perf';
+import { showLoadingOverlay, hideLoadingOverlay } from '@/contexts/LoadingOverlayContext';
 import type { User } from '@supabase/supabase-js';
 import * as Sentry from 'sentry-expo';
 import { getPostHog } from '@/lib/posthogClient';
@@ -252,6 +253,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 lastUserIdRef,
                 signedInGenerationRef,
                 orgNameRefreshTimerRef,
+                showLoadingOverlay,
+                hideLoadingOverlay,
               };
               await handleSignedIn(qS, deps);
             }
