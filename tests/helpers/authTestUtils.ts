@@ -113,17 +113,18 @@ export function createMockUser(overrides: Partial<User> & Record<string, any> = 
 // ── Session factory ───────────────────────────────────────────
 
 export function createMockSession(
-  overrides: Partial<Session> & { user?: Partial<User> } = {},
+  overrides: Omit<Partial<Session>, 'user'> & { user?: Partial<User> & Record<string, any> } = {},
 ): Session {
-  const user = createMockUser(overrides.user);
+  const { user: userOverrides, ...sessionOverrides } = overrides;
+  const user = createMockUser(userOverrides);
   return {
-    access_token: overrides.access_token ?? 'test-access-token',
-    refresh_token: overrides.refresh_token ?? 'test-refresh-token',
-    expires_in: overrides.expires_in ?? 3600,
-    expires_at: overrides.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
+    access_token: sessionOverrides.access_token ?? 'test-access-token',
+    refresh_token: sessionOverrides.refresh_token ?? 'test-refresh-token',
+    expires_in: sessionOverrides.expires_in ?? 3600,
+    expires_at: sessionOverrides.expires_at ?? Math.floor(Date.now() / 1000) + 3600,
     token_type: 'bearer',
     user,
-    ...overrides,
+    ...sessionOverrides,
   } as Session;
 }
 
@@ -198,7 +199,9 @@ export function createMockSignedInDeps(overrides: Record<string, any> = {}) {
     setProfileLoading: jest.fn(),
     profileRef: { current: null },
     profileLoadingRef: { current: false },
-    lastUserIdRef: { current: null },
+    // In AuthContext, lastUserIdRef is set to the new user's ID
+    // BEFORE handleSignedIn is called — mirror that in tests.
+    lastUserIdRef: { current: overrides.lastUserIdRef?.current ?? 'user-test-001' },
     signedInGenerationRef: { current: 0 },
     orgNameRefreshTimerRef: { current: null },
     showLoadingOverlay: jest.fn(),

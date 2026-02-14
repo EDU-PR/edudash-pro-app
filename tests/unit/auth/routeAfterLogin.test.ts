@@ -209,6 +209,8 @@ describe('routeAfterLogin', () => {
   // ── Force password change bypass ──────────────────
 
   it('routes to change-password-required when user metadata says so', async () => {
+    // Clear pending invite so invite-accept doesn't fire first
+    (getPendingTeacherInvite as jest.Mock).mockResolvedValue(null);
     const user = createMockUser({
       user_metadata: { force_password_change: true, role: 'teacher' },
     });

@@ -152,7 +152,8 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'clearBiometrics') ||
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'redirectTo') ||
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'exitApp') ||
-    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'resetApp')
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'resetApp') ||
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'preserveOtherSessions')
   )) ? (optionsOrEvent as SignOutOptions) : undefined;
 
   const targetRoute = options?.redirectTo ?? '/(auth)/sign-in';
@@ -294,23 +295,28 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
       }
       
       // Then navigate to sign-in with a small delay to ensure stack is cleared
-      setTimeout(() => {
-        try {
-          if (activeSignOutId !== opId) {
-            return;
-          }
-          router.replace(targetRouteWithFresh as any);
-          console.log('[authActions] Mobile navigation executed');
-        } catch (navErr) {
-          console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
-          // Fallback: try direct sign-in route
+      // Awaited so navigation fires before the finally block resets activeSignOutId
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
           try {
-            router.replace('/(auth)/sign-in?fresh=1' as any);
-          } catch (fallbackErr) {
-            console.error('[authActions] Fallback navigation also failed:', fallbackErr);
+            if (activeSignOutId !== opId) {
+              resolve();
+              return;
+            }
+            router.replace(targetRouteWithFresh as any);
+            console.log('[authActions] Mobile navigation executed');
+          } catch (navErr) {
+            console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
+            // Fallback: try direct sign-in route
+            try {
+              router.replace('/(auth)/sign-in?fresh=1' as any);
+            } catch (fallbackErr) {
+              console.error('[authActions] Fallback navigation also failed:', fallbackErr);
+            }
           }
-        }
-      }, 100);
+          resolve();
+        }, 100);
+      });
     }
   } catch (error) {
     clearTimeout(overallTimeoutId);

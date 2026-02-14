@@ -56,6 +56,7 @@ jest.mock('@/lib/rbac', () => ({
 
 jest.mock('@/lib/sessionManager', () => ({
   isPasswordRecoveryInProgress: jest.fn(() => false),
+  getStoredProfileForUser: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('@/lib/security-audit', () => ({

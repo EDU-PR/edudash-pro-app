@@ -3,12 +3,15 @@
  *
  * Validates:
  *   - Normal sign-out flow
- *   - Sequence ID (finally-block guard) — RC-2 fix
- *   - Local vs global sign-out scope — RC-4/RC-8 fix
- *   - Stale sign-out detection
- *   - Overall timeout protection
+ *   - Local vs global sign-out scope
  *   - Deduplication (skip if already signing out)
- *   - Web vs mobile navigation paths
+ *   - Account switch pending flags
+ *   - Stale sign-out detection
+ *
+ * NOTE: These tests use real timers because signOutAndRedirect has
+ * deeply nested async code (dynamic imports, withTimeout, setTimeout chains)
+ * that cannot be reliably tested with jest.useFakeTimers.
+ * With mocked dependencies the function completes in <500ms.
  */
 
 // ── Mocks ────────────────────────────────────────────
@@ -34,7 +37,7 @@ jest.mock('react-native', () => ({
   BackHandler: { exitApp: jest.fn() },
 }));
 
-jest.mock('./pushTokenUtils', () => ({
+jest.mock('@/lib/pushTokenUtils', () => ({
   deactivateCurrentUserTokens: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -56,11 +59,11 @@ jest.mock('@/lib/supabase', () => ({
   })),
 }));
 
-jest.mock('./routeAfterLogin', () => ({
+jest.mock('@/lib/routeAfterLogin', () => ({
   clearAllNavigationLocks: jest.fn(),
 }));
 
-jest.mock('./appReset', () => ({
+jest.mock('@/lib/appReset', () => ({
   requestAppReset: jest.fn(),
 }));
 
@@ -79,144 +82,77 @@ import { signOut } from '@/lib/sessionManager';
 describe('signOutAndRedirect', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
     resetSignOutState();
     mockRouter.replace.mockClear();
     mockRouter.dismissAll.mockClear();
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('calls signOut and navigates to sign-in', async () => {
-    const p = signOutAndRedirect();
-    // Advance past delays and timeouts
-    jest.advanceTimersByTime(500);
-    await p;
+  it('calls signOut with local scope by default', async () => {
+    await signOutAndRedirect();
 
     expect(signOut).toHaveBeenCalledWith(
       expect.objectContaining({ preserveOtherSessions: true }),
     );
-    // Mobile navigation includes a setTimeout(100ms)
-    jest.advanceTimersByTime(200);
-    expect(mockRouter.replace).toHaveBeenCalled();
-  });
-
-  it('defaults preserveOtherSessions to true (local sign-out)', async () => {
-    const p = signOutAndRedirect();
-    jest.advanceTimersByTime(500);
-    await p;
-
-    expect(signOut).toHaveBeenCalledWith(
-      expect.objectContaining({ preserveOtherSessions: true }),
-    );
-  });
+  }, 10_000);
 
   it('respects preserveOtherSessions=false for global sign-out', async () => {
-    const p = signOutAndRedirect({ preserveOtherSessions: false });
-    jest.advanceTimersByTime(500);
-    await p;
+    await signOutAndRedirect({ preserveOtherSessions: false });
 
     expect(signOut).toHaveBeenCalledWith(
       expect.objectContaining({ preserveOtherSessions: false }),
     );
-  });
+  }, 10_000);
+
+  it('navigates after sign-out', async () => {
+    await signOutAndRedirect();
+    // Mobile path uses setTimeout(100) fire-and-forget for router.replace
+    await new Promise(r => setTimeout(r, 200));
+
+    const navCalled =
+      mockRouter.replace.mock.calls.length > 0 ||
+      mockRouter.dismissAll.mock.calls.length > 0;
+    expect(navCalled).toBe(true);
+  }, 10_000);
+
+  it('adds fresh=1 param to sign-in redirect', async () => {
+    await signOutAndRedirect();
+    await new Promise(r => setTimeout(r, 200));
+
+    const calls = mockRouter.replace.mock.calls;
+    const hasFresh = calls.some((c: any[]) => String(c[0]).includes('fresh=1'));
+    expect(hasFresh).toBe(true);
+  }, 10_000);
 
   it('deduplicates concurrent sign-out calls', async () => {
     const p1 = signOutAndRedirect();
     const p2 = signOutAndRedirect(); // should be skipped
 
-    jest.advanceTimersByTime(500);
     await Promise.allSettled([p1, p2]);
 
-    // signOut should only be called once
     expect(signOut).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
   it('clears navigation locks before sign-out', async () => {
-    const { clearAllNavigationLocks } = require('./routeAfterLogin');
-    const p = signOutAndRedirect();
-    jest.advanceTimersByTime(500);
-    await p;
+    await signOutAndRedirect();
 
+    const { clearAllNavigationLocks } = require('@/lib/routeAfterLogin');
     expect(clearAllNavigationLocks).toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it('navigates to custom redirectTo route', async () => {
-    const p = signOutAndRedirect({ redirectTo: '/landing' });
-    jest.advanceTimersByTime(500);
-    await p;
-    jest.advanceTimersByTime(200);
+    await signOutAndRedirect({ redirectTo: '/landing' });
+    await new Promise(r => setTimeout(r, 200));
 
     const calls = mockRouter.replace.mock.calls;
     const hasLanding = calls.some((c: any[]) => String(c[0]).includes('/landing'));
     expect(hasLanding).toBe(true);
-  });
-
-  it('adds fresh=1 param to sign-in redirect', async () => {
-    const p = signOutAndRedirect();
-    jest.advanceTimersByTime(500);
-    await p;
-    jest.advanceTimersByTime(200);
-
-    const calls = mockRouter.replace.mock.calls;
-    const hasFresh = calls.some((c: any[]) => String(c[0]).includes('fresh=1'));
-    expect(hasFresh).toBe(true);
-  });
+  }, 10_000);
 
   it('resets sign-out flag after completion', async () => {
-    const p = signOutAndRedirect();
-    jest.advanceTimersByTime(500);
-    await p;
-    jest.advanceTimersByTime(200);
-
+    await signOutAndRedirect();
+    await new Promise(r => setTimeout(r, 200));
     expect(isSignOutInProgress()).toBe(false);
-  });
-});
-
-// ──────────────────────────────────────────────────────
-// signOutAndRedirect — sequence ID guard (RC-2)
-// ──────────────────────────────────────────────────────
-
-describe('signOutAndRedirect — sequence ID guard', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
-    resetSignOutState();
-    mockRouter.replace.mockClear();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('superseded sign-out does not reset isSigningOut flag', async () => {
-    // Start a sign-out that will be slow
-    let resolveSignOut: () => void;
-    (signOut as jest.Mock).mockReturnValueOnce(
-      new Promise<void>((r) => { resolveSignOut = r; }),
-    );
-
-    const p1 = signOutAndRedirect();
-    jest.advanceTimersByTime(100);
-
-    // Reset state to allow a second sign-out (simulating stale detection)
-    resetSignOutState();
-
-    const p2 = signOutAndRedirect();
-    jest.advanceTimersByTime(500);
-    await p2;
-
-    // Now resolve the first sign-out — its finally should NOT reset flags
-    resolveSignOut!();
-    jest.advanceTimersByTime(200);
-    await p1.catch(() => {});
-
-    // The second sign-out completed normally and reset its own flags
-    // We just verify no crash occurred
-    expect(true).toBe(true);
-  });
+  }, 10_000);
 });
 
 // ──────────────────────────────────────────────────────
@@ -262,20 +198,13 @@ describe('account switch pending flags', () => {
 describe('stale sign-out detection', () => {
   beforeEach(() => {
     resetSignOutState();
-    jest.useFakeTimers();
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('resetSignOutState clears the in-progress flag', () => {
-    // Manually set signing out
+  it('resetSignOutState clears the in-progress flag', async () => {
     const p = signOutAndRedirect();
     expect(isSignOutInProgress()).toBe(true);
     resetSignOutState();
     expect(isSignOutInProgress()).toBe(false);
-    jest.advanceTimersByTime(35000);
-    p.catch(() => {}); // swallow
-  });
+    await p.catch(() => {});
+  }, 10_000);
 });
