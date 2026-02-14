@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -10,8 +10,6 @@ interface InlineTutorPreviewProps {
   childName: string;
   /** Called when user wants to open the full tutor screen */
   onOpenFullSession: () => void;
-  /** Called when user sends a message from the inline preview */
-  onSendMessage?: (text: string) => void;
 }
 
 /**
@@ -22,18 +20,9 @@ interface InlineTutorPreviewProps {
 export default function InlineTutorPreview({
   childName,
   onOpenFullSession,
-  onSendMessage,
 }: InlineTutorPreviewProps) {
-  const [inputText, setInputText] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isListening, setIsListening] = useState(false);
-
-  const handleSend = useCallback(() => {
-    if (!inputText.trim()) return;
-    onSendMessage?.(inputText.trim());
-    setInputText('');
-    onOpenFullSession();
-  }, [inputText, onSendMessage, onOpenFullSession]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -45,8 +34,10 @@ export default function InlineTutorPreview({
   }, []);
 
   const handleMicToggle = useCallback(() => {
+    if (!isActive) return;
     setIsListening((prev) => !prev);
-  }, []);
+    // Future: integrate actual voice recording here
+  }, [isActive]);
 
   return (
     <View style={styles.container}>
@@ -99,12 +90,12 @@ export default function InlineTutorPreview({
             </Text>
           </View>
           <View style={styles.answerRow}>
-            <AnswerChip icon="📐" label="2/3" />
-            <AnswerChip icon="" label="1/3" />
+            <AnswerChip icon="📐" label="2/3" onPress={onOpenFullSession} />
+            <AnswerChip icon="" label="1/3" onPress={onOpenFullSession} />
           </View>
           <View style={styles.answerRow}>
-            <AnswerChip icon="📊" label="1/2" />
-            <AnswerChip icon="" label="2/5" />
+            <AnswerChip icon="📊" label="1/2" onPress={onOpenFullSession} />
+            <AnswerChip icon="" label="2/5" onPress={onOpenFullSession} />
           </View>
         </View>
       </TouchableOpacity>
@@ -145,12 +136,12 @@ export default function InlineTutorPreview({
   );
 }
 
-function AnswerChip({ icon, label }: { icon: string; label: string }) {
+function AnswerChip({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
   return (
-    <View style={styles.answerChip}>
+    <TouchableOpacity style={styles.answerChip} activeOpacity={0.7} onPress={onPress}>
       {icon ? <Text style={styles.answerIcon}>{icon}</Text> : null}
       <Text style={styles.answerLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 

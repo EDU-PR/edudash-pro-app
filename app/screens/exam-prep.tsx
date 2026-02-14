@@ -9,7 +9,7 @@ import React, { useCallback, useState } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
@@ -40,14 +40,18 @@ function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'seni
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
   const { tier } = useSubscription();
- 
+  const { grade: gradeParam, childName } = useLocalSearchParams<{ grade?: string; childName?: string }>();
+
+  // If a grade was passed from the dashboard, pre-fill it and skip to subject step
+  const hasPrefilledGrade = !!(gradeParam && GRADES.some((g) => g.value === gradeParam));
+
   // State
-  const [selectedGrade, setSelectedGrade] = useState<string>('grade_4');
+  const [selectedGrade, setSelectedGrade] = useState<string>(hasPrefilledGrade ? gradeParam! : 'grade_4');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedExamType, setSelectedExamType] = useState<string>('practice_test');
   const [selectedLanguage, setSelectedLanguage] = useState<SouthAfricanLanguage>('en-ZA');
   const [generating, setGenerating] = useState(false);
-  const [step, setStep] = useState<'grade' | 'subject' | 'type'>('grade');
+  const [step, setStep] = useState<'grade' | 'subject' | 'type'>(hasPrefilledGrade ? 'subject' : 'grade');
  
   // Get subjects for current grade
   const phase = getPhaseFromGrade(selectedGrade);
