@@ -42,8 +42,8 @@ export default function AIHomeworkGraderLive() {
     if (!raw) return ''
     try { return decodeURIComponent(raw) } catch { return raw }
   }
-  const [assignmentTitle, setAssignmentTitle] = useState(readParam(params.assignmentTitle) || 'Counting to 10')
-  const [gradeLevel, setGradeLevel] = useState(readParam(params.gradeLevel) || 'Age 5')
+  const [assignmentTitle, setAssignmentTitle] = useState(readParam(params.assignmentTitle))
+  const [gradeLevel, setGradeLevel] = useState(readParam(params.gradeLevel))
   const [submissionContent, setSubmissionContent] = useState(readParam(params.submissionContent) || '')
   const [isStreaming, setIsStreaming] = useState(false)
   const [pending, setPending] = useState(false)
@@ -143,7 +143,13 @@ export default function AIHomeworkGraderLive() {
       let finalSummary: Partial<ParsedResult> | null = null
       track('edudash.ai.grader.ui_started', {})
       const text = await grade(
-        { submissionText: submissionContent, rubric: ['accuracy', 'completeness'], gradeLevel: 5, language: 'en' },
+        {
+          submissionText: submissionContent,
+          assignmentTitle: assignmentTitle || undefined,
+          rubric: ['accuracy', 'completeness', 'effort', 'understanding'],
+          gradeLevel: gradeLevel || undefined,
+          language: 'en',
+        },
         { model: selectedModel, streaming: true,
           onDelta: (chunk) => { bufferRef.current += chunk; setJsonBuffer(bufferRef.current) },
           onFinal: (summary) => { if (summary?.feedback) { finalSummary = summary; setParsed(parseResult('', summary)) } },

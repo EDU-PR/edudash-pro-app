@@ -185,6 +185,9 @@ function normalizeServiceType(serviceType?: string): string {
   if (serviceType === 'dash_conversation' || serviceType === 'dash_ai') {
     return 'chat_message';
   }
+  if (serviceType === 'grading_assistance') {
+    return 'grading';
+  }
   return serviceType;
 }
 
@@ -825,7 +828,24 @@ async function callOpenAIImageGeneration(params: {
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([429, 503, 529]);
 
-function buildSystemPrompt(extraContext?: string): string {
+function buildSystemPrompt(extraContext?: string, serviceType?: string): string {
+  // Grading requests get a specialised system prompt — the tutor persona
+  // would otherwise attempt conversation instead of grading.
+  if (serviceType === 'grading') {
+    const GRADING_SYSTEM_PROMPT = [
+      'You are an experienced South African teacher responsible for grading student work.',
+      'Evaluate the student submission against the criteria provided in the user message.',
+      'Always respond with ONLY valid JSON (no markdown fences, no preamble, no trailing text).',
+      'JSON schema: { "score": <0-100>, "feedback": "<constructive, age-appropriate feedback>",',
+      '  "strengths": ["..."], "areasForImprovement": ["..."], "suggestions": ["..."] }',
+      'Be encouraging. Identify genuine strengths before listing areas for improvement.',
+      'If a language preference is specified, respond in that language.',
+    ].join('\n');
+    return extraContext
+      ? `${GRADING_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`
+      : GRADING_SYSTEM_PROMPT;
+  }
+
   if (!extraContext) return DEFAULT_SYSTEM_PROMPT;
   
   // Check if extra context contains image/attachment directives (high priority)
@@ -2516,7 +2536,7 @@ serve(async (req) => {
     ].filter(Boolean);
     const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
 
-    const systemPrompt = buildSystemPrompt(mergedContext);
+    const systemPrompt = buildSystemPrompt(mergedContext, normalizedServiceType);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
     // Redact PII before sending to AI providers
     const messages = redactMessagesForProvider(rawMessages);
