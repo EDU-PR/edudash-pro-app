@@ -250,6 +250,29 @@ function resolveToolShortcuts(orgType: OrganizationType, role: string, mode: Das
 function resolveQuickActions(orgType: OrganizationType, role: string, mode: DashUnifiedMode): DashPolicyQuickAction[] {
   const isStaff = STAFF_ROLES.has(role);
 
+  if (role === 'super_admin' || role === 'superadmin') {
+    return [
+      {
+        id: 'ops_health',
+        label: 'System Health',
+        icon: 'pulse-outline',
+        prompt: 'Summarize current platform health (DB, edge functions, auth, push/calls) and list the next 3 recommended actions.',
+      },
+      {
+        id: 'ops_usage',
+        label: 'AI Usage',
+        icon: 'flash-outline',
+        prompt: 'Show the top 5 schools by AI usage this month and propose quota adjustments or suspensions if needed.',
+      },
+      {
+        id: 'ops_incident',
+        label: 'Incident Draft',
+        icon: 'warning-outline',
+        prompt: 'Draft an incident update message for internal staff: what happened, impact, mitigation, and next update time.',
+      },
+    ];
+  }
+
   if (isStaff && orgType === 'preschool' && mode !== 'orb') {
     return [
       {
