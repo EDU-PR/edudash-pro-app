@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal } from 'react-native';
 import { Stack } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +14,11 @@ import { useSuperAdminUsers } from '@/hooks/useSuperAdminUsers';
 
 
 export default function SuperAdminUsersScreen() {
+  const params = useLocalSearchParams<{
+    scopeRole?: string;
+    scopeOrgId?: string;
+    scopeLabel?: string;
+  }>();
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const { showAlert, alertProps } = useAlertModal();
@@ -43,6 +49,22 @@ export default function SuperAdminUsersScreen() {
     openTierPicker,
     openRolePicker,
   } = useSuperAdminUsers(showAlert);
+
+  React.useEffect(() => {
+    const scopeRole = String(params.scopeRole || '').toLowerCase();
+    const scopeOrgId = String(params.scopeOrgId || '');
+    const scopeLabel = String(params.scopeLabel || '');
+    if (!scopeRole && !scopeOrgId && !scopeLabel) return;
+
+    setFilters((prev) => ({
+      ...prev,
+      role: ['principal', 'teacher', 'parent', 'student', 'superadmin'].includes(scopeRole)
+        ? (scopeRole as typeof prev.role)
+        : prev.role,
+      schoolId: scopeOrgId || prev.schoolId,
+      search: !prev.search && scopeLabel ? scopeLabel : prev.search,
+    }));
+  }, [params.scopeRole, params.scopeOrgId, params.scopeLabel, setFilters]);
 
 
   if (!hasAccess) {
@@ -82,6 +104,16 @@ export default function SuperAdminUsersScreen() {
           <Text style={styles.statsText}>
             Showing {filteredUsers.length} of {totalUsers} users
           </Text>
+          {!!filters.schoolId && (
+            <TouchableOpacity
+              style={styles.scopeBadge}
+              onPress={() => setFilters(prev => ({ ...prev, schoolId: '', role: 'all' }))}
+            >
+              <Text style={styles.scopeBadgeText}>
+                Scoped to org {String(params.scopeLabel || 'selection')} • Tap to clear
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
 
@@ -97,7 +129,7 @@ export default function SuperAdminUsersScreen() {
           />
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabs}>
-            {(['all', 'principal', 'teacher', 'parent', 'superadmin'] as const).map((role) => (
+            {(['all', 'principal', 'teacher', 'parent', 'student', 'superadmin'] as const).map((role) => (
               <TouchableOpacity
                 key={role}
                 style={[styles.filterTab, filters.role === role && styles.filterTabActive]}

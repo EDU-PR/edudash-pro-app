@@ -23,6 +23,7 @@ import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
+import { useBottomInset } from '@/hooks/useBottomInset';
 import { 
   prewarmCallSystem, 
   getPrewarmedCallObject, 
@@ -77,13 +78,14 @@ export function VideoCallInterface({
   callId,
   meetingUrl,
   onCallStateChange,
-  role = 'teacher', // Default to teacher for backward compatibility
+  role = 'teacher',
 }: VideoCallInterfaceProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const bottomInset = useBottomInset();
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
@@ -1028,7 +1030,7 @@ export function VideoCallInterface({
       )}
 
       {/* Controls */}
-      <View style={styles.controlsContainer}>
+      <View style={[styles.controlsContainer, { paddingBottom: bottomInset + 16 }]}>
         {/* Secondary Row - Role-based features */}
         <View style={styles.secondaryControls}>
           <TouchableOpacity style={styles.secondaryButton} onPress={toggleSpeaker}>

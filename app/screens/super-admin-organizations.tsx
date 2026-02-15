@@ -1,14 +1,18 @@
 import React from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Dimensions } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Dimensions, Switch } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomInset } from '@/hooks/useBottomInset';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { Ionicons } from '@expo/vector-icons';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { useSuperAdminOrganizations } from '@/hooks/super-admin-organizations';
+
+import { assertSupabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 import type {
   OrganizationType,
   OrganizationStatus,
@@ -20,14 +24,37 @@ import {
   typeColors,
   formatTierLabel,
   formatStatusLabel,
+  getEntityMeta,
   createStyles,
 } from '@/lib/screen-styles/super-admin-organizations.styles';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const styles = createStyles(theme);
+const TEACHER_ROLES = ['teacher', 'assistant_teacher', 'head_teacher', 'educator'];
+
+interface OrgEditDraft {
+  name: string;
+  contact_email: string;
+  contact_phone: string;
+  address: string;
+  city: string;
+  province: string;
+  country: string;
+  is_active: boolean;
+  is_verified: boolean;
+}
+
+interface OrgMemberRow {
+  id: string;
+  name: string;
+  secondary: string;
+  status: string;
+  isActive: boolean;
+}
 
 export default function SuperAdminOrganizations() {
   const { showAlert, alertProps } = useAlertModal();
+  const bottomInset = useBottomInset();
 
   const {
     filteredOrgs,
@@ -53,6 +80,163 @@ export default function SuperAdminOrganizations() {
     openTierPicker,
     openStatusPicker,
   } = useSuperAdminOrganizations({ showAlert });
+
+  const [showEditModal, setShowEditModal] = React.useState(false);
+  const [editDraft, setEditDraft] = React.useState<OrgEditDraft | null>(null);
+  const [savingEdit, setSavingEdit] = React.useState(false);
+
+  const [showMembersModal, setShowMembersModal] = React.useState(false);
+  const [membersLoading, setMembersLoading] = React.useState(false);
+  const [membersMode, setMembersMode] = React.useState<'students' | 'teachers'>('students');
+  const [memberRows, setMemberRows] = React.useState<OrgMemberRow[]>([]);
+
+  const hydrateEditDraft = (org: Organization): OrgEditDraft => ({
+    name: org.name || '',
+    contact_email: org.contact_email || '',
+    contact_phone: org.contact_phone || '',
+    address: org.address || '',
+    city: org.city || '',
+    province: org.province || '',
+    country: org.country || 'South Africa',
+    is_active: org.status === 'active',
+    is_verified: !!org.is_verified,
+  });
+
+  const openEditModal = (org?: Organization) => {
+    const target = org || selectedOrg;
+    if (!target) return;
+    setSelectedOrg(target);
+    setShowActionsModal(false);
+    setShowDetailModal(false);
+    setEditDraft(hydrateEditDraft(target));
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditDraft(null);
+  };
+
+  const saveOrganizationProfile = async () => {
+    if (!selectedOrg || !editDraft || savingEdit) return;
+    const trimmedName = editDraft.name.trim();
+    if (!trimmedName) {
+      showAlert({ title: 'Validation Error', message: 'Organization name is required.' });
+      return;
+    }
+
+    const payload = {
+      p_entity_type: getEntityMeta(selectedOrg).entityType,
+      p_entity_id: getEntityMeta(selectedOrg).actualId,
+      p_name: trimmedName,
+      p_contact_email: editDraft.contact_email.trim() || null,
+      p_contact_phone: editDraft.contact_phone.trim() || null,
+      p_address: editDraft.address.trim() || null,
+      p_city: editDraft.city.trim() || null,
+      p_province: editDraft.province.trim() || null,
+      p_country: editDraft.country.trim() || null,
+      p_is_active: editDraft.is_active,
+      p_is_verified: editDraft.is_verified,
+      p_sync_duplicates: true,
+    };
+
+    setSavingEdit(true);
+    try {
+      const { data, error } = await assertSupabase().rpc('superadmin_update_entity_profile', payload);
+      if (error) throw error;
+      if (data?.success === false) {
+        throw new Error(data?.message || 'Profile update was rejected.');
+      }
+
+      track('superadmin_org_profile_updated', {
+        org_id: payload.p_entity_id,
+        entity_type: payload.p_entity_type,
+      });
+
+      showAlert({ title: 'Saved', message: `${trimmedName} was updated successfully.` });
+      closeEditModal();
+      await onRefresh();
+    } catch (error: any) {
+      showAlert({ title: 'Update Failed', message: error?.message || 'Could not save organization changes.' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const loadOrgMembers = async (mode: 'students' | 'teachers') => {
+    if (!selectedOrg) return;
+    const { actualId } = getEntityMeta(selectedOrg);
+    const filter = `organization_id.eq.${actualId},preschool_id.eq.${actualId}`;
+    setMembersMode(mode);
+    setMemberRows([]);
+    setMembersLoading(true);
+    setShowMembersModal(true);
+
+    try {
+      if (mode === 'students') {
+        const { data, error } = await assertSupabase()
+          .from('students')
+          .select('id, first_name, last_name, guardian_name, status, is_active, preschool_id, organization_id')
+          .or(filter)
+          .order('first_name');
+        if (error) throw error;
+
+        const rows: OrgMemberRow[] = (data || []).map((student: any) => {
+          const fullName = [student.first_name, student.last_name].filter(Boolean).join(' ').trim();
+          const status = String(student.status || (student.is_active === false ? 'inactive' : 'active'));
+          return {
+            id: student.id,
+            name: fullName || `Student ${student.id.slice(0, 6)}`,
+            secondary: student.guardian_name ? `Guardian: ${student.guardian_name}` : 'Learner profile',
+            status,
+            isActive: student.is_active !== false && status !== 'inactive',
+          };
+        });
+        setMemberRows(rows);
+      } else {
+        const { data, error } = await assertSupabase()
+          .from('profiles')
+          .select('id, auth_user_id, first_name, last_name, email, role, is_active, preschool_id, organization_id')
+          .in('role', TEACHER_ROLES)
+          .or(filter)
+          .order('first_name');
+        if (error) throw error;
+
+        const rows: OrgMemberRow[] = (data || []).map((teacher: any) => {
+          const fullName = [teacher.first_name, teacher.last_name].filter(Boolean).join(' ').trim();
+          return {
+            id: teacher.id,
+            name: fullName || teacher.email || `Teacher ${teacher.id.slice(0, 6)}`,
+            secondary: teacher.email || 'Staff profile',
+            status: teacher.role || 'teacher',
+            isActive: teacher.is_active !== false,
+          };
+        });
+        setMemberRows(rows);
+      }
+    } catch (error: any) {
+      showAlert({
+        title: 'Member Load Failed',
+        message: error?.message || `Unable to load ${mode}.`,
+      });
+      setMemberRows([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const jumpToUserManager = (mode: 'students' | 'teachers') => {
+    if (!selectedOrg) return;
+    const { actualId } = getEntityMeta(selectedOrg);
+    router.push({
+      pathname: '/screens/super-admin-users',
+      params: {
+        scopeOrgId: actualId,
+        scopeRole: mode === 'teachers' ? 'teacher' : 'student',
+        scopeLabel: selectedOrg.name,
+      },
+    });
+  };
 
   const renderStatCell = (bg: string, value: number, label: string) => (
     <View style={[styles.statCard, { backgroundColor: bg + '20' }]}>
@@ -169,6 +353,12 @@ export default function SuperAdminOrganizations() {
           <Ionicons name="mail-outline" size={14} color={theme.textSecondary} />
           <Text style={styles.detailText} numberOfLines={1}>{item.contact_email || 'No email'}</Text>
         </View>
+        <View style={styles.detailRow}>
+          <Ionicons name="people-outline" size={14} color={theme.textSecondary} />
+          <Text style={styles.detailText}>
+            {item.active_student_count ?? item.student_count} active students • {item.active_teacher_count ?? item.teacher_count} active teachers
+          </Text>
+        </View>
         {item.city && (
           <View style={styles.detailRow}>
             <Ionicons name="location-outline" size={14} color={theme.textSecondary} />
@@ -228,6 +418,10 @@ export default function SuperAdminOrganizations() {
                   </View>
                 </View>
                 <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Underlying Type</Text>
+                  <Text style={styles.modalValue}>{selectedOrg.organization_type_raw || '-'}</Text>
+                </View>
+                <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Status</Text>
                   <View style={[styles.statusBadge, { backgroundColor: statusColors[selectedOrg.status] + '20' }]}>
                     <View style={[styles.statusDot, { backgroundColor: statusColors[selectedOrg.status] }]} />
@@ -241,6 +435,37 @@ export default function SuperAdminOrganizations() {
                   <Text style={styles.modalValue}>
                     {selectedOrg.is_verified ? '✅ Yes' : '❌ No'}
                   </Text>
+                </View>
+              </View>
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>People</Text>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Students</Text>
+                  <View style={styles.modalInlineActions}>
+                    <Text style={styles.modalValueCompact}>
+                      {selectedOrg.active_student_count ?? selectedOrg.student_count} active / {selectedOrg.student_count} total
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.modalLinkButton}
+                      onPress={() => loadOrgMembers('students')}
+                    >
+                      <Text style={styles.modalLinkText}>View</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Teachers</Text>
+                  <View style={styles.modalInlineActions}>
+                    <Text style={styles.modalValueCompact}>
+                      {selectedOrg.active_teacher_count ?? selectedOrg.teacher_count} active / {selectedOrg.teacher_count} total
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.modalLinkButton}
+                      onPress={() => loadOrgMembers('teachers')}
+                    >
+                      <Text style={styles.modalLinkText}>View</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
               <View style={styles.modalSection}>
@@ -322,12 +547,21 @@ export default function SuperAdminOrganizations() {
                     <Text style={styles.modalActionText}>Change Status</Text>
                   </TouchableOpacity>
                 </View>
+                <View style={styles.modalButtonRow}>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, { backgroundColor: '#6d28d9' }]}
+                    onPress={() => handleOrgAction('change_type')}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={20} color="#fff" />
+                    <Text style={styles.modalActionText}>Change Type</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.modalActions}>
+              <View style={[styles.modalActions, { marginBottom: bottomInset + 16 }]}>
                 <TouchableOpacity
                   style={[styles.modalActionBtn, { backgroundColor: theme.primary }]}
-                  onPress={() => handleOrgAction('edit')}
+                  onPress={() => openEditModal(selectedOrg)}
                 >
                   <Ionicons name="create-outline" size={20} color="#fff" />
                   <Text style={styles.modalActionText}>Edit</Text>
@@ -362,6 +596,7 @@ export default function SuperAdminOrganizations() {
     const actions = [
       { id: 'view', label: 'View Details', icon: 'eye-outline', color: theme.primary },
       { id: 'edit', label: 'Edit Organization', icon: 'create-outline', color: theme.info },
+      { id: 'change_type', label: 'Change Type', icon: 'swap-horizontal-outline', color: '#a78bfa' },
       { id: 'verify', label: 'Verify Organization', icon: 'checkmark-circle-outline', color: theme.success },
       { id: 'suspend', label: 'Suspend Organization', icon: 'pause-circle-outline', color: theme.warning },
       { id: 'delete', label: 'Delete Organization', icon: 'trash-outline', color: theme.error },
@@ -387,7 +622,13 @@ export default function SuperAdminOrganizations() {
               <TouchableOpacity
                 key={action.id}
                 style={styles.actionItem}
-                onPress={() => handleOrgAction(action.id)}
+                onPress={() => {
+                  if (action.id === 'edit') {
+                    openEditModal(selectedOrg);
+                    return;
+                  }
+                  handleOrgAction(action.id);
+                }}
               >
                 <Ionicons name={action.icon as any} size={22} color={action.color} />
                 <Text style={[styles.actionItemText, { color: action.color }]}>
@@ -404,6 +645,205 @@ export default function SuperAdminOrganizations() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+    );
+  };
+
+  const renderEditModal = () => {
+    if (!selectedOrg || !editDraft) return null;
+
+    return (
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeEditModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Organization</Text>
+              <TouchableOpacity onPress={closeEditModal}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>Profile</Text>
+                <Text style={styles.editLabel}>Name</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.name}
+                  onChangeText={(name) => setEditDraft(prev => prev ? { ...prev, name } : prev)}
+                  placeholder="Organization name"
+                  placeholderTextColor={theme.textMuted}
+                />
+                <Text style={styles.editLabel}>Email</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.contact_email}
+                  onChangeText={(contact_email) => setEditDraft(prev => prev ? { ...prev, contact_email } : prev)}
+                  placeholder="Contact email"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                <Text style={styles.editLabel}>Phone</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.contact_phone}
+                  onChangeText={(contact_phone) => setEditDraft(prev => prev ? { ...prev, contact_phone } : prev)}
+                  placeholder="Contact phone"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>Location</Text>
+                <Text style={styles.editLabel}>Address</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.address}
+                  onChangeText={(address) => setEditDraft(prev => prev ? { ...prev, address } : prev)}
+                  placeholder="Street address"
+                  placeholderTextColor={theme.textMuted}
+                />
+                <Text style={styles.editLabel}>City</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.city}
+                  onChangeText={(city) => setEditDraft(prev => prev ? { ...prev, city } : prev)}
+                  placeholder="City"
+                  placeholderTextColor={theme.textMuted}
+                />
+                <Text style={styles.editLabel}>Province</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.province}
+                  onChangeText={(province) => setEditDraft(prev => prev ? { ...prev, province } : prev)}
+                  placeholder="Province"
+                  placeholderTextColor={theme.textMuted}
+                />
+                <Text style={styles.editLabel}>Country</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editDraft.country}
+                  onChangeText={(country) => setEditDraft(prev => prev ? { ...prev, country } : prev)}
+                  placeholder="Country"
+                  placeholderTextColor={theme.textMuted}
+                />
+              </View>
+
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>State</Text>
+                <View style={styles.toggleRow}>
+                  <Text style={styles.modalLabel}>Active</Text>
+                  <Switch
+                    value={editDraft.is_active}
+                    onValueChange={(is_active) => setEditDraft(prev => prev ? { ...prev, is_active } : prev)}
+                    trackColor={{ false: '#4b5563', true: theme.success }}
+                    thumbColor="#ffffff"
+                  />
+                </View>
+                <View style={styles.toggleRow}>
+                  <Text style={styles.modalLabel}>Verified</Text>
+                  <Switch
+                    value={editDraft.is_verified}
+                    onValueChange={(is_verified) => setEditDraft(prev => prev ? { ...prev, is_verified } : prev)}
+                    trackColor={{ false: '#4b5563', true: theme.primary }}
+                    thumbColor="#ffffff"
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.editFooter, { paddingBottom: bottomInset + 12 }]}>
+              <TouchableOpacity style={styles.editCancelBtn} onPress={closeEditModal} disabled={savingEdit}>
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editSaveBtn, savingEdit && styles.editSaveBtnDisabled]}
+                onPress={saveOrganizationProfile}
+                disabled={savingEdit}
+              >
+                <Text style={styles.editSaveText}>{savingEdit ? 'Saving...' : 'Save Changes'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderMembersModal = () => {
+    if (!selectedOrg) return null;
+
+    return (
+      <Modal
+        visible={showMembersModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <View style={styles.actionsOverlay}>
+          <View style={styles.memberModalContent}>
+            <View style={styles.memberModalHeader}>
+              <View>
+                <Text style={styles.actionsTitle}>
+                  {membersMode === 'students' ? 'Students' : 'Teachers'}
+                </Text>
+                <Text style={styles.actionsSubtitle}>{selectedOrg.name}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowMembersModal(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {membersLoading ? (
+              <View style={styles.membersLoading}>
+                <EduDashSpinner size="small" color={theme.primary} />
+                <Text style={styles.loadingText}>Loading members...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.membersList}>
+                {memberRows.map((row) => (
+                  <View key={row.id} style={styles.memberRow}>
+                    <View style={styles.memberTextWrap}>
+                      <Text style={styles.memberName}>{row.name}</Text>
+                      <Text style={styles.memberSecondary}>{row.secondary}</Text>
+                    </View>
+                    <View style={[styles.memberStatusPill, { backgroundColor: (row.isActive ? theme.success : theme.error) + '22' }]}>
+                      <Text style={[styles.memberStatusText, { color: row.isActive ? theme.success : theme.error }]}>
+                        {row.status}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {memberRows.length === 0 && (
+                  <View style={styles.emptyMembers}>
+                    <Text style={styles.emptyText}>
+                      No {membersMode} found for this organization.
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+
+            <View style={styles.memberActions}>
+              <TouchableOpacity
+                style={styles.memberSecondaryBtn}
+                onPress={() => jumpToUserManager(membersMode)}
+              >
+                <Text style={styles.memberSecondaryBtnText}>Open User Manager</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.memberPrimaryBtn} onPress={() => setShowMembersModal(false)}>
+                <Text style={styles.memberPrimaryBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     );
   };
@@ -492,6 +932,8 @@ export default function SuperAdminOrganizations() {
 
       {renderDetailModal()}
       {renderActionsModal()}
+      {renderEditModal()}
+      {renderMembersModal()}
       <AlertModal {...alertProps} />
     </SafeAreaView>
   );
