@@ -46,6 +46,7 @@ import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
+import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
 import {
   buildSystemPrompt,
   cleanForTTS,
@@ -77,6 +78,7 @@ export default function DashVoiceScreen() {
   const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   const role = String(profile?.role || 'parent').toLowerCase();
+  const aiScope = useMemo(() => resolveAIProxyScopeFromRole(role), [role]);
   const orgType = getOrganizationType(profile);
   const dashPolicy = useMemo(
     () =>
@@ -176,7 +178,7 @@ export default function DashVoiceScreen() {
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            scope: role,
+            scope: aiScope,
             service_type: 'chat_message',
             payload: {
               messages: [{ role: 'user', content: 'Hello' }],
@@ -465,7 +467,7 @@ export default function DashVoiceScreen() {
 
       const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
       const bodyPayload = {
-        scope: role,
+        scope: aiScope,
         service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
         payload,
         stream: !ocrMode, enable_tools: true,
@@ -601,6 +603,7 @@ export default function DashVoiceScreen() {
     isProcessing,
     orgType,
     role,
+    aiScope,
     preferredLanguage,
     attachedImage,
     enqueueSpeech,

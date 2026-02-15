@@ -16,37 +16,59 @@ import {
  * This acts as a safety net against routing to non-existent screens.
  */
 const KNOWN_VALID_ROUTES = new Set([
+  '/(k12)/parent/dashboard',
   '/screens/app-search',
   '/screens/notifications',
   '/screens/account',
   '/screens/dash-assistant',
+  '/screens/dash-tutor',
   '/screens/exam-prep',
+  '/screens/subscription-setup',
   '/screens/parent-messages',
   '/screens/grades',
+  '/screens/parent-children',
+  '/screens/parent-progress',
+  '/screens/parent-attendance',
+  '/screens/parent-payments',
+  '/screens/parent-announcements',
+  '/screens/parent-menu',
+  '/screens/parent-document-upload',
+  '/screens/homework',
+  '/screens/parent-weekly-report',
+  '/screens/settings',
   '/screens/parent-activity-feed',
   '/screens/calendar',
-  '/screens/parent-announcements',
-  '/screens/parent-children',
 ]);
 
 /** Routes that must NOT appear in the action map (they don't exist). */
 const KNOWN_DEAD_ROUTES = [
   '/screens/parent-events',
   '/screens/search',
-  '/screens/parent-progress', // should be /screens/grades for K12
 ];
 
 describe('K12 Parent Action Map', () => {
   it('exports all expected action IDs', () => {
     const expectedIds: K12ParentActionId[] = [
+      'dashboard_home',
       'search',
       'notifications',
       'profile',
       'tutor_session',
       'exam_builder',
+      'subscription_setup',
       'messages',
       'grades',
       'account',
+      'children',
+      'progress',
+      'attendance',
+      'payments',
+      'announcements',
+      'weekly_menu',
+      'documents',
+      'homework',
+      'weekly_report',
+      'settings',
       'see_all_activity',
       'see_all_events',
       'event_detail',
@@ -84,8 +106,8 @@ describe('K12 Parent Action Map', () => {
     expect(K12_PARENT_ACTIONS.see_all_events.route).toBe('/screens/calendar');
   });
 
-  it('tutor_session includes mode=tutor param', () => {
-    expect(K12_PARENT_ACTIONS.tutor_session.params?.mode).toBe('tutor');
+  it('tutor_session includes mode=diagnostic param', () => {
+    expect(K12_PARENT_ACTIONS.tutor_session.params?.mode).toBe('diagnostic');
   });
 
   it('every action has a non-empty label', () => {
