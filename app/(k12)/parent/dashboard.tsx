@@ -40,7 +40,7 @@ import { useSpotlightTarget } from '@/hooks/useSpotlightTarget';
 import { GlassCard } from '@/components/nextgen/GlassCard';
 import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
 import { Pill } from '@/components/nextgen/Pill';
-import DashOrb from '@/components/nextgen/DashOrb';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import SubNavTabs from '@/components/nextgen/SubNavTabs';
 import FocusBanner from '@/components/nextgen/FocusBanner';
 import InlineTutorPreview from '@/components/nextgen/InlineTutorPreview';
@@ -404,7 +404,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             onPress={() => setIsDrawerOpen(true)}
             accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}
           >
-            <DashOrb size={30} />
+            <CosmicOrb size={30} isProcessing={false} isSpeaking={false} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrapper}>
             <Text style={[styles.headerTitle, { color: theme.text }]}>

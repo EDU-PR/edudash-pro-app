@@ -84,71 +84,103 @@ export function useOrbStreaming() {
       let sentenceBuffer = '';
       let sentenceIndex = 0;
 
-      try {
-        const response = await fetch(request.endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${request.accessToken}`,
-          },
-          body: JSON.stringify({ ...request.body, stream: true }),
-          signal: controller.signal,
-        });
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try {
+          const parsed = JSON.parse(data);
+          const text =
+            parsed?.delta?.text ??
+            parsed?.choices?.[0]?.delta?.content ??
+            '';
+          if (!text) return;
 
-        if (!response.ok) {
-          throw new Error(`Streaming failed: ${response.status}`);
-        }
+          accumulated += text;
+          sentenceBuffer += text;
+          callbacks.onTextChunk(text, accumulated);
 
-        // React Native may not support ReadableStream — fall back to full text
-        const isRN =
-          typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
-        const canStream =
-          !isRN && response.body && typeof response.body.getReader === 'function';
+          // Extract complete sentences and fire TTS for each
+          const { sentences, remainder } = extractCompleteSentences(sentenceBuffer);
+          sentenceBuffer = remainder;
 
-        const processLine = (line: string) => {
-          if (!line.startsWith('data: ')) return;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') return;
-          try {
-            const parsed = JSON.parse(data);
-            const text =
-              parsed?.delta?.text ??
-              parsed?.choices?.[0]?.delta?.content ??
-              '';
-            if (!text) return;
+          for (const sentence of sentences) {
+            callbacks.onSentenceReady(sentence, sentenceIndex);
 
-            accumulated += text;
-            sentenceBuffer += text;
-            callbacks.onTextChunk(text, accumulated);
-
-            // Extract complete sentences and fire TTS for each
-            const { sentences, remainder } = extractCompleteSentences(sentenceBuffer);
-            sentenceBuffer = remainder;
-
-            for (const sentence of sentences) {
-              callbacks.onSentenceReady(sentence, sentenceIndex);
-
-              // Estimate viseme timeline for this sentence and fire events
-              const timeline = request.phonicsMode
-                ? estimateVisemeTimelinePhonics(sentence)
-                : estimateVisemeTimeline(sentence);
-              for (const evt of timeline) {
-                // Schedule viseme at the estimated offset
-                setTimeout(() => {
-                  if (isStreamingRef.current || sentenceIndex > 0) {
-                    callbacks.onVisemeEvent(evt);
-                  }
-                }, evt.offsetMs);
-              }
-
-              sentenceIndex++;
+            // Estimate viseme timeline for this sentence and fire events
+            const timeline = request.phonicsMode
+              ? estimateVisemeTimelinePhonics(sentence)
+              : estimateVisemeTimeline(sentence);
+            for (const evt of timeline) {
+              setTimeout(() => {
+                if (isStreamingRef.current || sentenceIndex > 0) {
+                  callbacks.onVisemeEvent(evt);
+                }
+              }, evt.offsetMs);
             }
-          } catch {
-            // Skip malformed SSE lines
-          }
-        };
 
-        if (canStream) {
+            sentenceIndex++;
+          }
+        } catch {
+          // Skip malformed SSE lines
+        }
+      };
+
+      // Detect environment — RN uses XHR for true incremental streaming,
+      // web uses ReadableStream.
+      const isRN =
+        typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+
+      try {
+        if (isRN) {
+          // React Native: XHR with onreadystatechange gives incremental chunks
+          // (much faster first-token than response.text() which blocks until complete)
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', request.endpoint);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('Authorization', `Bearer ${request.accessToken}`);
+            xhr.responseType = 'text';
+
+            let lastIdx = 0;
+            const drain = () => {
+              const chunk = xhr.responseText.slice(lastIdx);
+              lastIdx = xhr.responseText.length;
+              for (const line of chunk.split('\n')) processLine(line);
+            };
+
+            xhr.onreadystatechange = () => {
+              if (xhr.readyState >= 3) drain();
+              if (xhr.readyState === 4) {
+                xhr.status >= 200 && xhr.status < 300
+                  ? resolve()
+                  : reject(new Error(`Streaming failed: ${xhr.status}`));
+              }
+            };
+
+            xhr.onerror = () => reject(new Error('Network error during streaming'));
+
+            const onAbort = () => { xhr.abort(); reject(Object.assign(new Error('AbortError'), { name: 'AbortError' })); };
+            controller.signal.addEventListener('abort', onAbort);
+
+            xhr.send(JSON.stringify({ ...request.body, stream: true }));
+          });
+        } else {
+          // Web: fetch + ReadableStream
+          const response = await fetch(request.endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${request.accessToken}`,
+            },
+            body: JSON.stringify({ ...request.body, stream: true }),
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            throw new Error(`Streaming failed: ${response.status}`);
+          }
+
           const reader = response.body!.getReader();
           const decoder = new TextDecoder('utf-8');
           let buffer = '';
@@ -162,12 +194,7 @@ export function useOrbStreaming() {
             buffer = lines.pop() || '';
             for (const line of lines) processLine(line);
           }
-          // Process any remaining buffer
           if (buffer) processLine(buffer);
-        } else {
-          // RN fallback: read full text then parse SSE lines
-          const sseText = await response.text();
-          for (const line of sseText.split('\n')) processLine(line);
         }
 
         // Flush remaining text as final sentence
