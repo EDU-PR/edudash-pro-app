@@ -36,6 +36,7 @@ import {
   trackTutorFullChatHandoff,
   trackTutorPhonicsContractApplied,
 } from '@/lib/ai/trackingEvents';
+import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
 import { styles } from '@/components/super-admin/dash-ai-chat/DashAIChat.styles';
 import { ChatMessage, ChatMessageData } from '@/components/super-admin/dash-ai-chat/ChatMessage';
 import { ChatInput } from '@/components/super-admin/dash-ai-chat/ChatInput';
@@ -115,6 +116,7 @@ export default function DashTutorVoiceChat() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const normalizedRole = String(profile?.role || 'parent').toLowerCase();
+  const aiScope = useMemo(() => resolveAIProxyScopeFromRole(normalizedRole), [normalizedRole]);
   const orgType = getOrganizationType(profile);
 
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
@@ -474,7 +476,7 @@ export default function DashTutorVoiceChat() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          scope: normalizedRole || 'parent',
+          scope: aiScope,
           service_type: 'dash_conversation',
           payload: {
             messages: payloadMessages,
@@ -532,7 +534,7 @@ export default function DashTutorVoiceChat() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          scope: normalizedRole || 'parent',
+          scope: aiScope,
           service_type: 'dash_conversation',
           payload: {
             messages: payloadMessages,

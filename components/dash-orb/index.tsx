@@ -68,6 +68,7 @@ import { logger } from '@/lib/logger';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
+import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
 
 let AsyncStorage: any = null;
 try {
@@ -1335,10 +1336,11 @@ export default function DashOrb({
           schoolType: learnerContext?.schoolType || null,
           organizationType: learnerContext?.schoolType || null,
         });
+        const aiScope = resolveAIProxyScopeFromRole(normalizedRole);
         const traceId = `dash_orb_stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
         const streamBody: Record<string, unknown> = {
-          scope: normalizedRole || 'parent',
+          scope: aiScope,
           service_type: 'dash_conversation',
           payload: {
             prompt: command,
@@ -1734,9 +1736,10 @@ export default function DashOrb({
           ].join('\n')
         : null;
       const ocrContext = ocrMode ? getOCRPromptForTask(ocrTask) : null;
+      const aiScope = resolveAIProxyScopeFromRole(normalizedRole);
 
       const aiProxyBody = {
-        scope: normalizedRole || 'parent',
+        scope: aiScope,
         service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
         payload: {
           prompt: command,

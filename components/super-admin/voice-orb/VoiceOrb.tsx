@@ -777,13 +777,24 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   };
 
   // Determine glow color based on state
-  const glowColor = isListening 
-    ? COLORS.listening 
-    : (isSpeaking || ttsIsSpeaking) 
-      ? COLORS.speaking 
-      : COLORS.violet;
+  const coreState: 'idle' | 'listening' | 'speaking' = (isSpeaking || ttsIsSpeaking)
+    ? 'speaking'
+    : (isListening || recorderState.isRecording || usingLiveSTT)
+      ? 'listening'
+      : 'idle';
+
+  // Per UX: idle=white, listening=green, speaking=red.
+  const coreColor = coreState === 'idle'
+    ? 'rgba(255, 255, 255, 0.98)'
+    : coreState === 'listening'
+      ? COLORS.listening
+      : '#ef4444';
+
+  // Keep the core glow consistent with the state so the center is readable.
+  const glowColor = coreState === 'idle'
+    ? COLORS.violet
+    : coreColor;
   const liveHasSpeech = liveTranscript.trim().length > 0;
-  const speechActive = usingLiveSTT ? liveHasSpeech : recorderState.hasSpeechStarted;
 
   return (
     <View style={styles.container}>
@@ -871,6 +882,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
                     width: coreSize,
                     height: coreSize,
                     borderRadius: coreSize / 2,
+                    backgroundColor: coreColor,
                     shadowColor: glowColor,
                   },
                 ]}
@@ -900,12 +912,6 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         <Text style={[styles.statusText, { color: isMuted ? '#ef4444' : theme.textSecondary }]}>
           {isMuted ? 'Muted' : isTranscribing ? 'Transcribing...' : statusText}
         </Text>
-      ) : (isListening || recorderState.isRecording || usingLiveSTT) && !isMuted ? (
-        <Text style={[styles.statusText, { color: speechActive ? COLORS.listening : theme.textSecondary }]}>
-          {speechActive ? 'Hearing you...' : 'Listening...'}
-        </Text>
-      ) : (isSpeaking || ttsIsSpeaking) ? (
-        <Text style={[styles.statusText, { color: COLORS.speaking }]}>Speaking...</Text>
       ) : null}
 
       {showLiveTranscript && usingLiveSTT && liveHasSpeech && (
