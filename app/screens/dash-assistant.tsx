@@ -12,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import DashAssistant from '@/components/ai/DashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
+import { resolveDashboardFallback } from '@/lib/dashboard/resolveDashboardFallback';
 import type { TutorMode } from '@/hooks/dash-assistant/tutorTypes';
 
 export default function DashAssistantScreen() {
@@ -42,31 +43,12 @@ export default function DashAssistantScreen() {
   const uiMode: 'advisor' | 'tutor' | 'orb' | 'exam' | null =
     mode === 'advisor' || mode === 'orb' || mode === 'tutor' || mode === 'exam' ? mode : null;
 
-  const getFallbackPath = () => {
-    const role = normalizeRole(String(profile?.role || ''));
-    switch (role) {
-      case 'teacher':
-        return '/screens/teacher-dashboard';
-      case 'principal':
-      case 'principal_admin':
-        return '/screens/principal-dashboard';
-      case 'parent':
-        return '/screens/parent-dashboard';
-      case 'student':
-        return '/screens/learner-dashboard';
-      case 'super_admin':
-        return '/screens/super-admin-dashboard';
-      default:
-        return '/'; // safe landing
-    }
-  };
-
   const handleClose = () => {
     // Navigate back to the previous screen
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(getFallbackPath());
+      router.replace(resolveDashboardFallback(profile) as any);
     }
   };
 

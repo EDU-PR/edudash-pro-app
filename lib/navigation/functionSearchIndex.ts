@@ -337,7 +337,7 @@ export const FUNCTION_SEARCH_INDEX: FunctionSearchItem[] = [
     route: '/screens/parent-payments',
     icon: 'cash',
     section: 'Finance',
-    keywords: ['payment', 'payments', 'fees', 'billing', 'balance', 'outstanding', 'proof of payment', 'pop'],
+    keywords: ['payment', 'payments', 'fees', 'billing', 'balance', 'outstanding', 'proof of payment', 'pop', 'pay', 'school fees', 'money', 'owe', 'owing', 'invoice'],
     roles: ['parent'],
     priority: 70,
   },
@@ -348,7 +348,7 @@ export const FUNCTION_SEARCH_INDEX: FunctionSearchItem[] = [
     route: '/screens/parent-payments?tab=upload',
     icon: 'cloud-upload',
     section: 'Finance',
-    keywords: ['proof of payment', 'pop', 'upload', 'payment upload', 'receipt'],
+    keywords: ['proof of payment', 'pop', 'upload', 'payment upload', 'receipt', 'receipts', 'pay', 'submit payment'],
     roles: ['parent'],
     priority: 69,
   },
@@ -359,7 +359,7 @@ export const FUNCTION_SEARCH_INDEX: FunctionSearchItem[] = [
     route: '/screens/parent-pop-history',
     icon: 'time',
     section: 'Finance',
-    keywords: ['payment history', 'pop history', 'proofs', 'receipts', 'uploads'],
+    keywords: ['payment history', 'pop history', 'proofs', 'receipts', 'uploads', 'payment records'],
     roles: ['parent'],
     priority: 68,
   },
@@ -403,7 +403,7 @@ export const FUNCTION_SEARCH_INDEX: FunctionSearchItem[] = [
     route: '/screens/parent-document-upload',
     icon: 'documents',
     section: 'Documents',
-    keywords: ['documents', 'document', 'uploads', 'registration docs', 'files'],
+    keywords: ['documents', 'document', 'uploads', 'registration docs', 'files', 'docs', 'receipts', 'certificates', 'records'],
     roles: ['parent'],
     priority: 70,
   },
@@ -494,6 +494,40 @@ export const FUNCTION_SEARCH_INDEX: FunctionSearchItem[] = [
     keywords: ['settings', 'preferences', 'account'],
     roles: ['all'],
     priority: 64,
+  },
+  // K12 parent-specific screens
+  {
+    id: 'parent-grades',
+    title: 'Grades',
+    description: 'View learner grades, assessments, and academic progress.',
+    route: '/screens/grades',
+    icon: 'ribbon',
+    section: 'Learning',
+    keywords: ['grades', 'marks', 'results', 'assessments', 'report card', 'academic', 'progress', 'scores'],
+    roles: ['parent', 'student'],
+    priority: 72,
+  },
+  {
+    id: 'parent-activity-feed',
+    title: 'Activity Feed',
+    description: 'Recent learner activity, submissions, and school updates.',
+    route: '/screens/parent-activity-feed',
+    icon: 'pulse',
+    section: 'Navigation',
+    keywords: ['activity', 'feed', 'updates', 'recent', 'submissions', 'timeline'],
+    roles: ['parent'],
+    priority: 68,
+  },
+  {
+    id: 'parent-announcements',
+    title: 'School Announcements',
+    description: 'View school announcements, news, and communications.',
+    route: '/screens/parent-announcements',
+    icon: 'megaphone',
+    section: 'Communication',
+    keywords: ['announcements', 'news', 'school', 'communication', 'notices', 'updates', 'newsletter'],
+    roles: ['parent'],
+    priority: 68,
   },
 ];
 
@@ -683,6 +717,16 @@ function inferRolesFromRoute(route: string): FunctionSearchRole[] | undefined {
   return undefined;
 }
 
+/**
+ * Routes known to not have corresponding screen files.
+ * These are excluded from auto-generated search results to prevent
+ * navigation to non-existent screens.
+ */
+const INVALID_ROUTE_BLOCKLIST = new Set([
+  '/screens/parent-events',
+  '/screens/search',
+]);
+
 function buildAutoScreenIndex(base: FunctionSearchItem[]): FunctionSearchItem[] {
   const existingRoutes = new Set(base.map((item) => item.route));
   const autoItems: FunctionSearchItem[] = [];
@@ -691,6 +735,7 @@ function buildAutoScreenIndex(base: FunctionSearchItem[]): FunctionSearchItem[] 
     const route = String(screen.route || '');
     if (!route || existingRoutes.has(route)) return;
     if (!route.startsWith('/screens/') && !route.startsWith('/(k12)/')) return;
+    if (INVALID_ROUTE_BLOCKLIST.has(route)) return;
     const title = String(screen.title || routeToTitle(route));
     const description = String(screen.description || `Open ${title}`);
     const section = routeToSection(route);
@@ -710,6 +755,7 @@ function buildAutoScreenIndex(base: FunctionSearchItem[]): FunctionSearchItem[] 
 
   APP_WIDE_ROUTE_CANDIDATES.forEach((route) => {
     if (!route || existingRoutes.has(route)) return;
+    if (INVALID_ROUTE_BLOCKLIST.has(route)) return;
     const title = routeToTitle(route);
     const description = `Open ${title} screen`;
     const section = routeToSection(route);

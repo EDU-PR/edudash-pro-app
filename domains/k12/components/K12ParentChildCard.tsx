@@ -30,6 +30,8 @@ export interface Child {
 interface ChildCardProps {
   child: Child;
   colors: ThemeColors;
+  /** Callback when the card is pressed; receives the child's ID */
+  onPressChild?: (childId: string) => void;
 }
 
 const normalizeGradeLabel = (value?: string | null): string => {
@@ -37,7 +39,7 @@ const normalizeGradeLabel = (value?: string | null): string => {
   return value.replace(/^\s*grade\s+grade\s+/i, 'Grade ').replace(/\s+/g, ' ').trim();
 };
 
-export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
+export const ChildCard: React.FC<ChildCardProps> = ({ child, colors, onPressChild }) => (
   <TouchableOpacity
     style={[
       styles.childCard,
@@ -46,8 +48,7 @@ export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
     activeOpacity={0.7}
     onPress={() => {
       track('k12.parent.child_card_tap', { childId: child.id });
-      // TODO: Navigate to child detail when route exists
-      // router.push(`/(k12)/parent/children/${child.id}` as any);
+      onPressChild?.(child.id);
     }}
   >
     <View style={styles.childCardHeader}>

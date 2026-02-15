@@ -193,7 +193,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     }
   }, [profile?.id, authLoading, profileLoading, fetchChildrenData]);
 
-  // Redirect if unauthorized
+  // Redirect if unauthorized or wrong role
   const hasRedirectedRef = React.useRef(false);
   useEffect(() => {
     if (hasRedirectedRef.current) return;
@@ -203,8 +203,13 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         router.replace('/(auth)/sign-in');
         return;
       }
+      if (!canView || !hasAccess) {
+        hasRedirectedRef.current = true;
+        router.replace('/profiles-gate' as any);
+        return;
+      }
     }
-  }, [authLoading, profileLoading, user?.id]);
+  }, [authLoading, profileLoading, user?.id, canView, hasAccess]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -408,7 +413,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             style={styles.notificationButton}
             onPress={() => {
               track('k12.parent.search_tap', { user_id: user?.id });
-              router.push('/screens/search' as any);
+              router.push({ pathname: '/screens/app-search', params: { scope: 'all' } } as any);
             }}
           >
             <Ionicons name="search-outline" size={22} color={theme.text} />
@@ -457,7 +462,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             // Don't setActiveSubTab — dashboard tab stays active;
             // other tabs navigate to separate screens.
             if (tabId === 'messages') router.push('/screens/parent-messages' as any);
-            else if (tabId === 'grades') router.push('/screens/parent-progress' as any);
+            else if (tabId === 'grades') router.push('/screens/grades' as any);
             else if (tabId === 'account') router.push('/screens/account' as any);
           }}
         />
@@ -677,7 +682,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             </View>
           ) : (
             children.map((child) => (
-              <ChildCard key={child.id} child={child} colors={theme} />
+              <ChildCard key={child.id} child={child} colors={theme} onPressChild={(childId) => {
+                router.push({ pathname: '/screens/parent-children', params: { childId } } as any);
+              }} />
             ))
           )}
         </View>
@@ -772,6 +779,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             actionLabel={t('common.see_all', { defaultValue: 'See All' })}
             onActionPress={() => {
               track('k12.parent.see_all_updates_tap', { user_id: user?.id });
+              router.push('/screens/parent-activity-feed' as any);
             }}
           />
           {recentUpdates.length === 0 ? (
@@ -815,7 +823,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             actionLabel={t('common.see_all', { defaultValue: 'See All' })}
             onActionPress={() => {
               track('k12.parent.see_all_events_tap', { user_id: user?.id });
-              router.push('/screens/parent-events' as any);
+              router.push({ pathname: '/screens/calendar', params: { source: 'k12_parent', tab: 'events' } } as any);
             }}
           />
           {upcomingEvents.length === 0 ? (
@@ -840,6 +848,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                 activeOpacity={0.7}
                 onPress={() => {
                   track('k12.parent.event_tap', { eventId: event.id, user_id: user?.id });
+                  router.push({ pathname: '/screens/calendar', params: { date: event.date } } as any);
                 }}
               >
                 <View style={[styles.eventDate, { backgroundColor: theme.primary + '20' }]}>
@@ -866,7 +875,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           activeOpacity={0.8}
           onPress={() => {
             track('k12.parent.school_communication_tap', { user_id: user?.id });
-            // TODO: Navigate to school communication
+            router.push('/screens/parent-announcements' as any);
           }}
         >
           <LinearGradient

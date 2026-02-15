@@ -570,6 +570,10 @@ export function BottomTabBar() {
     if (homeDashboardRoute && item.id === 'parent-dashboard' && userRole === 'parent') {
       return { ...item, route: homeDashboardRoute };
     }
+    // K12 parent center Dash tab → Tutor Chat (locked decision)
+    if (item.id === 'parent-dash' && userRole === 'parent' && resolvedSchoolType === 'k12_school') {
+      return { ...item, route: '/screens/dash-assistant?mode=tutor&source=k12_parent_tab' };
+    }
     if (homeDashboardRoute && item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
       return { ...item, route: homeDashboardRoute };
     }
@@ -596,6 +600,15 @@ export function BottomTabBar() {
         pathname.startsWith('/screens/parent-dashboard') ||
         pathname === '/(k12)/parent/dashboard' ||
         pathname.startsWith('/(k12)/parent/dashboard')
+      );
+    }
+
+    // K12 parent center Dash tab — highlight for any Dash-related screen
+    if (tabId === 'parent-dash') {
+      return (
+        pathname.includes('/screens/dash-assistant') ||
+        pathname.includes('/screens/dash-voice') ||
+        pathname.includes('/screens/dash-tutor')
       );
     }
 
