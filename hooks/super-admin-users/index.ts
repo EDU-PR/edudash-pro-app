@@ -168,6 +168,7 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
     suspendUser: (user) => actions.suspendUser(user, deps),
     updateUserRole: (user, role) => actions.updateUserRole(user, role, deps),
     requestUserDeletion: (user) => actions.requestUserDeletion(user, deps),
+    deleteUserNow: (user) => actions.deleteUserNow(user, deps),
     resetUserPassword: (user) => actions.resetUserPassword(user, deps),
     createTempPassword: (user) => actions.createTempPassword(user, deps),
     openTierPicker: (user) => actions.openTierPicker(user, deps),

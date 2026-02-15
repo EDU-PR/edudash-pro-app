@@ -223,7 +223,9 @@ export async function requestUserDeletion(user: UserRecord, deps: ActionDeps): P
 
   showAlert({
     title: 'Request User Deletion',
-    message: `Request deletion of ${user.email}? This will schedule the user for deletion in 7 days.`,
+    message:
+      `Request deletion of ${user.email}?\n\n` +
+      `This will deactivate the user immediately and schedule deletion in 7 days.`,
     buttons: [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -248,6 +250,64 @@ export async function requestUserDeletion(user: UserRecord, deps: ActionDeps): P
             logger.error('Failed to request user deletion:', error);
             const message = error instanceof Error ? error.message : 'Failed to request user deletion';
             showAlert({ title: 'Error', message, type: 'error' });
+          }
+        },
+      },
+    ],
+  });
+}
+
+export async function deleteUserNow(user: UserRecord, deps: ActionDeps): Promise<void> {
+  const { showAlert, fetchUsers, profileId } = deps;
+  const targetAuthId = getAuthUserId(user);
+
+  showAlert({
+    title: 'Delete User Immediately',
+    message:
+      `This permanently deletes ${user.email} now.\n\n` +
+      `This cannot be undone and will remove the user from authentication.\n\n` +
+      `Continue?`,
+    buttons: [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete Now',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const { data, error } = await assertSupabase().functions.invoke('superadmin-delete-user', {
+              body: {
+                confirm: true,
+                target_user_id: targetAuthId,
+                reason: 'Immediate deletion by superadmin',
+              },
+            });
+            if (error) throw error;
+            if (!data?.success) throw new Error(data?.error || 'Delete failed');
+
+            track('superadmin_user_deleted_now', {
+              user_id: user.id,
+              user_email: user.email,
+              target_auth_user_id: targetAuthId,
+            });
+
+            await writeSuperAdminAudit({
+              actorProfileId: profileId,
+              action: 'user_deleted_now',
+              targetId: user.id,
+              targetType: 'user',
+              description: `Immediate deletion executed for ${user.email}`,
+              metadata: { target_auth_user_id: targetAuthId },
+            });
+
+            showAlert({ title: 'Deleted', message: 'User deleted successfully.', type: 'success' });
+            fetchUsers();
+          } catch (error: any) {
+            logger.error('Failed to delete user immediately:', error);
+            showAlert({
+              title: 'Delete Failed',
+              message: error?.message || 'Failed to delete user immediately',
+              type: 'error',
+            });
           }
         },
       },
