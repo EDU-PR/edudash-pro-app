@@ -777,24 +777,27 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   };
 
   // Determine glow color based on state
-  const coreState: 'idle' | 'listening' | 'speaking' = (isSpeaking || ttsIsSpeaking)
-    ? 'speaking'
-    : (isListening || recorderState.isRecording || usingLiveSTT)
-      ? 'listening'
-      : 'idle';
-
-  // Per UX: idle=white, listening=green, speaking=red.
-  const coreColor = coreState === 'idle'
-    ? 'rgba(255, 255, 255, 0.98)'
-    : coreState === 'listening'
-      ? COLORS.listening
-      : '#ef4444';
-
-  // Keep the core glow consistent with the state so the center is readable.
-  const glowColor = coreState === 'idle'
-    ? COLORS.violet
-    : coreColor;
   const liveHasSpeech = liveTranscript.trim().length > 0;
+  const listeningActive = isListening || recorderState.isRecording || usingLiveSTT;
+  const speechActive = usingLiveSTT ? liveHasSpeech : recorderState.hasSpeechStarted;
+
+  // Per UX:
+  // - Idle / waiting for speech: white core
+  // - Listening and hearing speech: green core
+  // - Speaking: red core
+  const isCurrentlySpeaking = isSpeaking || ttsIsSpeaking;
+  const coreColor = isCurrentlySpeaking
+    ? '#ef4444'
+    : (listeningActive && speechActive)
+      ? COLORS.listening
+      : 'rgba(255, 255, 255, 0.98)';
+
+  // Keep the core glow readable. Idle keeps a subtle violet halo.
+  const glowColor = isCurrentlySpeaking
+    ? coreColor
+    : (listeningActive && speechActive)
+      ? coreColor
+      : COLORS.violet;
 
   return (
     <View style={styles.container}>
