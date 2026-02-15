@@ -49,6 +49,16 @@ const SUSTAINED_SOUND_MAP: Record<string, string> = {
   ah: 'a', eh: 'e', ih: 'i', aw: 'o', uh: 'u',
 };
 
+function normalizeEduDashBrandForms(text: string): string {
+  return text
+    // "E D U DashPro" / "E.D.U Dash Pro" -> "EduDash Pro"
+    .replace(/\bE[\s.\-]*D[\s.\-]*U[\s.\-]*DASH[\s-]*PRO\b/gi, 'EduDash Pro')
+    // "Edu Dash Pro" / "Edu-Dash-Pro" -> "EduDash Pro"
+    .replace(/\bEDU[\s-]*DASH[\s-]*PRO\b/gi, 'EduDash Pro')
+    // "EduDashPro" -> "EduDash Pro"
+    .replace(/\bEduDashPro\b/g, 'EduDash Pro');
+}
+
 function normalizePhonicsMarkers(
   text: string,
   phonicsMode: boolean,
@@ -167,7 +177,10 @@ function stripMarkdownAndMeta(text: string, preservePhonicsMarkers: boolean): st
 
   return next
     .replace(/_Tools used:.*?_/gi, '')
-    .replace(/_.*?tokens used_/gi, '');
+    .replace(/_.*?tokens used_/gi, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*tools?\s*used\s*:.*$/gim, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*\d[\d,\s]*(?:\.\d+)?\s*tokens?\s*used\b.*$/gim, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*tokens?\s*used\b.*$/gim, '');
 }
 
 function stripEmojiAndSymbols(text: string): string {
@@ -203,6 +216,7 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
   text = stripMarkdownAndMeta(text, preservePhonicsMarkers);
   text = stripEmojiAndSymbols(text);
   text = normalizeChoiceLabels(text);
+  text = normalizeEduDashBrandForms(text);
 
   // Apply pronunciation dictionary (brand names, SA languages, acronyms)
   text = applyPronunciationPlainText(text);

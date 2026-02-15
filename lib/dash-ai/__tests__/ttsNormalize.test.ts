@@ -67,4 +67,16 @@ describe('ttsNormalize', () => {
     expect(out).toContain('Option C. apple');
     expect(out).not.toContain('/a/');
   });
+
+  it('normalizes EduDash brand variants so TTS says one product name', () => {
+    const out = normalizeForTTS('Welcome to E D U DashPro platform.');
+    expect(out).toContain('EduDash Pro');
+    expect(out).not.toContain('E D U');
+  });
+
+  it('strips token usage footer lines from spoken output', () => {
+    const out = normalizeForTTS('Great plan.\n📊 2,561 tokens used');
+    expect(out).toContain('Great plan');
+    expect(out.toLowerCase()).not.toContain('tokens used');
+  });
 });
