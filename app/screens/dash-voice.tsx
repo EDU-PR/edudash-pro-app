@@ -39,7 +39,6 @@ import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTele
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
-import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import { DashOrb } from '@/components/dash-orb/DashOrb';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/LanguageDropdown';
@@ -58,7 +57,7 @@ import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { detectOCRTask, isOCRIntent, getOCRPromptForTask } from '@/lib/dash-ai/ocrPrompts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const ORB_SIZE = Math.min(SCREEN_WIDTH * 0.55, 220);
+const ORB_SIZE = Math.min(SCREEN_WIDTH * 0.78, 320);
 
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
@@ -106,6 +105,7 @@ export default function DashVoiceScreen() {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [isGreetingLoading, setIsGreetingLoading] = useState(true);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   // Conversation history for context (prevents redundant greetings)
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -116,6 +116,12 @@ export default function DashVoiceScreen() {
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
+
+  // Streaming-to-speech: speak the first complete sentence ASAP to cut perceived latency.
+  const STREAMING_TTS_ENABLED = process.env.EXPO_PUBLIC_DASH_VOICE_STREAMING_TTS !== 'false';
+  const streamedPrefixQueuedRef = useRef('');
+  const streamedHasQueuedRef = useRef(false);
+  const streamedLastQueuedAtRef = useRef(0);
 
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
@@ -250,6 +256,69 @@ export default function DashVoiceScreen() {
     processSpeechQueue();
   }, [processSpeechQueue]);
 
+  const longestCommonPrefixLen = useCallback((a: string, b: string) => {
+    const max = Math.min(a.length, b.length);
+    let i = 0;
+    for (; i < max; i += 1) {
+      if (a[i] !== b[i]) break;
+    }
+    return i;
+  }, []);
+
+  const findSpeakBoundaryIndex = useCallback((text: string) => {
+    if (!text) return -1;
+    // Prefer sentence-ending punctuation for "speak-while-streaming".
+    const m = /[.!?](?=\s|$)/.exec(text);
+    if (m) return m.index;
+    // Paragraph breaks are also safe boundaries.
+    const para = text.indexOf('\n\n');
+    if (para >= 0) return para;
+    return -1;
+  }, []);
+
+  const resetStreamingSpeech = useCallback(() => {
+    streamedPrefixQueuedRef.current = '';
+    streamedHasQueuedRef.current = false;
+    streamedLastQueuedAtRef.current = 0;
+  }, []);
+
+  const maybeEnqueueStreamingSpeech = useCallback((accumulated: string) => {
+    if (!STREAMING_TTS_ENABLED) return;
+    if (!accumulated) return;
+
+    const full = accumulated;
+    const prev = streamedPrefixQueuedRef.current;
+
+    let delta = '';
+    if (!prev) {
+      delta = full;
+    } else if (full.startsWith(prev)) {
+      delta = full.slice(prev.length);
+    } else {
+      // Fallback: keep the longest shared prefix so we don't re-speak.
+      const lcp = longestCommonPrefixLen(full, prev);
+      streamedPrefixQueuedRef.current = full.slice(0, lcp);
+      delta = full.slice(lcp);
+    }
+
+    if (delta.trim().length < 24) return;
+    const boundaryIdx = findSpeakBoundaryIndex(delta);
+    if (boundaryIdx < 0) return;
+
+    const rawChunk = delta.slice(0, boundaryIdx + 1);
+    const speakChunk = rawChunk.trim();
+    if (!speakChunk) return;
+
+    // Throttle tiny chunks so we don't spam the speech queue on fast streams.
+    const now = Date.now();
+    if (now - streamedLastQueuedAtRef.current < 650 && speakChunk.length < 80) return;
+    streamedLastQueuedAtRef.current = now;
+
+    streamedHasQueuedRef.current = true;
+    streamedPrefixQueuedRef.current = `${streamedPrefixQueuedRef.current}${rawChunk}`;
+    enqueueSpeech(speakChunk);
+  }, [STREAMING_TTS_ENABLED, enqueueSpeech, findSpeakBoundaryIndex, longestCommonPrefixLen]);
+
   const handleVoiceError = useCallback((message: string) => {
     const normalized = String(message || '').toLowerCase();
     if (!normalized) return;
@@ -350,6 +419,8 @@ export default function DashVoiceScreen() {
     });
     track('dash.turn.started', turnTelemetryBase);
     activeRequestRef.current?.abort();
+    resetStreamingSpeech();
+    speechQueueRef.current = [];
     setIsProcessing(true);
     setLastResponse('');
     setStreamingText('');
@@ -460,6 +531,7 @@ export default function DashVoiceScreen() {
           // Guard: never show raw SSE artifacts in the streaming display
           if (accumulated && !/^\s*data:\s*(\[DONE\])?\s*$/i.test(accumulated)) {
             setStreamingText(accumulated);
+            maybeEnqueueStreamingSpeech(accumulated);
           }
         },
         (finalText) => {
@@ -478,7 +550,13 @@ export default function DashVoiceScreen() {
             conversationHistoryRef.current = withResponse;
             setConversationHistory(withResponse);
             persistOrbMessages(withResponse);
-            enqueueSpeech(cleaned);
+            if (STREAMING_TTS_ENABLED) {
+              const lcp = longestCommonPrefixLen(cleaned, streamedPrefixQueuedRef.current);
+              const remaining = cleaned.slice(lcp).trim();
+              if (remaining) enqueueSpeech(remaining);
+            } else {
+              enqueueSpeech(cleaned);
+            }
           }
           track(
             'dash.turn.completed',
@@ -490,6 +568,7 @@ export default function DashVoiceScreen() {
           activeRequestRef.current = null;
         },
         (error) => {
+          resetStreamingSpeech();
           setLastResponse(`Sorry, ${error.message}. Please try again.`);
           setStreamingText('');
           setIsProcessing(false);
@@ -505,6 +584,7 @@ export default function DashVoiceScreen() {
       );
       activeRequestRef.current = req;
     } catch (error) {
+      resetStreamingSpeech();
       const msg = error instanceof Error ? error.message : 'Something went wrong';
       setLastResponse(`Sorry, ${msg}. Please try again.`);
       setStreamingText('');
@@ -517,7 +597,22 @@ export default function DashVoiceScreen() {
         error: msg,
       });
     }
-  }, [isProcessing, orgType, role, preferredLanguage, attachedImage, enqueueSpeech, persistOrbMessages, profile, dashPolicy.defaultMode, dashPolicy.systemPromptAddendum]);
+  }, [
+    isProcessing,
+    orgType,
+    role,
+    preferredLanguage,
+    attachedImage,
+    enqueueSpeech,
+    maybeEnqueueStreamingSpeech,
+    resetStreamingSpeech,
+    longestCommonPrefixLen,
+    persistOrbMessages,
+    profile,
+    dashPolicy.defaultMode,
+    dashPolicy.systemPromptAddendum,
+    STREAMING_TTS_ENABLED,
+  ]);
 
   useEffect(() => () => { activeRequestRef.current?.abort(); }, []);
 
@@ -592,6 +687,23 @@ export default function DashVoiceScreen() {
           >
             <Ionicons name="search-outline" size={16} color={theme.primary} />
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowTranscript((v) => !v)}
+            style={[
+              s.headerIconBtn,
+              {
+                borderColor: theme.border,
+                backgroundColor: showTranscript ? theme.surface : 'transparent',
+              },
+            ]}
+            accessibilityLabel={showTranscript ? 'Hide transcript' : 'Show transcript'}
+          >
+            <Ionicons
+              name={showTranscript ? 'document-text' : 'document-text-outline'}
+              size={16}
+              color={showTranscript ? theme.text : theme.primary}
+            />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowLangMenu(true)} style={[s.langBtn, { borderColor: theme.border }]}>
             <Ionicons name="language-outline" size={16} color={theme.primary} />
             <Text style={[s.langBtnText, { color: theme.primary }]}>{langLabel}</Text>
@@ -620,9 +732,11 @@ export default function DashVoiceScreen() {
                 onTTSEnd={() => setIsSpeaking(false)}
                 onLanguageChange={(lang: SupportedLanguage) => setPreferredLanguage(lang)}
                 language={preferredLanguage}
+                size={ORB_SIZE}
                 autoStartListening
                 autoRestartAfterTTS
                 preschoolMode={orgType === 'preschool'}
+                showLiveTranscript={false}
               />
             ) : (
               <DashOrb
@@ -667,8 +781,8 @@ export default function DashVoiceScreen() {
             </View>
           ) : null}
 
-          {/* Response */}
-          {displayedText ? (
+          {/* Response (optional panel) */}
+          {showTranscript && displayedText ? (
             <View style={[s.responseCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <ScrollView style={s.responseScroll} nestedScrollEnabled>
                 <Text style={[s.responseText, { color: theme.text }]}>{displayedText}</Text>
@@ -722,28 +836,30 @@ export default function DashVoiceScreen() {
         )}
 
         {/* Input bar */}
-        <View style={[s.inputBar, { backgroundColor: theme.background, paddingBottom: Math.max(insets.bottom, 4) }]}>
-          <TouchableOpacity onPress={pickMedia} onLongPress={takePhoto} style={s.mediaBtn} activeOpacity={0.7}>
-            <Ionicons name="image-outline" size={22} color={theme.primary} />
-          </TouchableOpacity>
-          <TextInput
-            style={[s.textInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]}
-            placeholder="Type a message..."
-            placeholderTextColor={theme.textSecondary}
-            value={inputText}
-            onChangeText={setInputText}
-            onSubmitEditing={handleSubmit}
-            returnKeyType="send"
-            editable={!isProcessing}
-            multiline={false}
-          />
-          <TouchableOpacity
-            style={[s.sendBtn, { backgroundColor: inputText.trim() ? theme.primary : theme.surface }]}
-            onPress={handleSubmit}
-            disabled={!inputText.trim() || isProcessing}
-          >
-            <Ionicons name="send" size={18} color={inputText.trim() ? '#fff' : theme.textSecondary} />
-          </TouchableOpacity>
+        <View style={[s.inputBar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+          <View style={[s.composerShell, { backgroundColor: theme.surface }]}>
+            <TouchableOpacity onPress={pickMedia} onLongPress={takePhoto} style={s.mediaBtn} activeOpacity={0.7}>
+              <Ionicons name="image-outline" size={20} color={theme.primary} />
+            </TouchableOpacity>
+            <TextInput
+              style={[s.textInput, { color: theme.text }]}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.textSecondary}
+              value={inputText}
+              onChangeText={setInputText}
+              onSubmitEditing={handleSubmit}
+              returnKeyType="send"
+              editable={!isProcessing}
+              multiline={false}
+            />
+            <TouchableOpacity
+              style={[s.sendBtn, { backgroundColor: inputText.trim() ? theme.primary : 'rgba(255,255,255,0.10)' }]}
+              onPress={handleSubmit}
+              disabled={!inputText.trim() || isProcessing}
+            >
+              <Ionicons name="send" size={18} color={inputText.trim() ? '#fff' : theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -797,8 +913,21 @@ const s = StyleSheet.create({
   attachThumb: { width: 40, height: 40, borderRadius: 8 },
   attachLabel: { flex: 1, fontSize: 13 },
   attachRemove: { padding: 4 },
-  inputBar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingTop: 6 },
-  mediaBtn: { padding: 8 },
-  textInput: { flex: 1, borderRadius: 24, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  inputBar: { paddingHorizontal: 16, paddingTop: 10 },
+  composerShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 28,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  mediaBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  textInput: { flex: 1, paddingHorizontal: 6, paddingVertical: 8, fontSize: 15, backgroundColor: 'transparent' },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });
