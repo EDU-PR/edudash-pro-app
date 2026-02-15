@@ -51,11 +51,10 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
   
   // Determine destination based on user role
   const getDestination = () => {
-    if (isSuperAdmin(profile?.role)) {
-      return '/screens/super-admin-ai-command-center';
-    }
-    // All roles → full-screen voice ORB experience
-    return '/screens/dash-voice';
+    // All roles → full-screen voice ORB experience.
+    // Superadmin can long-press the FAB to open Ops Command Center.
+    if (isSuperAdmin(profile?.role)) return '/screens/dash-voice?mode=ops';
+    return '/screens/dash-voice?mode=orb';
   };
   
   // Default position (bottom right, above safe area)
@@ -180,6 +179,19 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
     setTimeout(() => { isNavigatingRef.current = false; }, 1000);
   };
 
+  const handleLongPress = async () => {
+    if (isDragging || isNavigatingRef.current) return;
+    if (!isSuperAdmin(profile?.role)) return;
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch {
+      // Haptics not available
+    }
+    isNavigatingRef.current = true;
+    router.push('/screens/super-admin-ai-command-center');
+    setTimeout(() => { isNavigatingRef.current = false; }, 1000);
+  };
+
   if (!showDashFAB || isOrbScreenOpen) {
     return null;
   }
@@ -202,10 +214,14 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={handlePress}
+          onLongPress={handleLongPress}
+          delayLongPress={350}
           disabled={isDragging}
           accessibilityRole="button"
           accessibilityLabel="Open Dash Orb"
-          accessibilityHint="Open the Dash AI assistant"
+          accessibilityHint={isSuperAdmin(profile?.role)
+            ? 'Tap for voice orb. Long-press for Ops Command Center.'
+            : 'Open the Dash voice orb'}
         >
           <Animated.View
             style={[

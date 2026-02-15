@@ -19,6 +19,7 @@ export type { PasswordModalState, DashboardStats, RecentAlert, SystemStatus, Fea
 function buildQuickActions(stats: DashboardStats | null): QuickAction[] {
   return [
     { id: 'ai-command-center', title: 'Dash AI Command Center', description: 'Admin controls for agentic AI operations', icon: 'flash', route: '/screens/super-admin-ai-command-center', color: '#00f5ff', badge: 0 },
+    { id: 'voice-orb', title: 'Voice Orb', description: 'Hands-free voice commands (full screen)', icon: 'mic', route: '/screens/dash-voice?mode=ops', color: '#8b5cf6', badge: 0 },
     { id: 'organizations', title: 'Organizations', description: 'View & manage all registered organizations', icon: 'business', route: '/screens/super-admin-organizations', color: '#10b981', badge: stats?.total_organizations || 0 },
     { id: 'school-onboarding', title: 'School Onboarding', description: 'Create and onboard new schools', icon: 'school', route: '/screens/super-admin/school-onboarding-wizard', color: '#00f5ff', badge: 0 },
     { id: 'users', title: 'User Management', description: 'Manage users, roles, and permissions', icon: 'people', route: '/screens/super-admin-users', color: '#3b82f6', badge: stats?.pending_issues || 0 },
