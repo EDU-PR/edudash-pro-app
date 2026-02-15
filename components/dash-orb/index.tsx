@@ -1162,32 +1162,18 @@ export default function DashOrb({
   }, [handleSend]);
 
   const quickIntents = useMemo(() => {
-    if (normalizedRole === 'principal' || normalizedRole === 'principal_admin') {
-      return [
-        {
-          id: 'weekly_program',
-          label: 'Weekly program',
-          prompt: 'Draft a Monday-to-Friday preschool weekly program aligned to this month theme.',
-        },
-        {
-          id: 'staff_message',
-          label: 'Staff message',
-          prompt: 'Write a concise staff briefing for teachers with today priorities and class-ready reminders.',
-        },
-        {
-          id: 'family_digest',
-          label: 'Parent digest',
-          prompt: 'Create a parent-facing daily digest with activities, meals, and homework notes.',
-        },
-      ];
+    const actions = Array.isArray(dashPolicy.quickActions) ? dashPolicy.quickActions : [];
+    if (actions.length > 0) {
+      return actions.map((a) => ({ id: a.id, label: a.label, prompt: a.prompt }));
     }
 
+    // Fallback (should be rare): keep a few safe defaults.
     return [
-      { id: 'ask_homework', label: 'Ask homework', prompt: 'Help us with today\'s homework task.' },
-      { id: 'translate', label: 'Translate', prompt: 'Translate this clearly for a young learner.' },
-      { id: 'summarize', label: 'Summarize', prompt: 'Summarize this in simple points.' },
+      { id: 'explain', label: 'Explain', prompt: 'Explain this in simple steps and ask one check question.' },
+      { id: 'practice', label: 'Practice', prompt: 'Give me one practice task and then evaluate my answer.' },
+      { id: 'summarize', label: 'Summarize', prompt: 'Summarize this into key points and one next action.' },
     ];
-  }, [normalizedRole]);
+  }, [dashPolicy.quickActions]);
 
   const handleQuickIntent = useCallback((intent: { id: string; label: string; prompt: string }) => {
     if (isProcessing) return;
