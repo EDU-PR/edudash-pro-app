@@ -1,3 +1,5 @@
+import { resolveAIProxyScopeFromRole } from './aiProxyScope';
+
 export type ToolPlannerCandidate = {
   name: string;
   description: string;
@@ -83,10 +85,11 @@ export async function planToolCall(options: {
   if (!supabaseClient || tools.length === 0) return null;
 
   const prompt = buildPlannerPrompt(message, tools);
+  const scope = resolveAIProxyScopeFromRole(role);
 
   const { data, error } = await supabaseClient.functions.invoke('ai-proxy', {
     body: {
-      scope: role || 'parent',
+      scope,
       service_type: 'chat_message',
       payload: {
         prompt,
