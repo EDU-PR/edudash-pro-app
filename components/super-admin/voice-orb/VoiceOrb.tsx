@@ -150,16 +150,16 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
   // Perceived latency is dominated by "silence → final transcript → send".
   // Keep preschool more forgiving, but default faster for staff/older learners.
-  const defaultLiveSilenceMs = preschoolMode ? 3200 : 1800;
+  const defaultLiveSilenceMs = preschoolMode ? 3000 : 1200;
   const liveSilenceTimeoutRaw = Number.parseInt(
     process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || String(defaultLiveSilenceMs),
     10
   );
-  const liveSilenceMin = preschoolMode ? 1800 : 1200;
+  const liveSilenceMin = preschoolMode ? 1600 : 900;
   const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
     ? Math.min(12000, Math.max(liveSilenceMin, liveSilenceTimeoutRaw))
     : defaultLiveSilenceMs;
-  const LIVE_FINAL_FALLBACK_MS = preschoolMode ? 1100 : 650;
+  const LIVE_FINAL_FALLBACK_MS = preschoolMode ? 900 : 350;
   const usingLiveSTTRef = useRef(false);
   const liveSessionRef = useRef(0);
   const liveFinalizedRef = useRef(false);

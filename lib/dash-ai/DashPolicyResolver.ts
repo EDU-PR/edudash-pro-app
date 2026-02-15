@@ -321,7 +321,7 @@ function resolveQuickActions(orgType: OrganizationType, role: string, mode: Dash
 
 export function resolveDashPolicy(input: ResolveDashPolicyInput): ResolvedDashPolicy {
   const profile = input.profile || null;
-  const role = normalizeRole(input.role || profile?.role || 'parent');
+  const role = normalizeRole(input.role || profile?.role || 'guest');
   const orgType = normalizeOrgType(input.orgType || profile?.organization_type || profile?.school_type || String(profile?.preschool?.school_type || profile?.preschool?.organization_type || ''));
   const effectiveTier = resolveEffectiveTier(role, profile?.subscription_tier as string | null, input.orgTier);
   const defaultMode = resolveDefaultMode(role, orgType);

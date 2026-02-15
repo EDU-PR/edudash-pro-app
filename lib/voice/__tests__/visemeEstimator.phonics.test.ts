@@ -10,7 +10,7 @@ describe('estimateVisemeTimelinePhonics', () => {
 
     const silenceAfterM = timeline.slice(mIndex + 1).find((evt) => evt.visemeId === 21);
     expect(silenceAfterM).toBeDefined();
-    expect((silenceAfterM?.durationMs ?? 0)).toBeGreaterThanOrEqual(300);
+    expect((silenceAfterM?.durationMs ?? 0)).toBeGreaterThanOrEqual(150);
   });
 
   it('maps /s/ and /n/ to sustained phonics visemes', () => {
@@ -23,4 +23,3 @@ describe('estimateVisemeTimelinePhonics', () => {
     expect(hasN).toBe(true);
   });
 });
-

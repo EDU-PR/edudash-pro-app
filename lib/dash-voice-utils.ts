@@ -26,7 +26,17 @@ export interface QuickAction {
 
 export function getQuickActions(orgType: string, role: string): QuickAction[] {
   const isPreschool = orgType === 'preschool';
-  const isStaff = ['teacher', 'principal', 'admin', 'manager', 'staff'].includes(role);
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  const isStaff = [
+    'teacher',
+    'principal',
+    'principal_admin',
+    'admin',
+    'super_admin',
+    'superadmin',
+    'manager',
+    'staff',
+  ].includes(normalizedRole);
 
   if (isStaff && isPreschool) {
     return [
@@ -79,10 +89,27 @@ export function buildSystemPrompt(
   language: SupportedLanguage | null,
 ): string {
   const parts: string[] = [];
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  const isSuperAdmin = normalizedRole === 'super_admin' || normalizedRole === 'superadmin';
+  const isStaff = [
+    'teacher',
+    'principal',
+    'principal_admin',
+    'admin',
+    'super_admin',
+    'superadmin',
+    'staff',
+    'manager',
+  ].includes(normalizedRole);
+  const identityLine = isSuperAdmin
+    ? 'You are Dash, a world-class A.I. operations copilot for the EduDashPro platform owner.'
+    : isStaff
+      ? 'You are Dash, a world-class A.I. assistant for South African educators and school operations.'
+      : 'You are Dash, a world-class A.I. tutor built for South African learners.';
 
   // ── Core identity ────────────────────────────────────────────────
   parts.push(
-    'You are Dash, a world-class AI tutor built for South African learners.',
+    identityLine,
     'You speak naturally and conversationally — like a warm, patient, encouraging human teacher.',
     'Your responses will be read aloud by text-to-speech, so write the way you would SPEAK:',
     '- NO emojis, icons, or special unicode symbols.',
@@ -95,6 +122,16 @@ export function buildSystemPrompt(
     '- Avoid meta-language like "Here is a list" — just give the content naturally.',
     '',
   );
+
+  if (isSuperAdmin) {
+    parts.push(
+      'SUPER ADMIN MODE:',
+      'Optimize for platform operations: monitoring, debugging, incident response, security, billing, onboarding, and shipping.',
+      'Do NOT assume the user is a parent or that they have a child unless they explicitly say so.',
+      'If the user asks about a school, treat it as an organization record with type, tier, staff, learners, and data pipelines.',
+      '',
+    );
+  }
 
   // ── Voice interface awareness ────────────────────────────────────
   parts.push(
@@ -110,6 +147,16 @@ export function buildSystemPrompt(
 
   // ── Org-specific pedagogy ────────────────────────────────────────
   if (orgType === 'preschool') {
+    const isParent = normalizedRole === 'parent' || normalizedRole === 'guardian';
+    const isLearner = normalizedRole === 'student' || normalizedRole === 'learner';
+    if (isStaff) {
+      parts.push(
+        'You are helping preschool staff run a school day smoothly.',
+        'Prioritize weekly programs, daily routines, transitions, materials, and parent communication.',
+        'If asked for learner support, keep it play-based and suitable for ages three to six.',
+        '',
+      );
+    } else if (isParent || isLearner) {
     parts.push(
       'CRITICAL: You are talking to a PARENT whose child is a preschooler aged three to six.',
       'The parent may be reading your response to their child, or a child may be listening via TTS.',
@@ -157,6 +204,15 @@ export function buildSystemPrompt(
       'End with ONE simple question or invitation.',
       '',
     );
+    } else {
+      parts.push(
+        'EARLY LEARNING MODE:',
+        'The user context is unknown. Do NOT assume they are a parent.',
+        'If they ask for phonics or early reading, keep the phonics sounds clear and short, but keep normal pacing for full sentences.',
+        'Use simple, concrete explanations and ask one short question at the end.',
+        '',
+      );
+    }
   } else if (orgType === 'k12_school') {
     parts.push(
       'You are helping school-age learners.',
@@ -176,7 +232,7 @@ export function buildSystemPrompt(
   }
 
   // ── Staff mode ───────────────────────────────────────────────────
-  if (['teacher', 'principal', 'staff'].includes(role)) {
+  if (isStaff) {
     parts.push(
       'The user is a staff member. Help with lesson planning, activities, routines, and assessment.',
       'Provide structured but spoken-style guidance they can use directly.',

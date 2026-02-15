@@ -44,8 +44,8 @@ export interface UseVoiceTTSReturn {
 
 /** Normal speech rate — keep at 0% for consistent pacing */
 const DEFAULT_AZURE_RATE = 0;
-/** Phonics rate: slower than normal, but not overly stretched */
-const DEFAULT_PHONICS_AZURE_RATE = -6;
+/** Phonics: keep sentence pace natural; phoneme markers are slowed in SSML */
+const DEFAULT_PHONICS_AZURE_RATE = 0;
 /** Device TTS: 1.0 = natural pace (matches Azure 0%) */
 const DEFAULT_DEVICE_RATE = 1.0;
 /** Device TTS phonics: slightly slower for clarity */
@@ -985,7 +985,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }
       
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
-      const chunks = splitIntoChunks(cleanText, phonicsMode ? 800 : 1200);
+      // Keep chunking consistent in phonics mode to avoid extra request gaps.
+      const chunks = splitIntoChunks(cleanText, 1200);
 
       if (!policy.shouldUseCloudVoice) {
         reportTTSError(new Error('FREE_QUOTA_EXHAUSTED_DEVICE_VOICE'));

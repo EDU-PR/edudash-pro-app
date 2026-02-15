@@ -102,8 +102,8 @@ const WORD_GAP_MS = 40;
 // Silence at sentence boundaries
 const SILENCE_MS = 120;
 // Held consonants for phonics mode
-const PHONICS_SUSTAINED_DURATION_MS = 260;
-const PHONICS_MARKER_SILENCE_MS = 340;
+const PHONICS_SUSTAINED_DURATION_MS = 280;
+const PHONICS_MARKER_SILENCE_MS = 200;
 
 /**
  * Estimate a viseme timeline from plain text.

@@ -96,13 +96,17 @@ const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
   'de-DE': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
 };
 
-/** Keep phonics slightly slower than normal speech without sounding dragged out */
-const DEFAULT_PHONICS_SPEAKING_RATE = -15;
-const PHONICS_PHONEME_RATE = -22;
-const PHONICS_MARKER_BREAK_MS = 320;
-const PHONICS_BLEND_SEGMENT_BREAK_MS = 360;
-const PHONICS_BLEND_FINAL_BREAK_MS = 520;
-const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;
+/**
+ * Phonics pacing policy:
+ * - Do NOT slow entire sentences in phonics mode (keep natural pace).
+ * - Only slow/hold the phoneme segments (slash markers) for clarity.
+ */
+const DEFAULT_PHONICS_SPEAKING_RATE = 0;
+const PHONICS_PHONEME_RATE = -10;
+const PHONICS_MARKER_BREAK_MS = 160;
+const PHONICS_BLEND_SEGMENT_BREAK_MS = 180;
+const PHONICS_BLEND_FINAL_BREAK_MS = 240;
+const PHONICS_FALLBACK_LETTER_BREAK_MS = 140;
 
 /** Audio format for pronunciation assessment & streaming */
 const STREAMING_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
@@ -1241,11 +1245,13 @@ Deno.serve(async (req) => {
       const streamPitch = clampNumber(Number(body.pitch ?? 0), -50, 50);
       const streamStyle = typeof body.style === 'string' ? body.style.trim() : 'friendly';
 
-      const streamSSMLText = isPhonics ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
+      const streamSSMLText = isPhonics
+        ? convertPhonicsMarkersToSSML(text)
+        : escapeXml(normalizeChoiceLabelsForSpeech(text));
       const streamPronunciation = applyPronunciationToSSML(streamSSMLText);
       const streamLang = applyInlineLangSwitching(streamPronunciation);
       const streamProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${streamLang}</prosody>`;
-      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(text)}</prosody>`;
+      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
       const streamInner = streamStyle
         ? `<mstts:express-as style="${escapeXml(streamStyle)}">${streamProsody}</mstts:express-as>`
         : streamProsody;
@@ -1344,12 +1350,14 @@ Deno.serve(async (req) => {
     const styleOverride = typeof body.style === 'string' ? body.style.trim() : '';
     const style = styleOverride || (phonicsMode ? 'friendly' : '');
 
-    const ssmlText = phonicsMode ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
+    const ssmlText = phonicsMode
+      ? convertPhonicsMarkersToSSML(text)
+      : escapeXml(normalizeChoiceLabelsForSpeech(text));
     // Apply pronunciation dictionary (brand names, SA languages, <lang> switching)
     const ssmlWithPronunciation = applyPronunciationToSSML(ssmlText);
     const ssmlWithLang = applyInlineLangSwitching(ssmlWithPronunciation);
     const prosody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${ssmlWithLang}</prosody>`;
-    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(text)}</prosody>`;
+    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
     const inner = style
       ? `<mstts:express-as style="${escapeXml(style)}">${prosody}</mstts:express-as>`
       : prosody;
