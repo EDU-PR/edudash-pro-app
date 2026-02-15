@@ -543,6 +543,7 @@ export class DashAICore {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      signal?: AbortSignal;
     }
   ): Promise<DashMessage> {
     let convId = conversationId || this.conversation.getCurrentConversationId();
@@ -570,7 +571,8 @@ export class DashAICore {
       onStreamChunk,
       options?.contextOverride,
       options?.modelOverride,
-      options?.messagesOverride
+      options?.messagesOverride,
+      options?.signal
     );
 
     await this.conversation.addMessageToConversation(convId, assistantMessage);
@@ -585,7 +587,8 @@ export class DashAICore {
     onStreamChunk?: (chunk: string) => void,
     contextOverride?: string | null,
     modelOverride?: string | null,
-    messagesOverride?: ConversationContextMessage[]
+    messagesOverride?: ConversationContextMessage[],
+    signal?: AbortSignal
   ): Promise<DashMessage> {
     try {
       const conversation = await this.conversation.getConversation(conversationId);
@@ -652,6 +655,7 @@ export class DashAICore {
         stream: shouldStream,
         onChunk: onStreamChunk,
         model: modelOverride || undefined,
+        signal,
       });
 
       const generatedImages = response.metadata?.generated_images || [];

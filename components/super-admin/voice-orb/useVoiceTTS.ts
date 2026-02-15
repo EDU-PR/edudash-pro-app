@@ -91,6 +91,13 @@ const AZURE_VOICES_BY_LANG: Record<string, { male: string; female: string }> = {
   en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
   af: { male: 'af-ZA-AdriNeural', female: 'af-ZA-AdriNeural' },
   zu: { male: 'zu-ZA-ThandoNeural', female: 'zu-ZA-ThandoNeural' },
+  xh: { male: 'xh-ZA-NomalungaNeural', female: 'xh-ZA-NomalungaNeural' },
+  nso: { male: 'nso-ZA-DidiNeural', female: 'nso-ZA-DidiNeural' },
+  st: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' }, // Sesotho — no native Azure voice
+  fr: { male: 'fr-FR-HenriNeural', female: 'fr-FR-DeniseNeural' },
+  pt: { male: 'pt-BR-AntonioNeural', female: 'pt-BR-FranciscaNeural' },
+  es: { male: 'es-ES-AlvaroNeural', female: 'es-ES-ElviraNeural' },
+  de: { male: 'de-DE-ConradNeural', female: 'de-DE-KatjaNeural' },
 };
 
 const normalizeVoiceGender = (value: unknown): 'male' | 'female' => {
@@ -933,8 +940,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       let fallbackUsed: 'none' | 'device' | 'phonics_blocked' = 'none';
       let telemetryError: unknown = null;
       
-      // Azure supports en/af/zu in this client path; device fallback will cover the rest.
-      const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
+      // Azure supports all 9 i18n languages (st uses en-ZA fallback)
+      const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu', 'xh', 'nso', 'st', 'fr', 'pt', 'es', 'de'];
       const baseLang = language.split('-')[0];
       const phonicsMode = typeof options.phonicsMode === 'boolean'
         ? options.phonicsMode

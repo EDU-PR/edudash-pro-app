@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, ScrollView } from 'react-native';
+import { SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { GlassCard } from '@/components/nextgen/GlassCard';
 import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
 
-interface FeatureItem {
+export interface FeatureItem {
   id: string;
   title: string;
   subtitle: string;
@@ -25,6 +25,8 @@ interface K12StudentFeatureScreenProps {
   heroTone?: 'green' | 'purple';
   onHeroPress: () => void;
   items: FeatureItem[];
+  loading?: boolean;
+  emptyMessage?: string;
 }
 
 export function K12StudentFeatureScreen({
@@ -37,6 +39,8 @@ export function K12StudentFeatureScreen({
   heroTone = 'green',
   onHeroPress,
   items,
+  loading = false,
+  emptyMessage = 'Nothing here yet.',
 }: K12StudentFeatureScreenProps) {
   const { theme } = useNextGenTheme();
 
@@ -67,19 +71,31 @@ export function K12StudentFeatureScreen({
         />
 
         <View style={styles.listSection}>
-          {items.map((item) => (
-            <GlassCard key={item.id} style={styles.itemCard} padding={14}>
-              <View style={styles.itemRow}>
-                <View style={[styles.itemIcon, { backgroundColor: `${item.tone || theme.primary}20` }]}>
-                  <Ionicons name={item.icon} size={18} color={item.tone || theme.primary} />
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Loading…</Text>
+            </View>
+          ) : items.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <Ionicons name="folder-open-outline" size={32} color={theme.textSecondary} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{emptyMessage}</Text>
+            </View>
+          ) : (
+            items.map((item) => (
+              <GlassCard key={item.id} style={styles.itemCard} padding={14}>
+                <View style={styles.itemRow}>
+                  <View style={[styles.itemIcon, { backgroundColor: `${item.tone || theme.primary}20` }]}>
+                    <Ionicons name={item.icon} size={18} color={item.tone || theme.primary} />
+                  </View>
+                  <View style={styles.itemText}>
+                    <Text style={[styles.itemTitle, { color: theme.text }]}>{item.title}</Text>
+                    <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>{item.subtitle}</Text>
+                  </View>
                 </View>
-                <View style={styles.itemText}>
-                  <Text style={[styles.itemTitle, { color: theme.text }]}>{item.title}</Text>
-                  <Text style={[styles.itemSubtitle, { color: theme.textSecondary }]}>{item.subtitle}</Text>
-                </View>
-              </View>
-            </GlassCard>
-          ))}
+              </GlassCard>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -149,6 +165,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 3,
     lineHeight: 17,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
 

@@ -1,28 +1,54 @@
-import React, { useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
 
+type TutorQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+};
+
 interface InlineTutorPreviewProps {
   childName: string;
-  /** Called when user wants to open the full tutor screen */
+  /** Open full tutor session */
   onOpenFullSession: () => void;
 }
 
-/**
- * Inline tutor session preview card.
- * Shows a mini chat-like view embedded in the dashboard with a sample
- * greeting and quick-start controls. Matches the next-gen mockup.
- */
+const SAMPLE_QUESTIONS: TutorQuestion[] = [
+  {
+    id: 'fraction-simplify',
+    prompt: 'What is 5/10 simplified to its lowest terms?',
+    options: ['1/2', '2/5', '5/5', '3/4'],
+    correctIndex: 0,
+    explanation: 'Great work. Divide top and bottom by 5: 5/10 = 1/2.',
+  },
+  {
+    id: 'fraction-compare',
+    prompt: 'Which fraction is greater?',
+    options: ['1/4', '3/4', '2/8', '1/2'],
+    correctIndex: 1,
+    explanation: 'Correct. 3/4 is larger than 1/2, 1/4, and 2/8.',
+  },
+];
+
 export default function InlineTutorPreview({
   childName,
   onOpenFullSession,
 }: InlineTutorPreviewProps) {
   const [isActive, setIsActive] = useState(true);
   const [isListening, setIsListening] = useState(false);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  const question = useMemo(
+    () => SAMPLE_QUESTIONS[questionIndex % SAMPLE_QUESTIONS.length],
+    [questionIndex]
+  );
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -36,12 +62,24 @@ export default function InlineTutorPreview({
   const handleMicToggle = useCallback(() => {
     if (!isActive) return;
     setIsListening((prev) => !prev);
-    // Future: integrate actual voice recording here
   }, [isActive]);
+
+  const handleChooseAnswer = useCallback((index: number) => {
+    if (!isActive) return;
+    setSelectedIndex(index);
+  }, [isActive]);
+
+  const handleNextQuestion = useCallback(() => {
+    setQuestionIndex((prev) => prev + 1);
+    setSelectedIndex(null);
+  }, []);
+
+  const isCorrect = selectedIndex !== null && selectedIndex === question.correctIndex;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      <Image source={ROBOT_MASCOT} style={styles.floatingMascot} />
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Current Tutor Session</Text>
         <TouchableOpacity onPress={onOpenFullSession} hitSlop={8}>
@@ -49,58 +87,76 @@ export default function InlineTutorPreview({
         </TouchableOpacity>
       </View>
 
-      {/* Chat area */}
-      <TouchableOpacity
-        style={[styles.chatArea, !isActive && styles.chatAreaCollapsed]}
-        activeOpacity={0.9}
-        onPress={onOpenFullSession}
-      >
-        {/* Tutor identity row */}
+      <View style={[styles.chatArea, !isActive && styles.chatAreaCollapsed]}>
         <View style={styles.identityRow}>
-          <Image source={ROBOT_MASCOT} style={styles.robotThumb} />
+          <View style={styles.liveDot} />
           <View style={styles.identityText}>
             <Text style={styles.identityName}>Interactive Tutor Session</Text>
-            <Text style={styles.identityHint}>
-              Personalisable • Holistic at PhaseLevel terms
-            </Text>
+            <Text style={styles.identityHint}>Personalized • Diagnose → Teach → Practice</Text>
           </View>
         </View>
 
-        {/* Sample message */}
         <View style={styles.messageBubble}>
           <Text style={styles.messageText}>
-            Hello {childName}! Let's explore a new{'\n'}
-            World! cansagen.
+            Hello {childName}! Let’s explore one concept step by step.
           </Text>
         </View>
 
-        {/* Sample practice hint */}
         <Text style={styles.practiceHint}>
-          We'll Learn made shar Practice, berma a napetly!
+          This is a tutor practice question, not a formal exam.
         </Text>
 
-        {/* Sample interactive cards */}
         <View style={styles.sampleCards}>
           <View style={styles.sampleCard}>
             <Text style={styles.sampleCardIcon}>✦</Text>
-            <Text style={styles.sampleCardText}>
-              What is{' '}
-              <Text style={styles.sampleBold}>5</Text> simplified to its lowest
-              terms?
-            </Text>
+            <Text style={styles.sampleCardText}>{question.prompt}</Text>
           </View>
-          <View style={styles.answerRow}>
-            <AnswerChip icon="📐" label="2/3" onPress={onOpenFullSession} />
-            <AnswerChip icon="" label="1/3" onPress={onOpenFullSession} />
-          </View>
-          <View style={styles.answerRow}>
-            <AnswerChip icon="📊" label="1/2" onPress={onOpenFullSession} />
-            <AnswerChip icon="" label="2/5" onPress={onOpenFullSession} />
-          </View>
-        </View>
-      </TouchableOpacity>
 
-      {/* Bottom controls */}
+          <View style={styles.answerGrid}>
+            {question.options.map((option, idx) => {
+              const selected = selectedIndex === idx;
+              const showResult = selectedIndex !== null;
+              const isAnswerCorrect = idx === question.correctIndex;
+
+              return (
+                <TouchableOpacity
+                  key={`${question.id}-${option}`}
+                  style={[
+                    styles.answerChip,
+                    selected && styles.answerChipSelected,
+                    showResult && isAnswerCorrect && styles.answerChipCorrect,
+                    showResult && selected && !isAnswerCorrect && styles.answerChipWrong,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => handleChooseAnswer(idx)}
+                >
+                  <Text
+                    style={[
+                      styles.answerLabel,
+                      selected && styles.answerLabelSelected,
+                      showResult && isAnswerCorrect && styles.answerLabelCorrect,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {selectedIndex !== null ? (
+            <View style={[styles.feedbackCard, isCorrect ? styles.feedbackGood : styles.feedbackRetry]}>
+              <Text style={styles.feedbackTitle}>{isCorrect ? 'Nice work!' : 'Good try!'}</Text>
+              <Text style={styles.feedbackText}>{question.explanation}</Text>
+              <TouchableOpacity style={styles.nextBtn} onPress={handleNextQuestion}>
+                <Text style={styles.nextBtnText}>Next question</Text>
+                <Ionicons name="arrow-forward" size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
       <View style={styles.controls}>
         {isActive ? (
           <TouchableOpacity style={styles.controlBtn} onPress={handleStop}>
@@ -113,15 +169,14 @@ export default function InlineTutorPreview({
             <Text style={styles.resumeLabel}>Resume</Text>
           </TouchableOpacity>
         )}
+
         <View style={styles.langPills}>
           <Text style={styles.langPill}>EN</Text>
           <Text style={styles.langPillInactive}>AF</Text>
         </View>
+
         <TouchableOpacity
-          style={[
-            styles.micBtn,
-            isListening && styles.micBtnActive,
-          ]}
+          style={[styles.micBtn, isListening && styles.micBtnActive]}
           onPress={handleMicToggle}
           disabled={!isActive}
         >
@@ -136,15 +191,6 @@ export default function InlineTutorPreview({
   );
 }
 
-function AnswerChip({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
-  return (
-    <TouchableOpacity style={styles.answerChip} activeOpacity={0.7} onPress={onPress}>
-      {icon ? <Text style={styles.answerIcon}>{icon}</Text> : null}
-      <Text style={styles.answerLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     borderRadius: 20,
@@ -154,21 +200,31 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: 'hidden',
   },
+  floatingMascot: {
+    position: 'absolute',
+    top: -20,
+    left: 12,
+    width: 76,
+    height: 76,
+    resizeMode: 'contain',
+    zIndex: 5,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
+    paddingTop: 16,
+    paddingBottom: 10,
+    paddingLeft: 84,
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
   expandText: {
-    color: 'rgba(234,240,255,0.50)',
+    color: 'rgba(234,240,255,0.56)',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -176,24 +232,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
+  chatAreaCollapsed: {
+    opacity: 0.45,
+  },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
     backgroundColor: 'rgba(90,64,157,0.15)',
     borderRadius: 14,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: 'rgba(90,64,157,0.20)',
+    gap: 10,
   },
-  robotThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    resizeMode: 'contain',
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#34D399',
   },
   identityText: {
-    marginLeft: 10,
     flex: 1,
   },
   identityName: {
@@ -202,9 +262,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   identityHint: {
-    color: 'rgba(234,240,255,0.45)',
+    color: 'rgba(234,240,255,0.58)',
     fontSize: 10,
-    marginTop: 1,
+    marginTop: 2,
   },
   messageBubble: {
     backgroundColor: 'rgba(60,142,98,0.15)',
@@ -215,17 +275,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(60,142,98,0.20)',
   },
   messageText: {
-    color: 'rgba(234,240,255,0.85)',
+    color: 'rgba(234,240,255,0.90)',
     fontSize: 13,
     lineHeight: 19,
   },
   practiceHint: {
-    color: 'rgba(234,240,255,0.55)',
+    color: 'rgba(234,240,255,0.62)',
     fontSize: 12,
     marginBottom: 10,
   },
   sampleCards: {
-    gap: 6,
+    gap: 8,
   },
   sampleCard: {
     flexDirection: 'row',
@@ -234,7 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     gap: 8,
-    marginBottom: 6,
   },
   sampleCardIcon: {
     color: '#C7BFFF',
@@ -242,38 +301,90 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   sampleCardText: {
-    color: 'rgba(234,240,255,0.75)',
+    color: 'rgba(234,240,255,0.82)',
     fontSize: 12,
     flex: 1,
     lineHeight: 18,
   },
-  sampleBold: {
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  answerRow: {
+  answerGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   answerChip: {
-    flex: 1,
+    width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
-  answerIcon: {
-    fontSize: 14,
+  answerChipSelected: {
+    borderColor: 'rgba(99,102,241,0.9)',
+    backgroundColor: 'rgba(99,102,241,0.22)',
+  },
+  answerChipCorrect: {
+    borderColor: 'rgba(52,211,153,0.9)',
+    backgroundColor: 'rgba(16,185,129,0.2)',
+  },
+  answerChipWrong: {
+    borderColor: 'rgba(248,113,113,0.9)',
+    backgroundColor: 'rgba(239,68,68,0.16)',
   },
   answerLabel: {
-    color: 'rgba(234,240,255,0.80)',
+    color: 'rgba(234,240,255,0.88)',
     fontSize: 13,
     fontWeight: '600',
+  },
+  answerLabelSelected: {
+    color: '#FFFFFF',
+  },
+  answerLabelCorrect: {
+    color: '#DCFCE7',
+  },
+  feedbackCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+    gap: 6,
+  },
+  feedbackGood: {
+    backgroundColor: 'rgba(16,185,129,0.14)',
+    borderColor: 'rgba(52,211,153,0.38)',
+  },
+  feedbackRetry: {
+    backgroundColor: 'rgba(245,158,11,0.13)',
+    borderColor: 'rgba(251,191,36,0.35)',
+  },
+  feedbackTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedbackText: {
+    color: 'rgba(234,240,255,0.84)',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  nextBtn: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#4F46E5',
+  },
+  nextBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   controls: {
     flexDirection: 'row',
@@ -318,12 +429,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  chatAreaCollapsed: {
-    opacity: 0.4,
-  },
-  micBtnActive: {
-    backgroundColor: '#EF4444',
-  },
   langPills: {
     flexDirection: 'row',
     gap: 6,
@@ -353,5 +458,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#3C8E62',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  micBtnActive: {
+    backgroundColor: '#EF4444',
   },
 });

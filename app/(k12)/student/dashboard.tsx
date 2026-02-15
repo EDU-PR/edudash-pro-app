@@ -38,26 +38,17 @@ const quickActions = [
   { id: 'ai', icon: 'sparkles', label: 'Study AI', route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic', color: '#EC4899' },
 ];
 
-// Mock data for upcoming assignments - TODO: Replace with real data from Supabase
-const mockUpcomingAssignments = [
-  { id: '1', title: 'Math Homework - Chapter 5', subject: 'Mathematics', dueDate: 'Tomorrow', status: 'pending' },
-  { id: '2', title: 'Essay: Climate Change', subject: 'English', dueDate: 'Mar 15', status: 'pending' },
-  { id: '3', title: 'Science Lab Report', subject: 'Physics', dueDate: 'Mar 18', status: 'in_progress' },
-];
+// Placeholder data — screens fetch real data via hooks, dashboard shows summary cards  
+// TODO: Wire real assignment count + class schedule from Supabase queries
+const EMPTY_ASSIGNMENTS: { id: string; title: string; subject: string; dueDate: string; status: string }[] = [];
+const EMPTY_CLASSES: { id: string; name: string; time: string; room: string; teacher: string; current: boolean }[] = [];
 
-// Mock data for today's classes - TODO: Replace with real data from Supabase
-const mockTodaysClasses = [
-  { id: '1', name: 'Mathematics', time: '08:00 - 09:00', room: 'Room 201', teacher: 'Mr. Johnson', current: false },
-  { id: '2', name: 'English Literature', time: '09:15 - 10:15', room: 'Room 105', teacher: 'Ms. Williams', current: true },
-  { id: '3', name: 'Physics', time: '11:00 - 12:00', room: 'Lab 3', teacher: 'Dr. Smith', current: false },
-];
-
-// Mock metrics - TODO: Replace with real data from Supabase
-const mockMetrics = {
-  avgGrade: 'A-',
-  attendance: 98,
-  pendingTasks: 5,
-  completedToday: 2,
+// Default metrics shown until real aggregation is wired
+const defaultMetrics = {
+  avgGrade: '--',
+  attendance: 0,
+  pendingTasks: 0,
+  completedToday: 0,
 };
 
 interface QuickStatProps {
@@ -91,9 +82,9 @@ export default function K12StudentDashboardScreen() {
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [todaysClasses, setTodaysClasses] = useState(mockTodaysClasses);
-  const [upcomingAssignments, setUpcomingAssignments] = useState(mockUpcomingAssignments);
-  const [metrics, setMetrics] = useState(mockMetrics);
+  const [todaysClasses, setTodaysClasses] = useState(EMPTY_CLASSES);
+  const [upcomingAssignments, setUpcomingAssignments] = useState(EMPTY_ASSIGNMENTS);
+  const [metrics, setMetrics] = useState(defaultMetrics);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile

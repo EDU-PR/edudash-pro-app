@@ -8,7 +8,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, RefreshControl, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -380,7 +381,7 @@ export default function StudentsDetailScreen() {
       </View>
 
       {/* Students List */}
-      <FlatList
+      <FlashList
         data={filteredStudents}
         renderItem={renderStudentCard}
         keyExtractor={(item) => item.id}
@@ -388,6 +389,7 @@ export default function StudentsDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadStudents(true)} />}
         ListEmptyComponent={() => (loading ? null : <EmptyStudentsState />)}
         showsVerticalScrollIndicator={false}
+        estimatedItemSize={100}
       />
 
       {/* Filter Modal */}

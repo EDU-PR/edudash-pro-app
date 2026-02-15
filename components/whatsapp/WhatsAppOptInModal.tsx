@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Modal, View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Linking } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'
 import { useWhatsAppConnection, WhatsAppConnectionStatus } from '../../hooks/useWhatsAppConnection'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -10,6 +10,7 @@ import { queryClient } from '../../lib/query/queryClient'
 import { convertToE164, formatAsUserTypes, validatePhoneNumber, EXAMPLE_PHONE_NUMBERS } from '../../lib/utils/phoneUtils'
 import { Vibration } from 'react-native';
 import Feedback from '../../lib/feedback'
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface WhatsAppOptInModalProps {
@@ -24,6 +25,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
   onSuccess
 }) => {
   const { theme, isDark } = useTheme()
+  const { showAlert, alertProps } = useAlertModal()
   const { t } = useTranslation()
   const { user, profile } = useAuth()
   const {
@@ -123,11 +125,11 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         error_type: errorType
       })
       
-      Alert.alert(
-        t('dashboard.invalid_phone_number'),
-        validation.message || t('dashboard.enter_valid_phone'),
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: t('dashboard.invalid_phone_number'),
+        message: validation.message || t('dashboard.enter_valid_phone'),
+        type: 'warning',
+      })
       return
     }
     
@@ -149,11 +151,11 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         timestamp: new Date().toISOString()
       })
       
-      Alert.alert(
-        t('whatsapp:consentRequired'),
-        t('whatsapp:consentRequiredMessage'),
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: t('whatsapp:consentRequired'),
+        message: t('whatsapp:consentRequiredMessage'),
+        type: 'warning',
+      })
       return
     }
 
@@ -171,21 +173,22 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
       onSuccess?.()
     } catch (error) {
       console.error('WhatsApp opt-in failed:', error)
-      Alert.alert(
-        t('whatsapp:optInFailed'),
-        t('whatsapp:optInFailedMessage'),
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: t('whatsapp:optInFailed'),
+        message: t('whatsapp:optInFailedMessage'),
+        type: 'error',
+      })
     }
   }
 
   const handleOptOut = async () => {
     if (isDisconnecting) return // Prevent multiple clicks
     
-    Alert.alert(
-      'Disconnect WhatsApp',
-      'How would you like to disconnect your WhatsApp integration?',
-      [
+    showAlert({
+      title: 'Disconnect WhatsApp',
+      message: 'How would you like to disconnect your WhatsApp integration?',
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Soft Disconnect',
@@ -199,26 +202,26 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
               setStep('phone')
               setPhoneNumber('')
               setConsentGiven(false)
-              // Force refresh to ensure UI updates
               setTimeout(() => {
                 forceRefresh()
-                // Additional cache clearing to ensure UI updates
                 queryClient.invalidateQueries({ queryKey: ['whatsapp'] })
                 queryClient.removeQueries({ queryKey: ['whatsapp'] })
                 queryClient.invalidateQueries({ queryKey: ['whatsappContacts'] })
                 queryClient.removeQueries({ queryKey: ['whatsappContacts'] })
               }, 100)
-              Alert.alert(
-                'Disconnected Successfully',
-                'WhatsApp has been disconnected. You can reconnect anytime. Your preferences have been saved.'
-              )
+              showAlert({
+                title: 'Disconnected Successfully',
+                message: 'WhatsApp has been disconnected. You can reconnect anytime. Your preferences have been saved.',
+                type: 'success',
+              })
             } catch (error) {
               console.error('WhatsApp opt-out failed:', error)
               const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred'
-              Alert.alert(
-                'Disconnect Failed', 
-                `Could not disconnect: ${errorMsg}\n\nTry the "Hard Disconnect" option if this persists.`
-              )
+              showAlert({
+                title: 'Disconnect Failed',
+                message: `Could not disconnect: ${errorMsg}\n\nTry the "Hard Disconnect" option if this persists.`,
+                type: 'error',
+              })
             } finally {
               setIsDisconnecting(false)
             }
@@ -237,40 +240,39 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
               setStep('phone')
               setPhoneNumber('')
               setConsentGiven(false)
-              // Force refresh to ensure UI updates
               setTimeout(() => {
                 forceRefresh()
-                // Additional cache clearing to ensure UI updates
                 queryClient.invalidateQueries({ queryKey: ['whatsapp'] })
                 queryClient.removeQueries({ queryKey: ['whatsapp'] })
                 queryClient.invalidateQueries({ queryKey: ['whatsappContacts'] })
                 queryClient.removeQueries({ queryKey: ['whatsappContacts'] })
               }, 100)
-              Alert.alert(
-                'Completely Disconnected',
-                'WhatsApp has been completely removed from your account. All connection data has been deleted.'
-              )
+              showAlert({
+                title: 'Completely Disconnected',
+                message: 'WhatsApp has been completely removed from your account. All connection data has been deleted.',
+                type: 'success',
+              })
             } catch (error) {
               console.error('WhatsApp hard disconnect failed:', error)
               const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred'
-              Alert.alert(
-                'Hard Disconnect Failed', 
-                `Could not remove WhatsApp connection: ${errorMsg}\n\nPlease contact support if this issue persists.`,
-                [
+              showAlert({
+                title: 'Hard Disconnect Failed',
+                message: `Could not remove WhatsApp connection: ${errorMsg}\n\nPlease contact support if this issue persists.`,
+                type: 'error',
+                buttons: [
                   { text: 'Contact Support', onPress: () => {
-                    // Could open support chat or email
                     console.log('User needs support for WhatsApp disconnect')
                   }},
                   { text: 'OK' }
-                ]
-              )
+                ],
+              })
             } finally {
               setIsDisconnecting(false)
             }
           }
         }
-      ]
-    )
+      ],
+    })
   }
 
   const handleOpenWhatsApp = () => {
@@ -278,22 +280,22 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
     if (deepLink) {
       Linking.openURL(deepLink).catch(err => {
         console.error('Failed to open WhatsApp:', err)
-        Alert.alert(
-          t('whatsapp:openFailed'),
-          t('whatsapp:openFailedMessage'),
-          [{ text: t('common.ok') }]
-        )
+        showAlert({
+          title: t('whatsapp:openFailed'),
+          message: t('whatsapp:openFailedMessage'),
+          type: 'error',
+        })
       })
     }
   }
 
   const handleSendTestMessage = async () => {
     if (!connectionStatus?.isConnected || !connectionStatus?.contact) {
-      Alert.alert(
-        'WhatsApp Not Connected',
-        'Please connect WhatsApp first before sending test messages.',
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: 'WhatsApp Not Connected',
+        message: 'Please connect WhatsApp first before sending test messages.',
+        type: 'warning',
+      })
       return
     }
 
@@ -301,19 +303,19 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
       await sendTestMessage()
       try { await Feedback.vibrate(30); } catch { /* Intentional: non-fatal */ }
       try { await Feedback.playSuccess(); } catch { /* Intentional: non-fatal */ }
-      Alert.alert(
-        t('whatsapp:testMessageSent'),
-        t('whatsapp:testMessageSentMessage'),
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: t('whatsapp:testMessageSent'),
+        message: t('whatsapp:testMessageSentMessage'),
+        type: 'success',
+      })
     } catch (error) {
       console.error('Test message failed:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      Alert.alert(
-        t('whatsapp:testMessageFailed'),
-        `${t('whatsapp:testMessageFailedMessage')}\n\nError: ${errorMessage}`,
-        [{ text: t('common.ok') }]
-      )
+      showAlert({
+        title: t('whatsapp:testMessageFailed'),
+        message: `${t('whatsapp:testMessageFailedMessage')}\n\nError: ${errorMessage}`,
+        type: 'error',
+      })
     }
   }
 
@@ -561,7 +563,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         <TouchableOpacity 
           onPress={() => {
             forceRefresh()
-            Alert.alert('Refreshed', 'WhatsApp data refreshed from database')
+            showAlert({ title: 'Refreshed', message: 'WhatsApp data refreshed from database', type: 'success' })
           }}
           style={{ padding: 8, borderRadius: 6, backgroundColor: theme.surface }}
         >
@@ -624,10 +626,11 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
               } catch (error) {
                 console.error('Auto-connect failed:', error)
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-                Alert.alert(
-                  'Connection Failed', 
-                  `Could not connect to school WhatsApp: ${errorMessage}\n\nPlease try manual setup below.`
-                )
+                showAlert({
+                  title: 'Connection Failed',
+                  message: `Could not connect to school WhatsApp: ${errorMessage}\n\nPlease try manual setup below.`,
+                  type: 'error',
+                })
               }
             }}
             disabled={isOptingIn}
@@ -864,7 +867,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         <TouchableOpacity 
           onPress={() => {
             forceRefresh()
-            Alert.alert('Refreshed', 'Connection status refreshed from database')
+            showAlert({ title: 'Refreshed', message: 'Connection status refreshed from database', type: 'success' })
           }}
           style={{ padding: 8, borderRadius: 6, backgroundColor: theme.surface }}
         >
@@ -1018,6 +1021,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <AlertModal {...alertProps} />
     </Modal>
   )
 }

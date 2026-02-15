@@ -55,6 +55,11 @@ const LANG_TO_BCP47: Record<string, string> = {
   zu: 'zu-ZA',
   xh: 'xh-ZA',
   nso: 'nso-ZA',
+  st: 'st-ZA',
+  fr: 'fr-FR',
+  pt: 'pt-BR',
+  es: 'es-ES',
+  de: 'de-DE',
 };
 
 const DEFAULT_VOICES: Record<string, string> = {
@@ -63,6 +68,11 @@ const DEFAULT_VOICES: Record<string, string> = {
   'zu-ZA': 'zu-ZA-ThandoNeural',
   'xh-ZA': 'xh-ZA-NomalungaNeural',
   'nso-ZA': 'nso-ZA-DidiNeural',
+  'st-ZA': 'en-ZA-LukeNeural', // Sesotho not available in Azure — fallback to en-ZA
+  'fr-FR': 'fr-FR-HenriNeural',
+  'pt-BR': 'pt-BR-AntonioNeural',
+  'es-ES': 'es-ES-AlvaroNeural',
+  'de-DE': 'de-DE-ConradNeural',
 };
 
 /** Dash's primary voice */
@@ -79,6 +89,11 @@ const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
   'zu-ZA': ['zu-ZA-ThandoNeural', DASH_FALLBACK_VOICE],
   'xh-ZA': ['xh-ZA-NomalungaNeural', DASH_FALLBACK_VOICE],
   'nso-ZA': ['nso-ZA-DidiNeural', DASH_FALLBACK_VOICE],
+  'st-ZA': [DASH_VOICE, DASH_FALLBACK_VOICE], // Sesotho — no native Azure voice
+  'fr-FR': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
+  'pt-BR': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
+  'es-ES': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
+  'de-DE': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
 };
 
 /** Keep phonics slightly slower than normal speech without sounding dragged out */
@@ -491,6 +506,8 @@ interface AzureTTSAttemptResult {
   status: number;
   audio?: Uint8Array;
   details?: string;
+  /** The candidate name that succeeded after fallback (only set when recovery happened) */
+  recoveredWith?: string;
 }
 
 interface AzureTTSCandidate {
@@ -653,7 +670,7 @@ async function azureSynthesizeWithCandidates(params: {
           failedAttempts: failures.length,
         });
       }
-      return result;
+      return { ...result, recoveredWith: failures.length > 0 ? candidate.name : undefined };
     }
 
     lastStatus = result.status || lastStatus;
@@ -962,6 +979,29 @@ Deno.serve(async (req) => {
       return jsonResponse(401, { error: 'Invalid token' });
     }
 
+    // Quota check — prevent free-tier abuse of TTS/STT credits
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: userData.user.id,
+        p_request_type: 'tts',
+      });
+
+      if (!quota.error) {
+        const quotaData = quota.data as Record<string, unknown> | null;
+        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+          return jsonResponse(429, {
+            error: 'quota_exceeded',
+            message: 'Text-to-speech usage quota exceeded for this billing period',
+            details: quotaData,
+          });
+        }
+      }
+    }
+
     const body = await req.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) {
       return jsonResponse(400, { error: 'Invalid JSON body' });
@@ -1241,6 +1281,22 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Record usage (non-fatal)
+      try {
+        await supabase.rpc('record_ai_usage', {
+          p_user_id: userData.user.id,
+          p_feature_used: 'tts',
+          p_model_used: `azure-${streamVoice}`,
+          p_tokens_used: 0,
+          p_request_tokens: 0,
+          p_response_tokens: 0,
+          p_success: true,
+          p_metadata: { scope: 'tts_stream', voice_id: streamVoice },
+        });
+      } catch (usageErr) {
+        console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
+      }
+
       // Return audio response directly.
       return new Response(streamTTS.audio, {
         status: 200,
@@ -1327,6 +1383,17 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Detect if voice/language fallback occurred
+    const recoveredVoice = azureResp.recoveredWith || undefined;
+    // Extract voice name from candidate label like "voice_plain:en-GB-RyanNeural"
+    const actualVoiceName = recoveredVoice
+      ? (recoveredVoice.split(':').pop() || voiceId)
+      : voiceId;
+    // Detect language fallback: primary voice locale prefix differs from actual voice locale prefix
+    const requestedLangPrefix = voiceId.split('-').slice(0, 2).join('-');
+    const actualLangPrefix = actualVoiceName.split('-').slice(0, 2).join('-');
+    const languageFallback = recoveredVoice ? (requestedLangPrefix !== actualLangPrefix) : false;
+
     const contentHash = await sha256(
       `${text}|${language}|${voiceId}|${hasExplicitRate ? speakingRate : speakingRateRaw}|${pitch}|${outputFormat}|${phonicsMode ? 'phonics' : 'normal'}`
     );
@@ -1384,6 +1451,22 @@ Deno.serve(async (req) => {
 
     const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
 
+    // Record usage (non-fatal)
+    try {
+      await supabase.rpc('record_ai_usage', {
+        p_user_id: userData.user.id,
+        p_feature_used: 'tts',
+        p_model_used: `azure-${voiceId}`,
+        p_tokens_used: 0,
+        p_request_tokens: 0,
+        p_response_tokens: 0,
+        p_success: true,
+        p_metadata: { scope: 'tts_synthesize', voice_id: voiceId, language, text_length: text.length, cache_hit: false },
+      });
+    } catch (usageErr) {
+      console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
+    }
+
     return jsonResponse(200, {
       provider: 'azure',
       audio_url: publicUrl,
@@ -1392,6 +1475,8 @@ Deno.serve(async (req) => {
       language,
       voice_id: voiceId,
       size_bytes: audioBuffer.length,
+      language_fallback: languageFallback,
+      actual_voice: actualVoiceName,
     });
   } catch (error) {
     return jsonResponse(500, {

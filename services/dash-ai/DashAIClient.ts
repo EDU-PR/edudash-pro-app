@@ -40,6 +40,8 @@ export interface AIServiceParams {
   ocrResponseFormat?: 'json' | 'text';
   stream?: boolean;
   onChunk?: (chunk: string) => void;
+  /** AbortSignal to cancel in-flight requests (streaming & non-streaming) */
+  signal?: AbortSignal;
 }
 
 /**
@@ -412,7 +414,8 @@ export class DashAIClient {
             attachments: params.attachments,
             images: params.images,
           },
-          params.onChunk
+          params.onChunk,
+          params.signal
         );
       }
       
@@ -821,14 +824,14 @@ export class DashAIClient {
    * - Supabase auth getSession: https://supabase.com/docs/reference/javascript/auth-getsession
    * - Fetch streaming: https://developer.mozilla.org/docs/Web/API/Streams_API/Using_readable_streams
    */
-  private async callAIServiceStreaming(params: any, onChunk: (chunk: string) => void): Promise<AIServiceResponse> {
+  private async callAIServiceStreaming(params: any, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<AIServiceResponse> {
     // Feature flag: Use WebSocket streaming on React Native when enabled
     // Reference: https://reactnative.dev/docs/0.79/platform-specific-code
     const useWebSocket = process.env.EXPO_PUBLIC_USE_WEBSOCKET_STREAMING === 'true';
     
     if (useWebSocket) {
       try {
-        return await this.callAIServiceStreamingWS(params, onChunk);
+        return await this.callAIServiceStreamingWS(params, onChunk, signal);
       } catch (error) {
         console.warn('[DashAIClient] WebSocket streaming failed, falling back to SSE:', error);
         // Fall through to SSE implementation below
@@ -875,6 +878,7 @@ export class DashAIClient {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
+        signal,
         body: JSON.stringify({
           scope: scope,
           service_type: params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message'),
@@ -1064,7 +1068,7 @@ export class DashAIClient {
    * - React Native WebSocket (0.79): https://reactnative.dev/docs/0.79/network#websocket-support
    * - Supabase auth getSession: https://supabase.com/docs/reference/javascript/auth-getsession
    */
-  private async callAIServiceStreamingWS(params: any, onChunk: (chunk: string) => void): Promise<AIServiceResponse> {
+  private async callAIServiceStreamingWS(params: any, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<AIServiceResponse> {
     // Performance instrumentation
     const startTime = Date.now();
     let firstTokenTime: number | null = null;
@@ -1100,6 +1104,19 @@ export class DashAIClient {
         const ws = new WebSocket(wsUrl);
         let accumulated = '';
         let hasError = false;
+
+        // Wire AbortSignal to close WebSocket on cancel
+        if (signal) {
+          if (signal.aborted) {
+            reject(new Error('Aborted'));
+            return;
+          }
+          signal.addEventListener('abort', () => {
+            hasError = true;
+            ws.close();
+            reject(new Error('Aborted'));
+          }, { once: true });
+        }
         
         ws.onopen = () => {
           // Send request payload

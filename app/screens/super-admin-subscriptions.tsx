@@ -56,6 +56,7 @@ export default function SuperAdminSubscriptionsScreen() {
     setFilter,
     setShowCreateModal,
     setCreateForm,
+    AlertModalComponent,
   } = useSubscriptions();
 
   const handleBack = () => {
@@ -174,6 +175,8 @@ export default function SuperAdminSubscriptionsScreen() {
         school={selectedSchoolForChange}
         onSuccess={handlePlanChangeSuccess}
       />
+
+      <AlertModalComponent />
     </View>
   );
 }

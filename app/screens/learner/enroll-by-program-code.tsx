@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 /**
  * Screen for logged-in learners to enroll in programs using program codes.
  * This does NOT create a new account - it just enrolls the existing user.
@@ -26,22 +27,21 @@ export default function EnrollByProgramCodeScreen() {
   const autoEnrollAttempted = useRef(false);
   const codeFromParams = useRef(!!params?.code); // Track if code came from URL params
 
+  const { showAlert, alertProps } = useAlertModal();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   // Check if user is logged in
   useEffect(() => {
     if (!user) {
-      Alert.alert(
-        'Sign In Required',
-        'You need to be signed in to enroll in programs. Would you like to sign in?',
-        [
+      showAlert({
+        title: 'Sign In Required',
+        message: 'You need to be signed in to enroll in programs. Would you like to sign in?',
+        type: 'warning',
+        buttons: [
           { text: 'Cancel', style: 'cancel', onPress: () => router.back() },
-          {
-            text: 'Sign In',
-            onPress: () => router.replace('/(auth)/sign-in'),
-          },
-        ]
-      );
+          { text: 'Sign In', onPress: () => router.replace('/(auth)/sign-in') },
+        ],
+      });
     }
   }, [user]);
 
@@ -65,10 +65,11 @@ export default function EnrollByProgramCodeScreen() {
 
           if (!data || typeof data !== 'object' || !(data as any).valid) {
             // Invalid code - show error but don't auto-enroll
-            Alert.alert(
-              'Invalid Code',
-              (data as any)?.error || 'The program code you entered is invalid or the program is no longer active.'
-            );
+            showAlert({
+              title: 'Invalid Code',
+              message: (data as any)?.error || 'The program code you entered is invalid or the program is no longer active.',
+              type: 'error',
+            });
             setAutoEnrolling(false);
             return;
           }
@@ -89,7 +90,7 @@ export default function EnrollByProgramCodeScreen() {
           };
 
           if (!program.id) {
-            Alert.alert('Invalid Code', 'Could not find program details.');
+            showAlert({ title: 'Invalid Code', message: 'Could not find program details.', type: 'error' });
             setAutoEnrolling(false);
             return;
           }
@@ -106,11 +107,12 @@ export default function EnrollByProgramCodeScreen() {
 
           if (existingEnrollment) {
             if (existingEnrollment.is_active) {
-              Alert.alert(
-                'Already Enrolled',
-                `You are already enrolled in "${program.title}".`,
-                [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }]
-              );
+              showAlert({
+                title: 'Already Enrolled',
+                message: `You are already enrolled in "${program.title}".`,
+                type: 'info',
+                buttons: [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }],
+              });
               setAutoEnrolling(false);
               return;
             } else {
@@ -122,11 +124,12 @@ export default function EnrollByProgramCodeScreen() {
 
               if (updateError) throw updateError;
 
-              Alert.alert(
-                'Enrollment Reactivated',
-                `You have been re-enrolled in "${program.title}".`,
-                [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }]
-              );
+              showAlert({
+                title: 'Enrollment Reactivated',
+                message: `You have been re-enrolled in "${program.title}".`,
+                type: 'success',
+                buttons: [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }],
+              });
               setAutoEnrolling(false);
               return;
             }
@@ -147,28 +150,22 @@ export default function EnrollByProgramCodeScreen() {
           }
 
           // Success - show alert and navigate
-          Alert.alert(
-            'Enrollment Successful!',
-            `You have been automatically enrolled in "${program.title}".`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  router.replace('/screens/learner-dashboard');
-                },
-              },
-            ]
-          );
+          showAlert({
+            title: 'Enrollment Successful!',
+            message: `You have been automatically enrolled in "${program.title}".`,
+            type: 'success',
+            buttons: [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }],
+          });
         } catch (error: any) {
           console.error('Auto-enrollment error:', error);
           
           // Show user-friendly error message for RLS errors
           if (error?.code === '42501' || error?.code === 'PGRST301' || error?.message?.includes('row-level security') || error?.message?.includes('RLS')) {
-            Alert.alert(
-              'Enrollment Failed',
-              'Unable to enroll automatically. Please try enrolling manually using the button below.',
-              [{ text: 'OK' }]
-            );
+            showAlert({
+              title: 'Enrollment Failed',
+              message: 'Unable to enroll automatically. Please try enrolling manually using the button below.',
+              type: 'error',
+            });
           }
           
           // Set programInfo so user can manually enroll if validation succeeded
@@ -182,7 +179,7 @@ export default function EnrollByProgramCodeScreen() {
 
   const validateProgramCode = async () => {
     if (!programCode.trim()) {
-      Alert.alert('Error', 'Please enter a program code');
+      showAlert({ title: 'Error', message: 'Please enter a program code', type: 'error' });
       return;
     }
 
@@ -200,10 +197,11 @@ export default function EnrollByProgramCodeScreen() {
       if (error) throw error;
 
       if (!data || typeof data !== 'object' || !(data as any).valid) {
-        Alert.alert(
-          'Invalid Code',
-          (data as any)?.error || 'The program code you entered is invalid or the program is no longer active.'
-        );
+        showAlert({
+          title: 'Invalid Code',
+          message: (data as any)?.error || 'The program code you entered is invalid or the program is no longer active.',
+          type: 'error',
+        });
         return;
       }
 
@@ -222,15 +220,15 @@ export default function EnrollByProgramCodeScreen() {
       };
 
       if (!program.id) {
-        Alert.alert('Invalid Code', 'Could not find program details.');
+        showAlert({ title: 'Invalid Code', message: 'Could not find program details.', type: 'error' });
         return;
       }
 
       setProgramInfo(program);
-      Alert.alert('Code Valid', `You can enroll in: ${program.title}`);
+      showAlert({ title: 'Code Valid', message: `You can enroll in: ${program.title}`, type: 'success' });
     } catch (error: any) {
       console.error('Program code validation error:', error);
-      Alert.alert('Error', error.message || 'Failed to validate program code');
+      showAlert({ title: 'Error', message: error.message || 'Failed to validate program code', type: 'error' });
     } finally {
       setValidating(false);
     }
@@ -238,12 +236,12 @@ export default function EnrollByProgramCodeScreen() {
 
   const handleEnroll = async () => {
     if (!user?.id) {
-      Alert.alert('Error', 'You must be signed in to enroll');
+      showAlert({ title: 'Error', message: 'You must be signed in to enroll', type: 'error' });
       return;
     }
 
     if (!programInfo?.id) {
-      Alert.alert('Error', 'Please validate a program code first');
+      showAlert({ title: 'Error', message: 'Please validate a program code first', type: 'error' });
       return;
     }
 
@@ -262,11 +260,12 @@ export default function EnrollByProgramCodeScreen() {
 
       if (existingEnrollment) {
         if (existingEnrollment.is_active) {
-          Alert.alert(
-            'Already Enrolled',
-            `You are already enrolled in "${programInfo.title}".`,
-            [{ text: 'OK', onPress: () => router.back() }]
-          );
+          showAlert({
+            title: 'Already Enrolled',
+            message: `You are already enrolled in "${programInfo.title}".`,
+            type: 'info',
+            buttons: [{ text: 'OK', onPress: () => router.back() }],
+          });
         } else {
           // Re-activate enrollment
           const { error: updateError } = await supabase
@@ -276,11 +275,12 @@ export default function EnrollByProgramCodeScreen() {
 
           if (updateError) throw updateError;
 
-          Alert.alert(
-            'Enrollment Reactivated',
-            `You have been re-enrolled in "${programInfo.title}".`,
-            [{ text: 'OK', onPress: () => router.back() }]
-          );
+          showAlert({
+            title: 'Enrollment Reactivated',
+            message: `You have been re-enrolled in "${programInfo.title}".`,
+            type: 'success',
+            buttons: [{ text: 'OK', onPress: () => router.back() }],
+          });
         }
         return;
       }
@@ -299,25 +299,19 @@ export default function EnrollByProgramCodeScreen() {
         throw enrollError;
       }
 
-      Alert.alert(
-        'Enrollment Successful!',
-        `You have been enrolled in "${programInfo.title}".`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate back to learner dashboard
-              router.replace('/screens/learner-dashboard');
-            },
-          },
-        ]
-      );
+      showAlert({
+        title: 'Enrollment Successful!',
+        message: `You have been enrolled in "${programInfo.title}".`,
+        type: 'success',
+        buttons: [{ text: 'OK', onPress: () => router.replace('/screens/learner-dashboard') }],
+      });
     } catch (error: any) {
       console.error('Enrollment error:', error);
-      Alert.alert(
-        'Enrollment Failed',
-        error.message || 'Failed to enroll in program. Please try again.'
-      );
+      showAlert({
+        title: 'Enrollment Failed',
+        message: error.message || 'Failed to enroll in program. Please try again.',
+        type: 'error',
+      });
     } finally {
       setEnrolling(false);
     }
@@ -463,6 +457,7 @@ export default function EnrollByProgramCodeScreen() {
           <Text style={[styles.linkText, { color: theme.primary }]}>← Back</Text>
         </TouchableOpacity>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

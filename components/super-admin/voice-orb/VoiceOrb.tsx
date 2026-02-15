@@ -384,6 +384,27 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       }
     }
   }, [recorderActions, onStopListening, transcribe, selectedLanguage, onTranscript, isProcessing, stopLiveListening, scheduleLiveFallback]);
+
+  const suspendListeningForTTS = useCallback(async () => {
+    if (recorderState.isRecording) {
+      try {
+        await recorderActions.stopRecording();
+      } catch (stopError) {
+        console.warn('[VoiceOrb] Failed to stop recorder before TTS:', stopError);
+      }
+    }
+    if (usingLiveSTTRef.current) {
+      try {
+        await cancelLiveListening();
+      } catch (stopError) {
+        console.warn('[VoiceOrb] Failed to cancel live STT before TTS:', stopError);
+      }
+      clearLiveTimers();
+      setUsingLiveSTT(false);
+    }
+    onStopListening();
+    setStatusText('Speaking...');
+  }, [cancelLiveListening, clearLiveTimers, onStopListening, recorderActions, recorderState.isRecording]);
   
   // Update the ref whenever handleStopAndTranscribe changes
   useEffect(() => {
@@ -393,6 +414,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   // Expose TTS methods via ref
   useImperativeHandle(ref, () => ({
     speakText: async (text: string, language?: SupportedLanguage, options?: TTSOptions) => {
+      await suspendListeningForTTS();
       onTTSStart?.();
       try {
         // Priority: passed language > last detected > selected > default
@@ -409,7 +431,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     get isSpeaking() {
       return ttsIsSpeaking;
     },
-  }), [speak, stopSpeaking, ttsIsSpeaking, selectedLanguage, onTTSStart, onTTSEnd]);
+  }), [speak, stopSpeaking, ttsIsSpeaking, selectedLanguage, onTTSStart, onTTSEnd, suspendListeningForTTS]);
   
   // CRITICAL: Stop recording when TTS starts to prevent feedback loop (Dash hearing itself)
   useEffect(() => {

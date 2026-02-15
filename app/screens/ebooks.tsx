@@ -7,7 +7,8 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Dimensions, FlatList, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
@@ -424,13 +425,12 @@ export default function EBooksScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredBooks}
           renderItem={renderBookCard}
           keyExtractor={(item) => item.id}
           numColumns={2}
           contentContainerStyle={styles.bookList}
-          columnWrapperStyle={styles.bookRow}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -439,6 +439,7 @@ export default function EBooksScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          estimatedItemSize={280}
         />
       )}
     </View>
