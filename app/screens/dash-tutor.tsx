@@ -25,6 +25,7 @@ import DashAssistant from '@/components/ai/DashAssistant';
 import { getTutorTheme, isPreschoolBand } from '@/lib/dash-ai/tutorTheme';
 import { resolveAgeBand } from '@/lib/dash-ai/learnerContext';
 import { normalizeRole } from '@/lib/rbac';
+import { resolveDashboardFallback } from '@/lib/dashboard/resolveDashboardFallback';
 import type { TutorMode } from '@/hooks/dash-assistant/tutorTypes';
 
 // ─── ZA Cosmic Palette ───────────────────────────────────────────────────────
@@ -97,30 +98,13 @@ export default function DashTutorScreen() {
 
   const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
 
-  const getFallbackPath = useCallback(() => {
-    const role = normalizeRole(String(profile?.role || ''));
-    switch (role) {
-      case 'teacher':
-        return '/screens/teacher-dashboard';
-      case 'principal':
-      case 'principal_admin':
-        return '/screens/principal-dashboard';
-      case 'parent':
-        return '/screens/parent-dashboard';
-      case 'super_admin':
-        return '/screens/super-admin-dashboard';
-      default:
-        return '/';
-    }
-  }, [profile?.role]);
-
   const handleClose = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(getFallbackPath());
+      router.replace(resolveDashboardFallback(profile) as any);
     }
-  }, [getFallbackPath]);
+  }, [profile]);
 
   // Compute header title based on mode
   const headerTitle = useMemo(() => {

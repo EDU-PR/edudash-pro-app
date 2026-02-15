@@ -1,0 +1,103 @@
+/**
+ * Unit tests for K12 Parent Dashboard routes
+ *
+ * Validates that every CTA in the K12 parent action map
+ * points to a route that is plausible (no known dead routes).
+ */
+
+import {
+  K12_PARENT_ACTIONS,
+  getAllK12ParentRoutes,
+  type K12ParentActionId,
+} from '@/lib/navigation/k12ParentActionMap';
+
+/**
+ * Routes that are known to exist as actual screen files in app/screens/.
+ * This acts as a safety net against routing to non-existent screens.
+ */
+const KNOWN_VALID_ROUTES = new Set([
+  '/screens/app-search',
+  '/screens/notifications',
+  '/screens/account',
+  '/screens/dash-assistant',
+  '/screens/exam-prep',
+  '/screens/parent-messages',
+  '/screens/grades',
+  '/screens/parent-activity-feed',
+  '/screens/calendar',
+  '/screens/parent-announcements',
+  '/screens/parent-children',
+]);
+
+/** Routes that must NOT appear in the action map (they don't exist). */
+const KNOWN_DEAD_ROUTES = [
+  '/screens/parent-events',
+  '/screens/search',
+  '/screens/parent-progress', // should be /screens/grades for K12
+];
+
+describe('K12 Parent Action Map', () => {
+  it('exports all expected action IDs', () => {
+    const expectedIds: K12ParentActionId[] = [
+      'search',
+      'notifications',
+      'profile',
+      'tutor_session',
+      'exam_builder',
+      'messages',
+      'grades',
+      'account',
+      'see_all_activity',
+      'see_all_events',
+      'event_detail',
+      'school_communication',
+      'child_detail',
+    ];
+    expectedIds.forEach((id) => {
+      expect(K12_PARENT_ACTIONS).toHaveProperty(id);
+    });
+  });
+
+  it('every action route maps to a known valid route', () => {
+    const routes = getAllK12ParentRoutes();
+    routes.forEach((route) => {
+      expect(KNOWN_VALID_ROUTES).toContain(route);
+    });
+  });
+
+  it('no action route points to a known dead route', () => {
+    const routes = getAllK12ParentRoutes();
+    KNOWN_DEAD_ROUTES.forEach((dead) => {
+      expect(routes).not.toContain(dead);
+    });
+  });
+
+  it('search action points to /screens/app-search (not /screens/search)', () => {
+    expect(K12_PARENT_ACTIONS.search.route).toBe('/screens/app-search');
+  });
+
+  it('grades action points to /screens/grades (not /screens/parent-progress)', () => {
+    expect(K12_PARENT_ACTIONS.grades.route).toBe('/screens/grades');
+  });
+
+  it('see_all_events points to /screens/calendar (not /screens/parent-events)', () => {
+    expect(K12_PARENT_ACTIONS.see_all_events.route).toBe('/screens/calendar');
+  });
+
+  it('tutor_session includes mode=tutor param', () => {
+    expect(K12_PARENT_ACTIONS.tutor_session.params?.mode).toBe('tutor');
+  });
+
+  it('every action has a non-empty label', () => {
+    Object.entries(K12_PARENT_ACTIONS).forEach(([id, config]) => {
+      expect(config.label).toBeTruthy();
+      expect(config.label.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('getAllK12ParentRoutes returns unique routes', () => {
+    const routes = getAllK12ParentRoutes();
+    const unique = new Set(routes);
+    expect(unique.size).toBe(routes.length);
+  });
+});
