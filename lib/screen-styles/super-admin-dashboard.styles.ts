@@ -45,11 +45,16 @@ export interface QuickAction {
 
 // ── Style Factory ───────────────────────────────────────────────────
 
-export function createStyles(_theme: any) {
+export function createStyles(theme: any) {
+  const bg0 = theme?.background ?? '#0F121E';
+  const glass = 'rgba(255,255,255,0.05)';
+  const glassBorder = 'rgba(255,255,255,0.10)';
+  const glassStrong = 'rgba(255,255,255,0.07)';
+
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#0f1419',
+      backgroundColor: bg0,
     },
     loadingContainer: {
       flex: 1,
@@ -101,6 +106,13 @@ export function createStyles(_theme: any) {
       paddingHorizontal: 16,
       paddingVertical: 12,
       borderBottomWidth: 1,
+      backgroundColor: glassStrong,
+    },
+    quickAccessLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flexShrink: 1,
     },
     aiButton: {
       flexDirection: 'row',
@@ -109,6 +121,22 @@ export function createStyles(_theme: any) {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 20,
+    },
+    opsConsoleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
+    },
+    opsConsoleText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '600',
     },
     aiButtonText: {
       color: '#ffffff',
@@ -159,6 +187,9 @@ export function createStyles(_theme: any) {
       minHeight: 110,
       justifyContent: 'center',
       marginBottom: 8,
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     statValue: {
       fontSize: 24,
@@ -189,13 +220,15 @@ export function createStyles(_theme: any) {
     sectionSubtitle: {
       fontSize: 13,
       marginBottom: 18,
-      fontStyle: 'italic',
+      fontStyle: 'normal',
       lineHeight: 18,
     },
     aiControlCard: {
       borderRadius: 14,
       padding: 16,
       borderWidth: 1,
+      backgroundColor: glass,
+      borderColor: glassBorder,
     },
     aiControlHeader: {
       flexDirection: 'row',
@@ -368,6 +401,9 @@ export function createStyles(_theme: any) {
       marginBottom: 12,
       // Better touch targets for mobile
       minWidth: 160,
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     actionHeader: {
       flexDirection: 'row',
@@ -411,6 +447,9 @@ export function createStyles(_theme: any) {
     statusCard: {
       padding: 16,
       borderRadius: 12,
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     statusItem: {
       flexDirection: 'row',
@@ -439,6 +478,9 @@ export function createStyles(_theme: any) {
     alertsContainer: {
       borderRadius: 12,
       overflow: 'hidden',
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     alertItem: {
       flexDirection: 'row',
@@ -473,6 +515,9 @@ export function createStyles(_theme: any) {
     featureFlagsContainer: {
       borderRadius: 12,
       overflow: 'hidden',
+      backgroundColor: glass,
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     featureFlag: {
       flexDirection: 'row',

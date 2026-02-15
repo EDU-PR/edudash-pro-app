@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Switch, Modal, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -14,6 +14,7 @@ import { createStyles } from '@/lib/screen-styles/super-admin-dashboard.styles';
 import { useSuperAdminDashboard } from '@/hooks/super-admin-dashboard';
 export default function SuperAdminDashboardScreen() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
   const {
@@ -61,14 +62,31 @@ export default function SuperAdminDashboardScreen() {
       <View style={styles.container}>
         <ThemedStatusBar />
         {/* Quick Access Bar */}
-        <View style={[styles.quickAccessBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-          <TouchableOpacity
-            style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
-            onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
-          >
-            <Ionicons name="flash" size={16} color="#fff" />
-            <Text style={styles.aiButtonText}>Dash AI Command</Text>
-          </TouchableOpacity>
+        <View style={[styles.quickAccessBar, { borderBottomColor: theme.border }]}>
+          <View style={styles.quickAccessLeft}>
+            <TouchableOpacity
+              style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
+              onPress={() => router.push('/screens/dash-voice?mode=ops' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open Dash Voice Orb"
+              accessibilityHint="Opens the full-screen voice orb for operations commands."
+            >
+              <Ionicons name="mic" size={16} color="#fff" />
+              <Text style={styles.aiButtonText}>Voice ORB</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.opsConsoleButton}
+              onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open Ops Console"
+              accessibilityHint="Opens the Ops command console for text-based requests."
+            >
+              <Ionicons name="terminal-outline" size={16} color="#fff" />
+              <Text style={styles.opsConsoleText}>Ops Console</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={[styles.healthIndicator, {
             backgroundColor: dashboardStats?.system_health === 'healthy' ? '#10b98108' : '#f59e0b08',
             borderColor: dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b',
@@ -87,6 +105,8 @@ export default function SuperAdminDashboardScreen() {
         </View>
         <ScrollView
           style={styles.content}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 24 }}
+          scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 12) + 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         >
           {/* Dash AI Owner Controls */}
@@ -95,7 +115,7 @@ export default function SuperAdminDashboardScreen() {
             <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
               One-owner autonomy controls for when you're away
             </Text>
-            <View style={[styles.aiControlCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.aiControlCard}>
               <View style={styles.aiControlHeader}>
                 <View style={styles.aiControlOwnerInfo}>
                   <Text style={[styles.aiControlTitle, { color: theme.text }]}>Platform Owner</Text>
@@ -272,13 +292,13 @@ export default function SuperAdminDashboardScreen() {
                 Empowering educational institutions across South Africa
               </Text>
               <View style={styles.statsContainer}>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="business" size={24} color="#3b82f6" />
                   <Text style={[styles.statValue, { color: theme.text }]}>{dashboardStats.total_organizations}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Organizations</Text>
                   <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>All institution types</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="card" size={24} color="#10b981" />
                   <Text style={[styles.statValue, { color: theme.text }]}>
                     R{Math.round(dashboardStats.monthly_revenue).toLocaleString()}
@@ -286,13 +306,13 @@ export default function SuperAdminDashboardScreen() {
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Monthly Revenue</Text>
                   <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>Subscriptions</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="alert-circle" size={24} color="#f59e0b" />
                   <Text style={[styles.statValue, { color: theme.text }]}>{dashboardStats.pending_issues}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Critical Issues</Text>
                   <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>Needs attention</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="flash" size={24} color="#8b5cf6" />
                   <Text style={[styles.statValue, { color: theme.text }]}>
                     ${Math.round(dashboardStats.ai_usage_cost).toLocaleString()}
@@ -300,13 +320,13 @@ export default function SuperAdminDashboardScreen() {
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>AI Usage Cost</Text>
                   <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>Last 30 days</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="people" size={24} color="#06b6d4" />
                   <Text style={[styles.statValue, { color: theme.text }]}>{dashboardStats.total_users}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Users</Text>
                   <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>{dashboardStats.active_users} active</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.statCard}>
                   <Ionicons name="person-add" size={24} color="#ec4899" />
                   <Text style={[styles.statValue, { color: theme.text }]}>{dashboardStats.active_seats}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Seats</Text>
@@ -318,7 +338,7 @@ export default function SuperAdminDashboardScreen() {
           {/* Recent Alerts */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Alerts</Text>
-            <View style={[styles.alertsContainer, { backgroundColor: theme.surface }]}>
+            <View style={styles.alertsContainer}>
               {recentAlerts.length > 0 ? (
                 recentAlerts.map((alert) => (
                   <View key={alert.id} style={[styles.alertItem, { borderBottomColor: theme.divider }]}>
@@ -339,7 +359,7 @@ export default function SuperAdminDashboardScreen() {
           {/* Feature Flag Status */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Feature Flag Status</Text>
-            <View style={[styles.featureFlagsContainer, { backgroundColor: theme.surface }]}>
+            <View style={styles.featureFlagsContainer}>
               {featureFlags.map((flag, index) => (
                 <View
                   key={flag.name}
@@ -362,7 +382,7 @@ export default function SuperAdminDashboardScreen() {
               {quickActions.map((action) => (
                 <TouchableOpacity
                   key={action.id}
-                  style={[styles.actionCard, { backgroundColor: theme.surface }]}
+                  style={styles.actionCard}
                   onPress={() => handleQuickAction(action)}
                 >
                   <View style={styles.actionHeader}>
@@ -387,7 +407,7 @@ export default function SuperAdminDashboardScreen() {
           {/* System Status */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>System Status</Text>
-            <View style={[styles.statusCard, { backgroundColor: theme.surface }]}>
+            <View style={styles.statusCard}>
               {systemStatus ? (
                 <>
                   <View style={styles.statusItem}>
