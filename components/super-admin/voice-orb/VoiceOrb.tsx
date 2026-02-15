@@ -20,7 +20,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -101,6 +100,8 @@ interface VoiceOrbProps {
   autoRestartAfterTTS?: boolean;
   /** Preschool mode: longer silence timeout, lower speech threshold for children */
   preschoolMode?: boolean;
+  /** Show the live transcription bubble while listening (default: true). */
+  showLiveTranscript?: boolean;
 }
 
 // ============================================================================
@@ -125,6 +126,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   autoStartListening = true,
   autoRestartAfterTTS = true,
   preschoolMode = false,
+  showLiveTranscript = true,
 }, ref) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -146,11 +148,18 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, [externalLanguage]);
 
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
-  const liveSilenceTimeoutRaw = Number.parseInt(process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || '4200', 10);
+  // Perceived latency is dominated by "silence → final transcript → send".
+  // Keep preschool more forgiving, but default faster for staff/older learners.
+  const defaultLiveSilenceMs = preschoolMode ? 3200 : 1800;
+  const liveSilenceTimeoutRaw = Number.parseInt(
+    process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || String(defaultLiveSilenceMs),
+    10
+  );
+  const liveSilenceMin = preschoolMode ? 1800 : 1200;
   const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
-    ? Math.min(12000, Math.max(1800, liveSilenceTimeoutRaw))
-    : 4200;
-  const LIVE_FINAL_FALLBACK_MS = 1300;
+    ? Math.min(12000, Math.max(liveSilenceMin, liveSilenceTimeoutRaw))
+    : defaultLiveSilenceMs;
+  const LIVE_FINAL_FALLBACK_MS = preschoolMode ? 1100 : 650;
   const usingLiveSTTRef = useRef(false);
   const liveSessionRef = useRef(0);
   const liveFinalizedRef = useRef(false);
@@ -547,12 +556,30 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   
   // Derived sizes
   const orbSize = Math.max(110, size);
-  const coreSize = orbSize * 0.42;
+  const ringThickness = Math.max(10, Math.round(orbSize * 0.08));
+  const innerSize = orbSize - ringThickness * 2;
+  const coreSize = Math.max(44, Math.round(orbSize * 0.32));
   
   // Pre-generate animation data
-  const particles = useMemo(() => generateParticles(8, orbSize), [orbSize]);
-  const shootingStars = useMemo(() => generateShootingStars(3, orbSize), [orbSize]);
+  const particles = useMemo(() => generateParticles(10, orbSize), [orbSize]);
+  const shootingStars = useMemo(() => generateShootingStars(4, orbSize), [orbSize]);
   const rings = useMemo(() => generateRings(orbSize), [orbSize]);
+  const starfield = useMemo(() => {
+    const count = Math.max(26, Math.min(56, Math.round(orbSize * 0.22)));
+    const radius = innerSize / 2;
+    const colors = [COLORS.starlight, COLORS.lavender, COLORS.particle, COLORS.shooting] as const;
+
+    return Array.from({ length: count }).map((_, idx) => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.sqrt(Math.random()) * radius * 0.92;
+      const x = radius + Math.cos(angle) * dist;
+      const y = radius + Math.sin(angle) * dist;
+      const size = 1 + Math.random() * 2.2;
+      const opacity = 0.35 + Math.random() * 0.55;
+      const color = colors[idx % colors.length];
+      return { x, y, size, opacity, color };
+    });
+  }, [innerSize, orbSize]);
 
   // ── Voice amplitude reactive animation ──────────────────────────
   // Track audio level for ORB scale reactivity
@@ -612,9 +639,16 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       glowIntensity.value = withTiming(0.5, { duration: 500 });
     }
     
-    // Slow rotation always
+    // Rotation: faster when thinking/speaking, slower when idle.
+    const rotationMs = isParentProcessing
+      ? 9000
+      : (isSpeaking || ttsIsSpeaking)
+        ? 14000
+        : isListening
+          ? 24000
+          : 42000;
     coreRotation.value = withRepeat(
-      withTiming(360, { duration: 30000, easing: Easing.linear }),
+      withTiming(360, { duration: rotationMs, easing: Easing.linear }),
       -1,
       false
     );
@@ -624,14 +658,19 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       cancelAnimation(coreRotation);
       cancelAnimation(glowIntensity);
     };
-  }, [isListening, isSpeaking, ttsIsSpeaking]);
+  }, [isListening, isSpeaking, ttsIsSpeaking, isParentProcessing]);
 
   // Animated styles — multiply voice amplitude for reactive ORB
-  const coreAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: coreScale.value * corePulse.value * voiceAmplitude.value },
-      { rotate: `${coreRotation.value}deg` },
-    ] as any,
+  const orbScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: coreScale.value * corePulse.value * voiceAmplitude.value }] as any,
+  }));
+
+  const ringRotateStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${coreRotation.value}deg` }] as any,
+  }));
+
+  const auraRotateStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${-coreRotation.value * 0.65}deg` }] as any,
   }));
 
   // Handle recording start - BLOCKS while TTS is playing to prevent feedback
@@ -764,27 +803,90 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
           <ShootingStar key={`star-${index}`} {...star} />
         ))}
         
-        {/* Core orb */}
-        <Animated.View 
+        {/* Next-Gen Orb Core (cosmic ring + starfield) */}
+        <Animated.View
           style={[
-            styles.coreContainer, 
-            { width: coreSize, height: coreSize, borderRadius: coreSize / 2 },
-            coreAnimatedStyle
+            styles.orbShell,
+            { width: orbSize, height: orbSize, borderRadius: orbSize / 2 },
+            orbScaleStyle,
           ]}
         >
-          <LinearGradient
-            colors={[glowColor, COLORS.corePink, COLORS.purple]}
-            style={[styles.core, { width: coreSize, height: coreSize, borderRadius: coreSize / 2 }]}
-            start={{ x: 0.2, y: 0 }}
-            end={{ x: 0.8, y: 1 }}
+          <Animated.View
+            style={[
+              styles.ringShell,
+              { width: orbSize, height: orbSize, borderRadius: orbSize / 2, padding: ringThickness },
+              ringRotateStyle,
+            ]}
           >
-            <Image
-              source={require('@/assets/branding/png/icon-192.png')}
-              style={[styles.logo, { width: coreSize * 0.55, height: coreSize * 0.55 }]}
-              resizeMode="contain"
+            <LinearGradient
+              colors={['#ff6ad5', '#c774e8', '#6ee7ff', '#ffd670', '#ff6ad5']}
+              style={[styles.ringGradient, { borderRadius: orbSize / 2 }]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             />
-            <View style={[styles.coreHighlight, { width: coreSize * 0.35, height: coreSize * 0.12 }]} />
-          </LinearGradient>
+            <View
+              style={[
+                styles.innerSphere,
+                {
+                  width: innerSize,
+                  height: innerSize,
+                  borderRadius: innerSize / 2,
+                },
+              ]}
+            >
+              {/* Starfield */}
+              {starfield.map((s0, idx) => (
+                <View
+                  key={`star-${idx}`}
+                  style={[
+                    styles.star,
+                    {
+                      left: s0.x - s0.size / 2,
+                      top: s0.y - s0.size / 2,
+                      width: s0.size,
+                      height: s0.size,
+                      borderRadius: s0.size / 2,
+                      opacity: s0.opacity,
+                      backgroundColor: s0.color,
+                    },
+                  ]}
+                />
+              ))}
+
+              {/* Aurora overlay */}
+              <Animated.View style={[styles.auroraOverlay, auraRotateStyle]}>
+                <LinearGradient
+                  colors={['rgba(255,106,213,0.20)', 'transparent', 'rgba(110,231,255,0.20)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.auroraGradient}
+                />
+              </Animated.View>
+
+              {/* Center "voice core" */}
+              <View
+                style={[
+                  styles.centerCore,
+                  {
+                    width: coreSize,
+                    height: coreSize,
+                    borderRadius: coreSize / 2,
+                    shadowColor: glowColor,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.centerCoreHighlight,
+                  {
+                    width: Math.round(coreSize * 0.42),
+                    height: Math.round(coreSize * 0.16),
+                    borderRadius: 999,
+                  },
+                ]}
+              />
+            </View>
+          </Animated.View>
         </Animated.View>
         
         {/* Floating particles */}
@@ -806,7 +908,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         <Text style={[styles.statusText, { color: COLORS.speaking }]}>Speaking...</Text>
       ) : null}
 
-      {usingLiveSTT && liveHasSpeech && (
+      {showLiveTranscript && usingLiveSTT && liveHasSpeech && (
         <View style={styles.liveTranscriptContainer}>
           <Text style={[styles.liveTranscriptText, { color: theme.text }]} numberOfLines={4}>
             {liveTranscript}
