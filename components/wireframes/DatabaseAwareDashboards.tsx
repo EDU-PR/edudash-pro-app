@@ -8,8 +8,9 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { router } from 'expo-router';
-import { ScrollView, View, Alert } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectRoleAndSchool } from '@/lib/routeAfterLogin';
@@ -40,6 +41,7 @@ const safeDisplay = (value: any, fallback: string = '—'): string => {
  */
 export const SuperAdminDashboardDatabase: React.FC = () => {
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [role, setRole] = useState<string | null>(null);
@@ -136,7 +138,7 @@ subtitle={t('common.loading', { defaultValue: 'Loading...' })}
 title={t('wireframes.no_leads_yet', { defaultValue: 'No Leads Yet' })}
             description="Enterprise leads will appear here when submitted from the contact form"
             actionLabel="View Lead Form"
-            onActionPress={() => Alert.alert('Navigate to Contact Sales Form')}
+            onActionPress={() => showAlert({ title: 'Navigate to Contact Sales Form', type: 'info' })}
           />
         ) : (
           leads.slice(0, 3).map((lead) => (
@@ -244,7 +246,7 @@ title={t('wireframes.no_schools_yet', { defaultValue: 'No schools registered yet
             title="Platform Settings"
             description="Global configuration and feature flag management"
             actionLabel="Manage Settings"
-            onActionPress={() => Alert.alert('Feature Coming Soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', type: 'info' })}
           />
         );
       default:
@@ -260,10 +262,9 @@ title={t('wireframes.no_schools_yet', { defaultValue: 'No schools registered yet
           label="Alert"
           icon="🚨"
           role="superadmin"
-          onPress={() => Alert.alert('Create Alert')}
+          onPress={() => showAlert({ title: 'Create Alert', type: 'info' })}
         />
-      )}
-    </NavigationShell>
+      )}      <AlertModal {...alertProps} />    </NavigationShell>
   );
 };
 
@@ -273,6 +274,7 @@ title={t('wireframes.no_schools_yet', { defaultValue: 'No schools registered yet
  */
 export const PrincipalDashboardDatabase: React.FC = () => {
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [role, setRole] = useState<string | null>(null);
@@ -380,7 +382,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
             title="No School Associated"
             description="Your account needs to be linked to a school to view dashboard metrics"
             actionLabel="Contact Support"
-            onActionPress={() => Alert.alert('Please contact support to link your school')}
+            onActionPress={() => showAlert({ title: 'Please contact support to link your school', type: 'info' })}
           />
         </WireframeCard>
       ) : (
@@ -402,7 +404,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
               icon="📊"
               title="View Reports"
               subtitle="Generate weekly or monthly school reports"
-              onPress={() => Alert.alert('Feature Coming Soon', 'Report generation will be available soon')}
+              onPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Report generation will be available soon', type: 'info' })}
             />
           </WireframeCard>
 
@@ -448,7 +450,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
             title="Principal Meeting Room"
             description="Video collaboration space for school leadership team meetings"
             actionLabel="Start New Meeting"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Video meetings will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Video meetings will be available soon', type: 'info' })}
           />
         );
       case 'teachers':
@@ -458,7 +460,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
             title="Teacher Management"
             description="Staff directory, performance tracking, and professional development"
             actionLabel="Invite Teachers"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Teacher management will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Teacher management will be available soon', type: 'info' })}
           />
         );
       case 'resources':
@@ -468,7 +470,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
             title="Resource Portal"
             description="School-wide content library and teaching materials"
             actionLabel="Browse Resources"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Resource portal will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Resource portal will be available soon', type: 'info' })}
           />
         );
       case 'settings':
@@ -478,7 +480,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
             title="School Settings"
             description="Configure school policies, integrations, and preferences"
             actionLabel="Manage Settings"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Settings will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Settings will be available soon', type: 'info' })}
           />
         );
       default:
@@ -494,10 +496,9 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
           label="Report"
           icon="📊"
           role="principal"
-          onPress={() => Alert.alert('Generate Report')}
+          onPress={() => showAlert({ title: 'Generate Report', type: 'info' })}
         />
-      )}
-    </NavigationShell>
+      )}      <AlertModal {...alertProps} />    </NavigationShell>
   );
 };
 
@@ -507,6 +508,7 @@ title={t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
  */
 export const TeacherDashboardDatabase: React.FC = () => {
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [role, setRole] = useState<string | null>(null);
@@ -578,7 +580,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
           title="No Classes Scheduled"
           description="Your class schedule will appear here once classes are created"
           actionLabel="Create First Class"
-          onActionPress={() => Alert.alert('Feature Coming Soon', 'Class creation will be available soon')}
+          onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Class creation will be available soon', type: 'info' })}
         />
       </WireframeCard>
 
@@ -632,7 +634,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
             title="AI Teaching Assistant"
             description="Generate lessons, create quizzes, and build STEM activities with AI"
             actionLabel="Start Creating"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'AI tools will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'AI tools will be available soon', type: 'info' })}
           />
         );
       case 'assignments':
@@ -642,7 +644,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
             title="Assignment Manager"
             description="Create, distribute, and grade assignments across all your classes"
             actionLabel="New Assignment"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Assignment creation will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Assignment creation will be available soon', type: 'info' })}
           />
         );
       case 'resources':
@@ -652,7 +654,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
             title="Teaching Resources"
             description="Access curriculum materials, lesson plans, and teaching aids"
             actionLabel="Browse Library"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Resource library will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Resource library will be available soon', type: 'info' })}
           />
         );
       case 'messages':
@@ -662,7 +664,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
             title="Parent Communication"
             description="Message parents about student progress and classroom updates"
             actionLabel="New Message"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Messaging will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Messaging will be available soon', type: 'info' })}
           />
         );
       default:
@@ -678,10 +680,9 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
           label="Lesson"
           icon="🎯"
           role="teacher"
-          onPress={() => Alert.alert('Generate Lesson')}
+          onPress={() => showAlert({ title: 'Generate Lesson', type: 'info' })}
         />
-      )}
-    </NavigationShell>
+      )}      <AlertModal {...alertProps} />    </NavigationShell>
   );
 };
 
@@ -691,6 +692,7 @@ title={t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}
  */
 export const ParentDashboardDatabase: React.FC = () => {
   const { user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [role, setRole] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -761,7 +763,7 @@ export const ParentDashboardDatabase: React.FC = () => {
           title="No Children Enrolled"
           description="Your children's academic progress will appear here once they are enrolled in classes"
           actionLabel="Contact School"
-          onActionPress={() => Alert.alert('Contact School', 'Please contact your school to enroll your children')}
+          onActionPress={() => showAlert({ title: 'Contact School', message: 'Please contact your school to enroll your children', type: 'info' })}
         />
       </WireframeCard>
 
@@ -782,7 +784,7 @@ export const ParentDashboardDatabase: React.FC = () => {
           icon="📸"
           title="Photo Math Problems"
           subtitle="Take a photo of math homework for instant help"
-          onPress={() => Alert.alert('Feature Coming Soon', 'Photo math will be available soon')}
+          onPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Photo math will be available soon', type: 'info' })}
         />
       </WireframeCard>
 
@@ -807,7 +809,7 @@ export const ParentDashboardDatabase: React.FC = () => {
           title="Help Your School Go Premium"
           subtitle="Advocate for advanced AI tools and features"
           badge="New"
-          onPress={() => Alert.alert('School Upgrade', 'Contact your principal to learn about premium features')}
+          onPress={() => showAlert({ title: 'School Upgrade', message: 'Contact your principal to learn about premium features', type: 'info' })}
         />
       </WireframeCard>
     </ScrollView>
@@ -822,7 +824,7 @@ export const ParentDashboardDatabase: React.FC = () => {
             title="AI Homework Helper"
             description="Get step-by-step guidance on homework problems. Take a photo or type your question!"
             actionLabel="Start Homework Help"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'AI homework helper will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'AI homework helper will be available soon', type: 'info' })}
           />
         );
       case 'messages':
@@ -832,7 +834,7 @@ export const ParentDashboardDatabase: React.FC = () => {
             title="Teacher Messages"
             description="Communication hub for all your child's teachers"
             actionLabel="No Messages"
-            onActionPress={() => Alert.alert('No messages from teachers yet')}
+            onActionPress={() => showAlert({ title: 'No messages from teachers yet', type: 'info' })}
           />
         );
       case 'calendar':
@@ -842,7 +844,7 @@ export const ParentDashboardDatabase: React.FC = () => {
             title="School Calendar"
             description="Important dates, events, and assignment due dates"
             actionLabel="No Events"
-            onActionPress={() => Alert.alert('No upcoming events')}
+            onActionPress={() => showAlert({ title: 'No upcoming events', type: 'info' })}
           />
         );
       case 'settings':
@@ -852,7 +854,7 @@ export const ParentDashboardDatabase: React.FC = () => {
             title="Account Settings"
             description="Manage notifications, privacy, and account preferences"
             actionLabel="Manage Settings"
-            onActionPress={() => Alert.alert('Feature Coming Soon', 'Settings will be available soon')}
+            onActionPress={() => showAlert({ title: 'Feature Coming Soon', message: 'Settings will be available soon', type: 'info' })}
           />
         );
       default:
@@ -868,9 +870,8 @@ export const ParentDashboardDatabase: React.FC = () => {
           label="Photo"
           icon="📸"
           role="parent"
-          onPress={() => Alert.alert('Photo Homework Problem')}
+          onPress={() => showAlert({ title: 'Photo Homework Problem', type: 'info' })}
         />
-      )}
-    </NavigationShell>
+      )}      <AlertModal {...alertProps} />    </NavigationShell>
   );
 };

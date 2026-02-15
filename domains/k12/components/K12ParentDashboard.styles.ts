@@ -263,12 +263,18 @@ export const styles = StyleSheet.create({
     gap: 12,
   },
   inlineTutorIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    width: 74,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -14,
+  },
+  inlineTutorMascot: {
+    width: 70,
+    height: 70,
+    resizeMode: 'contain',
   },
   inlineTutorTextWrap: {
     flex: 1,

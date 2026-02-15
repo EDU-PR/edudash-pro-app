@@ -11,7 +11,8 @@
  */
 
 import React from 'react';
-import { FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -213,7 +214,7 @@ export default function PrincipalRegistrationsScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredRegistrations}
           renderItem={renderRegistration}
           keyExtractor={(item) => item.id}
@@ -227,6 +228,7 @@ export default function PrincipalRegistrationsScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          estimatedItemSize={120}
         />
       )}
 

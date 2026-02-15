@@ -47,6 +47,32 @@ serve(async (req: Request) => {
       });
     }
 
+    // Quota check — prevent free-tier abuse
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: user.id,
+        p_request_type: 'stt',
+      });
+
+      if (!quota.error) {
+        const quotaData = quota.data as Record<string, unknown> | null;
+        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+          return new Response(JSON.stringify({
+            error: 'quota_exceeded',
+            message: 'Speech-to-text usage quota exceeded for this billing period',
+            details: quotaData,
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+    }
+
     // Parse FormData
     const formData = await req.formData();
     const audioFile = formData.get('audio') as File | null;
@@ -150,6 +176,29 @@ serve(async (req: Request) => {
     }
 
     console.log(`[transcribe-chunk] Done: chunk ${chunkIndex}, ${transcript.length} chars via ${provider}`);
+
+    // Record usage (non-fatal)
+    try {
+      await supabase.rpc('record_ai_usage', {
+        p_user_id: user.id,
+        p_feature_used: 'stt',
+        p_model_used: provider === 'whisper' ? 'whisper-1' : 'deepgram-nova-2',
+        p_tokens_used: 0,
+        p_request_tokens: 0,
+        p_response_tokens: 0,
+        p_success: true,
+        p_metadata: {
+          scope: 'transcribe_chunk',
+          session_id: sessionId,
+          chunk_index: chunkIndex,
+          language,
+          provider,
+          text_length: transcript.length,
+        },
+      });
+    } catch (usageErr) {
+      console.warn('[transcribe-chunk] record_ai_usage failed (non-fatal):', usageErr);
+    }
 
     return new Response(JSON.stringify({ transcript, provider }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

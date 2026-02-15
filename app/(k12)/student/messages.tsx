@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { K12StudentFeatureScreen } from '@/domains/k12/components/K12StudentFeatureScreen';
 
 export default function K12StudentMessagesScreen() {
+  // TODO: Fetch messages/notifications for student from messages table
   return (
     <K12StudentFeatureScreen
       title="Messages"
@@ -15,11 +16,8 @@ export default function K12StudentMessagesScreen() {
       onHeroPress={() =>
         router.push('/screens/dash-assistant?source=k12_student&mode=tutor&tutorMode=explain' as any)
       }
-      items={[
-        { id: 'msg-1', title: 'English Teacher', subtitle: 'Essay feedback available', icon: 'mail-outline', tone: '#6366F1' },
-        { id: 'msg-2', title: 'Math Teacher', subtitle: 'Homework reminder for tomorrow', icon: 'notifications-outline', tone: '#10B981' },
-        { id: 'msg-3', title: 'School Office', subtitle: 'Exam timetable update posted', icon: 'megaphone-outline', tone: '#F59E0B' },
-      ]}
+      items={[]}
+      emptyMessage="No messages yet."
     />
   );
 }

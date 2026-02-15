@@ -307,6 +307,9 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'reputation',
   'generate_image',
   'ai_assistant',
+  'homework_grader',
+  'homework_helper',
+  'progress_analysis',
   'call_parent',
 ];
 

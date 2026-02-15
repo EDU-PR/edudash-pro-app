@@ -171,6 +171,7 @@ export async function speakDashResponse(params: {
     if (voiceRefs.ttsSessionIdRef) {
       voiceRefs.ttsSessionIdRef.current = sessionId;
     }
+    let fallbackNotified = false;
 
     setIsSpeaking(true);
     setSpeakingMessageId(message.id);
@@ -268,6 +269,24 @@ export async function speakDashResponse(params: {
           onError: (error: unknown) => {
             clear();
             settle(() => reject(error));
+          },
+          onLanguageFallback: (requested: string, actual: string) => {
+            if (fallbackNotified) return;
+            fallbackNotified = true;
+            const langNames: Record<string, string> = {
+              en: 'English', af: 'Afrikaans', zu: 'isiZulu', xh: 'isiXhosa',
+              nso: 'Sepedi', st: 'Sesotho', fr: 'French', pt: 'Portuguese',
+              es: 'Spanish', de: 'German',
+            };
+            const from = langNames[requested] || requested;
+            const to = langNames[actual] || actual;
+            showAlert({
+              title: 'Voice Language Notice',
+              message: `${from} voice is not yet available. Playing in ${to} instead.`,
+              type: 'info',
+              icon: 'language-outline',
+              buttons: [{ text: 'OK', style: 'default' }],
+            });
           },
         });
       }).catch((error) => {

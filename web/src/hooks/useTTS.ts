@@ -53,6 +53,7 @@ export function useTTS(userId?: string) {
   const [isPaused, setIsPaused] = useState(false);
   const [isSupported] = useState(true); // Always supported via Azure
   const [error, setError] = useState<string | null>(null);
+  const [languageFallback, setLanguageFallback] = useState<{ requested: string; actual: string } | null>(null);
   const [quota, setQuota] = useState<TTSQuota | null>(null);
   const [userTier, setUserTier] = useState<string>('free');
   const [voicePreference, setVoicePreference] = useState<'male' | 'female'>('female');
@@ -274,6 +275,14 @@ export function useTTS(userId?: string) {
         throw new Error('No audio URL returned');
       }
 
+      // Detect language fallback from Edge Function
+      if (data.language_fallback === true && data.actual_voice) {
+        const actualLang = (data.actual_voice as string).split('-')[0] || 'en';
+        setLanguageFallback({ requested: language, actual: actualLang });
+      } else {
+        setLanguageFallback(null);
+      }
+
       // Play audio
       const audio = new Audio(data.audio_url);
       audioRef.current = audio;
@@ -370,6 +379,7 @@ export function useTTS(userId?: string) {
     isPaused,
     isSupported,
     error,
+    languageFallback,
     quota,
     userTier,
     voicePreference,

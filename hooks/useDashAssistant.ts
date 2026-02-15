@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -964,6 +964,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
     try {
       setIsLoading(true);
+      // Create AbortController so cancelGeneration can abort in-flight requests
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       scrollToBottom({ animated: true, delay: 120 });
       
       if (attachments.length > 0) {
@@ -1223,6 +1226,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
             messagesOverride,
+            signal: controller.signal,
           }
         );
         
@@ -1239,6 +1243,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
             messagesOverride,
+            signal: controller.signal,
           }
         );
       }
@@ -1437,14 +1442,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } else if (response.metadata?.dashboard_action?.type === 'open_screen') {
         const { route, params } = response.metadata.dashboard_action as any;
         if (typeof route === 'string' && route.includes('/screens/ai-lesson-generator')) {
-          Alert.alert(
-            'Open Lesson Generator?',
-            'Dash suggests opening the AI Lesson Generator with prefilled details.',
-            [
+          showAlert({
+            title: 'Open Lesson Generator?',
+            message: 'Dash suggests opening the AI Lesson Generator with prefilled details.',
+            type: 'info',
+            buttons: [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Open', onPress: () => { try { router.push({ pathname: route, params } as any); } catch {} } },
-            ]
-          );
+            ],
+          });
         } else {
           try { router.push({ pathname: route, params } as any); } catch {}
         }
@@ -1492,18 +1498,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const shouldOpen = intentType === 'create_lesson' || wantsLessonGenerator(userText, response?.content);
         if (shouldOpen) {
           if (!capsReady) {
-            Alert.alert('Please wait', 'Loading your subscription details. Try again in a moment.');
+            showAlert({ title: 'Please wait', message: 'Loading your subscription details. Try again in a moment.', type: 'info' });
             return;
           }
           if (!canInteractiveLessons) {
-            Alert.alert(
-              'Upgrade Required',
-              'Interactive lessons and activities are available on Premium or Pro Plus plans.',
-              [
+            showAlert({
+              title: 'Upgrade Required',
+              message: 'Interactive lessons and activities are available on Premium or Pro Plus plans.',
+              type: 'warning',
+              buttons: [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'View Plans', onPress: () => router.push('/pricing') },
-              ]
-            );
+              ],
+            });
             return;
           }
           if (user?.id) {
@@ -1518,14 +1525,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               return;
             }
           }
-          Alert.alert(
-            'Open Lesson Generator?',
-            'I can open the AI Lesson Generator with the details we discussed.',
-            [
+          showAlert({
+            title: 'Open Lesson Generator?',
+            message: 'I can open the AI Lesson Generator with the details we discussed.',
+            type: 'info',
+            buttons: [
               { text: 'Not now', style: 'cancel' },
-              { text: 'Open', onPress: () => dashInstance.openLessonGeneratorFromContext(userText, response?.content || '') }
-            ]
-          );
+              { text: 'Open', onPress: () => dashInstance.openLessonGeneratorFromContext(userText, response?.content || '') },
+            ],
+          });
         }
       } catch {}
 
@@ -1545,6 +1553,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       );
 
     } catch (error) {
+      // Ignore AbortError — user intentionally cancelled
+      if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Aborted')) {
+        return;
+      }
       console.error('Failed to send message:', error);
       track(
         'dash.turn.failed',
@@ -1566,6 +1578,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         buttons: [{ text: 'OK', style: 'default' }]
       });
     } finally {
+      abortControllerRef.current = null;
       setIsLoading(false);
       setLoadingStatus(null);
     }
@@ -2160,7 +2173,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setIsInitialized(true);
       } catch (error) {
         console.error('Failed to initialize Dash:', error);
-        Alert.alert('Error', 'Failed to initialize AI Assistant.');
+        showAlert({ title: 'Error', message: 'Failed to initialize AI Assistant.', type: 'error' });
       }
     };
 
@@ -2258,6 +2271,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         clearTimeout(voiceAutoSendTimeoutRef.current);
         voiceAutoSendTimeoutRef.current = null;
       }
+      // Abort any in-flight AI request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      // Stop active voice recording to release microphone
+      if (voiceSessionRef.current) {
+        voiceSessionRef.current.stop().catch(() => {});
+        voiceSessionRef.current = null;
+      }
+      voiceProviderRef.current = null;
       if (dashInstance) {
         stopSpeaking().catch(() => {});
         dashInstance.cleanup();
@@ -2342,11 +2366,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      // Keep partial streaming content visible as the final message
+      if (streamingMessageId && streamingContent) {
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === streamingMessageId
+              ? { ...msg, content: streamingContent + '\n\n*(Generation stopped)*' }
+              : msg
+          )
+        );
+      }
       setIsLoading(false);
       setLoadingStatus(null);
       setStreamingMessageId(null);
       setStreamingContent('');
-    }, []),
+    }, [streamingMessageId, streamingContent]),
     speakResponse,
     stopSpeaking,
     scrollToBottom,

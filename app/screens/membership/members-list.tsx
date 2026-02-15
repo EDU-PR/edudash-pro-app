@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -204,7 +205,7 @@ export default function YouthMembersListScreen() {
         )}
 
         {/* Members List */}
-        <FlatList
+        <FlashList
           data={members}
           keyExtractor={(item) => item.id}
           renderItem={renderMemberItem}
@@ -214,6 +215,7 @@ export default function YouthMembersListScreen() {
             <RefreshControl refreshing={isRefreshing} onRefresh={refetch} colors={['#10B981']} tintColor="#10B981" />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          estimatedItemSize={72}
         />
       </SafeAreaView>
     </DashboardWallpaperBackground>

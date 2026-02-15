@@ -3,7 +3,7 @@
  * Extracted from principal-social-agent.tsx for WARP.md compliance.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { useAlertModal } from '@/components/ui/AlertModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { normalizeTimeHHMMToHHMMSS } from './types';
@@ -11,6 +11,7 @@ import type { AutopostSchedule, SocialCategory, SocialConnection, SocialPost } f
 
 export function useSocialAgent(organizationId: string | null) {
   const { profile } = useAuth();
+  const { showAlert, AlertModalComponent } = useAlertModal();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +76,7 @@ export function useSocialAgent(organizationId: string | null) {
   const handleConnect = useCallback(async () => {
     if (!organizationId) return;
     if (!connectPageId.trim() || !connectToken.trim()) {
-      Alert.alert('Missing info', 'Please provide Page ID and Page Access Token.'); return;
+      showAlert({ title: 'Missing info', message: 'Please provide Page ID and Page Access Token.', type: 'warning' }); return;
     }
     try {
       setConnecting(true);
@@ -86,10 +87,10 @@ export function useSocialAgent(organizationId: string | null) {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.message || 'Failed to connect Facebook Page');
       setConnectToken('');
-      Alert.alert('Connected', 'Facebook Page connected successfully.');
+      showAlert({ title: 'Connected', message: 'Facebook Page connected successfully.', type: 'success' });
       await loadAll();
     } catch (e: any) {
-      Alert.alert('Connect failed', e?.message || 'Failed to connect Facebook Page');
+      showAlert({ title: 'Connect failed', message: e?.message || 'Failed to connect Facebook Page', type: 'error' });
     } finally { setConnecting(false); }
   }, [organizationId, connectPageId, connectToken, connectPageName, loadAll]);
 
@@ -100,9 +101,9 @@ export function useSocialAgent(organizationId: string | null) {
       const { error } = await sb.from('social_connections').update({ is_active: false })
         .eq('id', connection.id).eq('organization_id', organizationId);
       if (error) throw error;
-      Alert.alert('Disconnected', 'Facebook Page connection disabled.');
+      showAlert({ title: 'Disconnected', message: 'Facebook Page connection disabled.', type: 'info' });
       await loadAll();
-    } catch (e: any) { Alert.alert('Error', e?.message || 'Failed to disconnect'); }
+    } catch (e: any) { showAlert({ title: 'Error', message: e?.message || 'Failed to disconnect', type: 'error' }); }
   }, [organizationId, connection?.id, loadAll]);
 
   const handleSaveSettings = useCallback(async () => {
@@ -119,9 +120,9 @@ export function useSocialAgent(organizationId: string | null) {
       };
       const { error } = await sb.from('social_agent_settings').upsert(payload as any, { onConflict: 'organization_id' });
       if (error) throw error;
-      Alert.alert('Saved', 'Social Agent settings updated.');
+      showAlert({ title: 'Saved', message: 'Social Agent settings updated.', type: 'success' });
       await loadAll();
-    } catch (e: any) { Alert.alert('Save failed', e?.message || 'Failed to save settings'); }
+    } catch (e: any) { showAlert({ title: 'Save failed', message: e?.message || 'Failed to save settings', type: 'error' }); }
     finally { setSettingsSaving(false); }
   }, [organizationId, agentEnabled, autopostEnabled, autopostSchedule, autopostTime, timezone, defaultCategory, profile?.id, loadAll]);
 
@@ -135,10 +136,10 @@ export function useSocialAgent(organizationId: string | null) {
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.message || 'Generation failed');
-      Alert.alert('Draft created', 'A new post draft has been added to your queue.');
+      showAlert({ title: 'Draft created', message: 'A new post draft has been added to your queue.', type: 'success' });
       setGenerateContext('');
       await loadAll();
-    } catch (e: any) { Alert.alert('Generation failed', e?.message || 'Failed to generate draft'); }
+    } catch (e: any) { showAlert({ title: 'Generation failed', message: e?.message || 'Failed to generate draft', type: 'error' }); }
     finally { setGenerating(false); }
   }, [organizationId, generateCategory, generateContext, loadAll]);
 
@@ -150,9 +151,9 @@ export function useSocialAgent(organizationId: string | null) {
       const { data, error } = await sb.functions.invoke('social-facebook-publish', { body: { post_id: postId } });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.message || 'Publish failed');
-      Alert.alert('Published', 'Post published to Facebook.');
+      showAlert({ title: 'Published', message: 'Post published to Facebook.', type: 'success' });
       await loadAll();
-    } catch (e: any) { Alert.alert('Publish failed', e?.message || 'Failed to publish'); await loadAll(); }
+    } catch (e: any) { showAlert({ title: 'Publish failed', message: e?.message || 'Failed to publish', type: 'error' }); await loadAll(); }
     finally { setPublishingPostId(null); }
   }, [organizationId, loadAll]);
 
@@ -163,7 +164,7 @@ export function useSocialAgent(organizationId: string | null) {
       const { error } = await sb.from('social_posts').delete().eq('id', postId).eq('organization_id', organizationId);
       if (error) throw error;
       await loadAll();
-    } catch (e: any) { Alert.alert('Delete failed', e?.message || 'Failed to delete'); }
+    } catch (e: any) { showAlert({ title: 'Delete failed', message: e?.message || 'Failed to delete', type: 'error' }); }
   }, [organizationId, loadAll]);
 
   return {
@@ -178,5 +179,6 @@ export function useSocialAgent(organizationId: string | null) {
     generating, publishingPostId,
     onRefresh, handleConnect, handleDisconnect,
     handleSaveSettings, handleGenerate, handlePublish, handleDeletePost,
+    AlertModalComponent,
   };
 }

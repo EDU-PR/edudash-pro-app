@@ -124,6 +124,7 @@ export interface IDashAIAssistant {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      signal?: AbortSignal;
     }
   ): Promise<DashMessage>;
 

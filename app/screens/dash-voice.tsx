@@ -523,6 +523,10 @@ export default function DashVoiceScreen() {
 
   // ── Handlers ──────────────────────────────────────────────────────
   const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
+    // Guard against ORB hearing its own TTS output during brief state races.
+    if (isSpeakingRef.current || isSpeaking || isProcessing) {
+      return;
+    }
     const formatted = formatTranscript(transcript, language, {
       whisperFlow: true,
       summarize: true,
@@ -531,7 +535,7 @@ export default function DashVoiceScreen() {
     });
     if (language) setPreferredLanguage(language);
     if (formatted.trim()) sendMessage(formatted);
-  }, [sendMessage]);
+  }, [isProcessing, isSpeaking, orgType, sendMessage]);
 
   const handleSubmit = useCallback(() => {
     if (inputText.trim()) { sendMessage(inputText); setInputText(''); }

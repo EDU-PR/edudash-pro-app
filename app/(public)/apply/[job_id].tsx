@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
 import { JobPosting } from '@/types/hiring';
 import { useTranslation } from 'react-i18next';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -22,6 +23,7 @@ export default function PublicJobApplicationScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -50,20 +52,20 @@ export default function PublicJobApplicationScreen() {
       const data = await HiringHubService.getJobPostingById(job_id);
       
 if (!data || data.status !== 'active') {
-        Alert.alert(t('apply.jobNotAvailableTitle'), t('apply.jobNotAvailableDesc'));
+        showAlert({ title: t('apply.jobNotAvailableTitle'), message: t('apply.jobNotAvailableDesc'), type: 'warning' });
         return;
       }
 
       // Check if expired
 if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        Alert.alert(t('apply.jobExpiredTitle'), t('apply.jobExpiredDesc'));
+        showAlert({ title: t('apply.jobExpiredTitle'), message: t('apply.jobExpiredDesc'), type: 'warning' });
         return;
       }
 
       setJobPosting(data);
     } catch (error: any) {
 console.error('Error loading job posting:', error);
-      Alert.alert(t('common.error'), error.message || t('apply.loadError'));
+      showAlert({ title: t('common.error'), message: error.message || t('apply.loadError'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -82,20 +84,20 @@ console.error('Error loading job posting:', error);
 
       // Validate file size
 if (file.size && file.size > MAX_FILE_SIZE) {
-        Alert.alert(t('apply.fileTooLargeTitle'), t('apply.fileTooLargeDesc'));
+        showAlert({ title: t('apply.fileTooLargeTitle'), message: t('apply.fileTooLargeDesc'), type: 'warning' });
         return;
       }
 
       // Validate file type
 if (file.mimeType && !ALLOWED_MIME_TYPES.includes(file.mimeType)) {
-        Alert.alert(t('apply.invalidFileTypeTitle'), t('apply.invalidFileTypeDesc'));
+        showAlert({ title: t('apply.invalidFileTypeTitle'), message: t('apply.invalidFileTypeDesc'), type: 'warning' });
         return;
       }
 
       setResumeFile(file);
     } catch (error) {
 console.error('Error picking document:', error);
-      Alert.alert(t('common.error'), t('apply.pickDocumentError'));
+      showAlert({ title: t('common.error'), message: t('apply.pickDocumentError'), type: 'error' });
     }
   };
 
@@ -106,37 +108,37 @@ console.error('Error picking document:', error);
 
   const validateForm = (): boolean => {
 if (!firstName.trim()) {
-      Alert.alert(t('apply.validationErrorTitle'), t('validation.required', { field: t('auth.firstName') }));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('validation.required', { field: t('auth.firstName') }), type: 'warning' });
       return false;
     }
 
 if (!lastName.trim()) {
-      Alert.alert(t('apply.validationErrorTitle'), t('validation.required', { field: t('auth.lastName') }));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('validation.required', { field: t('auth.lastName') }), type: 'warning' });
       return false;
     }
 
 if (!email.trim()) {
-      Alert.alert(t('apply.validationErrorTitle'), t('validation.required', { field: t('auth.email') }));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('validation.required', { field: t('auth.email') }), type: 'warning' });
       return false;
     }
 
 if (!validateEmail(email)) {
-      Alert.alert(t('apply.validationErrorTitle'), t('validation.email_invalid'));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('validation.email_invalid'), type: 'warning' });
       return false;
     }
 
 if (!phone.trim()) {
-      Alert.alert(t('apply.validationErrorTitle'), t('validation.required', { field: t('apply.phoneNumber') }));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('validation.required', { field: t('apply.phoneNumber') }), type: 'warning' });
       return false;
     }
 
 if (!experienceYears.trim() || isNaN(Number(experienceYears))) {
-      Alert.alert(t('apply.validationErrorTitle'), t('apply.error.yearsExperienceNumber'));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('apply.error.yearsExperienceNumber'), type: 'warning' });
       return false;
     }
 
 if (!resumeFile) {
-      Alert.alert(t('apply.validationErrorTitle'), t('apply.error.resumeRequired'));
+      showAlert({ title: t('apply.validationErrorTitle'), message: t('apply.error.resumeRequired'), type: 'warning' });
       return false;
     }
 
@@ -184,29 +186,27 @@ if (!resumeFile) {
       );
 
       // Success!
-Alert.alert(
-        t('apply.submittedTitle'),
-        t('apply.submittedDesc'),
-        [
-          {
-            text: t('common.ok'),
-            onPress: () => {
-              // Clear form
-              setFirstName('');
-              setLastName('');
-              setEmail('');
-              setPhone('');
-              setExperienceYears('');
-              setQualifications('');
-              setCoverLetter('');
-              setResumeFile(null);
-            },
+      showAlert({
+        title: t('apply.submittedTitle'),
+        message: t('apply.submittedDesc'),
+        type: 'success',
+        buttons: [{
+          text: t('common.ok'),
+          onPress: () => {
+            setFirstName('');
+            setLastName('');
+            setEmail('');
+            setPhone('');
+            setExperienceYears('');
+            setQualifications('');
+            setCoverLetter('');
+            setResumeFile(null);
           },
-        ]
-      );
+        }],
+      });
     } catch (error: any) {
 console.error('Error submitting application:', error);
-      Alert.alert(t('common.error'), error.message || t('apply.submitError'));
+      showAlert({ title: t('common.error'), message: error.message || t('apply.submitError'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -431,6 +431,7 @@ placeholder={t('apply.placeholder.coverLetterLong')}
           </Text>
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

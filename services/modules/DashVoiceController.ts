@@ -17,7 +17,13 @@ import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 // Azure TTS languages (short codes accepted by tts-proxy)
-const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
+const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso', 'st', 'fr', 'pt', 'es', 'de'];
+
+/** Map short lang codes to BCP-47 for fallback detection */
+const LANG_SHORT_TO_BCP47: Record<string, string> = {
+  en: 'en-ZA', af: 'af-ZA', zu: 'zu-ZA', xh: 'xh-ZA', nso: 'nso-ZA',
+  st: 'st-ZA', fr: 'fr-FR', pt: 'pt-BR', es: 'es-ES', de: 'de-DE',
+};
 /** Normal speech rate — matches useVoiceTTS constant */
 const DEFAULT_AZURE_RATE = 0;
 /** Phonics rate — slower than normal, but still conversational */
@@ -33,6 +39,11 @@ const DASH_VOICES_BY_LANG: Record<string, string> = {
   zu: 'zu-ZA-ThandoNeural',
   xh: 'xh-ZA-NomalungaNeural',
   nso: 'nso-ZA-DidiNeural',
+  st: 'en-ZA-LukeNeural', // Sesotho — no native Azure voice, fallback
+  fr: 'fr-FR-HenriNeural',
+  pt: 'pt-BR-AntonioNeural',
+  es: 'es-ES-AlvaroNeural',
+  de: 'de-DE-ConradNeural',
 };
 
 export interface VoiceSettings {
@@ -48,6 +59,8 @@ export interface SpeechCallbacks {
   onDone?: () => void;
   onStopped?: () => void;
   onError?: (error: any) => void;
+  /** Called when TTS falls back to a different language than requested */
+  onLanguageFallback?: (requested: string, actual: string) => void;
 }
 
 /**
@@ -116,7 +129,17 @@ export class DashVoiceController {
       
       if (!AZURE_TTS_LANGUAGES.includes(shortCode)) {
         console.warn(`[DashVoiceController] Unsupported TTS language, defaulting to English: ${shortCode}`);
+        const originalLang = shortCode;
         shortCode = 'en';
+        callbacks?.onLanguageFallback?.(originalLang, 'en');
+      }
+      
+      // Detect static language fallback (e.g. Sesotho mapped to English voice)
+      const voiceForLang = DASH_VOICES_BY_LANG[shortCode] || DASH_VOICE_ID;
+      const voiceLangPrefix = voiceForLang.split('-').slice(0, 2).join('-');
+      const requestedBcp47 = LANG_SHORT_TO_BCP47[shortCode] || `${shortCode}-ZA`;
+      if (voiceLangPrefix !== requestedBcp47) {
+        callbacks?.onLanguageFallback?.(shortCode, voiceLangPrefix.split('-')[0] || 'en');
       }
       
       console.log(`[DashVoiceController] TTS routing: language=${shortCode}, provider=azure`);
@@ -212,6 +235,12 @@ export class DashVoiceController {
       if (!data.audio_url) {
         console.error('[DashVoiceController] No audio URL in response:', data);
         throw new Error('No audio URL in TTS response');
+      }
+      
+      // Detect dynamic language fallback from Edge Function
+      if (data.language_fallback === true && data.actual_voice) {
+        const actualLang = (data.actual_voice as string).split('-').slice(0, 1).join('') || 'en';
+        callbacks?.onLanguageFallback?.(language, actualLang);
       }
       
       // Check if speech was aborted before playing

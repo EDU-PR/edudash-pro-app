@@ -31,6 +31,7 @@ export default function PrincipalSocialAgentScreen() {
     generating, publishingPostId,
     onRefresh, handleConnect, handleDisconnect,
     handleSaveSettings, handleGenerate, handlePublish, handleDeletePost,
+    AlertModalComponent,
   } = useSocialAgent(organizationId);
 
   if (!organizationId) {
@@ -239,6 +240,7 @@ export default function PrincipalSocialAgentScreen() {
           </Card>
         </ScrollView>
       )}
+      <AlertModalComponent />
     </View>
   );
 }

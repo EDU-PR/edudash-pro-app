@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, FlatList, Dimensions } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Dimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -443,7 +444,7 @@ export default function SuperAdminOrganizations() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
+      <FlashList
         data={filteredOrgs}
         keyExtractor={item => item.id}
         renderItem={renderOrganizationCard}
@@ -486,6 +487,7 @@ export default function SuperAdminOrganizations() {
         contentContainerStyle={styles.listContent}
         numColumns={SCREEN_WIDTH > 600 ? 2 : 1}
         key={SCREEN_WIDTH > 600 ? 'two-columns' : 'one-column'}
+        estimatedItemSize={160}
       />
 
       {renderDetailModal()}
