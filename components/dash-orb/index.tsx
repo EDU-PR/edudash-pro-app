@@ -520,11 +520,20 @@ export default function DashOrb({
     };
   }, [messages, chatStorageKey]);
 
+  const getMemorySpeakerLabel = useCallback((messageRole: ChatMessage['role']) => {
+    if (messageRole !== 'user') return 'Dash';
+    if (isUserSuperAdmin) return 'Operator';
+    if (normalizedRole === 'parent') return 'Parent';
+    if (normalizedRole === 'student' || normalizedRole === 'learner') return 'Learner';
+    if (normalizedRole === 'teacher' || normalizedRole === 'principal' || normalizedRole === 'admin') return 'Staff';
+    return 'User';
+  }, [isUserSuperAdmin, normalizedRole]);
+
   useEffect(() => {
     const summary = messages
       .filter((msg) => (msg.role === 'user' || msg.role === 'assistant') && !msg.isLoading)
       .slice(-6)
-      .map((msg) => `${msg.role === 'user' ? 'Parent/Child' : 'Dash'}: ${msg.content}`)
+      .map((msg) => `${getMemorySpeakerLabel(msg.role)}: ${msg.content}`)
       .join(' | ')
       .slice(0, 500);
 
@@ -543,7 +552,7 @@ export default function DashOrb({
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [messages, memoryStorageKey]);
+  }, [getMemorySpeakerLabel, messages, memoryStorageKey]);
 
   useEffect(() => {
     return () => {
@@ -1907,13 +1916,8 @@ export default function DashOrb({
         }
 
         let formattedResponse = String(response.data?.response || '');
-        if (Array.isArray(response.data?.tool_calls) && response.data.tool_calls.length > 0) {
-          const toolNames = response.data.tool_calls.map((t: any) => t.name).join(', ');
-          formattedResponse += `\n\n🔧 _Tools used: ${toolNames}_`;
-        }
-        if (response.data?.tokens_used && response.data.tokens_used > 1000) {
-          formattedResponse += `\n📊 _${response.data.tokens_used.toLocaleString()} tokens used_`;
-        }
+        // Keep token/tool telemetry out of the conversational response body.
+        // It creates noisy UX and gets read aloud by TTS.
         return formattedResponse;
       }
 
