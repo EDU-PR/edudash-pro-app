@@ -20,7 +20,6 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
-import DashOrb from '@/components/super-admin/DashOrb';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { logger } from '@/lib/logger';
@@ -365,14 +364,6 @@ export default function SuperAdminDevOpsScreen() {
         <View style={styles.bottomPadding} />
       </ScrollView>
       
-      {/* Dash AI Orb - Floating DevOps Assistant */}
-      <DashOrb 
-        position="bottom-right"
-        size={56}
-        onCommandExecuted={(cmd, result) => {
-          track('dash_orb_command', { command: cmd });
-        }}
-      />
       <AlertModal {...alertProps} />
     </View>
   );

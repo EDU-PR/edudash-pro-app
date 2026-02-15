@@ -1,42 +1,31 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+/**
+ * DashOrb — Unified orb visual for all roles.
+ *
+ * Wraps CosmicOrb (the canonical Dash visual) so that every consumer
+ * gets the same cosmic-nebula design used across the app.
+ *
+ * For an interactive AI entry point, use the global DraggableDashFAB
+ * (rendered in app/_layout.tsx).  This component is presentational only.
+ */
 
-export default function DashOrb({ size = 64 }: { size?: number }) {
-  return (
-    <View style={[styles.wrapper, { width: size, height: size }]}>
-      <LinearGradient
-        colors={['#1B2236', '#101525']}
-        style={styles.orb}
-      >
-        <LinearGradient
-          colors={['#3C8E62', '#5A409D']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.innerGlow}
-        />
-      </LinearGradient>
-    </View>
-  );
+import React from 'react';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+
+export interface DashOrbProps {
+  /** Outer diameter in pixels (default 64) */
+  size?: number;
+  /** Forward animation state when embedded near voice input */
+  isProcessing?: boolean;
+  /** Forward speaking state for amplitude reactivity */
+  isSpeaking?: boolean;
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  orb: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 999,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0F121E',
-  },
-  innerGlow: {
-    width: '60%',
-    height: '60%',
-    borderRadius: 999,
-    opacity: 0.8,
-  },
-});
+export default function DashOrb({
+  size = 64,
+  isProcessing = false,
+  isSpeaking = false,
+}: DashOrbProps) {
+  return (
+    <CosmicOrb size={size} isProcessing={isProcessing} isSpeaking={isSpeaking} />
+  );
+}

@@ -20,7 +20,6 @@ import { useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
-import DashOrb from '@/components/dash-orb';
 import { GlassCard } from '@/components/nextgen/GlassCard';
 import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
 import { Pill } from '@/components/nextgen/Pill';
@@ -448,13 +447,6 @@ export default function K12StudentDashboardScreen() {
         </View>
 
       </ScrollView>
-
-      {/* Dash AI Orb */}
-      <DashOrb
-        position="bottom-right"
-        size={54}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'k12_student_dashboard' })}
-      />
 
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer

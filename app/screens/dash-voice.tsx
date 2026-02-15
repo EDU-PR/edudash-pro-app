@@ -39,7 +39,7 @@ import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTele
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
-import { DashOrb } from '@/components/dash-orb/DashOrb';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/LanguageDropdown';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
@@ -47,6 +47,11 @@ import { getOrganizationType } from '@/lib/tenant/compat';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
 import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
+import {
+  shouldGreetToday,
+  buildDynamicGreeting,
+  buildGreetingDirective,
+} from '@/lib/ai/greetingManager';
 import {
   buildSystemPrompt,
   cleanForTTS,
@@ -137,10 +142,7 @@ export default function DashVoiceScreen() {
     }
   }, [isListening, isSpeaking]);
 
-  // ── Smart auto-greeting: greet once per NEW conversation ──────────
-  // IMPORTANT: Never send internal instructions as a user message — it leaks
-  // raw system text into the visible chat bubble. Instead, build a concise
-  // greeting and send it as a hidden system directive via the "context" field.
+  // ── Smart auto-greeting: once per day, dynamic, role-aware ────────
   const hasGreetedRef = useRef(false);
   useEffect(() => {
     if (hasGreetedRef.current) return;
@@ -148,28 +150,47 @@ export default function DashVoiceScreen() {
     if (isProcessing) return;
     hasGreetedRef.current = true;
 
-    // Build a local greeting instantly — no API call needed for the visual
-    const hour = new Date().getHours();
-    const tg = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
-    const localGreeting = name ? `${tg}, ${name}! How can I help you today?` : `${tg}! How can I help you today?`;
 
-    // Show instant local greeting — no flash, no layout shift
-    const initialHistory = [{ role: 'assistant' as const, content: localGreeting }];
-    conversationHistoryRef.current = initialHistory;
-    setConversationHistory(initialHistory);
-    setLastResponse(localGreeting);
-    setIsGreetingLoading(false);
+    // Check once-per-day guard (async but non-blocking for the local greeting)
+    (async () => {
+      const shouldGreet = await shouldGreetToday(user?.id);
+      if (!shouldGreet) {
+        // Already greeted today — show a brief non-greeting opener
+        const opener = name ? `Hey ${name}, what can I help with?` : 'What can I help with?';
+        const hist = [{ role: 'assistant' as const, content: opener }];
+        conversationHistoryRef.current = hist;
+        setConversationHistory(hist);
+        setLastResponse(opener);
+        setIsGreetingLoading(false);
+        return;
+      }
 
-    // Fire-and-forget: fetch a richer AI greeting in the background
-    const timer = setTimeout(async () => {
+      // Build instant local greeting — dynamic, not hardcoded
+      const localGreeting = buildDynamicGreeting({
+        userName: name || null,
+        role,
+        orgType,
+        language: preferredLanguage,
+      });
+
+      const initialHistory = [{ role: 'assistant' as const, content: localGreeting }];
+      conversationHistoryRef.current = initialHistory;
+      setConversationHistory(initialHistory);
+      setLastResponse(localGreeting);
+      setIsGreetingLoading(false);
+
+      // Background: upgrade to AI-generated greeting (non-blocking)
       try {
         const supabase = assertSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
-        const greetDirective = name
-          ? `Greet the user briefly — their name is ${name}. Say "${tg}" and ask how you can help. Keep it to one warm sentence.`
-          : `Greet the user briefly. Say "${tg}" and ask how you can help. Keep it to one warm sentence.`;
+        const directive = buildGreetingDirective({
+          userName: name || null,
+          role,
+          orgType,
+          language: preferredLanguage,
+        });
         const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
         const res = await fetch(url, {
           method: 'POST',
@@ -187,7 +208,7 @@ export default function DashVoiceScreen() {
                 '\n\n' +
                 dashPolicy.systemPromptAddendum +
                 '\n\n' +
-                greetDirective,
+                directive,
             },
             stream: false,
             metadata: {
@@ -212,8 +233,7 @@ export default function DashVoiceScreen() {
       } catch (err) {
         console.warn('[dash-voice] AI greeting upgrade failed:', err);
       }
-    }, 800);
-    return () => clearTimeout(timer);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -742,14 +762,10 @@ export default function DashVoiceScreen() {
                 showLiveTranscript={false}
               />
             ) : (
-              <DashOrb
+              <CosmicOrb
                 size={ORB_SIZE}
-                state={
-                  isProcessing ? 'thinking'
-                    : isSpeaking ? 'speaking'
-                    : isListening ? 'listening'
-                    : 'idle'
-                }
+                isProcessing={isProcessing || isListening}
+                isSpeaking={isSpeaking}
               />
             )}
           </View>

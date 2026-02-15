@@ -10,7 +10,6 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
-import DashOrb from '@/components/super-admin/DashOrb';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { logger } from '@/lib/logger';
@@ -388,12 +387,6 @@ export default function SuperAdminAnalyticsScreen() {
         )}
       </ScrollView>
       
-      {/* Dash AI Assistant */}
-      <DashOrb 
-        position="bottom-right"
-        size={56}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'analytics' })}
-      />
       <AlertModal {...alertProps} />
     </View>
   );

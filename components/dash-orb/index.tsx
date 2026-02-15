@@ -30,7 +30,6 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '../../lib/supabase';
-import { getWelcomeMessage } from '../../lib/ai/constants';
 import { createDashOrbStyles } from './DashOrb.styles';
 import { ChatModal, ChatMessage } from './ChatModal';
 import { QuickAction } from './QuickActions';
@@ -42,7 +41,7 @@ import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 import { useWakeWord } from '../../hooks/useWakeWord';
-import NextGenDashOrb from './DashOrb';
+import { CosmicOrb } from './CosmicOrb';
 import { useOrbStreaming } from '@/hooks/dash-orb/useOrbStreaming';
 import type { VisemeEvent } from '@/lib/voice/visemeEstimator';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
@@ -50,6 +49,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { isSuperAdmin } from '../../lib/roleUtils';
 import { getOrganizationType } from '../../lib/tenant/compat';
+import {
+  shouldGreetToday,
+  buildDynamicGreeting,
+} from '@/lib/ai/greetingManager';
 import { calculateAge } from '../../lib/date-utils';
 import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
@@ -828,13 +831,25 @@ export default function DashOrb({
     setIsExpanded(true);
     if (messages.length === 0) {
       if (!showQuickActions) {
-        // Add welcome message based on user role
-        setMessages([{
-          id: 'welcome',
-          role: 'assistant',
-          content: getWelcomeMessage(normalizedRole),
-          timestamp: new Date(),
-        }]);
+        // Dynamic greeting with once-per-day guard
+        (async () => {
+          const shouldGreet = await shouldGreetToday(user?.id);
+          const greeting = shouldGreet
+            ? buildDynamicGreeting({
+                userName: profile?.first_name || profile?.full_name?.split(' ')[0] || null,
+                role: normalizedRole,
+                orgType: getOrganizationType(profile) || null,
+              })
+            : profile?.first_name
+              ? `Hey ${profile.first_name}, what can I help with?`
+              : 'What can I help with?';
+          setMessages([{
+            id: 'welcome',
+            role: 'assistant',
+            content: greeting,
+            timestamp: new Date(),
+          }]);
+        })();
       }
     }
   };
@@ -1291,8 +1306,8 @@ export default function DashOrb({
       // Process the command — try SSE streaming first, fall back to non-streaming
       const forceNonStreaming = (options?.attachments?.length ?? 0) > 0;
 
-      if (forceNonStreaming || isUserSuperAdmin) {
-        // Non-streaming path: OCR / image / super-admin calls
+      if (forceNonStreaming) {
+        // Non-streaming path: OCR / image attachments only
         const result = await executeCommand(command, history, options?.attachments || []);
         await streamResponseToMessage(thinkingId, result);
         setMessages(prev =>
@@ -2130,11 +2145,10 @@ export default function DashOrb({
             activeOpacity={0.9}
             style={{ width: size, height: size }}
           >
-            <NextGenDashOrb
+            <CosmicOrb
               size={size}
-              state={orbState}
-              audioLevel={orbAudioLevel}
-              visemeId={simulatedVisemeId}
+              isProcessing={orbState === 'thinking' || orbState === 'listening'}
+              isSpeaking={orbState === 'speaking'}
             />
             
             {/* Center icon */}
