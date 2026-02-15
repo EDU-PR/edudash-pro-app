@@ -82,7 +82,7 @@ export default function DashVoiceScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
-  const role = String(profile?.role || 'parent').toLowerCase();
+  const role = String(profile?.role || 'guest').toLowerCase();
   const aiScope = useMemo(() => resolveAIProxyScopeFromRole(role), [role]);
   const orgType = getOrganizationType(profile);
   const dashPolicy = useMemo(
@@ -290,11 +290,27 @@ export default function DashVoiceScreen() {
   const findSpeakBoundaryIndex = useCallback((text: string) => {
     if (!text) return -1;
     // Prefer sentence-ending punctuation for "speak-while-streaming".
-    const m = /[.!?](?=\s|$)/.exec(text);
-    if (m) return m.index;
-    // Paragraph breaks are also safe boundaries.
-    const para = text.indexOf('\n\n');
-    if (para >= 0) return para;
+    const sentence = /[.!?](?=\s|$)/.exec(text);
+    if (sentence) return sentence.index;
+
+    // Soft boundaries that are still safe to speak on (faster perceived latency).
+    const soft = /[\n;:](?=\s|$)/.exec(text);
+    if (soft) return soft.index;
+
+    // Commas are only safe if we already have enough context.
+    if (text.length > 120) {
+      const comma = /,(?=\s)/.exec(text);
+      if (comma) return comma.index;
+    }
+
+    // Fallback: if the model streams long clauses without punctuation, speak an early phrase.
+    const hardMax = 180;
+    if (text.length > hardMax) {
+      const slice = text.slice(0, hardMax);
+      const lastSpace = Math.max(slice.lastIndexOf(' '), slice.lastIndexOf('\n'));
+      if (lastSpace > 60) return lastSpace;
+      return hardMax;
+    }
     return -1;
   }, []);
 
@@ -323,7 +339,7 @@ export default function DashVoiceScreen() {
       delta = full.slice(lcp);
     }
 
-    if (delta.trim().length < 24) return;
+    if (delta.trim().length < 12) return;
     const boundaryIdx = findSpeakBoundaryIndex(delta);
     if (boundaryIdx < 0) return;
 
@@ -333,7 +349,7 @@ export default function DashVoiceScreen() {
 
     // Throttle tiny chunks so we don't spam the speech queue on fast streams.
     const now = Date.now();
-    if (now - streamedLastQueuedAtRef.current < 650 && speakChunk.length < 80) return;
+    if (now - streamedLastQueuedAtRef.current < 350 && speakChunk.length < 60) return;
     streamedLastQueuedAtRef.current = now;
 
     streamedHasQueuedRef.current = true;

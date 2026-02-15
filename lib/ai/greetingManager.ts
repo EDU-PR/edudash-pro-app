@@ -92,6 +92,9 @@ function getRolePurpose(role: string): string {
     case 'super_admin':
     case 'admin':
       return 'Ready to help manage the platform';
+    case 'user':
+    case 'guest':
+      return 'Ready when you are';
     case 'principal':
     case 'principal_admin':
       return 'Here to support your school';
@@ -133,7 +136,7 @@ export function buildDynamicGreeting(ctx: GreetingContext): string {
   const timeGreet = labels[tod];
 
   const name = ctx.userName?.trim();
-  const role = (ctx.role || 'parent').toLowerCase();
+  const role = (ctx.role || 'user').toLowerCase();
   const purpose = getRolePurpose(role);
   const dayNote = getDayFlavor();
 
@@ -162,7 +165,7 @@ export function buildDynamicGreeting(ctx: GreetingContext): string {
 export function buildGreetingDirective(ctx: GreetingContext): string {
   const tod = getTimeOfDay();
   const name = ctx.userName?.trim();
-  const role = (ctx.role || 'parent').toLowerCase();
+  const role = (ctx.role || 'user').toLowerCase();
   const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
 
   const parts = [

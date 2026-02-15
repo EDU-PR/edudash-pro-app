@@ -127,7 +127,7 @@ export default function DashOrb({
   const { theme } = useTheme();
   const styles = useMemo(() => createDashOrbStyles(theme), [theme]);
   const userRole = profile?.role?.toLowerCase() || '';
-  const normalizedRole = userRole || 'parent';
+  const normalizedRole = userRole || 'guest';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   const orgType = getOrganizationType(profile);
   // Age band from profile/learner context only (never inferred from voice)
