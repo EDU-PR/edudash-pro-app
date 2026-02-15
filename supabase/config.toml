@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.daily-rooms]
 verify_jwt = true
+
+[functions.superadmin-delete-user]
+verify_jwt = true

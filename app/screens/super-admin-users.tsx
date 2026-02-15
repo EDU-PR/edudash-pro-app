@@ -44,6 +44,7 @@ export default function SuperAdminUsersScreen() {
     impersonateUser,
     suspendUser,
     requestUserDeletion,
+    deleteUserNow,
     resetUserPassword,
     createTempPassword,
     openTierPicker,
@@ -384,6 +385,14 @@ export default function SuperAdminUsersScreen() {
                 >
                   <Ionicons name="trash" size={20} color="#dc2626" />
                   <Text style={[styles.modalActionText, { color: '#dc2626' }]}>Request Deletion</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalActionButton}
+                  onPress={() => deleteUserNow(selectedUser)}
+                >
+                  <Ionicons name="skull" size={20} color="#991b1b" />
+                  <Text style={[styles.modalActionText, { color: '#991b1b' }]}>Delete Now</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
