@@ -6,6 +6,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomInset } from '@/hooks/useBottomInset';
 import * as ImagePicker from "expo-image-picker";
 import { Stack, router } from 'expo-router';
 import {
@@ -43,6 +44,7 @@ export default function AccountScreen() {
   const { refreshProfile } = useAuth();
   const { t } = useTranslation();
   const { showAlert, alertProps } = useAlertModal();
+  const bottomInset = useBottomInset();
   const [refreshing, setRefreshing] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export default function AccountScreen() {
   const styles = useThemedStyles((theme) => ({
     container: { flex: 1, backgroundColor: theme.background },
     scrollView: { flex: 1 },
-    scrollContent: { paddingBottom: 40 },
+    scrollContent: { paddingBottom: bottomInset + 40 },
     settingsButton: { padding: 8 },
     profileHeader: {
       alignItems: "center" as const,
@@ -131,7 +133,7 @@ export default function AccountScreen() {
     modalOverlay: { flex: 1, backgroundColor: theme.modalOverlay, justifyContent: "flex-end" as const },
     modalContent: {
       backgroundColor: theme.modalBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-      paddingTop: 20, paddingBottom: 40, maxHeight: "80%" as const,
+      paddingTop: 20, paddingBottom: bottomInset + 20, maxHeight: "80%" as const,
     },
     modalHeader: {
       flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const,

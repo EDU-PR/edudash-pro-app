@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { OrganizationType } from '@/lib/types/organization';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 interface OrgTypeOption {
   type: OrganizationType;
@@ -74,6 +75,7 @@ export default function OrgTypeSelectionScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const { state, updateState, completeStep } = useOnboarding();
+  const bottomInset = useBottomInset();
   const [selectedType, setSelectedType] = useState<OrganizationType | null>(
     state.organizationType || null
   );
@@ -183,7 +185,7 @@ export default function OrgTypeSelectionScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: bottomInset + 20 }]}>
         <TouchableOpacity
           style={[
             styles.continueButton,

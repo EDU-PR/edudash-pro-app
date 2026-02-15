@@ -8,7 +8,7 @@ export interface UserRecord {
   auth_user_id: string | null;
   email: string;
   name: string | null;
-  role: 'principal' | 'teacher' | 'parent' | 'superadmin' | 'super_admin';
+  role: 'principal' | 'teacher' | 'parent' | 'student' | 'superadmin' | 'super_admin';
   school_id: string | null;
   school_name: string | null;
   created_at: string;
@@ -19,9 +19,10 @@ export interface UserRecord {
 }
 
 export interface UserFilters {
-  role: 'all' | 'principal' | 'teacher' | 'parent' | 'superadmin';
+  role: 'all' | 'principal' | 'teacher' | 'parent' | 'student' | 'superadmin';
   status: 'all' | 'active' | 'inactive';
   school: string;
+  schoolId: string;
   search: string;
 }
 
@@ -38,6 +39,8 @@ export const getRoleColor = (role: string): string => {
       return '#10b981';
     case 'parent':
       return '#f59e0b';
+    case 'student':
+      return '#3b82f6';
     default:
       return '#6b7280';
   }
@@ -109,6 +112,21 @@ export function createStyles(_theme: any) {
     statsText: {
       color: '#9ca3af',
       fontSize: 14,
+    },
+    scopeBadge: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+      backgroundColor: '#2563eb22',
+      borderWidth: 1,
+      borderColor: '#2563eb66',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    scopeBadgeText: {
+      color: '#93c5fd',
+      fontSize: 12,
+      fontWeight: '600',
     },
     filtersContainer: {
       backgroundColor: '#1f2937',

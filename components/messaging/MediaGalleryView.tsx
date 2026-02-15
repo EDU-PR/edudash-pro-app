@@ -21,6 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 type MediaType = 'image' | 'voice' | 'file';
 
@@ -51,6 +52,7 @@ export function MediaGalleryView({
   threadId,
   onClose,
 }: MediaGalleryViewProps) {
+  const bottomInset = useBottomInset();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<MediaType>('image');
@@ -240,7 +242,9 @@ export function MediaGalleryView({
               numColumns={activeTab === 'image' ? 3 : 1}
               key={activeTab} // force re-layout on tab switch
               contentContainerStyle={
-                activeTab === 'image' ? styles.grid : styles.list
+                activeTab === 'image'
+                  ? [styles.grid, { paddingBottom: bottomInset + 20 }]
+                  : [styles.list, { paddingBottom: bottomInset + 20 }]
               }
             />
           )}

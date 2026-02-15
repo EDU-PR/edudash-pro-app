@@ -9,6 +9,7 @@ import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { RegistrationData, RegistrationErrors, GRADE_LEVELS, getRegistrationErrorMessage } from '@/lib/screen-data/school-registration.types';
@@ -17,6 +18,7 @@ export default function SchoolRegistrationScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
+  const bottomInset = useBottomInset();
   const params = useLocalSearchParams<{ schoolType?: string; from?: string }>();
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -454,7 +456,7 @@ export default function SchoolRegistrationScreen() {
             {renderStepContent()}
           </ScrollView>
           
-          <View style={styles.navigationContainer}>
+          <View style={[styles.navigationContainer, { paddingBottom: bottomInset + 16 }]}>
             {currentStep > 1 && (
               <TouchableOpacity style={styles.backButton} onPress={prevStep}>
                 <Text style={styles.backButtonText}>Back</Text>

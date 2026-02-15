@@ -25,7 +25,7 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
   const [creatingTempPassword, setCreatingTempPassword] = useState(false);
   const [updatingTier, setUpdatingTier] = useState(false);
   const [filters, setFilters] = useState<UserFilters>({
-    role: 'all', status: 'all', school: '', search: '',
+    role: 'all', status: 'all', school: '', schoolId: '', search: '',
   });
 
   // ─── Fetch all users ────────────────────────────────────────────────────
@@ -113,6 +113,9 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
       filtered = filtered.filter(u =>
         u.school_name?.toLowerCase().includes(filters.school.toLowerCase()),
       );
+    }
+    if (filters.schoolId) {
+      filtered = filtered.filter(u => u.school_id === filters.schoolId);
     }
     if (filters.search) {
       const s = filters.search.toLowerCase();
