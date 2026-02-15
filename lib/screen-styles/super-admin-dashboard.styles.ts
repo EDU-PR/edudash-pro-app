@@ -47,14 +47,55 @@ export interface QuickAction {
 
 export function createStyles(theme: any) {
   const bg0 = theme?.background ?? '#0F121E';
-  const glass = 'rgba(255,255,255,0.05)';
-  const glassBorder = 'rgba(255,255,255,0.10)';
-  const glassStrong = 'rgba(255,255,255,0.07)';
+  const glass = 'rgba(255,255,255,0.06)';
+  const glassBorder = 'rgba(255,255,255,0.12)';
+  const glassStrong = 'rgba(255,255,255,0.085)';
+  const glassHighlight = 'rgba(255,255,255,0.20)';
+
+  const glassShadow = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 26,
+    elevation: 14,
+  };
 
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: bg0,
+    },
+    bgLayer: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    bgBlobA: {
+      position: 'absolute',
+      top: -120,
+      right: -140,
+      width: 340,
+      height: 340,
+      borderRadius: 999,
+      backgroundColor: `${theme?.primary ?? '#8b5cf6'}22`,
+      transform: [{ rotate: '18deg' }],
+    },
+    bgBlobB: {
+      position: 'absolute',
+      bottom: -160,
+      left: -160,
+      width: 380,
+      height: 380,
+      borderRadius: 999,
+      backgroundColor: `${theme?.accent ?? '#22c55e'}14`,
+      transform: [{ rotate: '-10deg' }],
+    },
+    bgBlobC: {
+      position: 'absolute',
+      top: 220,
+      left: -120,
+      width: 260,
+      height: 260,
+      borderRadius: 999,
+      backgroundColor: `${theme?.primary ?? '#8b5cf6'}10`,
     },
     loadingContainer: {
       flex: 1,
@@ -107,6 +148,7 @@ export function createStyles(theme: any) {
       paddingVertical: 12,
       borderBottomWidth: 1,
       backgroundColor: glassStrong,
+      borderBottomColor: glassBorder,
     },
     quickAccessLeft: {
       flexDirection: 'row',
@@ -132,6 +174,8 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
     },
     opsConsoleText: {
       color: '#ffffff',
@@ -190,6 +234,10 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      overflow: 'hidden',
+      ...glassShadow,
     },
     statValue: {
       fontSize: 24,
@@ -229,6 +277,10 @@ export function createStyles(theme: any) {
       borderWidth: 1,
       backgroundColor: glass,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      overflow: 'hidden',
+      ...glassShadow,
     },
     aiControlHeader: {
       flexDirection: 'row',
@@ -404,6 +456,10 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      overflow: 'hidden',
+      ...glassShadow,
     },
     actionHeader: {
       flexDirection: 'row',
@@ -450,6 +506,10 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      overflow: 'hidden',
+      ...glassShadow,
     },
     statusItem: {
       flexDirection: 'row',
@@ -481,6 +541,9 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      ...glassShadow,
     },
     alertItem: {
       flexDirection: 'row',
@@ -518,6 +581,9 @@ export function createStyles(theme: any) {
       backgroundColor: glass,
       borderWidth: 1,
       borderColor: glassBorder,
+      borderTopColor: glassHighlight,
+      borderTopWidth: 1,
+      ...glassShadow,
     },
     featureFlag: {
       flexDirection: 'row',
