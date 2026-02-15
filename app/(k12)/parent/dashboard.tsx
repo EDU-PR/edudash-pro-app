@@ -44,8 +44,16 @@ import DashOrb from '@/components/nextgen/DashOrb';
 import SubNavTabs from '@/components/nextgen/SubNavTabs';
 import FocusBanner from '@/components/nextgen/FocusBanner';
 import InlineTutorPreview from '@/components/nextgen/InlineTutorPreview';
+import {
+  K12_PARENT_ACTIONS,
+  buildK12ParentActionTarget,
+  type K12ParentActionId,
+} from '@/lib/navigation/k12ParentActionMap';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
 
 type StarfieldPoint = {
   top: `${number}%`;
@@ -88,7 +96,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState('dashboard');
+  const [activeSubTab] = useState('dashboard');
   const dashboardBottomPadding = quickWinsEnabled ? 100 : 80;
 
   const SUB_NAV_TABS = useMemo(() => [
@@ -218,46 +226,42 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     setRefreshing(false);
   }, [user?.id, fetchChildrenData]);
 
-  const handleQuickAction = (route: string, actionId: string) => {
+  const pushAction = useCallback(
+    (actionId: K12ParentActionId, params?: Record<string, string | number | boolean | undefined>) => {
+      router.push(buildK12ParentActionTarget(actionId, params) as any);
+    },
+    []
+  );
+
+  const handleQuickAction = useCallback((actionId: K12ParentActionId) => {
     track('k12.parent.quick_action_tap', { action: actionId, user_id: user?.id });
-    if (actionId === 'payments') {
-      router.push('/screens/parent-payments' as any);
-      return;
-    }
-    router.push(route as any);
-  };
+    pushAction(actionId);
+  }, [pushAction, user?.id]);
 
   const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
   const canShowExamPrep = hasExamEligibleChild;
   const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice') && canShowExamPrep;
   const requiredExamTier = getRequiredTier('exam.practice');
   const quickActions = useMemo(() => ([
-    { id: 'children', icon: 'people', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), route: '/screens/parent-children', color: '#4F46E5' },
-    { id: 'progress', icon: 'ribbon', label: t('dashboard.progress', { defaultValue: 'Progress' }), route: '/screens/parent-progress', color: '#10B981' },
-    { id: 'attendance', icon: 'calendar-outline', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), route: '/screens/parent-attendance', color: '#F59E0B' },
-    { id: 'messages', icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), route: '/screens/parent-messages', color: '#3B82F6' },
-    { id: 'payments', icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), route: '/screens/parent-payments', color: '#8B5CF6' },
-    { id: 'announcements', icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), route: '/screens/parent-announcements', color: '#EF4444' },
-    { id: 'menu', icon: 'restaurant-outline', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), route: '/screens/parent-menu', color: '#F97316' },
-    { id: 'documents', icon: 'document-attach', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), route: '/screens/parent-document-upload', color: '#14B8A6' },
+    { id: 'children', actionId: 'children' as const, icon: 'people', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), color: '#4F46E5' },
+    { id: 'progress', actionId: 'progress' as const, icon: 'ribbon', label: t('dashboard.progress', { defaultValue: 'Progress' }), color: '#10B981' },
+    { id: 'attendance', actionId: 'attendance' as const, icon: 'calendar-outline', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), color: '#F59E0B' },
+    { id: 'messages', actionId: 'messages' as const, icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), color: '#3B82F6' },
+    { id: 'payments', actionId: 'payments' as const, icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), color: '#8B5CF6' },
+    { id: 'announcements', actionId: 'announcements' as const, icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), color: '#EF4444' },
+    { id: 'menu', actionId: 'weekly_menu' as const, icon: 'restaurant-outline', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), color: '#F97316' },
+    { id: 'documents', actionId: 'documents' as const, icon: 'document-attach', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), color: '#14B8A6' },
   ]), [t]);
 
   const aiQuickActions = useMemo(() => ([
-    { id: 'homework', icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), route: '/screens/homework', color: '#06B6D4' },
-    { id: 'weekly-report', icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), route: '/screens/parent-weekly-report', color: '#F97316' },
+    { id: 'homework', actionId: 'homework' as const, icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), color: '#06B6D4' },
+    { id: 'weekly-report', actionId: 'weekly_report' as const, icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), color: '#F97316' },
   ]), [t]);
 
   const openTutorSession = useCallback(() => {
     track('k12.parent.tutor_session_open', { user_id: user?.id });
-    router.push({
-      pathname: '/screens/dash-assistant',
-      params: {
-        source: 'k12_parent',
-        mode: 'tutor',
-        tutorMode: 'diagnostic',
-      },
-    } as any);
-  }, [user?.id]);
+    pushAction('tutor_session');
+  }, [pushAction, user?.id]);
 
   const handleExamBuilderPress = useCallback(() => {
     if (!canShowExamPrep) {
@@ -287,7 +291,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         type: 'warning',
         buttons: [
           { text: t('common.not_now', { defaultValue: 'Not now' }), style: 'cancel' },
-          { text: t('common.upgrade', { defaultValue: 'Upgrade' }), onPress: () => router.push('/screens/subscription-setup' as any) },
+          { text: t('common.upgrade', { defaultValue: 'Upgrade' }), onPress: () => pushAction('subscription_setup') },
         ],
       });
       return;
@@ -298,25 +302,25 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     const leadChild = children[0];
     const gradeNum = leadChild ? getGradeNumber(leadChild.grade) : 0;
     const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
-    router.push({
-      pathname: '/screens/exam-prep',
-      params: gradeParam ? { grade: gradeParam, childName: leadChild?.name || '' } : {},
-    } as any);
-  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children]);
+    pushAction(
+      'exam_builder',
+      gradeParam ? { grade: gradeParam, childName: leadChild?.name || '' } : undefined
+    );
+  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children, pushAction]);
 
   const navItems = useMemo(() => ([
-    { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: '/(k12)/parent/dashboard' },
-    { id: 'children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: 'people', route: '/screens/parent-children' },
-    { id: 'progress', label: t('dashboard.progress', { defaultValue: 'Progress' }), icon: 'ribbon', route: '/screens/parent-progress' },
-    { id: 'attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: 'calendar-outline', route: '/screens/parent-attendance' },
-    { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', route: '/screens/parent-messages' },
-    { id: 'payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/parent-payments' },
-    { id: 'announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: 'megaphone', route: '/screens/parent-announcements' },
-    { id: 'menu', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', route: '/screens/parent-menu' },
-    { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: '/screens/parent-weekly-report' },
-    { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: '/screens/parent-document-upload' },
-    { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
-    { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
+    { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: K12_PARENT_ACTIONS.dashboard_home.route },
+    { id: 'children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: 'people', route: K12_PARENT_ACTIONS.children.route },
+    { id: 'progress', label: t('dashboard.progress', { defaultValue: 'Progress' }), icon: 'ribbon', route: K12_PARENT_ACTIONS.progress.route },
+    { id: 'attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: 'calendar-outline', route: K12_PARENT_ACTIONS.attendance.route },
+    { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', route: K12_PARENT_ACTIONS.messages.route },
+    { id: 'payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: 'card', route: K12_PARENT_ACTIONS.payments.route },
+    { id: 'announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: 'megaphone', route: K12_PARENT_ACTIONS.announcements.route },
+    { id: 'menu', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', route: K12_PARENT_ACTIONS.weekly_menu.route },
+    { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: K12_PARENT_ACTIONS.weekly_report.route },
+    { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: K12_PARENT_ACTIONS.documents.route },
+    { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: K12_PARENT_ACTIONS.account.route },
+    { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: K12_PARENT_ACTIONS.settings.route },
   ]), [t]);
 
   const SectionHeaderCard = ({
@@ -413,7 +417,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             style={styles.notificationButton}
             onPress={() => {
               track('k12.parent.search_tap', { user_id: user?.id });
-              router.push({ pathname: '/screens/app-search', params: { scope: 'all' } } as any);
+              pushAction('search');
             }}
           >
             <Ionicons name="search-outline" size={22} color={theme.text} />
@@ -422,7 +426,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             style={styles.notificationButton}
             onPress={() => {
               track('k12.parent.notifications_tap', { user_id: user?.id });
-              router.push('/screens/notifications' as any);
+              pushAction('notifications');
             }}
           >
             <Ionicons name="notifications-outline" size={24} color={theme.text} />
@@ -438,7 +442,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             style={styles.profileButton}
             onPress={() => {
               track('k12.parent.profile_tap', { user_id: user?.id });
-              router.push('/screens/account' as any);
+              pushAction('profile');
             }}
           >
             <LinearGradient
@@ -461,9 +465,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           onTabPress={(tabId) => {
             // Don't setActiveSubTab — dashboard tab stays active;
             // other tabs navigate to separate screens.
-            if (tabId === 'messages') router.push('/screens/parent-messages' as any);
-            else if (tabId === 'grades') router.push('/screens/grades' as any);
-            else if (tabId === 'account') router.push('/screens/account' as any);
+            if (tabId === 'messages') pushAction('messages');
+            else if (tabId === 'grades') pushAction('grades');
+            else if (tabId === 'account') pushAction('account');
           }}
         />
       )}
@@ -622,7 +626,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           >
             <View style={styles.inlineTutorHeader}>
               <View style={styles.inlineTutorIcon}>
-                <DashOrb size={36} />
+                <Image source={ROBOT_MASCOT} style={styles.inlineTutorMascot} />
               </View>
               <View style={styles.inlineTutorTextWrap}>
                 <Text style={styles.inlineTutorTitle}>
@@ -683,7 +687,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           ) : (
             children.map((child) => (
               <ChildCard key={child.id} child={child} colors={theme} onPressChild={(childId) => {
-                router.push({ pathname: '/screens/parent-children', params: { childId } } as any);
+                pushAction('child_detail', { childId });
               }} />
             ))
           )}
@@ -713,7 +717,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                       borderWidth: 1,
                     },
                   ]}
-                  onPress={() => handleQuickAction(action.route, action.id)}
+                  onPress={() => handleQuickAction(action.actionId)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
@@ -759,7 +763,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                     borderWidth: 1,
                   },
                 ]}
-                onPress={() => handleQuickAction(action.route, action.id)}
+                onPress={() => handleQuickAction(action.actionId)}
                 activeOpacity={0.7}
               >
                 <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
@@ -779,7 +783,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             actionLabel={t('common.see_all', { defaultValue: 'See All' })}
             onActionPress={() => {
               track('k12.parent.see_all_updates_tap', { user_id: user?.id });
-              router.push('/screens/parent-activity-feed' as any);
+              pushAction('see_all_activity');
             }}
           />
           {recentUpdates.length === 0 ? (
@@ -823,7 +827,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             actionLabel={t('common.see_all', { defaultValue: 'See All' })}
             onActionPress={() => {
               track('k12.parent.see_all_events_tap', { user_id: user?.id });
-              router.push({ pathname: '/screens/calendar', params: { source: 'k12_parent', tab: 'events' } } as any);
+              pushAction('see_all_events');
             }}
           />
           {upcomingEvents.length === 0 ? (
@@ -848,7 +852,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                 activeOpacity={0.7}
                 onPress={() => {
                   track('k12.parent.event_tap', { eventId: event.id, user_id: user?.id });
-                  router.push({ pathname: '/screens/calendar', params: { date: event.date } } as any);
+                  pushAction('event_detail', { date: event.date });
                 }}
               >
                 <View style={[styles.eventDate, { backgroundColor: theme.primary + '20' }]}>
@@ -875,7 +879,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           activeOpacity={0.8}
           onPress={() => {
             track('k12.parent.school_communication_tap', { user_id: user?.id });
-            router.push('/screens/parent-announcements' as any);
+            pushAction('school_communication');
           }}
         >
           <LinearGradient

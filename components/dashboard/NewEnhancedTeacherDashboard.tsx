@@ -78,6 +78,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   } = useTeacherDashboard();
 
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id || null;
+  const isStandaloneTeacher = !organizationId;
   const {
     students: teacherStudents,
     loading: teacherStudentsLoading,
@@ -118,6 +119,22 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
         tutorMode: 'diagnostic',
       },
     } as any);
+  }, [user?.id]);
+
+  const openTeacherInviteAccept = useCallback(() => {
+    track('teacher.dashboard.join_school_invite_open', {
+      user_id: user?.id,
+      source: 'teacher_dashboard_standalone',
+    });
+    router.push('/screens/teacher-invite-accept' as any);
+  }, [user?.id]);
+
+  const openJoinByCode = useCallback(() => {
+    track('teacher.dashboard.join_school_code_open', {
+      user_id: user?.id,
+      source: 'teacher_dashboard_standalone',
+    });
+    router.push('/screens/student-join-by-code' as any);
   }, [user?.id]);
 
   const assignmentRows = dashboardData?.recentAssignments || [];
@@ -312,6 +329,38 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
             </View>
           </LinearGradient>
         </View>
+
+        {isStandaloneTeacher && (
+          <View style={styles.standaloneCard}>
+            <View style={styles.standaloneHeaderRow}>
+              <View style={styles.standaloneIconWrap}>
+                <Ionicons name="school-outline" size={18} color={theme.primary} />
+              </View>
+              <Text style={styles.standaloneTitle}>
+                {t('teacher.standalone_workspace_active', { defaultValue: 'Standalone Workspace Active' })}
+              </Text>
+            </View>
+            <Text style={styles.standaloneDescription}>
+              {t('teacher.standalone_workspace_hint', {
+                defaultValue: 'You can keep teaching independently. Join a school anytime using a principal invite token or school code.',
+              })}
+            </Text>
+            <View style={styles.standaloneActionsRow}>
+              <TouchableOpacity style={styles.standalonePrimaryButton} onPress={openTeacherInviteAccept} activeOpacity={0.85}>
+                <Ionicons name="mail-open-outline" size={16} color="#EAF0FF" />
+                <Text style={styles.standalonePrimaryButtonText}>
+                  {t('teacher.accept_invite_token', { defaultValue: 'Accept Invite Token' })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.standaloneSecondaryButton} onPress={openJoinByCode} activeOpacity={0.85}>
+                <Ionicons name="key-outline" size={16} color={theme.primary} />
+                <Text style={styles.standaloneSecondaryButtonText}>
+                  {t('teacher.join_by_code', { defaultValue: 'Join by Code' })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Today Highlights */}
         <View style={styles.highlightsSection}>
