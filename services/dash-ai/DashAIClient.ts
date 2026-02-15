@@ -270,9 +270,15 @@ export class DashAIClient {
 
   private normalizeRoleAndScope(roleValue?: string | null): {
     role: string;
-    scope: 'teacher' | 'principal' | 'parent' | 'student';
+    scope: 'teacher' | 'principal' | 'parent' | 'student' | 'admin';
   } {
     const role = String(roleValue || 'teacher').toLowerCase();
+
+    // Super-admins get their own scope so the AI proxy routes correctly
+    if (role === 'super_admin' || role === 'superadmin') {
+      return { role, scope: 'admin' };
+    }
+
     const scope: 'teacher' | 'principal' | 'parent' | 'student' =
       (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
         ? (role === 'learner' ? 'student' : role)
