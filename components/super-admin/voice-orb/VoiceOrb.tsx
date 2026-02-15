@@ -79,6 +79,8 @@ interface VoiceOrbProps {
   isParentProcessing?: boolean;
   onStartListening: () => void;
   onStopListening: () => void;
+  /** Live partial transcript updates (best-effort) from on-device STT. */
+  onPartialTranscript?: (text: string, language?: SupportedLanguage) => void;
   onTranscript: (text: string, language?: SupportedLanguage, meta?: VoiceTranscriptMeta) => void;
   onSpeakStart?: () => void;
   onSpeakEnd?: () => void;
@@ -114,6 +116,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   isParentProcessing = false,
   onStartListening,
   onStopListening,
+  onPartialTranscript,
   onTranscript,
   onSpeakStart,
   onSpeakEnd,
@@ -243,6 +246,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       if (!usingLiveSTTRef.current) return;
       lastPartialRef.current = text;
       setLiveTranscript(text);
+      onPartialTranscript?.(text, selectedLanguage);
       resetLiveSilenceTimerRef.current?.();
     },
     onFinalResult: (text) => {
@@ -265,10 +269,11 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     clearLiveTimers();
     setUsingLiveSTT(false);
     setIsProcessing(false);
+    onPartialTranscript?.('', selectedLanguage);
 
     const formatted = formatTranscript(text || '', selectedLanguage, {
       whisperFlow: true,
-      summarize: true,
+      summarize: false,
       preschoolMode: (profile as any)?.school_type === 'preschool' || (profile as any)?.organization_type === 'preschool',
       maxSummaryWords: 16,
     });
@@ -285,7 +290,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
 
     const fallback = formatTranscript(lastPartialRef.current, selectedLanguage, {
       whisperFlow: true,
-      summarize: true,
+      summarize: false,
       preschoolMode: (profile as any)?.school_type === 'preschool' || (profile as any)?.organization_type === 'preschool',
       maxSummaryWords: 16,
     }).trim();
@@ -301,7 +306,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
 
     setStatusText('No speech detected');
     setTimeout(() => setStatusText('Listening...'), 2000);
-  }, [clearLiveTimers, onTranscript, selectedLanguage]);
+  }, [clearLiveTimers, onPartialTranscript, onTranscript, selectedLanguage]);
 
   useEffect(() => {
     finalizeLiveRef.current = finalizeLiveTranscript;

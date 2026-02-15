@@ -427,6 +427,21 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   const cachedAISettingsVoiceRef = useRef<string | null | undefined>(undefined);
   const lastAppliedVoiceSignatureRef = useRef<string | null>(null);
 
+  // ── Session cache: avoid getSession() on every TTS chunk ──────────
+  const sessionCacheRef = useRef<{ token: string; expiresAt: number } | null>(null);
+  const getSessionTokenCached = useCallback(async (): Promise<string> => {
+    const now = Date.now();
+    if (sessionCacheRef.current && sessionCacheRef.current.expiresAt > now) {
+      return sessionCacheRef.current.token;
+    }
+    const supabase = assertSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('AUTH_MISSING');
+    // Cache for 4 minutes (tokens typically valid 1 hour)
+    sessionCacheRef.current = { token: session.access_token, expiresAt: now + 4 * 60 * 1000 };
+    return session.access_token;
+  }, []);
+
   const clearPlaybackTimers = useCallback(() => {
     if (playbackIntervalRef.current) {
       clearInterval(playbackIntervalRef.current);
@@ -738,26 +753,23 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   /**
    * Speak using Azure TTS (primary method)
    */
-  const speakWithAzure = useCallback(async (
+  /**
+   * Fetch audio URL from tts-proxy WITHOUT playing it.
+   * This is used for prefetching so the next chunk is ready by the time the
+   * current chunk finishes playing.
+   */
+  const requestAzureAudioUrl = useCallback(async (
     cleanText: string,
     language: SupportedLanguage,
-    options: TTSOptions = {}
-  ): Promise<void> => {
+    options: TTSOptions = {},
+    cachedToken?: string,
+  ): Promise<string> => {
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
-      throw new Error('SERVICE_UNCONFIGURED_SUPABASE_URL');
-    }
+    if (!supabaseUrl) throw new Error('SERVICE_UNCONFIGURED_SUPABASE_URL');
 
-    const supabase = assertSupabase();
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-      throw new Error('AUTH_MISSING');
-    }
-
+    const token = cachedToken || await getSessionTokenCached();
     const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
     const endpoint = `${supabaseUrl}/functions/v1/tts-proxy`;
-
     const phonicsMode = options.phonicsMode === true;
     const voiceId = resolveAzureVoiceId(langCode, options.voice);
     const effectiveRate = Number.isFinite(options.rate as number)
@@ -771,7 +783,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           text: cleanText,
@@ -850,18 +862,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     if (data?.fallback === 'device') {
       throw new Error('SERVICE_UNCONFIGURED_DEVICE_FALLBACK');
     }
-
     if (!data?.audio_url) {
       throw new Error('SERVICE_UNCONFIGURED_NO_AUDIO_URL');
     }
-
-    try {
-      const timeoutMs = estimatePlaybackTimeoutMs(cleanText);
-      await playAudioUrl(data.audio_url, timeoutMs);
-    } catch (playbackError) {
-      throw new Error(`PLAYBACK_ERROR:${playbackError instanceof Error ? playbackError.message : String(playbackError)}`);
-    }
-  }, [playAudioUrl, estimatePlaybackTimeoutMs]);
+    return data.audio_url;
+  }, [getSessionTokenCached]);
 
   const splitIntoChunks = (text: string, maxLength: number): string[] => {
     const sentences: string[] = [];
@@ -988,6 +993,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Keep chunking consistent in phonics mode to avoid extra request gaps.
       const chunks = splitIntoChunks(cleanText, 1200);
 
+      // Pre-cache auth token so chunks don't each call getSession()
+      const cachedToken = await getSessionTokenCached();
+
       if (!policy.shouldUseCloudVoice) {
         reportTTSError(new Error('FREE_QUOTA_EXHAUSTED_DEVICE_VOICE'));
         fallbackUsed = 'device';
@@ -1000,18 +1008,48 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         return;
       }
       
-      // Speak chunks sequentially so speech never cuts off mid-sentence
+      // Speak chunks with look-ahead prefetching to eliminate inter-chunk silence.
+      // While chunk N plays, chunk N+1's audio URL is already being fetched.
       let anyChunkSucceeded = false;
       let cloudChunkSucceeded = false;
       let lastErr: Error | null = null;
+      let prefetchedNextIndex: number | null = null;
+      let prefetchedNextPromise: Promise<string | null> | null = null;
 
-      for (const chunk of chunks) {
+      const consumePrefetched = async (index: number): Promise<string | null> => {
+        if (prefetchedNextIndex !== index || !prefetchedNextPromise) return null;
+        const promise = prefetchedNextPromise;
+        prefetchedNextIndex = null;
+        prefetchedNextPromise = null;
+        try {
+          return await promise;
+        } catch {
+          return null;
+        }
+      };
+
+      const ensurePrefetch = (index: number) => {
+        if (index < 0 || index >= chunks.length) return;
+        if (prefetchedNextIndex === index && prefetchedNextPromise) return;
+        prefetchedNextIndex = index;
+        prefetchedNextPromise = requestAzureAudioUrl(chunks[index], effectiveLanguage, effectiveOptions, cachedToken)
+          .catch(() => null);
+      };
+
+      for (let ci = 0; ci < chunks.length; ci += 1) {
+        const chunk = chunks[ci];
         if (stopRequestedRef.current) break;
+        const prefetchedUrl = await consumePrefetched(ci);
+
         try {
           cloudAttempted = true;
-          await speakWithAzure(chunk, effectiveLanguage, {
-            ...effectiveOptions,
-          });
+          const audioUrl = prefetchedUrl || await requestAzureAudioUrl(chunk, effectiveLanguage, effectiveOptions, cachedToken);
+
+          // Start prefetch ONLY after current URL is ready so we don't delay time-to-first-audio.
+          // This overlaps next-chunk fetch with current playback.
+          ensurePrefetch(ci + 1);
+
+          await playAudioUrl(audioUrl, estimatePlaybackTimeoutMs(chunk));
           anyChunkSucceeded = true;
           cloudChunkSucceeded = true;
         } catch (azureErr) {
@@ -1029,9 +1067,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
             try {
               await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
               cloudAttempted = true;
-              await speakWithAzure(chunk, effectiveLanguage, {
-                ...effectiveOptions,
-              });
+              const retryUrl = await requestAzureAudioUrl(chunk, effectiveLanguage, effectiveOptions, cachedToken);
+              ensurePrefetch(ci + 1);
+              await playAudioUrl(retryUrl, estimatePlaybackTimeoutMs(chunk));
               anyChunkSucceeded = true;
               cloudChunkSucceeded = true;
               effectiveAzureErr = null;
@@ -1116,7 +1154,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     }
   }, [
     stopPlayback,
-    speakWithAzure,
+    getSessionTokenCached,
+    requestAzureAudioUrl,
+    playAudioUrl,
+    estimatePlaybackTimeoutMs,
     speakWithDeviceTTS,
     reportTTSError,
     resolveSessionVoice,

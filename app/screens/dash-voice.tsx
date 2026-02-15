@@ -113,6 +113,8 @@ export default function DashVoiceScreen() {
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [isGreetingLoading, setIsGreetingLoading] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [liveUserTranscript, setLiveUserTranscript] = useState('');
+  const [lastUserTranscript, setLastUserTranscript] = useState('');
 
   // Conversation history for context (prevents redundant greetings)
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -120,6 +122,8 @@ export default function DashVoiceScreen() {
   const conversationIdRef = useRef(`orb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
   const voiceOrbRef = useRef<VoiceOrbRef>(null);
+  const inputRef = useRef<TextInput>(null);
+  const ccScrollRef = useRef<ScrollView>(null);
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
@@ -298,17 +302,17 @@ export default function DashVoiceScreen() {
     if (soft) return soft.index;
 
     // Commas are only safe if we already have enough context.
-    if (text.length > 120) {
+    if (text.length > 80) {
       const comma = /,(?=\s)/.exec(text);
       if (comma) return comma.index;
     }
 
     // Fallback: if the model streams long clauses without punctuation, speak an early phrase.
-    const hardMax = 180;
+    const hardMax = 140;
     if (text.length > hardMax) {
       const slice = text.slice(0, hardMax);
       const lastSpace = Math.max(slice.lastIndexOf(' '), slice.lastIndexOf('\n'));
-      if (lastSpace > 60) return lastSpace;
+      if (lastSpace > 40) return lastSpace;
       return hardMax;
     }
     return -1;
@@ -339,7 +343,7 @@ export default function DashVoiceScreen() {
       delta = full.slice(lcp);
     }
 
-    if (delta.trim().length < 12) return;
+    if (delta.trim().length < 5) return;
     const boundaryIdx = findSpeakBoundaryIndex(delta);
     if (boundaryIdx < 0) return;
 
@@ -349,7 +353,7 @@ export default function DashVoiceScreen() {
 
     // Throttle tiny chunks so we don't spam the speech queue on fast streams.
     const now = Date.now();
-    if (now - streamedLastQueuedAtRef.current < 350 && speakChunk.length < 60) return;
+    if (now - streamedLastQueuedAtRef.current < 120 && speakChunk.length < 30) return;
     streamedLastQueuedAtRef.current = now;
 
     streamedHasQueuedRef.current = true;
@@ -663,12 +667,16 @@ export default function DashVoiceScreen() {
     }
     const formatted = formatTranscript(transcript, language, {
       whisperFlow: true,
-      summarize: true,
+      summarize: false,
       preschoolMode: orgType === 'preschool',
       maxSummaryWords: orgType === 'preschool' ? 16 : 20,
     });
     if (language) setPreferredLanguage(language);
-    if (formatted.trim()) sendMessage(formatted);
+    const cleaned = formatted.trim();
+    if (!cleaned) return;
+    setLiveUserTranscript('');
+    setLastUserTranscript(cleaned);
+    sendMessage(cleaned);
   }, [isProcessing, isSpeaking, orgType, sendMessage]);
 
   const handleSubmit = useCallback(() => {
@@ -688,6 +696,7 @@ export default function DashVoiceScreen() {
     : isSpeaking ? 'Speaking...'
     : isListening ? 'Always listening'
     : 'Tap the orb or speak';
+  const orbRenderSize = showTranscript ? Math.round(ORB_SIZE * 0.56) : ORB_SIZE;
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -756,7 +765,7 @@ export default function DashVoiceScreen() {
           <Text style={[s.subtitle, { color: theme.textSecondary }]}>Your AI assistant</Text>
 
           {/* ORB */}
-          <View style={s.orbContainer}>
+          <View style={[s.orbContainer, { minHeight: orbRenderSize + 40, marginBottom: showTranscript ? 10 : 16 }]}>
             {VoiceOrb ? (
               <VoiceOrb
                 ref={voiceOrbRef}
@@ -765,13 +774,14 @@ export default function DashVoiceScreen() {
                 isParentProcessing={isProcessing}
                 onStartListening={() => setIsListening(true)}
                 onStopListening={() => setIsListening(false)}
+                onPartialTranscript={(text) => setLiveUserTranscript(text)}
                 onTranscript={handleVoiceInput}
                 onVoiceError={handleVoiceError}
                 onTTSStart={() => setIsSpeaking(true)}
                 onTTSEnd={() => setIsSpeaking(false)}
                 onLanguageChange={(lang: SupportedLanguage) => setPreferredLanguage(lang)}
                 language={preferredLanguage}
-                size={ORB_SIZE}
+                size={orbRenderSize}
                 autoStartListening
                 autoRestartAfterTTS
                 preschoolMode={orgType === 'preschool'}
@@ -779,7 +789,7 @@ export default function DashVoiceScreen() {
               />
             ) : (
               <CosmicOrb
-                size={ORB_SIZE}
+                size={orbRenderSize}
                 isProcessing={isProcessing || isListening}
                 isSpeaking={isSpeaking}
               />
@@ -816,15 +826,76 @@ export default function DashVoiceScreen() {
             </View>
           ) : null}
 
-          {/* Response (optional panel) */}
-          {showTranscript && displayedText ? (
-            <View style={[s.responseCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <ScrollView style={s.responseScroll} nestedScrollEnabled>
-                <Text style={[s.responseText, { color: theme.text }]}>{displayedText}</Text>
-              </ScrollView>
-              {streamingText ? (
-                <View style={s.streamingDot}><ActivityIndicator size="small" color={theme.primary} /></View>
+          {/* Captions (CC): assistant captions + tap-to-correct user transcript */}
+          {showTranscript ? (
+            <View style={{ width: '100%', marginBottom: 12 }}>
+              {(liveUserTranscript.trim() || lastUserTranscript.trim()) ? (
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    const text = (liveUserTranscript.trim() || lastUserTranscript.trim());
+                    if (!text) return;
+                    setInputText(text);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                  style={{
+                    marginBottom: 10,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                  accessibilityLabel="Edit what Dash heard"
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, marginBottom: 4 }}>
+                      You said (tap to correct)
+                    </Text>
+                    <Text style={{ color: theme.text, fontSize: 15, lineHeight: 20 }}>
+                      {liveUserTranscript.trim() || lastUserTranscript.trim()}
+                    </Text>
+                  </View>
+                  <Ionicons name="create-outline" size={18} color={theme.primary} />
+                </TouchableOpacity>
               ) : null}
+
+              <View style={[
+                s.responseCard,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  maxHeight: 520,
+                  minHeight: 260,
+                },
+              ]}>
+                <ScrollView
+                  ref={ccScrollRef}
+                  style={[s.responseScroll, { maxHeight: 480 }]}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  onContentSizeChange={() => ccScrollRef.current?.scrollToEnd({ animated: true })}
+                  contentContainerStyle={{ paddingBottom: 30 }}
+                >
+                  <Text style={[
+                    s.responseText,
+                    {
+                      color: theme.text,
+                      fontSize: 22,
+                      lineHeight: 32,
+                    },
+                  ]}>
+                    {displayedText || (isProcessing ? '…' : '')}
+                  </Text>
+                </ScrollView>
+                {streamingText ? (
+                  <View style={s.streamingDot}><ActivityIndicator size="small" color={theme.primary} /></View>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -877,6 +948,7 @@ export default function DashVoiceScreen() {
               <Ionicons name="image-outline" size={20} color={theme.primary} />
             </TouchableOpacity>
             <TextInput
+              ref={inputRef}
               style={[s.textInput, { color: theme.text }]}
               placeholder="Type a message..."
               placeholderTextColor={theme.textSecondary}
