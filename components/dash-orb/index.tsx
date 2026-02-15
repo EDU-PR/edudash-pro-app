@@ -63,6 +63,8 @@ import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/o
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
+import { resolveAgeBand } from '@/lib/dash-ai/learnerContext';
+import { logger } from '@/lib/logger';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
@@ -124,6 +126,12 @@ export default function DashOrb({
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   const orgType = getOrganizationType(profile);
+  // Age band from profile/learner context only (never inferred from voice)
+  const ageBand = useMemo(
+    () => resolveAgeBand(learnerContext?.ageYears, learnerContext?.grade) || 'adult',
+    [learnerContext?.ageYears, learnerContext?.grade]
+  );
+
   const dashPolicy = useMemo(
     () =>
       resolveDashPolicy({
@@ -131,24 +139,11 @@ export default function DashOrb({
         role: normalizedRole,
         orgType,
         learnerContext: {
-          ageBand:
-            typeof learnerContext?.ageYears === 'number'
-              ? learnerContext.ageYears <= 5
-                ? '3-5'
-                : learnerContext.ageYears <= 8
-                  ? '6-8'
-                  : learnerContext.ageYears <= 12
-                    ? '9-12'
-                    : learnerContext.ageYears <= 15
-                      ? '13-15'
-                      : learnerContext.ageYears <= 18
-                        ? '16-18'
-                        : 'adult'
-              : null,
+          ageBand,
           grade: learnerContext?.grade || null,
         },
       }),
-    [learnerContext?.ageYears, learnerContext?.grade, normalizedRole, orgType, profile]
+    [ageBand, learnerContext?.grade, normalizedRole, orgType, profile]
   );
   const learnerAgeYears = typeof learnerContext?.ageYears === 'number' ? learnerContext.ageYears : null;
   const learnerGrade = learnerContext?.grade || null;
@@ -384,6 +379,14 @@ export default function DashOrb({
     enabled: wakeWordEnabled && wakeWordAvailable && !locked,
     useFallback: false, // Use Porcupine for "Hey Dash" wake word detection
   });
+
+  // Wake-word on by default (hands-free). User can toggle off in settings.
+  useEffect(() => {
+    if (!voiceEnabled) return;
+    if (!wakeWordAvailable) return;
+    setWakeWordEnabled(true);
+    wakeWord.startListening();
+  }, [voiceEnabled, wakeWordAvailable]);
   
   // Animations & Gestures
   const pan = useRef(new Animated.ValueXY()).current;
@@ -827,7 +830,10 @@ export default function DashOrb({
   };
 
   const handleWakeWordDetected = async () => {
+    console.log('[DashOrb] Wake word detected');
+
     if (locked) {
+      console.log('[DashOrb] Screen is locked - ignoring wake word');
       if (upgradeTimerRef.current) {
         clearTimeout(upgradeTimerRef.current);
       }
@@ -846,8 +852,26 @@ export default function DashOrb({
       }, 3600);
       return;
     }
-    // Wake word detected - start listening for command
+
+    // ✅ BARGE-IN: if Dash is speaking (or streaming), stop immediately and listen
+    try {
+      if (isSpeaking) {
+        console.log('[DashOrb] Barge-in: stopping TTS');
+        await Promise.resolve(stopSpeaking());
+      }
+      if (isProcessing) {
+        console.log('[DashOrb] Barge-in: cancelling stream');
+        cancelStream?.();
+      }
+    } catch {}
+
     setIsExpanded(true);
+
+    if (!voiceEnabled) {
+      console.log('[DashOrb] Voice is disabled - not starting command listening');
+      return;
+    }
+
     setIsListeningForCommand(true);
     
     // Add listening indicator message
@@ -1502,10 +1526,24 @@ export default function DashOrb({
     const label = toolShortcuts.find((item) => item.name === toolName)?.label || toolName;
 
     if (!tool) {
-      const errorMsg = `Tool "${toolName}" not found.`;
+      const errorMsg = `Tool "${toolName}" not found in allowlist.`;
+      logger.warn('DashOrb.handleRunTool', { toolName, error: 'not_registered' });
       setMessages((prev) => [
         ...prev,
         { id: `tool_err_${Date.now()}`, role: 'assistant', content: errorMsg, timestamp: new Date() },
+      ]);
+      return;
+    }
+
+    // Age-band tool safety gate: block risky tools for minors
+    const toolRisk = (tool as any)?.risk || (tool as any)?.riskLevel || 'low';
+    const isMinor = ageBand !== 'adult' && ageBand !== '16-18';
+    if (isMinor && (toolRisk === 'high' || toolRisk === 'medium')) {
+      const blockedMsg = `This action isn't available for younger learners. Ask a parent or teacher for help.`;
+      logger.info('DashOrb.toolBlocked', { toolName, ageBand, toolRisk });
+      setMessages((prev) => [
+        ...prev,
+        { id: `tool_blocked_${Date.now()}`, role: 'assistant', content: blockedMsg, timestamp: new Date() },
       ]);
       return;
     }
@@ -1515,6 +1553,7 @@ export default function DashOrb({
       supabaseClient = assertSupabase();
     } catch {}
 
+    const traceId = `dash_orb_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const context = {
       profile,
       user,
@@ -1524,15 +1563,29 @@ export default function DashOrb({
       organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
       hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
       isGuest: !user?.id,
-      trace_id: `dash_orb_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ageBand,
+      trace_id: traceId,
       tool_plan: {
         source: 'dash_orb.run_tool',
         tool: toolName,
       },
     };
 
+    const startMs = Date.now();
     const result = await ToolRegistry.execute(toolName, params, context);
+    const durationMs = Date.now() - startMs;
     const message = formatToolResultMessage(label, result);
+
+    // Traceable tool call log
+    logger.info('DashOrb.toolExecuted', {
+      traceId,
+      tool: toolName,
+      args: params,
+      success: (result as any)?.success !== false,
+      durationMs,
+      ageBand,
+      source: 'manual',
+    });
 
     setMessages((prev) => [
       ...prev,
@@ -1566,6 +1619,22 @@ export default function DashOrb({
     if (!plan?.tool) return null;
     const toolName = plan.tool;
 
+    // Age-band tool safety gate for auto-planned tools
+    if (!ToolRegistry.hasTool(toolName)) {
+      logger.warn('DashOrb.autoTool.notRegistered', { toolName });
+      return null;
+    }
+    const autoTool = ToolRegistry.getTool(toolName);
+    const autoToolRisk = (autoTool as any)?.risk || (autoTool as any)?.riskLevel || 'low';
+    const isMinorAuto = ageBand !== 'adult' && ageBand !== '16-18';
+    if (isMinorAuto && (autoToolRisk === 'high' || autoToolRisk === 'medium')) {
+      logger.info('DashOrb.autoTool.blocked', { toolName, ageBand, autoToolRisk });
+      return null;
+    }
+
+    const traceId = `dash_orb_auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const startMs = Date.now();
+
     const execution = await ToolRegistry.execute(toolName, plan.parameters || {}, {
       profile,
       user,
@@ -1575,15 +1644,28 @@ export default function DashOrb({
       organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
       hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
       isGuest: !user?.id,
-      trace_id: `dash_orb_auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ageBand,
+      trace_id: traceId,
       tool_plan: {
         source: 'dash_orb.auto_planner',
         tool: toolName,
       },
     });
 
+    const durationMs = Date.now() - startMs;
     const label = autoToolShortcuts.find((tool) => tool.name === toolName)?.label || toolName;
     const toolMessage = formatToolResultMessage(label, execution);
+
+    // Traceable tool call log
+    logger.info('DashOrb.toolExecuted', {
+      traceId,
+      tool: toolName,
+      args: plan.parameters,
+      success: (execution as any)?.success !== false,
+      durationMs,
+      ageBand,
+      source: 'auto_planner',
+    });
 
     const toolChatMessage: ChatMessage = {
       id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
