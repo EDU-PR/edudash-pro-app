@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { signOutAndRedirect } from '@/lib/authActions';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
@@ -61,8 +62,19 @@ export default function SuperAdminDashboardScreen() {
     <DesktopLayout role="super_admin" title="Super Admin">
       <View style={styles.container}>
         <ThemedStatusBar />
+        {/* NEXT-GEN glass backdrop */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['#0B1020', '#10162B', '#0B1020']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.bgLayer}
+        />
+        <View pointerEvents="none" style={styles.bgBlobA} />
+        <View pointerEvents="none" style={styles.bgBlobB} />
+        <View pointerEvents="none" style={styles.bgBlobC} />
         {/* Quick Access Bar */}
-        <View style={[styles.quickAccessBar, { borderBottomColor: theme.border }]}>
+        <View style={styles.quickAccessBar}>
           <View style={styles.quickAccessLeft}>
             <TouchableOpacity
               style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
