@@ -52,9 +52,7 @@ export default function PrincipalAIYearPlannerScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'AI Year Planner',
-          headerStyle: { backgroundColor: theme.card },
-          headerTintColor: theme.text,
+          headerShown: false,
         }}
       />
       
@@ -113,7 +111,16 @@ export default function PrincipalAIYearPlannerScreen() {
     </View>
   );
 
-  return <DesktopLayout role="principal">{content}</DesktopLayout>;
+  return (
+    <DesktopLayout
+      role="principal"
+      title="AI Year Planner"
+      showBackButton
+      mobileHeaderTopInsetOffset={4}
+    >
+      {content}
+    </DesktopLayout>
+  );
 }
 
 const createStyles = (theme: any) =>

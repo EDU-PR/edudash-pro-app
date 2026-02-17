@@ -1,7 +1,7 @@
 // filepath: /media/king/5e026cdc-594e-4493-bf92-c35c231beea3/home/king/Desktop/dashpro/app/screens/principal-year-planner.tsx
 // Principal Year Planner Screen - Refactored for WARP.md compliance (≤500 lines)
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,8 +9,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { extractOrganizationId } from '@/lib/tenant/compat';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useYearPlanner } from '@/hooks/principal/useYearPlanner';
+import { useTermSuggestionAI } from '@/hooks/useTermSuggestionAI';
 import {
   TermCard,
   TermFormModal,
@@ -25,7 +25,6 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalYearPlannerScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
-  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
 
   const orgId = extractOrganizationId(profile);
@@ -36,6 +35,19 @@ export default function PrincipalYearPlannerScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTerm, setEditingTerm] = useState<AcademicTerm | null>(null);
   const [formData, setFormData] = useState<TermFormData>(getDefaultTermFormData());
+
+  const {
+    suggest: aiSuggest,
+    isBusy: aiBusy,
+    error: aiError,
+    lastResult: aiLastResult,
+    applyToNativeForm: aiApplyToNativeForm,
+  } = useTermSuggestionAI({ context: 'ecd' });
+
+  const handleAISuggest = useCallback(async () => {
+    const result = await aiSuggest(formData);
+    if (result) aiApplyToNativeForm(formData, setFormData);
+  }, [formData, aiSuggest, aiApplyToNativeForm]);
 
   const groupedTerms = groupTermsByYear(terms);
 
@@ -59,7 +71,12 @@ export default function PrincipalYearPlannerScreen() {
   };
 
   return (
-    <DesktopLayout role="principal" title="Year Planner" showBackButton>
+    <DesktopLayout
+      role="principal"
+      title="Year Planner"
+      showBackButton
+      mobileHeaderTopInsetOffset={4}
+    >
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         style={styles.container}
@@ -113,6 +130,10 @@ export default function PrincipalYearPlannerScreen() {
           onSubmit={onSubmit}
           onClose={() => setShowCreateModal(false)}
           theme={theme}
+          onAISuggest={handleAISuggest}
+          aiBusy={aiBusy}
+          aiError={aiError}
+          aiTips={aiLastResult?.tips}
         />
       </ScrollView>
     </DesktopLayout>
