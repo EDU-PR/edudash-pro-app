@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { normalizeForTTS } from '../../../lib/dash-ai/ttsNormalize';
+import { getVoiceIdForLanguage } from '../../../lib/voice/voiceMapping';
 
 interface TTSOptions {
   rate?: number; // -50 to +50
@@ -35,17 +36,8 @@ const TTS_LIMITS: Record<string, number> = {
   school: 1000,
 };
 
-const AZURE_VOICES_BY_LANG: Record<string, { male: string; female: string }> = {
-  en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
-  af: { male: 'af-ZA-AdriNeural', female: 'af-ZA-AdriNeural' },
-  zu: { male: 'zu-ZA-ThandoNeural', female: 'zu-ZA-ThandoNeural' },
-  xh: { male: 'xh-ZA-NomalungaNeural', female: 'xh-ZA-NomalungaNeural' },
-  nso: { male: 'nso-ZA-DidiNeural', female: 'nso-ZA-DidiNeural' },
-};
-
 const resolveVoiceId = (language: string, voice: 'male' | 'female') => {
-  const byLang = AZURE_VOICES_BY_LANG[language] || AZURE_VOICES_BY_LANG.en;
-  return byLang[voice];
+  return getVoiceIdForLanguage(language, voice);
 };
 
 export function useTTS(userId?: string) {

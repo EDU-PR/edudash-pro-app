@@ -69,6 +69,13 @@ config.resolver.blockList = exclusionList([
   /\/app\/.*debug.*\.tsx?$/,
   /\/app\/biometric-test\.tsx$/,
   /\/app\/debug-user\.tsx$/,
+  // Prevent Metro from watching nested project trees and their dependencies.
+  // These directories are not part of this Expo bundle and can exhaust inotify watchers.
+  /[\\/]mark-1[\\/].*/,
+  /[\\/]web[\\/]node_modules[\\/].*/,
+  /[\\/]web[\\/]\\.next[\\/].*/,
+  /[\\/]soa-web[\\/]node_modules[\\/].*/,
+  /[\\/]soa-web[\\/]\\.next[\\/].*/,
 ]);
 
 // Comprehensive web-specific module resolution

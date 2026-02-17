@@ -28,6 +28,8 @@ interface TeacherQuickActionCardProps {
   onPress: () => void;
   subtitle?: string;
   disabled?: boolean;
+  /** When true, card fills its container (e.g. in a two-column grid row) */
+  fillContainer?: boolean;
 }
 
 export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
@@ -36,7 +38,8 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
   color,
   onPress,
   subtitle,
-  disabled
+  disabled,
+  fillContainer = false,
 }) => {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
@@ -58,6 +61,8 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
     <TouchableOpacity
       style={[
         styles.actionCard,
+        fillContainer && styles.actionCardFill,
+        fillContainer && { width: undefined },
         disabled && styles.actionCardDisabled,
         { borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : theme.border }
       ]}
@@ -101,6 +106,12 @@ const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => {
       shadowOpacity: isNextGenTeacher ? 0.35 : 0.1,
       shadowRadius: isNextGenTeacher ? 24 : 8,
       elevation: isNextGenTeacher ? 10 : 4,
+    },
+    actionCardFill: {
+      flex: 1,
+      minWidth: 0,
+      marginHorizontal: 0,
+      marginBottom: 0,
     },
     actionCardDisabled: {
       opacity: 0.5,

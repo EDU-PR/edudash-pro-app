@@ -87,6 +87,7 @@ const POLICY: PolicyMap = {
       'settings',
       'dash-studio',
       'dash-advisor',
+      'dash-tutor',
     ]),
   },
   k12_school: {
@@ -156,6 +157,7 @@ const POLICY: PolicyMap = {
       'announcements',
       'settings',
       'dash-advisor',
+      'dash-tutor',
     ]),
   },
 };

@@ -46,6 +46,7 @@ export const createTeacherDashboardStyles = (
       paddingHorizontal: layout.cardPadding,
       paddingBottom: 42,
       gap: 18,
+      width: '100%',
     },
     loadingContainer: {
       flex: 1,
@@ -420,14 +421,30 @@ export const createTeacherDashboardStyles = (
       letterSpacing: 0.6,
     },
     metricsGrid: {
+      width: '100%',
+      gap: layout.cardGap,
+    },
+    metricRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      marginHorizontal: -layout.cardGap / 2,
+      width: '100%',
+      gap: layout.cardGap,
+      marginBottom: layout.cardGap,
+    },
+    metricRowLast: {
+      marginBottom: 0,
     },
     actionsGrid: {
+      width: '100%',
+      gap: layout.cardGap,
+    },
+    actionRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      marginHorizontal: -layout.cardGap / 2,
+      width: '100%',
+      gap: layout.cardGap,
+      marginBottom: layout.cardGap,
+    },
+    actionRowLast: {
+      marginBottom: 0,
     },
     classOverviewRow: {
       flexDirection: 'row',

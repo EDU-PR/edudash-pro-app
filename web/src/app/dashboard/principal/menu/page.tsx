@@ -24,6 +24,8 @@ export default function PrincipalMenuPage() {
   const [weekDraft, setWeekDraft] = useState<WeeklyMenuDraft | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editInitialDraft, setEditInitialDraft] = useState<WeeklyMenuDraft | null>(null);
+  const [editInitialWeek, setEditInitialWeek] = useState<string | null>(null);
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -130,7 +132,11 @@ export default function PrincipalMenuPage() {
             </button>
             <button
               className="btn btnPrimary"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setEditInitialDraft(null);
+                setEditInitialWeek(null);
+                setShowCreateModal(true);
+              }}
               disabled={!weeklyMenuPublishingEnabled}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
@@ -183,7 +189,11 @@ export default function PrincipalMenuPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button
                 className="btn btnSecondary"
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => {
+                  setEditInitialDraft(weekDraft);
+                  setEditInitialWeek(selectedWeek);
+                  setShowCreateModal(true);
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
               >
                 <PenSquare className="icon16" />
@@ -248,11 +258,19 @@ export default function PrincipalMenuPage() {
         <CreateWeeklyMenuModal
           preschoolId={preschoolId}
           authorId={userId}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditInitialDraft(null);
+            setEditInitialWeek(null);
+          }}
           onPublished={() => {
             setShowCreateModal(false);
+            setEditInitialDraft(null);
+            setEditInitialWeek(null);
             void loadData();
           }}
+          initialDraft={editInitialDraft}
+          initialWeekStartDate={editInitialWeek}
         />
       )}
     </PrincipalShell>

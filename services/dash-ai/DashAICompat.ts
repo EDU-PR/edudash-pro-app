@@ -124,6 +124,7 @@ export interface IDashAIAssistant {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      metadata?: Record<string, unknown>;
       signal?: AbortSignal;
     }
   ): Promise<DashMessage>;
@@ -305,6 +306,8 @@ export class DashAIAssistant implements IDashAIAssistant {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      metadata?: Record<string, unknown>;
+      signal?: AbortSignal;
     }
   ): Promise<DashMessage> {
     // Delegate to DashAICore which now handles AI calls

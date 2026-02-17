@@ -101,8 +101,9 @@ const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
  * - Do NOT slow entire sentences in phonics mode (keep natural pace).
  * - Only slow/hold the phoneme segments (slash markers) for clarity.
  */
-const DEFAULT_PHONICS_SPEAKING_RATE = 0;
-const PHONICS_PHONEME_RATE = -10;
+// ── Phonics pacing — values MUST match lib/dash-ai/ttsConstants.ts (SSOT) ──
+const DEFAULT_PHONICS_SPEAKING_RATE = -15;   // AZURE_RATE_PHONICS
+const PHONICS_PHONEME_RATE = -15;            // AZURE_RATE_PHONEME
 const PHONICS_MARKER_BREAK_MS = 160;
 const PHONICS_BLEND_SEGMENT_BREAK_MS = 180;
 const PHONICS_BLEND_FINAL_BREAK_MS = 240;
@@ -395,8 +396,10 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
     return letter ? phonemeTagSustained(letter) : match;
   });
 
-  // Ensure no raw slash marker characters leak to Azure speech output.
-  text = text.replace(/\//g, ' ');
+  // Remove only orphaned phonics-style slashes (e.g. a stray /s that was not
+  // closed). Legitimate slashes in non-phonics text (fractions, URLs) are kept.
+  text = text.replace(/\/(?=[a-z]{1,3}(?:\s|$))/gi, ' ')
+             .replace(/(?<=\s|^)([a-z]{1,3})\/(?=\s|[.,!?;:]|$)/gi, '$1 ');
 
   return text;
 }

@@ -3,6 +3,8 @@ import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.48.1';
 import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
 import { callImagenImageGeneration, isImagenConfigured } from './providers/imagen.ts';
+import { SHARED_PHONICS_PROMPT_BLOCK } from './generated/phonicsPrompt.ts';
+import { OCR_PROMPT_BY_TASK } from './generated/ocrPrompts.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -252,41 +254,21 @@ const SERVER_TOOL_NAMES = new Set([
   'caps_curriculum_query',
 ]);
 
-const DEFAULT_SYSTEM_PROMPT = `You are Dash, an AI tutor for parents and students.\n\nCORE BEHAVIOR:\n- Always teach step-by-step, ask one short question at a time, and wait for the learner’s response.\n- Never assume age, grade, language, or background knowledge. Ask for them if missing.\n- Never refuse to help or say you can’t help. If info is missing, ask. If tools are needed, use them.\n- Keep responses short and interactive.\n\nTUTOR FLOW:\nDiagnose → Teach → Practice → Check.\n\nWEB SEARCH TOOL:\nIf the user asks about information not in the curriculum/context, call the web_search tool to retrieve trustworthy sources.\n\nLANGUAGE:\nIf the user’s preferred language is unknown, ask which language they prefer (English, Afrikaans, isiZulu).`;
+const DEFAULT_SYSTEM_PROMPT = `You are Dash, a helpful AI assistant for schools and families.
 
-const SHARED_PHONICS_PROMPT_BLOCK = [
-  'PHONICS MODE:',
-  '- Teach letter sounds, not letter names.',
-  '- Always use slash markers for sound modeling: /s/, /m/, /f/, /k/, /a/, /t/.',
-  '- Never write spaced repetition like "s s s" or "m m m".',
-  '- For blending, model sounds first: "/k/ - /a/ - /t/ ... cat".',
-  '- If showing letters, map each letter to a sound in the same line: "c says /k/, a says /a/, t says /t/".',
-  '- Use "c-a-t" only as optional visual support after the sound model.',
-  '- For segmenting, split words into sounds with slash markers: "dog is /d/ - /o/ - /g/".',
-  '- Keep phonics examples short, playful, and concrete.',
-].join('\n');
+CORE BEHAVIOR:
+- Give accurate, specific, context-aware answers.
+- Be concise, warm, and practical.
+- If attachments are provided, analyze them directly and reference concrete details.
+- Ask at most one clarifying question only when required.
 
-const OCR_PROMPT_BY_TASK: Record<'homework' | 'document' | 'handwriting', string> = {
-  homework: [
-    'OCR HOMEWORK SCAN:',
-    '- Read all visible handwritten and printed text.',
-    '- Identify subject, topic, and likely grade.',
-    '- If answers are present, evaluate briefly and suggest next practice.',
-    '- Mark uncertain words with [?].',
-  ].join('\n'),
-  document: [
-    'OCR DOCUMENT SCAN:',
-    '- Extract all visible text from the image.',
-    '- Preserve structure where possible (titles, bullets, steps).',
-    '- Mark uncertain words with [?].',
-  ].join('\n'),
-  handwriting: [
-    'OCR HANDWRITING REVIEW:',
-    '- Read handwritten text line by line.',
-    '- Mark uncertain words with [?].',
-    '- Give short handwriting improvement tips for young learners.',
-  ].join('\n'),
-};
+TOOLS:
+- Use available tools when real data or external information is needed.
+- Do not claim actions were completed unless a tool confirms it.
+
+LANGUAGE:
+- Follow explicit language instructions from the user or metadata.
+- If no language is specified, respond in clear English (South Africa).`;
 
 // CORS headers are now managed by _shared/cors.ts — computed per-request in serve()
 // The `corsHeaders` variable is set once per request at the top of serve().
@@ -828,7 +810,102 @@ async function callOpenAIImageGeneration(params: {
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([429, 503, 529]);
 
-function buildSystemPrompt(extraContext?: string, serviceType?: string): string {
+type ResponseMode = 'direct_writing' | 'explain_direct' | 'tutor_interactive';
+type LanguageSource = 'explicit_override' | 'auto_detect' | 'preference';
+type SupportedLocale = 'en-ZA' | 'af-ZA' | 'zu-ZA';
+
+function parseResponseMode(metadata?: Record<string, unknown>): ResponseMode | null {
+  const raw = String(metadata?.response_mode || '').trim().toLowerCase();
+  if (raw === 'direct_writing' || raw === 'explain_direct' || raw === 'tutor_interactive') {
+    return raw;
+  }
+  return null;
+}
+
+function parseLanguageSource(metadata?: Record<string, unknown>): LanguageSource | null {
+  const raw = String(metadata?.language_source || '').trim().toLowerCase();
+  if (raw === 'explicit_override' || raw === 'auto_detect' || raw === 'preference') {
+    return raw;
+  }
+  return null;
+}
+
+function parseDetectedLocale(metadata?: Record<string, unknown>): SupportedLocale | null {
+  const raw = String(metadata?.detected_language || '').trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === 'af' || raw === 'af-za') return 'af-ZA';
+  if (raw === 'zu' || raw === 'zu-za') return 'zu-ZA';
+  if (raw === 'en' || raw === 'en-za') return 'en-ZA';
+  return null;
+}
+
+function getLocaleLabel(locale: SupportedLocale): string {
+  if (locale === 'af-ZA') return 'Afrikaans';
+  if (locale === 'zu-ZA') return 'isiZulu';
+  return 'English (South Africa)';
+}
+
+function getLanguagePrompt(metadata?: Record<string, unknown>): string | null {
+  const locale = parseDetectedLocale(metadata);
+  if (!locale) return null;
+  const source = parseLanguageSource(metadata);
+  const label = getLocaleLabel(locale);
+
+  if (source === 'explicit_override') {
+    return [
+      'LANGUAGE MODE: explicit_override',
+      `- Reply fully in ${label} (${locale}) for this turn.`,
+      '- Keep examples and explanations in the same language.',
+    ].join('\n');
+  }
+  if (source === 'auto_detect') {
+    return [
+      'LANGUAGE MODE: auto_detect',
+      `- The learner appears to be using ${label} (${locale}).`,
+      '- Reply in the same language unless they ask to switch.',
+    ].join('\n');
+  }
+  if (source === 'preference') {
+    return [
+      'LANGUAGE MODE: preference',
+      `- Prefer ${label} (${locale}) unless the user requests another language explicitly.`,
+    ].join('\n');
+  }
+  return null;
+}
+
+function getResponseModePrompt(mode: ResponseMode | null): string | null {
+  if (mode === 'direct_writing') {
+    return [
+      'RESPONSE MODE: direct_writing',
+      '- Produce polished, complete writing output requested by the user.',
+      '- Do not switch into quiz/tutor loop unless explicitly requested.',
+      '- Keep structure clean and publication-ready.',
+    ].join('\n');
+  }
+  if (mode === 'tutor_interactive') {
+    return [
+      'RESPONSE MODE: tutor_interactive',
+      '- Use one-question-at-a-time tutoring.',
+      '- Wait for learner response before moving on.',
+      '- Give brief scaffolds and corrections between turns.',
+    ].join('\n');
+  }
+  if (mode === 'explain_direct') {
+    return [
+      'RESPONSE MODE: explain_direct',
+      '- Explain directly and clearly first.',
+      '- Only add quiz-style interaction when the user asks for testing/practice.',
+    ].join('\n');
+  }
+  return null;
+}
+
+function buildSystemPrompt(
+  extraContext?: string,
+  serviceType?: string,
+  requestMetadata?: Record<string, unknown>
+): string {
   // Grading requests get a specialised system prompt — the tutor persona
   // would otherwise attempt conversation instead of grading.
   if (serviceType === 'grading') {
@@ -846,7 +923,11 @@ function buildSystemPrompt(extraContext?: string, serviceType?: string): string 
       : GRADING_SYSTEM_PROMPT;
   }
 
-  if (!extraContext) return DEFAULT_SYSTEM_PROMPT;
+  const responseModePrompt = getResponseModePrompt(parseResponseMode(requestMetadata));
+  const languagePrompt = getLanguagePrompt(requestMetadata);
+  const promptParts = [DEFAULT_SYSTEM_PROMPT, responseModePrompt, languagePrompt].filter(Boolean);
+  const basePrompt = promptParts.join('\n\n');
+  if (!extraContext) return basePrompt;
   
   // Check if extra context contains image/attachment directives (high priority)
   const hasImageDirective = extraContext.includes('IMAGE PROCESSING') || 
@@ -855,11 +936,11 @@ function buildSystemPrompt(extraContext?: string, serviceType?: string): string 
   
   if (hasImageDirective) {
     // Put image directives FIRST (higher priority than default prompt)
-    return `${extraContext}\n\n${DEFAULT_SYSTEM_PROMPT}`;
+    return `${extraContext}\n\n${basePrompt}`;
   }
   
   // Normal context appended after default prompt
-  return `${DEFAULT_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`;
+  return `${basePrompt}\n\nCONTEXT:\n${extraContext}`;
 }
 
 function getOCRPrompt(task: 'homework' | 'document' | 'handwriting'): string {
@@ -1564,14 +1645,18 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
 
   const images = Array.isArray(payload.images) ? payload.images : [];
   if (images.length > 0) {
-    const imageBlocks = images.map((img) => ({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: img.media_type,
-        data: img.data,
-      },
-    }));
+    const imageBlocks = images.map((img) => {
+      const mediaType = String(img.media_type || '').toLowerCase();
+      const blockType = mediaType === 'application/pdf' ? 'document' : 'image';
+      return {
+        type: blockType,
+        source: {
+          type: 'base64',
+          media_type: img.media_type,
+          data: img.data,
+        },
+      };
+    });
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') {
         const existing = messages[i].content;
@@ -1591,7 +1676,7 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
     }
     messages.push({
       role: 'user',
-      content: [{ type: 'text', text: 'Attached image for review.' }, ...imageBlocks],
+      content: [{ type: 'text', text: 'Attached file for review.' }, ...imageBlocks],
     });
   }
 
@@ -1609,6 +1694,10 @@ function mapOpenAIContent(content: unknown) {
       const mediaType = part.source.media_type || 'image/jpeg';
       const url = `data:${mediaType};base64,${part.source.data}`;
       return { type: 'image_url', image_url: { url } };
+    }
+    if (part?.type === 'document' && part?.source?.data) {
+      const mediaType = part.source.media_type || 'application/octet-stream';
+      return { type: 'text', text: `[Attached ${mediaType} document for OCR review]` };
     }
     if (part?.type === 'tool_use' || part?.type === 'tool_result') {
       return { type: 'text', text: JSON.stringify(part) };
@@ -2535,8 +2624,9 @@ serve(async (req) => {
       requestedOCRMode ? getOCRPrompt(ocrTask) : null,
     ].filter(Boolean);
     const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
+    const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
 
-    const systemPrompt = buildSystemPrompt(mergedContext, normalizedServiceType);
+    const systemPrompt = buildSystemPrompt(mergedContext, normalizedServiceType, requestMetadata);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
     // Redact PII before sending to AI providers
     const messages = redactMessagesForProvider(rawMessages);
@@ -2936,7 +3026,6 @@ serve(async (req) => {
       });
     }
 
-    const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
     const resolutionMeta = deriveResolutionMetadata(
       requestMetadata,
       providerResponse.pending_tool_calls?.length || 0

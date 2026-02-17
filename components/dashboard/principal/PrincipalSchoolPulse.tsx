@@ -47,6 +47,17 @@ function toneColor(theme: any, tone: PulseTone): string {
   }
 }
 
+function isDarkHex(hex: string): boolean {
+  const match = String(hex || '').trim().match(/^#([0-9a-f]{6})$/i);
+  if (!match) return false;
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance < 0.55;
+}
+
 export interface PrincipalSchoolPulseProps {
   stats?: SchoolStats | null;
 }
@@ -167,6 +178,9 @@ export const PrincipalSchoolPulse: React.FC<PrincipalSchoolPulseProps> = ({ stat
 
 const createStyles = (theme: any) => {
   const gap = isTablet ? 12 : isSmallScreen ? 8 : 10;
+  const isDark = isDarkHex(theme?.background);
+  const tileBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.72)';
+  const tileBorder = isDark ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.92)';
   return StyleSheet.create({
     container: {
       marginTop: 10,
@@ -194,18 +208,18 @@ const createStyles = (theme: any) => {
     tile: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.cardBackground || theme.surface,
+      backgroundColor: tileBackground,
       borderRadius: 16,
       padding: isSmallScreen ? 12 : 14,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: tileBorder,
       borderLeftWidth: 4,
       width: isTablet ? '49%' : '100%',
       shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.14,
+      shadowRadius: 16,
+      elevation: 4,
     },
     iconWrap: {
       width: isSmallScreen ? 36 : 40,

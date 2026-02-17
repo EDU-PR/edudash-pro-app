@@ -23,6 +23,10 @@ const PHONICS_PATTERNS: RegExp[] = [
   /\[[a-z]\]/i,
   /\b[a-z]-[a-z](?:-[a-z])+\b/i,
   /\b(short|long)\s+vowel\b/i,
+  // Spaced letter repetitions ("s s s", "m m m", "a a a") — AI sometimes outputs these instead of /s/
+  /\b([a-z])\s+\1(?:\s+\1){0,7}\b/i,
+  // Sustained sounds ("sss", "mmm", "aaa", "eee") — ensure we use phonics TTS for these
+  /\b(sss|mmm|fff|zzz|nnn|lll|rrr|vvv|hhh|aaa|eee|iii|ooo|uuu|buh|duh|tuh|puh|guh|kuh|juh|wuh|yuh)\b/i,
 ];
 
 const PRESCHOOL_GRADES = new Set(['pre-r', 'pre r', 'grade r', 'r', 'grade 1', '1']);

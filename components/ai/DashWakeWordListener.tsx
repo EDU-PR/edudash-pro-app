@@ -130,48 +130,54 @@ export default function DashWakeWordListener() {
         return false;
       }
 
-      // Load custom "Hello Dash" model from assets
+      // Try custom "Hello Dash" model first, fall back to built-in "COMPUTER"
       let modelPath: string | null = null;
       try {
         modelPath = await WakeWordModelLoader.loadHelloDashModel();
         console.log('[DashWakeWord] Loaded custom Hello Dash model:', modelPath);
       } catch (e) {
-        console.debug('[DashWakeWord] Custom model not available, falling back to built-in:', e);
+        console.debug('[DashWakeWord] Custom model not available, trying built-in:', e);
       }
 
-      if (!modelPath) {
-        console.debug('[DashWakeWord] Custom model not available; wake word disabled');
-        setEnabled(false);
-        try {
-          await AsyncStorage.setItem('@dash_ai_in_app_wake_word', 'false');
-        } catch {}
-        DeviceEventEmitter.emit('dash:wake_word_toggle', false);
-        return false;
+      if (modelPath) {
+        // Use custom model
+        porcupineManagerRef.current = await PorcupineManager.fromKeywordPaths(
+          accessKey,
+          [modelPath],
+          () => {
+            if (isHandlingWakeRef.current) return;
+            isHandlingWakeRef.current = true;
+            setTimeout(() => { isHandlingWakeRef.current = false; }, 1500);
+            const currentPath = pathnameRef.current || '';
+            if (currentPath.includes('/dash-voice')) return;
+            console.log('[DashWakeWord] Wake word detected! Opening voice orb...');
+            stopListening().catch(() => {});
+            router.push('/screens/dash-voice?mode=orb&wake=1');
+          },
+          (error: any) => { console.debug('[DashWakeWord] Porcupine error:', error); }
+        );
+      } else {
+        // Fallback: use built-in "COMPUTER" keyword (say "Computer" to activate)
+        const { BuiltInKeyword } = require('@picovoice/porcupine-react-native');
+        porcupineManagerRef.current = await PorcupineManager.fromBuiltInKeywords(
+          accessKey,
+          [BuiltInKeyword.COMPUTER],
+          () => {
+            if (isHandlingWakeRef.current) return;
+            isHandlingWakeRef.current = true;
+            setTimeout(() => { isHandlingWakeRef.current = false; }, 1500);
+            const currentPath = pathnameRef.current || '';
+            if (currentPath.includes('/dash-voice')) return;
+            console.log('[DashWakeWord] Wake word (Computer) detected! Opening voice orb...');
+            stopListening().catch(() => {});
+            router.push('/screens/dash-voice?mode=orb&wake=1');
+          },
+          (error: any) => { console.debug('[DashWakeWord] Porcupine error:', error); }
+        );
+        console.log('[DashWakeWord] Using built-in COMPUTER keyword (say "Computer" to activate)');
       }
 
-      // Use PorcupineManager so audio frames are captured/processed automatically.
-      porcupineManagerRef.current = await PorcupineManager.fromKeywordPaths(
-        accessKey,
-        [modelPath],
-        () => {
-          if (isHandlingWakeRef.current) return;
-          isHandlingWakeRef.current = true;
-          setTimeout(() => { isHandlingWakeRef.current = false; }, 1500);
-
-          const currentPath = pathnameRef.current || '';
-          if (currentPath.includes('/dash-voice')) return;
-
-          console.log('[DashWakeWord] Wake word detected! Opening voice orb...');
-          stopListening().catch(() => {});
-          // Open the full-screen voice ORB (auto-starts listening).
-          router.push('/screens/dash-voice?mode=orb&wake=1');
-        },
-        (error: any) => {
-          console.debug('[DashWakeWord] Porcupine error:', error);
-        },
-      );
-
-      console.log('[DashWakeWord] Porcupine manager initialized with custom model');
+      console.log('[DashWakeWord] Porcupine manager initialized');
       return true;
     } catch (e) {
       console.debug('[DashWakeWord] Wake word engine not available or failed to init:', e);

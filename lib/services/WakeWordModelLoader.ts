@@ -13,7 +13,7 @@ export class WakeWordModelLoader {
   /**
    * Load the Hello Dash wake word model for the current platform
    */
-  static async loadHelloDashModel(): Promise<string> {
+  static async loadHelloDashModel(): Promise<string | null> {
     const cacheKey = `hello-dash-${Platform.OS}`;
     
     // Return cached model path if available
@@ -22,35 +22,20 @@ export class WakeWordModelLoader {
     }
 
     try {
-      let modelAsset: Asset;
-      
-      if (Platform.OS === 'android') {
-        // Load Android-specific model
-        modelAsset = Asset.fromModule(require('../../assets/wake-words/hello-dash_en_android_v3_0_0.ppn'));
-      } else if (Platform.OS === 'ios') {
-        // For iOS, use the Linux model (should work)
-        modelAsset = Asset.fromModule(require('../../assets/wake-words/Hello-Dash_en_linux_v3_0_0.ppn'));
-      } else {
-        // Fallback for other platforms
-        modelAsset = Asset.fromModule(require('../../assets/wake-words/Hello-Dash_en_linux_v3_0_0.ppn'));
-      }
-
-      // Ensure the asset is downloaded
+      const getAsset = () => {
+        if (Platform.OS === 'android') {
+          return require('../../assets/wake-words/hello-dash_en_android_v3_0_0.ppn');
+        }
+        return require('../../assets/wake-words/Hello-Dash_en_linux_v3_0_0.ppn');
+      };
+      const modelAsset = Asset.fromModule(getAsset());
       await modelAsset.downloadAsync();
-      
-      if (!modelAsset.localUri) {
-        throw new Error('Failed to load wake word model asset');
-      }
-
-      // Cache the model path
+      if (!modelAsset.localUri) return null;
       this.modelCache.set(cacheKey, modelAsset.localUri);
-      
       console.log(`[WakeWordModelLoader] Loaded Hello Dash model for ${Platform.OS}:`, modelAsset.localUri);
       return modelAsset.localUri;
-      
-    } catch (error) {
-      console.error('[WakeWordModelLoader] Failed to load Hello Dash model:', error);
-      throw new Error(`Failed to load Hello Dash wake word model: ${error}`);
+    } catch {
+      return null;
     }
   }
 

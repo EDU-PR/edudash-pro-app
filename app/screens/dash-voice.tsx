@@ -47,11 +47,7 @@ import { getOrganizationType } from '@/lib/tenant/compat';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
 import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
-import {
-  shouldGreetToday,
-  buildDynamicGreeting,
-  buildGreetingDirective,
-} from '@/lib/ai/greetingManager';
+import { shouldGreetToday, buildDynamicGreeting } from '@/lib/ai/greetingManager';
 import {
   buildSystemPrompt,
   cleanForTTS,
@@ -59,7 +55,7 @@ import {
   createStreamingRequest,
 } from '@/lib/dash-voice-utils';
 
-import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { shouldUsePhonicsMode, detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
 import { detectOCRTask, isOCRIntent, getOCRPromptForTask } from '@/lib/dash-ai/ocrPrompts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -146,100 +142,29 @@ export default function DashVoiceScreen() {
     }
   }, [isListening, isSpeaking]);
 
-  // ── Smart auto-greeting: once per day, dynamic, role-aware ────────
+  // ── Instant greeting: no AI round-trip for ChatGPT-like speed ─────
+  // Skip AI greeting upgrade — local greeting is immediate; AI upgrade added latency.
   const hasGreetedRef = useRef(false);
   useEffect(() => {
     if (hasGreetedRef.current) return;
     if (conversationHistoryRef.current.length > 0) return;
-    if (isProcessing) return;
     hasGreetedRef.current = true;
 
     const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
 
-    // Check once-per-day guard (async but non-blocking for the local greeting)
     (async () => {
       const shouldGreet = await shouldGreetToday(user?.id);
-      if (!shouldGreet) {
-        // Already greeted today — show a brief non-greeting opener
-        const opener = name ? `Hey ${name}, what can I help with?` : 'What can I help with?';
-        const hist = [{ role: 'assistant' as const, content: opener }];
-        conversationHistoryRef.current = hist;
-        setConversationHistory(hist);
-        setLastResponse(opener);
-        setIsGreetingLoading(false);
-        return;
-      }
+      const opener = shouldGreet
+        ? buildDynamicGreeting({ userName: name || null, role, orgType, language: preferredLanguage })
+        : (name ? `Hey ${name}, what can I help with?` : 'What can I help with?');
 
-      // Build instant local greeting — dynamic, not hardcoded
-      const localGreeting = buildDynamicGreeting({
-        userName: name || null,
-        role,
-        orgType,
-        language: preferredLanguage,
-      });
-
-      const initialHistory = [{ role: 'assistant' as const, content: localGreeting }];
-      conversationHistoryRef.current = initialHistory;
-      setConversationHistory(initialHistory);
-      setLastResponse(localGreeting);
+      const hist = [{ role: 'assistant' as const, content: opener }];
+      conversationHistoryRef.current = hist;
+      setConversationHistory(hist);
+      setLastResponse(opener);
       setIsGreetingLoading(false);
-
-      // Background: upgrade to AI-generated greeting (non-blocking)
-      try {
-        const supabase = assertSupabase();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) return;
-        const directive = buildGreetingDirective({
-          userName: name || null,
-          role,
-          orgType,
-          language: preferredLanguage,
-        });
-        const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            scope: aiScope,
-            service_type: 'chat_message',
-            payload: {
-              messages: [{ role: 'user', content: 'Hello' }],
-              context:
-                buildSystemPrompt(orgType, role, preferredLanguage) +
-                '\n\n' +
-                dashPolicy.systemPromptAddendum +
-                '\n\n' +
-                directive,
-            },
-            stream: false,
-            metadata: {
-              role,
-              source: 'dash_voice_greeting',
-              dash_mode: dashPolicy.defaultMode,
-              org_type: dashPolicy.orgType,
-            },
-          }),
-        });
-        const data = await res.json().catch(() => ({} as Record<string, any>));
-        const aiGreeting = typeof data?.content === 'string' ? data.content : null;
-        if (aiGreeting && conversationHistoryRef.current.length === 1) {
-          const updatedHistory = [{ role: 'assistant' as const, content: aiGreeting }];
-          conversationHistoryRef.current = updatedHistory;
-          setConversationHistory(updatedHistory);
-          setLastResponse(aiGreeting);
-          if (voiceOrbRef.current && typeof voiceOrbRef.current.speakText === 'function') {
-            voiceOrbRef.current.speakText(aiGreeting);
-          }
-        }
-      } catch (err) {
-        console.warn('[dash-voice] AI greeting upgrade failed:', err);
-      }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgType, preferredLanguage, profile?.first_name, profile?.full_name, role, user?.id]);
 
   const quickActions = useMemo(() => dashPolicy.quickActions, [dashPolicy.quickActions]);
   const rawDisplayed = streamingText || lastResponse;
@@ -302,7 +227,7 @@ export default function DashVoiceScreen() {
     if (soft) return soft.index;
 
     // Commas are only safe if we already have enough context.
-    if (text.length > 80) {
+    if (text.length > 50) {
       const comma = /,(?=\s)/.exec(text);
       if (comma) return comma.index;
     }
@@ -350,6 +275,9 @@ export default function DashVoiceScreen() {
     const rawChunk = delta.slice(0, boundaryIdx + 1);
     const speakChunk = rawChunk.trim();
     if (!speakChunk) return;
+
+    // Never split in the middle of a phonics marker (/s/, /m/, etc.) — preserves sustained sounds.
+    if (/\/[a-z]*$/i.test(speakChunk) || /^[a-z]*\//i.test(speakChunk)) return;
 
     // Throttle tiny chunks so we don't spam the speech queue on fast streams.
     const now = Date.now();
@@ -477,8 +405,11 @@ export default function DashVoiceScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Please log in');
 
+      // Only include the full phonics prompt block if the conversation mentions phonics
+      const recentText = updatedHistory.slice(-4).map(m => m.content).join(' ');
+      const phonicsActive = detectPhonicsIntent(trimmed) || detectPhonicsIntent(recentText);
       const systemPrompt =
-        buildSystemPrompt(orgType, role, preferredLanguage) +
+        buildSystemPrompt(orgType, role, preferredLanguage, { phonicsActive }) +
         '\n\n' +
         dashPolicy.systemPromptAddendum;
       const hasImage = !!attachedImage?.base64;

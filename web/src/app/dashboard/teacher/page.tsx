@@ -222,33 +222,35 @@ export default function TeacherDashboard() {
 
       <h1 className="h1">{greeting}, {userName}</h1>
 
-      {/* Overview Metrics */}
-      <div className="section">
-        <div className="sectionTitle">Overview</div>
-        <div className="grid2">
-          <div className="card tile">
-            <div className="metricValue">{metrics.totalStudents}</div>
-            <div className="metricLabel">Total Students</div>
-          </div>
-          <div className="card tile">
-            <div className="metricValue">{metrics.totalClasses}</div>
-            <div className="metricLabel">Active Classes</div>
-          </div>
-          <div className="card tile">
-            <div className="metricValue">{metrics.pendingGrading}</div>
-            <div className="metricLabel">Pending Grading</div>
-          </div>
-          <div className="card tile">
-            <div className="metricValue">{metrics.upcomingLessons}</div>
-            <div className="metricLabel">Upcoming Lessons</div>
+      {/* Dashboard sections: two distinct grids (Overview + Quick actions) */}
+      <div className="dashboardSections">
+        {/* Overview Metrics */}
+        <div className="section">
+          <div className="sectionTitle">Overview</div>
+          <div className="grid2">
+            <div className="card tile">
+              <div className="metricValue">{metrics.totalStudents}</div>
+              <div className="metricLabel">Total Students</div>
+            </div>
+            <div className="card tile">
+              <div className="metricValue">{metrics.totalClasses}</div>
+              <div className="metricLabel">Active Classes</div>
+            </div>
+            <div className="card tile">
+              <div className="metricValue">{metrics.pendingGrading}</div>
+              <div className="metricLabel">Pending Grading</div>
+            </div>
+            <div className="card tile">
+              <div className="metricValue">{metrics.upcomingLessons}</div>
+              <div className="metricLabel">Upcoming Lessons</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="section">
-        <div className="sectionTitle">Quick actions</div>
-        <div className="grid2">
+        {/* Quick Actions */}
+        <div className="section">
+          <div className="sectionTitle">Quick actions</div>
+          <div className="grid2">
           {isPreschool && (
             <button className="qa" onClick={() => router.push('/dashboard/teacher/lessons/create?mode=quick')}>
               <Wand2 className="icon20" />
@@ -292,6 +294,7 @@ export default function TeacherDashboard() {
             <Phone className="icon20" />
             <span>Quick Call</span>
           </button>
+        </div>
         </div>
       </div>
 

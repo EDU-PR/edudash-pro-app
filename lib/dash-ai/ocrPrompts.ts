@@ -6,33 +6,37 @@ export type OCRTask = 'homework' | 'document' | 'handwriting';
 
 export const HOMEWORK_SCAN_PROMPT = [
   'OCR HOMEWORK SCAN:',
-  '- Read all visible handwritten and printed text.',
-  '- Identify subject, topic, and likely grade level.',
-  '- If answers are present, evaluate correctness briefly.',
-  '- Return uncertain text with [?] markers.',
+  '- Read all visible handwritten and printed text with high accuracy.',
+  '- Identify subject, topic, and likely grade level (CAPS if South African).',
+  '- If answers are present, evaluate correctness with brief reasoning.',
+  '- Return uncertain text with [?] markers. Use confidence scores where helpful.',
   '- Provide kind, practical next-step feedback for learner and parent.',
+  '- For math: show worked solutions step-by-step. Identify calculation errors.',
+  '- Suggest 1-2 follow-up practice problems if gaps are found.',
 ].join('\n');
 
 export const DOCUMENT_SCAN_PROMPT = [
   'OCR DOCUMENT SCAN:',
-  '- Extract all text visible in the document image.',
-  '- Preserve structure (headings, bullets, numbered steps) where possible.',
-  '- Return uncertain words with [?].',
-  '- Summarize the document in plain language.',
+  '- Extract all text visible in the document image with high fidelity.',
+  '- Preserve structure: headings (##), bullets (-), numbered steps (1. 2. 3.), tables.',
+  '- Use markdown formatting for structure when outputting.',
+  '- Return uncertain words with [?]. Provide a brief summary at the end.',
+  '- If it is a worksheet or form, identify blank fields and question types.',
 ].join('\n');
 
 export const HANDWRITING_ANALYSIS_PROMPT = [
   'OCR HANDWRITING ANALYSIS:',
-  '- Read as much handwritten text as possible.',
+  '- Read as much handwritten text as possible with best-effort accuracy.',
   '- Mark uncertain readings with [?].',
-  '- Assess handwriting legibility and letter formation.',
+  '- Assess handwriting legibility, letter formation, and spacing.',
   '- For preschool learners, include short fine-motor practice suggestions.',
+  '- For older learners, suggest specific letter/word practice if needed.',
 ].join('\n');
 
 const OCR_PATTERNS: Array<{ task: OCRTask; pattern: RegExp }> = [
-  { task: 'homework', pattern: /\b(homework|worksheet|assignment|grade this|mark this)\b/i },
-  { task: 'handwriting', pattern: /\b(handwriting|write|letter formation|trace|motor skills?)\b/i },
-  { task: 'document', pattern: /\b(scan|read this document|extract text|ocr|photo of notes|page)\b/i },
+  { task: 'homework', pattern: /\b(homework|worksheet|assignment|grade this|mark this|check my work|help with this|solve this|math problem)\b/i },
+  { task: 'handwriting', pattern: /\b(handwriting|write|letter formation|trace|motor skills?|penmanship)\b/i },
+  { task: 'document', pattern: /\b(scan|read this document|extract text|ocr|photo of notes|page|what does this say|read this)\b/i },
 ];
 
 export function detectOCRTask(text: string): OCRTask | null {
