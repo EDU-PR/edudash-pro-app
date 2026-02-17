@@ -31,7 +31,20 @@ export default function SignIn() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading, profileLoading } = useAuth();
-  const searchParams = useLocalSearchParams<{ email?: string; switch?: string }>();
+  const searchParams = useLocalSearchParams<{
+    email?: string;
+    switch?: string;
+    verified?: string;
+    emailVerified?: string;
+    password_reset?: string;
+    emailChanged?: string;
+    emailVerificationFailed?: string;
+    emailChangeFailed?: string;
+    fresh?: string;
+    signedOut?: string;
+    skipBiometric?: string;
+    addAccount?: string;
+  }>();
 
   // Prefill email from URL (e.g. "Use password" from ProfileSwitcher: ?switch=1&email=...)
   const emailFromParams =

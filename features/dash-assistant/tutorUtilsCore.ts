@@ -133,6 +133,7 @@ export const buildTutorSystemContext = (
   options: {
     phase: 'start' | 'evaluate';
     learnerContext?: LearnerContext | null;
+    tutorEntrySource?: 'teacher_dashboard' | 'default';
   }
 ) => {
   const learner = options.learnerContext;
@@ -146,6 +147,7 @@ export const buildTutorSystemContext = (
   const isPlayMode = session.mode === 'play';
   const phonicsMode = session.phonicsMode === true;
   const phonicsStage = session.phonicsStage || 'letter_sounds';
+  const isTeacherDashboardTutor = options.tutorEntrySource === 'teacher_dashboard';
 
   const levelGuidance = isPlayMode
     ? [
@@ -302,6 +304,10 @@ export const buildTutorSystemContext = (
     '- For blending, model sounds first: "/k/ - /a/ - /t/ ... cat".',
     '- When switching languages mid-sentence, keep the foreign word intact — do not transliterate or add pronunciation guides in parentheses.',
     '- Common abbreviations: say "caps" (not C-A-P-S), "stem" (not S-T-E-M), "A.I." (spell out).',
+    isTeacherDashboardTutor ? 'TEACHER SESSION QUALITY RULES:' : null,
+    isTeacherDashboardTutor ? '- Keep responses class-ready and CAPS-aligned for teacher facilitation.' : null,
+    isTeacherDashboardTutor ? '- Prefer clear sections when explaining: CAPS objective, lesson flow, materials/media, and parent follow-up task.' : null,
+    isTeacherDashboardTutor ? '- Avoid generic filler; provide specific examples, timings, and practical classroom steps.' : null,
     '',
     'Ask ONE question only and stop. Do not add extra questions or commentary.',
     'Keep responses very short (2-4 short lines max) unless explaining a concept.',

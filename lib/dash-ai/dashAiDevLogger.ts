@@ -18,6 +18,7 @@ export function dashAiDevLog(
     status?: number;
     code?: string;
     message?: string;
+    details?: unknown;
     rawError?: unknown;
     responseBody?: string;
     responsePreview?: string;
@@ -32,6 +33,7 @@ export function dashAiDevLog(
       status: payload.status,
       code: payload.code,
       message: payload.message,
+      details: payload.details,
       phase: payload.phase,
       traceId: payload.traceId,
       responsePreview: payload.responsePreview,

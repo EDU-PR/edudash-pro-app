@@ -84,6 +84,7 @@
     "format": "npx prettier --write .",
     "format:check": "npx prettier --check .",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
+    "check:file-sizes:touched": "node scripts/check-file-sizes-touched.mjs",
     "check:expo-filesystem": "node scripts/check-expo-filesystem-usage.js",
     "check:backups": "bash scripts/scan-backups.sh",
     "check:todos": "bash scripts/scan-todos.sh",

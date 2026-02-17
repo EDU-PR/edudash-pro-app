@@ -40,6 +40,24 @@ describe('responseMode', () => {
     ).toBe('tutor_interactive');
   });
 
+  it('forces tutor mode when explicit tutor mode is set', () => {
+    expect(
+      classifyResponseMode({
+        text: 'hello there',
+        explicitTutorMode: true,
+      })
+    ).toBe('tutor_interactive');
+  });
+
+  it('still allows explicit exit intent while explicit tutor mode is set', () => {
+    expect(
+      classifyResponseMode({
+        text: 'stop tutor for now',
+        explicitTutorMode: true,
+      })
+    ).toBe('explain_direct');
+  });
+
   it('lets direct writing requests exit an active tutor session', () => {
     expect(
       classifyResponseMode({

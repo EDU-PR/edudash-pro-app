@@ -1210,7 +1210,7 @@ function getExpoProjectIdFromMetadata(metadata: unknown): string {
 
 async function getPushTokensForUsers(
   userIds: string[],
-  options?: { expectedExpoProjectId?: string }
+  options?: { expectedExpoProjectId?: string; dedupeByUser?: boolean }
 ): Promise<PushDevice[]> {
   const { data, error } = await supabase
     .from('push_devices')
@@ -1225,21 +1225,50 @@ async function getPushTokensForUsers(
   }
 
   const expectedExpoProjectId = normalizeExpoProjectId(options?.expectedExpoProjectId);
-  const candidates = expectedExpoProjectId
-    ? (data || []).filter((device: PushDevice) => {
-        return getExpoProjectIdFromMetadata(device.device_metadata) === expectedExpoProjectId;
-      })
-    : (data || []);
+  const dedupeByUser = options?.dedupeByUser === true;
+  const rawCandidates = data || [];
 
-  // Deduplicate by user_id (keeping the most recent token after optional project filter)
+  // Keep strict match for explicit project IDs, but allow legacy tokens with missing metadata.
+  // This avoids dropping valid devices that were registered before expo_project_id was persisted.
+  const candidates = expectedExpoProjectId
+    ? rawCandidates.filter((device: PushDevice) => {
+        const deviceProjectId = getExpoProjectIdFromMetadata(device.device_metadata);
+        return deviceProjectId === expectedExpoProjectId || deviceProjectId.length === 0;
+      })
+    : rawCandidates;
+
+  // Deduplicate by token (not user).
+  // A user can legitimately have multiple active devices, and all should receive push.
   const uniqueTokens = new Map<string, PushDevice>();
   candidates.forEach((device: PushDevice) => {
-    if (!uniqueTokens.has(device.user_id)) {
-      uniqueTokens.set(device.user_id, device);
+    const token = String(device.expo_push_token || '').trim();
+    if (!token) return;
+    if (!uniqueTokens.has(token)) {
+      uniqueTokens.set(token, device);
     }
   });
 
-  return Array.from(uniqueTokens.values());
+  if (expectedExpoProjectId) {
+    console.log(
+      `[push_tokens] users=${userIds.length} expected_project=${expectedExpoProjectId} raw=${rawCandidates.length} filtered=${candidates.length} unique_tokens=${uniqueTokens.size} dedupe_by_user=${dedupeByUser}`
+    );
+  }
+
+  let tokens = Array.from(uniqueTokens.values());
+
+  // Build-update broadcasts should avoid duplicate banners on a single physical device.
+  // Keep only the most recent token per user for these events.
+  if (dedupeByUser) {
+    const byUser = new Map<string, PushDevice>();
+    for (const device of tokens) {
+      if (!byUser.has(device.user_id)) {
+        byUser.set(device.user_id, device);
+      }
+    }
+    tokens = Array.from(byUser.values());
+  }
+
+  return tokens;
 }
 
 const normalizeRoleTarget = (role: string): string => {
@@ -2972,6 +3001,48 @@ async function filterUsersByPreferences(
 }
 
 /**
+ * Prevent duplicate push sends for the same message_id + recipient set.
+ * This protects against accidental double invocations of new_message dispatch.
+ */
+async function filterNewMessageRecipientsByDeliveryHistory(
+  userIds: string[],
+  messageId?: string
+): Promise<string[]> {
+  if (!messageId || userIds.length === 0) {
+    return userIds;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('push_notifications')
+      .select('recipient_user_id')
+      .eq('notification_type', 'new_message')
+      .in('recipient_user_id', userIds)
+      .contains('data', { message_id: messageId })
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+
+    if (error) {
+      console.warn('[dedup] unable to query existing new_message notifications:', error.message);
+      return userIds;
+    }
+
+    const alreadyNotified = new Set<string>((data || []).map((row: { recipient_user_id: string }) => row.recipient_user_id));
+    if (alreadyNotified.size === 0) {
+      return userIds;
+    }
+
+    const filtered = userIds.filter((userId) => !alreadyNotified.has(userId));
+    console.log(
+      `[dedup] new_message message_id=${messageId} original=${userIds.length} already_notified=${alreadyNotified.size} remaining=${filtered.length}`
+    );
+    return filtered;
+  } catch (error) {
+    console.warn('[dedup] new_message delivery-history check failed:', error);
+    return userIds;
+  }
+}
+
+/**
  * Get signature for a user if they have email_include_signature enabled
  */
 async function getUserSignature(userId: string): Promise<string | null> {
@@ -3143,11 +3214,32 @@ async function dispatchNotification(request: Request): Promise<Response> {
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
+
+      if (notificationRequest.event_type === 'new_message') {
+        filteredUserIds = await filterNewMessageRecipientsByDeliveryHistory(
+          filteredUserIds,
+          notificationRequest.message_id
+        );
+
+        if (filteredUserIds.length === 0 && recipientEmails.length === 0) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Message push already sent for this message_id',
+              recipients: 0,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
     }
 
     const pushTokens = filteredUserIds.length > 0
       ? await getPushTokensForUsers(filteredUserIds, {
           expectedExpoProjectId,
+          dedupeByUser:
+            notificationRequest.event_type === 'build_update_available' ||
+            notificationRequest.custom_payload?.dedupe_by_user === true,
         })
       : [];
     console.log(`[dispatch] Event: ${notificationRequest.event_type}, UserIDs: ${filteredUserIds.length}, PushTokens: ${pushTokens.length}`);
