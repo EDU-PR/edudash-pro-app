@@ -117,7 +117,7 @@ export const BIOMETRIC_USER_PROFILE_KEY = 'biometric_user_profile';
 export const BIOMETRIC_REFRESH_TOKEN_KEY = 'biometric_refresh_token';
 export const BIOMETRIC_SESSIONS_KEY = 'biometric_sessions_v2';
 export const BIOMETRIC_ACTIVE_USER_ID_KEY = 'biometric_active_user_id_v2';
-export const MAX_BIOMETRIC_ACCOUNTS = 10;
+export const MAX_BIOMETRIC_ACCOUNTS = 3;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -445,10 +445,21 @@ export async function getBiometricAccounts(): Promise<
       /* Intentional: non-fatal */
     }
 
-    const accounts = Object.values(accountsMap).filter((account) => !!account.userId);
+    let accounts = Object.values(accountsMap).filter((account) => !!account.userId);
     accounts.sort(
       (a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime(),
     );
+    // Enforce max: return only the most recently used up to MAX_BIOMETRIC_ACCOUNTS
+    if (accounts.length > MAX_BIOMETRIC_ACCOUNTS) {
+      accounts = accounts.slice(0, MAX_BIOMETRIC_ACCOUNTS);
+      // Persist trimmed sessions so storage stays in sync
+      const sessions = await getSessionsMap();
+      const keepIds = new Set(accounts.map((a) => a.userId));
+      const pruned = Object.fromEntries(
+        Object.entries(sessions).filter(([id]) => keepIds.has(id)),
+      );
+      await setSessionsMap(pruned);
+    }
     return accounts;
   } catch {
     return [];

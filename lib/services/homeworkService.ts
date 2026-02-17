@@ -1,4 +1,5 @@
 import { isAIEnabled } from '@/lib/ai/aiConfig';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { assertSupabase } from '../supabase'
 import { track } from '../analytics'
 import { getCurrentLanguage } from '../i18n'
@@ -64,7 +65,7 @@ export class HomeworkService {
       onFinal?: (payload: { score: number; feedback: string; suggestions: string[]; strengths: string[]; areasForImprovement: string[] }) => void
       onError?: (err: { message: string; code?: string }) => void
     },
-    options?: { model?: string }
+    options?: { model?: string; tier?: string }
   ): Promise<void> {
     try {
       if (!AI_ENABLED) {
@@ -81,7 +82,7 @@ export class HomeworkService {
             service_type: 'grading_assistance', // Valid service_type per DB constraint
             payload: {
               prompt: `Grade this homework submission.\n\nAssignment: ${assignmentTitle}\nGrade Level: ${gradeLevel}\n\nSubmission:\n${submissionContent}`,
-              model: options?.model,
+              model: options?.model || getDefaultModelIdForTier(options?.tier ?? 'free'),
             },
             metadata: {
               assignment_title: assignmentTitle,

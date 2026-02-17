@@ -14,6 +14,7 @@ import { SUPPORTED_LANGUAGES } from '@/components/super-admin/voice-orb/useVoice
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { SHARED_PHONICS_PROMPT_BLOCK } from '@/lib/dash-ai/phonicsPrompt';
+import { dashAiDevLogVoiceResponse } from '@/lib/dash-ai/dashAiDevLogger';
 
 // ── Quick Actions ────────────────────────────────────────────────────
 
@@ -558,6 +559,7 @@ export function createStreamingRequest(
         } catch {
           /* use default message */
         }
+        dashAiDevLogVoiceResponse(request.status, request.responseText || '', { message: errMsg });
         onError(new Error(errMsg));
         return;
       }

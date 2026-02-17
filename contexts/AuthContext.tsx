@@ -26,6 +26,7 @@ import {
   type PermissionChecker,
 } from '@/lib/rbac';
 import { signOut, clearStoredAuthData, syncSessionFromSupabase } from '@/lib/sessionManager';
+import { isAccountSwitchInProgress, setAccountSwitchInProgress } from '@/lib/authActions';
 import { destroyVisibilityHandler } from '@/lib/visibilityHandler';
 import { mark, measure } from '@/lib/perf';
 import { showLoadingOverlay, hideLoadingOverlay } from '@/contexts/LoadingOverlayContext';
@@ -192,10 +193,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!mounted) return;
           authDebug('auth.state', { event: qEvent, userId: qS?.user?.id });
 
-          // Sync storage
+          // Sync storage (skip clear on SIGNED_OUT when switching account — next event will be SIGNED_IN)
+          const skipSignOutCleanup = qEvent === 'SIGNED_OUT' && isAccountSwitchInProgress();
+          if (skipSignOutCleanup && __DEV__) {
+            console.log('[AccountSwitch] SIGNED_OUT during switch — skipping cleanup, waiting for SIGNED_IN');
+          }
           try {
-            if (qEvent === 'SIGNED_OUT') await clearStoredAuthData();
-            else await syncSessionFromSupabase(qS ?? null);
+            if (qEvent === 'SIGNED_OUT' && !skipSignOutCleanup) await clearStoredAuthData();
+            else if (qEvent !== 'SIGNED_OUT') await syncSessionFromSupabase(qS ?? null);
           } catch { /* noop */ }
 
           // Keep biometric session restore reliable by persisting rotated refresh tokens.
@@ -217,32 +222,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           const nextUserId = qS?.user?.id ?? null;
-          if (qEvent === 'SIGNED_OUT') signedInGenerationRef.current += 1;
+          if (qEvent === 'SIGNED_OUT' && !skipSignOutCleanup) signedInGenerationRef.current += 1;
 
-          // Detect user switch
-          const isSwitch =
-            qEvent === 'SIGNED_IN' &&
+          // Detect user switch (SIGNED_IN or TOKEN_REFRESHED when user actually changed)
+          const userChanged =
             !!nextUserId &&
             (
               (lastUserIdRef.current && lastUserIdRef.current !== nextUserId) ||
               (profileRef.current?.id && profileRef.current.id !== nextUserId)
             );
+          const isSwitch =
+            (qEvent === 'SIGNED_IN' || qEvent === 'TOKEN_REFRESHED') && userChanged;
           if (isSwitch) {
             setProfile(null);
             setPermissions(createPermissionChecker(null));
             setProfileLoading(true);
+            if (__DEV__) console.log('[AccountSwitch] User changed in auth state — running SIGNED_IN pipeline', { event: qEvent, newUserId: nextUserId });
           }
+          if (qEvent === 'SIGNED_IN' || (qEvent === 'TOKEN_REFRESHED' && userChanged)) setAccountSwitchInProgress(false);
           lastUserIdRef.current = nextUserId;
 
-          // Update session state only on token change
+          // Update session state only on token change (skip nulling out when switching account)
           const prevToken = sessionRef.current?.access_token;
-          if (prevToken !== qS?.access_token || qEvent === 'SIGNED_OUT') {
+          if (skipSignOutCleanup) {
+            // Leave session/user unchanged; SIGNED_IN will follow with new user
+          } else if (prevToken !== qS?.access_token || qEvent === 'SIGNED_OUT') {
             setSession(qS ?? null);
             setUser(qS?.user ?? null);
           }
 
           try {
-            if (qEvent === 'SIGNED_IN' && qS?.user) {
+            // Run full sign-in pipeline for SIGNED_IN or when TOKEN_REFRESHED reflects an account switch
+            const runSignedInPipeline = (qEvent === 'SIGNED_IN' || (qEvent === 'TOKEN_REFRESHED' && userChanged)) && qS?.user;
+            if (runSignedInPipeline) {
               const deps: SignedInDeps = {
                 mounted,
                 setProfile,
@@ -259,7 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await handleSignedIn(qS, deps);
             }
 
-            if (qEvent === 'SIGNED_OUT' && mounted) {
+            if (qEvent === 'SIGNED_OUT' && mounted && !skipSignOutCleanup) {
               await handleSignedOut(qS?.user, {
                 mounted,
                 setProfile,
@@ -273,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (error) {
             logger.error('AuthContext', 'Auth state handler error:', error);
-            if (mounted && qEvent === 'SIGNED_IN') setProfileLoading(false);
+            if (mounted && (qEvent === 'SIGNED_IN' || qEvent === 'TOKEN_REFRESHED')) setProfileLoading(false);
           }
         }); // end authEventQueue.enqueue
       });

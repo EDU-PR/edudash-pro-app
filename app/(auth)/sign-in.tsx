@@ -31,9 +31,16 @@ export default function SignIn() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading, profileLoading } = useAuth();
-  const searchParams = useLocalSearchParams();
+  const searchParams = useLocalSearchParams<{ email?: string; switch?: string }>();
 
-  const [email, setEmail] = useState("");
+  // Prefill email from URL (e.g. "Use password" from ProfileSwitcher: ?switch=1&email=...)
+  const emailFromParams =
+    typeof searchParams.email === 'string'
+      ? searchParams.email
+      : Array.isArray(searchParams.email)
+        ? searchParams.email[0]
+        : '';
+  const [email, setEmail] = useState(() => emailFromParams || '');
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -109,9 +116,10 @@ export default function SignIn() {
     return () => w?.removeEventListener?.('popstate', onPop);
   }, []);
 
-  // ── Prefill email from deep link ──────────
+  // ── Prefill email from deep link / account switch ("Use password") ──────────
   useEffect(() => {
-    const emailParam = typeof searchParams.email === 'string' ? searchParams.email : '';
+    const raw = searchParams.email;
+    const emailParam = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
     if (emailParam && email !== emailParam) setEmail(emailParam);
   }, [searchParams.email]);
 
@@ -285,17 +293,6 @@ export default function SignIn() {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.signupPrompt}>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>{t('auth.dont_have_account', { defaultValue: "Don't have an account?" })}</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-                <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/(auth)/role-selection' as any)} activeOpacity={0.8}>
-                  <Ionicons name="person-add-outline" size={20} color={theme.primary} />
-                  <Text style={styles.signupButtonText}>{t('auth.sign_up', { defaultValue: 'Sign Up' })}</Text>
-                </TouchableOpacity>
-              </View>
             </GlassCard>
           </View>
         </ScrollView>

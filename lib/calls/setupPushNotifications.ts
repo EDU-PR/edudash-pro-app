@@ -12,8 +12,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFCMToken } from './CallHeadlessTask';
 import { upsertPushDeviceViaRPC } from '@/lib/notifications';
 
-// Get project ID from EAS config (matches extra.eas.projectId in app.json)
-const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc';
+// Resolve project ID from active EAS runtime config first.
+// Avoid hardcoded legacy project fallback to prevent cross-project token drift.
+const EXPO_PROJECT_ID =
+  Constants.easConfig?.projectId ||
+  Constants.expoConfig?.extra?.eas?.projectId ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  null;
 
 // Storage key for stable device ID
 const DEVICE_ID_STORAGE_KEY = '@edudash_device_id';
@@ -50,6 +55,11 @@ async function getStableDeviceId(): Promise<string> {
  */
 export async function getExpoPushToken(): Promise<string | null> {
   try {
+    if (!EXPO_PROJECT_ID) {
+      console.warn('[PushNotifications] Missing Expo project ID; skipping push token registration');
+      return null;
+    }
+
     // Check permissions first
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;

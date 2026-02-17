@@ -38,6 +38,7 @@ import {
   trackTutorPhonicsContractApplied,
 } from '@/lib/ai/trackingEvents';
 import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
+import { dashAiDevLog } from '@/lib/dash-ai/dashAiDevLogger';
 import { styles } from '@/components/super-admin/dash-ai-chat/DashAIChat.styles';
 import { ChatMessage, ChatMessageData } from '@/components/super-admin/dash-ai-chat/ChatMessage';
 import {
@@ -583,7 +584,14 @@ export default function DashTutorVoiceChat() {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData?.message || errorData?.error || `Request failed: ${response.status}`);
+      const errMsg = errorData?.message || errorData?.error || `Request failed: ${response.status}`;
+      dashAiDevLog('voice_response_error', {
+        status: response.status,
+        message: errMsg,
+        code: errorData?.code,
+        rawError: errorData,
+      });
+      throw new Error(errMsg);
     }
 
     if (!response.body) {

@@ -7,6 +7,9 @@ node_modules/
 coverage/
 *.log
 
+# Dev server logs (npm run start:log → expo-dev.log, npm run web:dev:log → dev-server.log)
+logs/
+
 # Production builds
 dist/
 dist-update/

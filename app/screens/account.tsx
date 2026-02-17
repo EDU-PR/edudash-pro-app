@@ -80,10 +80,15 @@ export default function AccountScreen() {
     showAlert({ title, message, buttons });
   }, [showAlert]);
 
+  // Tab bar is typically ~56–64px; account screen is often shown with bottom nav visible.
+  // Exclude bottom from safe area so we don't double-count and clip content; add padding so Sign Out scrolls above tab bar.
+  const TAB_BAR_HEIGHT = 64;
+  const scrollBottomPadding = TAB_BAR_HEIGHT + bottomInset + 24;
+
   const styles = useThemedStyles((theme) => ({
     container: { flex: 1, backgroundColor: theme.background },
     scrollView: { flex: 1 },
-    scrollContent: { paddingBottom: bottomInset + 40 },
+    scrollContent: { paddingBottom: scrollBottomPadding },
     settingsButton: { padding: 8 },
     profileHeader: {
       alignItems: "center" as const,
@@ -488,7 +493,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Stack.Screen 
         options={{ 
           headerShown: false,

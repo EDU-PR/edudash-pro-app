@@ -30,6 +30,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { AlertModal } from '@/components/ui/AlertModal';
+import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
+import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips';
+import { setPreferredModel } from '@/lib/ai/preferences';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
@@ -138,6 +141,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     tier,
     subReady,
     cancelGeneration,
+    selectedModel,
+    availableModels,
+    setSelectedModel,
   } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource, externalTutorMode, tutorConfig });
 
   const isTypingActive = isLoading || !!loadingStatus;
@@ -162,6 +168,24 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     await stopAllActivity();
     await startNewConversation();
   }, [startNewConversation, stopAllActivity]);
+
+  const handlePasteImage = useCallback(
+    (file: File) => {
+      const attachment: DashAttachment = {
+        id: `paste_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        bucket: 'attachments',
+        storagePath: '',
+        kind: 'image',
+        status: 'pending',
+        previewUri: typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined,
+      };
+      addAttachments([attachment]);
+    },
+    [addAttachments]
+  );
 
   const openScanner = useCallback(() => {
     if (Platform.OS === 'web') {
@@ -292,6 +316,20 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   <Text style={[headerStyles.headerSubtitle, { color: theme.textSecondary }]}>
                     {shellSubtitle}
                   </Text>
+                  <ModelInUseIndicator modelId={selectedModel} compact showCostDots />
+                  {availableModels.length > 1 && (
+                    <View style={{ marginTop: 6 }}>
+                      <ModelSelectorChips
+                        availableModels={availableModels}
+                        selectedModel={selectedModel}
+                        onSelect={setSelectedModel}
+                        feature="chat_message"
+                        onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'chat_message'); }}
+                        showSectionTitle={false}
+                        showWhenFree={true}
+                      />
+                    </View>
+                  )}
                 </View>
                 <View style={headerStyles.headerRight}>
                   <View style={[headerStyles.actionRail, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
@@ -456,6 +494,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onCancel={cancelGeneration}
               bottomInset={0}
               hideQuickChips={false}
+              onPasteImage={handlePasteImage}
             />
           </View>
 

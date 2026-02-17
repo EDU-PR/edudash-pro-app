@@ -8,6 +8,7 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 import { inputStyles as styles } from '@/components/ai/dash-assistant/styles/input.styles';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -42,6 +43,8 @@ interface DashInputBarProps {
   onCancel?: () => void;
   onInterrupt?: () => void | Promise<void>;
   hideQuickChips?: boolean;
+  /** Web: paste image from clipboard (receives File). Optional. */
+  onPasteImage?: (file: File) => void;
 }
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
@@ -68,18 +71,45 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onCancel,
   onInterrupt,
   hideQuickChips = false,
+  onPasteImage,
 }) => {
+  const { t } = useTranslation();
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
   const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
   const orbRingSize = orbSize + 14;
 
-  const renderAttachmentChips = () => {
-    if (selectedAttachments.length === 0) return null;
-
-    return (
-      <View style={styles.attachmentChipsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+  const renderAttachmentStrip = () => (
+    <>
+      {selectedAttachments.length === 0 ? (
+        <TouchableOpacity
+          style={[
+            styles.attachmentStrip,
+            {
+              backgroundColor: theme.surfaceVariant + '40',
+              borderColor: theme.border,
+            },
+          ]}
+          onPress={() => {
+            try {
+              Haptics.selectionAsync?.();
+            } catch {}
+            onAttachFile();
+          }}
+          activeOpacity={0.7}
+          accessibilityLabel={t('common.ai_drop_files_or_tap')}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.attachmentDropZoneText, { color: theme.textSecondary }]}>
+            {t('common.ai_drop_files_or_tap')}
+          </Text>
+          <Text style={[styles.attachmentDropZoneSubtext, { color: theme.textTertiary }]}>
+            {t('common.ai_drop_files_subtext')}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.attachmentChipsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {selectedAttachments.map((attachment) => {
             // Get real-time progress from the hook
             const progress = attachmentProgress?.get(attachment.id);
@@ -211,10 +241,11 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             </View>
             );
           })}
-        </ScrollView>
-      </View>
-    );
-  };
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const hasMessages = messages && messages.length > 0;
@@ -238,8 +269,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         }
       ]}
     >
-      {/* Attachment chips */}
-      {renderAttachmentChips()}
+      {/* Attachment strip: drop zone when empty, thumbnails when present */}
+      {renderAttachmentStrip()}
 
       {(isRecording || partialTranscript) && (
         <View style={[styles.voiceStatusRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
@@ -355,6 +386,18 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}
             onChangeText={setInputText}
+            {...(Platform.OS === 'web' && onPasteImage
+              ? ({
+                  onPaste: (e: { nativeEvent?: { clipboardData?: DataTransfer } }) => {
+                    const clipboardData = e?.nativeEvent?.clipboardData;
+                    if (!clipboardData?.items?.length) return;
+                    const item = Array.from(clipboardData.items).find((i) => i?.type?.startsWith('image/'));
+                    if (!item) return;
+                    const file = item.getAsFile();
+                    if (file) onPasteImage(file);
+                  },
+                } as Record<string, unknown>)
+              : {})}
             onKeyPress={(e) => {
               if (!enterToSend || Platform.OS !== 'web') return;
               const nativeEvent = (e as any)?.nativeEvent || {};

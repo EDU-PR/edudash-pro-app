@@ -57,6 +57,10 @@
     "noClass": "No class assigned",
     "connectionError": "Connection error. Please check your internet.",
     "optional": "Optional",
+    "ai_model_in_use": "Using",
+    "ai_model_label": "AI Model",
+    "ai_drop_files_or_tap": "Drop files or tap to upload",
+    "ai_drop_files_subtext": "Images and documents",
     "add": "Add",
     "record": "Record",
     "uploading": "Uploading...",
@@ -236,6 +240,11 @@
       "resend_failed": "Failed to resend verification email. Please try again.",
       "resend_verification": "Resend Email",
       "verification_email_sent": "A new verification email has been sent to your inbox. Please check your email and click the verification link."
+    },
+    "welcome": {
+      "title": "Welcome",
+      "subtitle": "Sign in to your account or create a new one.",
+      "quick_access": "Quick access with Face ID / Fingerprint"
     },
     "biometric": {
       "prompt": "Sign in to EduDash Pro",
@@ -3397,9 +3406,12 @@
     "security": "Security",
     "session_expired": "Session Expired",
     "session_expired_message": "Please sign in again to continue.",
+    "session_expired_switch_message": "That account's session has expired. Sign in with email and password to use it again, or remove it from the list.",
     "sign_in_manually": "Sign in",
     "switch_account": "Switch Account",
     "switch_account_desc": "Quick switch with biometric authentication",
+    "switch_account_desc_no_biometric": "Tap to try quick switch, or use password to sign in to an account.",
+    "use_password_to_switch": "Use password",
     "switch_error": "Failed to switch account. Please try again.",
     "switch_failed": "Switch Failed"
   },

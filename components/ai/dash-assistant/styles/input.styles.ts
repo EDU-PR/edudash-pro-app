@@ -266,6 +266,27 @@ export const inputStyles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // Attachment strip — ChatGPT-like: drop zone when empty, thumbnails when present
+  attachmentStrip: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    minHeight: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  attachmentDropZoneText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  attachmentDropZoneSubtext: {
+    fontSize: 11,
+    marginTop: 2,
+  },
   // Attachment Chips
   attachmentChipsContainer: {
     paddingHorizontal: 16,
