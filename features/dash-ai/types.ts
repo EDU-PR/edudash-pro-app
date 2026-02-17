@@ -13,7 +13,6 @@
  * 4. Attachment Types (DashAttachment, DashCitation)
  * 5. Personality & Configuration Types (DashPersonality)
  */
-
 // ============================================================================
 // 1. CORE MESSAGE TYPES
 // ============================================================================
@@ -60,6 +59,7 @@ export interface DashMessage {
     detected_language?: string;
     response_mode?: 'direct_writing' | 'explain_direct' | 'tutor_interactive';
     language_source?: 'explicit_override' | 'auto_detect' | 'preference';
+    tutor_entry_source?: 'teacher_dashboard' | 'default';
     suggested_actions?: string[];
     tutor_phase?: string;
     tutor_question?: boolean;

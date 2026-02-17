@@ -61,6 +61,7 @@ async function sendPush(params: {
       body: {
         event_type: 'new_message', user_ids: recipients,
         thread_id: params.threadId, message_id: params.messageId, send_immediately: true,
+        custom_payload: { dedupe_by_user: true },
         template_override: {
           title: '\uD83D\uDCAC ' + params.senderName, body,
           data: { type: 'message', thread_id: params.threadId, message_id: params.messageId,

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import { usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,20 +27,15 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
   const pathname = usePathname();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const hapticsEnabledRef = useRef(true);
-  const soundEnabledRef = useRef(true);
 
   useEffect(() => {
     let mounted = true;
 
     const loadPrefs = async () => {
       try {
-        const [hapticsPref, soundPref] = await Promise.all([
-          AsyncStorage.getItem('pref_haptics_enabled'),
-          AsyncStorage.getItem('pref_sound_enabled'),
-        ]);
+        const hapticsPref = await AsyncStorage.getItem('pref_haptics_enabled');
         if (!mounted) return;
         hapticsEnabledRef.current = hapticsPref !== 'false';
-        soundEnabledRef.current = soundPref !== 'false';
       } catch {
         // Keep defaults
       }
@@ -93,35 +87,11 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
 
           if (!isOwnMessage && isForeground && !isViewingThread) {
             try {
-              const senderName = senderProfile
-                ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
-                : 'Someone';
-              const messagePreview = payload.new.content?.length > 50
-                ? `${payload.new.content.substring(0, 47)}...`
-                : payload.new.content || 'New message';
-
-              await Notifications.scheduleNotificationAsync({
-                identifier: `message-${payload.new.id}`,
-                content: {
-                  title: `💬 ${senderName}`,
-                  body: messagePreview,
-                  data: {
-                    type: 'message',
-                    thread_id: threadId,
-                    message_id: payload.new.id,
-                    sender_id: payload.new.sender_id,
-                    sender_name: senderName,
-                  },
-                  sound: soundEnabledRef.current ? 'default' : undefined,
-                },
-                trigger: null,
-              });
-
               if (hapticsEnabledRef.current) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               }
             } catch (notifError) {
-              logger.warn('ParentMessagesRealtime', 'Failed to show banner notification:', notifError);
+              logger.warn('ParentMessagesRealtime', 'Failed to trigger foreground haptics:', notifError);
             }
           }
 

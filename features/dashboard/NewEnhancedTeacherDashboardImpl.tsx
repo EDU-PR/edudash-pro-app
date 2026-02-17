@@ -11,7 +11,7 @@
  * - Optimized for touch interfaces and accessibility
  */
 
-import React, { useMemo, useEffect, useCallback } from 'react';
+import React, { useMemo, useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ import { BirthdayDonationRegister } from '@/components/dashboard/teacher/Birthda
 import { useNewEnhancedTeacherState } from '@/hooks/useNewEnhancedTeacherState';
 import { useTeacherStudents } from '@/hooks/useTeacherStudents';
 import { CollapsibleSection, StudentSummaryCard } from '@/components/dashboard/shared';
+import { scheduleTeacherRoutineReminders } from '@/lib/dashboard/teacherRoutineReminders';
 import { router } from 'expo-router';
 
 interface NewEnhancedTeacherDashboardProps {
@@ -55,6 +56,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const layout = useMemo(() => getLayoutMetrics(width), [width]);
+  const [routineReminderStatus, setRoutineReminderStatus] = useState<string | null>(null);
   
   const styles = useMemo(() => createTeacherDashboardStyles(theme, insets.top, insets.bottom, layout), [theme, insets.top, insets.bottom, layout]);
   
@@ -136,6 +138,61 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
     });
     router.push('/screens/student-join-by-code' as any);
   }, [user?.id]);
+
+  const openDailyProgramPlanner = useCallback(() => {
+    track('teacher.dashboard.daily_program_open', {
+      user_id: user?.id,
+      source: 'teacher_dashboard',
+      has_today_routine: !!dashboardData?.todayRoutine,
+    });
+
+    const routine = dashboardData?.todayRoutine;
+    router.push({
+      pathname: '/screens/teacher-daily-program-planner',
+      params: routine
+        ? {
+            weekStartDate: routine.weekStartDate,
+            termId: routine.termId || undefined,
+            themeId: routine.themeId || undefined,
+          }
+        : undefined,
+    } as any);
+  }, [dashboardData?.todayRoutine, user?.id]);
+
+  const handleScheduleRoutineReminders = useCallback(async () => {
+    const routine = dashboardData?.todayRoutine;
+    if (!routine) {
+      setRoutineReminderStatus(
+        t('teacher.routine_reminders_no_program', { defaultValue: 'No daily routine found for today.' })
+      );
+      return;
+    }
+
+    setRoutineReminderStatus(
+      t('teacher.routine_reminders_scheduling', { defaultValue: 'Scheduling reminders...' })
+    );
+    try {
+      const result = await scheduleTeacherRoutineReminders(routine);
+      setRoutineReminderStatus(
+        t('teacher.routine_reminders_done', {
+          defaultValue: '{{count}} reminders scheduled',
+          count: result.scheduled,
+        })
+      );
+      track('teacher.dashboard.daily_program_reminders_scheduled', {
+        user_id: user?.id,
+        source: 'teacher_dashboard',
+        weekly_program_id: routine.weeklyProgramId,
+        scheduled: result.scheduled,
+        skipped: result.skipped,
+      });
+    } catch (error) {
+      console.warn('[TeacherDashboard] Failed to schedule routine reminders:', error);
+      setRoutineReminderStatus(
+        t('teacher.routine_reminders_failed', { defaultValue: 'Could not schedule reminders right now.' })
+      );
+    }
+  }, [dashboardData?.todayRoutine, t, user?.id]);
 
   const assignmentRows = dashboardData?.recentAssignments || [];
 
@@ -423,6 +480,66 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        <View style={styles.routineCard}>
+          <View style={styles.routineTopRow}>
+            <Text style={styles.routineBadge}>
+              {t('teacher.daily_program', { defaultValue: 'Daily Program' })}
+            </Text>
+            <Ionicons name="time-outline" size={18} color="#EAF0FF" />
+          </View>
+          <Text style={styles.routineTitle}>
+            {dashboardData?.todayRoutine?.title
+              || t('teacher.routine_title_default', { defaultValue: 'Today\'s Routine' })}
+          </Text>
+          <Text style={styles.routineDescription}>
+            {dashboardData?.todayRoutine
+              ? dashboardData.todayRoutine.nextBlockTitle
+                ? t('teacher.routine_next_block', {
+                    defaultValue: 'Next block: {{title}} at {{time}}',
+                    title: dashboardData.todayRoutine.nextBlockTitle,
+                    time: dashboardData.todayRoutine.nextBlockStart || '--:--',
+                  })
+                : t('teacher.routine_blocks_count', {
+                    defaultValue: '{{count}} blocks planned today',
+                    count: dashboardData.todayRoutine.blockCount,
+                  })
+              : t('teacher.routine_no_program', {
+                  defaultValue: 'No routine published for today. Open planner to create one.',
+                })}
+          </Text>
+          <View style={styles.routineActionsRow}>
+            <TouchableOpacity
+              style={styles.routinePrimaryButton}
+              onPress={openDailyProgramPlanner}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.routinePrimaryButtonText}>
+                {t('teacher.open_planner', { defaultValue: 'Open Planner' })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.routineSecondaryButton, !dashboardData?.todayRoutine && styles.routineSecondaryButtonDisabled]}
+              onPress={handleScheduleRoutineReminders}
+              activeOpacity={0.9}
+              disabled={!dashboardData?.todayRoutine}
+            >
+              <Text style={styles.routineSecondaryButtonText}>
+                {t('teacher.set_reminders', { defaultValue: 'Set Reminders' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {dashboardData?.todayRoutine?.termId || dashboardData?.todayRoutine?.themeId ? (
+            <Text style={styles.routineMeta}>
+              {t('teacher.routine_linked_context', {
+                defaultValue: 'Linked to year plan context (term/theme).',
+              })}
+            </Text>
+          ) : null}
+          {routineReminderStatus ? (
+            <Text style={styles.routineStatusText}>{routineReminderStatus}</Text>
+          ) : null}
+        </View>
 
         {/* Metrics Grid */}
         <CollapsibleSection

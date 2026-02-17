@@ -949,10 +949,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const turnId = createDashTurnId('dash_assistant_turn');
     const turnStartedAt = Date.now();
     const normalizedRole = String(profile?.role || '').toLowerCase();
+    const isTeacherDashboardTutorEntry = handoffSource === 'teacher_dashboard';
+    const shouldForceTutorInteractive = isTeacherDashboardTutorEntry || !!externalTutorMode;
+    const tutorEntrySource: 'teacher_dashboard' | 'default' = isTeacherDashboardTutorEntry
+      ? 'teacher_dashboard'
+      : 'default';
     const initialResponseMode = classifyResponseMode({
       text,
       hasAttachments: attachments.length > 0,
       hasActiveTutorSession: !!tutorSessionRef.current?.awaitingAnswer,
+      explicitTutorMode: shouldForceTutorInteractive,
     });
     const turnModeHint = initialResponseMode === 'tutor_interactive'
       ? 'tutor'
@@ -1049,6 +1055,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const activeSession = tutorSessionRef.current;
       const roleForTutor = String(profile?.role || '').toLowerCase();
       const isLearnerRole = ['parent', 'student', 'learner'].includes(roleForTutor);
+      const canRunTutorPipeline = isLearnerRole || shouldForceTutorInteractive;
       const phonicsRequested = isLearnerRole && detectPhonicsTutorRequest(userText);
       const hasLearningAttachment = attachments.some(
         (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
@@ -1057,6 +1064,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         text: userText,
         hasAttachments: hasLearningAttachment,
         hasActiveTutorSession: !!activeSession?.awaitingAnswer,
+        explicitTutorMode: shouldForceTutorInteractive,
       });
       const stopTutor = isTutorStopIntent(userText);
       const leaveTutorMode = activeSession && responseMode !== 'tutor_interactive';
@@ -1067,7 +1075,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setTutorSession(null);
       }
 
-      let tutorIntent = (isLearnerRole && responseMode === 'tutor_interactive')
+      let tutorIntent = (canRunTutorPipeline && responseMode === 'tutor_interactive')
         ? detectTutorIntent(userText)
         : null;
       if (!tutorIntent && isLearnerRole && hasLearningAttachment && responseMode === 'tutor_interactive') {
@@ -1080,6 +1088,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
         // bare image with no homework-check words → normal chat path
       }
+      if (!tutorIntent && shouldForceTutorInteractive && !stopTutor) {
+        tutorIntent = externalTutorMode || activeSession?.mode || 'diagnostic';
+      }
       if (activeSession?.awaitingAnswer && !stopTutor) {
         tutorAction = 'evaluate';
         tutorModeForMetadata = activeSession.mode;
@@ -1087,6 +1098,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         tutorContextOverride = buildTutorSystemContext(activeSession, {
           phase: 'evaluate',
           learnerContext: learnerContextRef.current || learnerContext,
+          tutorEntrySource: tutorEntrySource,
         });
       } else if (tutorIntent && !stopTutor) {
         const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
@@ -1119,6 +1131,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         tutorContextOverride = buildTutorSystemContext(newSession, {
           phase: 'start',
           learnerContext: learnerContextRef.current || learnerContext,
+          tutorEntrySource: tutorEntrySource,
         });
       }
       const mergedContextBase = [baseContextOverride, tutorContextOverride, attachmentContextOverride, languageDirective, celebrationHint]
@@ -1260,6 +1273,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               response_mode: responseMode,
               language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
               detected_language: requestLanguage.locale || undefined,
+              tutor_entry_source: tutorEntrySource,
             },
             signal: controller.signal,
           }
@@ -1282,6 +1296,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               response_mode: responseMode,
               language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
               detected_language: requestLanguage.locale || undefined,
+              tutor_entry_source: tutorEntrySource,
             },
             signal: controller.signal,
           }
@@ -1314,6 +1329,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             language_source:
               resolvedLocale.source || requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
             response_mode: responseMode,
+            tutor_entry_source: tutorEntrySource,
           },
         };
       }
@@ -1677,6 +1693,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     canInteractiveLessons,
     user?.id,
     profile?.role,
+    handoffSource,
+    externalTutorMode,
     tier,
     capabilityTier,
   ]);
