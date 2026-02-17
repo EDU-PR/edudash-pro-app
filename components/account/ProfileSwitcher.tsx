@@ -4,7 +4,7 @@
  * Allows users to switch between stored biometric accounts without signing out.
  * Uses EnhancedBiometricAuth for multi-account storage and session restoration.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -13,7 +13,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { clearAllNavigationLocks } from '@/lib/routeAfterLogin';
@@ -54,6 +54,12 @@ export function ProfileSwitcher({
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
   const { showAlert, alertProps } = useAlertModal();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,6 +189,7 @@ export function ProfileSwitcher({
         });
       }
       if (!result.success) {
+        setAccountSwitchInProgress(false);
         showAlert({
           title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
           message: result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
@@ -223,6 +230,7 @@ export function ProfileSwitcher({
 
       // Refresh profile to update UI
       if (result.sessionRestored) {
+        const routeBeforeSwitch = pathnameRef.current;
         await refreshProfile();
         clearAllNavigationLocks();
 
@@ -235,11 +243,26 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
-        // Routing is handled by the auth pipeline:
-        // session restore fires SIGNED_IN → handleSignedIn → routeAfterLogin.
-        // We do NOT call routeAfterLogin directly to avoid competing routes.
-        console.log('[ProfileSwitcher] Session restored, auth pipeline will handle routing');
+        // Primary routing should come from auth pipeline (SIGNED_IN/TOKEN_REFRESHED).
+        // Fallback: if route did not change after switch, force route resolution.
+        setTimeout(async () => {
+          try {
+            const currentPath = pathnameRef.current;
+            const { data: { user: activeUser } } = await assertSupabase().auth.getUser();
+            if (activeUser?.id === account.userId && currentPath === routeBeforeSwitch) {
+              console.warn('[ProfileSwitcher] Route unchanged after account switch; forcing route resolution');
+              clearAllNavigationLocks();
+              const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
+              await routeAfterLogin(activeUser, null);
+            }
+          } catch (routeErr) {
+            console.warn('[ProfileSwitcher] Account switch fallback routing failed (non-fatal):', routeErr);
+          } finally {
+            setAccountSwitchInProgress(false);
+          }
+        }, 1500);
       } else {
+        setAccountSwitchInProgress(false);
         // That account's session expired; current user is unchanged — don't sign out
         showAlert({
           title: t('account.session_expired', { defaultValue: 'Session Expired' }),
@@ -265,6 +288,7 @@ export function ProfileSwitcher({
         });
       }
     } catch (error) {
+      setAccountSwitchInProgress(false);
       console.error('Account switch error:', error);
       showAlert({
         title: t('common.error', { defaultValue: 'Error' }),
@@ -273,7 +297,6 @@ export function ProfileSwitcher({
         buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
       });
     } finally {
-      setAccountSwitchInProgress(false);
       setSwitching(null);
     }
   }, [user?.id, onClose, onAccountSwitched, refreshProfile, t, biometricAvailable, showAlert]);
