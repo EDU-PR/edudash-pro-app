@@ -57,6 +57,12 @@ export function ProfileSwitcher({
   const { user, profile, refreshProfile } = useAuth();
   const pathname = usePathname();
   const { showAlert, alertProps } = useAlertModal();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,6 +209,7 @@ export function ProfileSwitcher({
         });
       }
       if (!result.success) {
+        setAccountSwitchInProgress(false);
         showAlert({
           title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
           message: result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
@@ -244,6 +251,7 @@ export function ProfileSwitcher({
 
       // Refresh profile to update UI
       if (result.sessionRestored) {
+        const routeBeforeSwitch = pathnameRef.current;
         await refreshProfile();
         clearAllNavigationLocks();
 
@@ -256,6 +264,7 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
+<<<<<<< HEAD
         // Route handoff:
         // Prefer auth pipeline, but when user remains on account/auth screens immediately
         // after successful restore, proactively resolve dashboard route.
@@ -336,7 +345,28 @@ export function ProfileSwitcher({
             routeFallbackTimerRef.current = null;
           }
         }, 1200);
+=======
+        // Primary routing should come from auth pipeline (SIGNED_IN/TOKEN_REFRESHED).
+        // Fallback: if route did not change after switch, force route resolution.
+        setTimeout(async () => {
+          try {
+            const currentPath = pathnameRef.current;
+            const { data: { user: activeUser } } = await assertSupabase().auth.getUser();
+            if (activeUser?.id === account.userId && currentPath === routeBeforeSwitch) {
+              console.warn('[ProfileSwitcher] Route unchanged after account switch; forcing route resolution');
+              clearAllNavigationLocks();
+              const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
+              await routeAfterLogin(activeUser, null);
+            }
+          } catch (routeErr) {
+            console.warn('[ProfileSwitcher] Account switch fallback routing failed (non-fatal):', routeErr);
+          } finally {
+            setAccountSwitchInProgress(false);
+          }
+        }, 1500);
+>>>>>>> 872fc5c00e2f3af94e5a01c0d83e580f25ce2b4d
       } else {
+        setAccountSwitchInProgress(false);
         // That account's session expired; current user is unchanged — don't sign out
         showAlert({
           title: t('account.session_expired', { defaultValue: 'Session Expired' }),
@@ -362,6 +392,7 @@ export function ProfileSwitcher({
         });
       }
     } catch (error) {
+      setAccountSwitchInProgress(false);
       console.error('Account switch error:', error);
       showAlert({
         title: t('common.error', { defaultValue: 'Error' }),
@@ -370,7 +401,6 @@ export function ProfileSwitcher({
         buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
       });
     } finally {
-      setAccountSwitchInProgress(false);
       setSwitching(null);
     }
   }, [user?.id, onClose, onAccountSwitched, refreshProfile, t, biometricAvailable, showAlert]);
