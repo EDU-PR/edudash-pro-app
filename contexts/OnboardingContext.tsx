@@ -24,6 +24,7 @@ export interface OnboardingState {
   guardianPhone?: string;
   guardianProfileId?: string;
   guardianInviteSent?: boolean;
+  guardianStepCompleted?: boolean;
 }
 
 interface OnboardingContextValue {
@@ -104,7 +105,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       next = 'role';
     } else if (!state.dateOfBirth) {
       next = 'dob';
-    } else if (state.isMinor && !state.guardianInviteSent) {
+    } else if (state.isMinor && !state.guardianStepCompleted) {
       next = 'guardian';
     } else {
       next = 'complete';
@@ -123,7 +124,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     (!!state.organizationType && 
      !!state.role && 
      !!state.dateOfBirth && 
-     (!state.isMinor || !!state.guardianInviteSent));
+     (!state.isMinor || !!state.guardianStepCompleted));
 
   if (!isLoaded) {
     return null; // Or a loading indicator
