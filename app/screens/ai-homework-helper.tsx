@@ -8,13 +8,15 @@ import { track } from '@/lib/analytics'
 import { Colors } from '@/constants/Colors'
 import { getCombinedUsage } from '@/lib/ai/usage'
 import { useHomeworkGenerator } from '@/hooks/useHomeworkGenerator'
-import { canUseFeature, getQuotaStatus, getEffectiveLimits } from '@/lib/ai/limits'
-import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences'
+import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits'
+import { setPreferredModel } from '@/lib/ai/preferences'
 import { router } from 'expo-router'
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh'
 import { ScreenHeader } from '@/components/ui/ScreenHeader'
+import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator'
+import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips'
 import { toast } from '@/components/ui/ToastProvider'
-import { useHomeworkHelperModels, useTierInfo } from '@/hooks/useAIModelSelection'
+import { useHomeworkHelperModels } from '@/hooks/useAIModelSelection'
 import { useTheme } from '@/contexts/ThemeContext'
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -30,22 +32,15 @@ export default function AIHomeworkHelperScreen() {
     grading_assistance: 0,
     homework_help: 0,
   })
-  const [models, setModels] = useState<Array<{ id: string; name: string; provider: 'claude' | 'openai' | 'custom'; relativeCost: number }>>([])
-  const [selectedModel, setSelectedModel] = useState<string>('')
 
   const flags = getFeatureFlagsSync()
-  const { quotas } = useHomeworkHelperModels()
+  const { availableModels, selectedModel, setSelectedModel, quotas } = useHomeworkHelperModels()
   const AI_ENABLED = (process.env.EXPO_PUBLIC_AI_ENABLED === 'true') || (process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true')
   const aiHelperEnabled = AI_ENABLED && flags.ai_homework_help !== false
 
-  // Refresh function to reload usage and model data
   const handleRefresh = async () => {
     try {
       setUsage(await getCombinedUsage())
-      const limits = await getEffectiveLimits()
-      setModels(limits.modelOptions || [])
-      const stored = await getPreferredModel('homework_help')
-      setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
     } catch (error) {
       console.error('Error refreshing AI homework helper data:', error)
     }
@@ -54,15 +49,7 @@ export default function AIHomeworkHelperScreen() {
   const { refreshing, onRefreshHandler } = useSimplePullToRefresh(handleRefresh, 'ai_homework_helper')
 
   useEffect(() => {
-    (async () => {
-      setUsage(await getCombinedUsage())
-      try {
-        const limits = await getEffectiveLimits()
-        setModels(limits.modelOptions || [])
-        const stored = await getPreferredModel('homework_help')
-        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
-      } catch { /* noop */ void 0; }
-    })()
+    getCombinedUsage().then(setUsage).catch(() => {})
   }, [])
 
   const onAskAI = async () => {
@@ -129,7 +116,9 @@ export default function AIHomeworkHelperScreen() {
         title="AI Homework Helper" 
         subtitle="Child-safe, step-by-step guidance" 
       />
-      
+      <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+        <ModelInUseIndicator modelId={selectedModel} label="Using" showCostDots compact />
+      </View>
       <ScrollView 
         contentContainerStyle={styles.container}
         refreshControl={
@@ -148,26 +137,14 @@ export default function AIHomeworkHelperScreen() {
 
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           {/* Model selector */}
-          {models.length > 0 && (
-            <View style={{ marginBottom: 8 }}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>Model</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {models.map(m => {
-                  const costIndicator = m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$';
-                  const notes = (m as any).notes ? ` · ${(m as any).notes}` : '';
-                  const modelText = `${m.name} · x${m.relativeCost} · ${costIndicator}${notes}`;
-                  
-                  return (
-                    <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'homework_help') } catch { /* noop */ void 0; } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? theme.primary : theme.border, backgroundColor: selectedModel === m.id ? theme.primary : 'transparent' }}>
-                      <Text style={{ color: selectedModel === m.id ? '#fff' : theme.text, fontSize: 12 }}>
-                        {modelText}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
+          <ModelSelectorChips
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onSelect={setSelectedModel}
+            feature="homework_help"
+            onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'homework_help'); }}
+            title="AI Model"
+          />
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>Subject</Text>
           <TextInput

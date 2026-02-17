@@ -33,6 +33,8 @@ import { setPreferredModel } from '@/lib/ai/preferences';
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useLessonGeneratorModels, useTierInfo } from '@/hooks/useAIModelSelection';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
+import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/ToastProvider';
@@ -665,7 +667,9 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
         subtitle="Create age-appropriate lessons with insights & homework"
         showBackButton
       />
-
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+        <ModelInUseIndicator modelId={selectedModel} label="Using" showCostDots compact />
+      </View>
       {/* Hero Badge */}
       <LinearGradient
         colors={['#FF6B6B', '#FF8E53']}
@@ -801,6 +805,29 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
           <QuotaBar used={usage.lesson_generation} limit={quotaStatus?.limit || 5} />
         </View>
 
+        {/* Model Selector */}
+        {!modelsLoading && (
+          <ModelSelectorChips
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onSelect={setSelectedModel}
+            feature="lesson_generation"
+            onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'lesson_generation'); }}
+            title="AI Model"
+          />
+        )}
+
+        {/* Model Selector */}
+        {!modelsLoading && (
+          <ModelSelectorChips
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onSelect={setSelectedModel}
+            feature="lesson_generation"
+            onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'lesson_generation'); }}
+            title="AI Model"
+          />
+        )}
         {/* Generate Button */}
         <TouchableOpacity
           onPress={handleGenerate}

@@ -17,8 +17,7 @@ import { router } from 'expo-router';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { clearAllNavigationLocks } from '@/lib/routeAfterLogin';
-import { signOutAndRedirect } from '@/lib/authActions';
-import { setAccountSwitchPending } from '@/lib/authActions';
+import { signOutAndRedirect, setAccountSwitchInProgress, setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
 import { registerPushDevice } from '@/lib/notifications';
 import { MAX_BIOMETRIC_ACCOUNTS } from '@/services/biometricStorage';
@@ -159,13 +158,30 @@ export function ProfileSwitcher({
         to_user_id: account.userId,
         method: biometricAvailable ? 'biometric' : 'token',
       });
+      if (__DEV__) {
+        console.log('[AccountSwitch] Start', {
+          from: user?.id,
+          to: account.userId,
+          method: biometricAvailable ? 'biometric' : 'token',
+        });
+      }
 
       // Use biometric auth when available, otherwise restore via stored refresh token.
       // Token-based restore is safe — the user is already authenticated on this device.
+      // Flag so AuthContext skips SIGNED_OUT cleanup when Supabase emits it during session replace.
+      setAccountSwitchInProgress(true);
       const result = biometricAvailable
         ? await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId)
         : await EnhancedBiometricAuth.restoreSessionForUser(account.userId);
 
+      if (__DEV__) {
+        console.log('[AccountSwitch] Result', {
+          success: result.success,
+          sessionRestored: result.sessionRestored,
+          to: account.userId,
+          error: result.error ?? null,
+        });
+      }
       if (!result.success) {
         showAlert({
           title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
@@ -195,6 +211,12 @@ export function ProfileSwitcher({
         to_user_id: account.userId,
         session_restored: result.sessionRestored,
       });
+      if (__DEV__) {
+        console.log('[AccountSwitch] Success', {
+          to: account.userId,
+          sessionRestored: result.sessionRestored,
+        });
+      }
 
       onClose();
       onAccountSwitched?.(account);
@@ -218,21 +240,24 @@ export function ProfileSwitcher({
         // We do NOT call routeAfterLogin directly to avoid competing routes.
         console.log('[ProfileSwitcher] Session restored, auth pipeline will handle routing');
       } else {
-        // Session couldn't be restored - need to sign in again
+        // That account's session expired; current user is unchanged — don't sign out
         showAlert({
           title: t('account.session_expired', { defaultValue: 'Session Expired' }),
-          message: t('account.session_expired_message', { defaultValue: 'Please sign in again to continue.' }),
+          message: t('account.session_expired_switch_message', {
+            defaultValue: 'That account\'s session has expired. Sign in with email and password to use it again, or remove it from the list.',
+          }),
           type: 'warning',
           buttons: [
+            { text: t('common.ok', { defaultValue: 'OK' }), style: 'default', onPress: () => onClose() },
             {
-              text: t('common.ok', { defaultValue: 'OK' }),
+              text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
               style: 'default',
               onPress: () => {
                 onClose();
                 signOutAndRedirect({
                   clearBiometrics: false,
                   resetApp: false,
-                  redirectTo: '/(auth)/sign-in?switch=1',
+                  redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
                 });
               },
             },
@@ -248,6 +273,7 @@ export function ProfileSwitcher({
         buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
       });
     } finally {
+      setAccountSwitchInProgress(false);
       setSwitching(null);
     }
   }, [user?.id, onClose, onAccountSwitched, refreshProfile, t, biometricAvailable, showAlert]);
@@ -346,50 +372,67 @@ export function ProfileSwitcher({
     return email.substring(0, 2).toUpperCase();
   };
 
+  const handleSwitchWithPassword = useCallback((account: StoredAccount) => {
+    onClose();
+    setAccountSwitchPending();
+    router.replace(`/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}` as any);
+  }, [onClose]);
+
   const renderAccountItem = ({ item }: { item: StoredAccount }) => {
     const isSwitching = switching === item.userId;
     
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.accountItem,
           { backgroundColor: theme.surface },
           item.isActive && { borderColor: theme.primary, borderWidth: 2 },
         ]}
-        onPress={() => handleSwitchAccount(item)}
-        onLongPress={() => handleRemoveAccount(item)}
-        disabled={isSwitching}
-        activeOpacity={0.7}
       >
-        {/* Avatar */}
-        <View style={[styles.accountAvatar, { backgroundColor: theme.primary + '30' }]}>
-          <Text style={[styles.avatarText, { color: theme.primary }]}>
-            {getInitials(item.email)}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.accountItemMain}
+          onPress={() => handleSwitchAccount(item)}
+          onLongPress={() => handleRemoveAccount(item)}
+          disabled={isSwitching}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.accountAvatar, { backgroundColor: theme.primary + '30' }]}>
+            <Text style={[styles.avatarText, { color: theme.primary }]}>
+              {getInitials(item.email)}
+            </Text>
+          </View>
+          <View style={styles.accountInfo}>
+            <Text style={[styles.accountEmail, { color: theme.text }]} numberOfLines={1}>
+              {item.email}
+            </Text>
+            <Text style={[styles.accountMeta, { color: theme.textSecondary }]}>
+              {item.isActive 
+                ? t('account.active_now', { defaultValue: 'Active now' })
+                : formatLastUsed(item.lastUsed)
+              }
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-        {/* Account Info */}
-        <View style={styles.accountInfo}>
-          <Text style={[styles.accountEmail, { color: theme.text }]} numberOfLines={1}>
-            {item.email}
-          </Text>
-          <Text style={[styles.accountMeta, { color: theme.textSecondary }]}>
-            {item.isActive 
-              ? t('account.active_now', { defaultValue: 'Active now' })
-              : formatLastUsed(item.lastUsed)
-            }
-          </Text>
-        </View>
-
-        {/* Status indicator */}
+        {/* Status or actions - separate so "Use password" is tappable */}
         {isSwitching ? (
           <EduDashSpinner size="small" color={theme.primary} />
         ) : item.isActive ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.primary} />
+        ) : !biometricAvailable ? (
+          <TouchableOpacity
+            style={[styles.usePasswordButton, { backgroundColor: theme.surfaceVariant }]}
+            onPress={() => handleSwitchWithPassword(item)}
+          >
+            <Ionicons name="lock-open-outline" size={18} color={theme.primary} />
+            <Text style={[styles.usePasswordText, { color: theme.primary }]}>
+              {t('account.use_password_to_switch', { defaultValue: 'Use password' })}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -422,9 +465,13 @@ export function ProfileSwitcher({
               {t('account.switch_account', { defaultValue: 'Switch Account' })}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {t('account.switch_account_desc', {
-                defaultValue: `Tap an account to switch instantly (up to ${MAX_BIOMETRIC_ACCOUNTS} saved accounts).`,
-              })}
+              {biometricAvailable
+                ? t('account.switch_account_desc', {
+                    defaultValue: `Tap an account to switch instantly (up to ${MAX_BIOMETRIC_ACCOUNTS} saved accounts).`,
+                  })
+                : t('account.switch_account_desc_no_biometric', {
+                    defaultValue: 'Tap to try quick switch, or use password to sign in to an account.',
+                  })}
             </Text>
             <Text style={[styles.debugText, { color: theme.textSecondary }]}>
               Saved accounts: {accounts.length}/{MAX_BIOMETRIC_ACCOUNTS}
@@ -432,26 +479,28 @@ export function ProfileSwitcher({
             </Text>
           </View>
 
-          {/* Account list */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <EduDashSpinner size="large" color={theme.primary} />
-            </View>
-          ) : accounts.length === 0 ? (
-            renderEmptyState()
-          ) : (
-            <FlatList
-              data={accounts}
-              renderItem={renderAccountItem}
-              keyExtractor={item => item.userId}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
+          {/* Account list - wrapped in flex container so FlatList gets height */}
+          <View style={styles.listWrapper}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <EduDashSpinner size="large" color={theme.primary} />
+              </View>
+            ) : accounts.length === 0 ? (
+              renderEmptyState()
+            ) : (
+              <FlatList
+                data={accounts}
+                renderItem={renderAccountItem}
+                keyExtractor={item => item.userId}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+          </View>
 
-          {/* Add account button */}
-          {showAddAccount && (
+          {/* Add account button - hidden when at max (3) */}
+          {showAddAccount && accounts.length < MAX_BIOMETRIC_ACCOUNTS && (
             <TouchableOpacity
               style={[styles.addAccountButton, { backgroundColor: theme.surface }]}
               onPress={handleAddAccount}
@@ -499,6 +548,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '75%',
+    height: '75%',
+  },
+  listWrapper: {
+    flex: 1,
+    minHeight: 180,
   },
   handleContainer: {
     alignItems: 'center',
@@ -542,6 +596,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
+  accountItemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   accountAvatar: {
     width: 44,
     height: 44,
@@ -564,6 +623,18 @@ const styles = StyleSheet.create({
   },
   accountMeta: {
     fontSize: 12,
+  },
+  usePasswordButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  usePasswordText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',

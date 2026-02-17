@@ -28,7 +28,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -588,7 +588,31 @@ export default function DashVoiceScreen() {
     STREAMING_TTS_ENABLED,
   ]);
 
-  useEffect(() => () => { activeRequestRef.current?.abort(); }, []);
+  // Stop Dash (TTS + request + queue) when leaving screen or on unmount
+  const stopDashActivity = useCallback(() => {
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = null;
+    speechQueueRef.current = [];
+    resetStreamingSpeech();
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+    setIsProcessing(false);
+    setStreamingText('');
+    voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
+  }, [resetStreamingSpeech]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        stopDashActivity();
+      };
+    }, [stopDashActivity])
+  );
+
+  useEffect(() => () => {
+    activeRequestRef.current?.abort();
+    stopDashActivity();
+  }, [stopDashActivity]);
 
   // ── Handlers ──────────────────────────────────────────────────────
   const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
@@ -659,6 +683,15 @@ export default function DashVoiceScreen() {
           <Text style={[s.headerSub, { color: theme.textSecondary }]}>{statusLabel}</Text>
         </View>
         <View style={s.headerRight}>
+          {(isSpeaking || isProcessing) && (
+            <TouchableOpacity
+              onPress={stopDashActivity}
+              style={[s.headerIconBtn, { borderColor: theme.error || '#ef4444', backgroundColor: (theme as any).error || '#ef4444' }]}
+              accessibilityLabel="Stop Dash speaking"
+            >
+              <Ionicons name="stop" size={16} color={theme.onError || theme.background || '#fff'} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => router.push('/screens/app-search?scope=dash&q=dash')}
             style={[s.headerIconBtn, { borderColor: theme.border }]}

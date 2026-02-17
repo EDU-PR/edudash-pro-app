@@ -48,6 +48,18 @@ export function isAccountSwitchPending(): boolean {
   return true;
 }
 
+// ── Account switch in progress (biometric restore) ─────────────────────────
+// When true, SIGNED_OUT is ignored (no clear, no redirect) so the next SIGNED_IN can complete the switch.
+let _accountSwitchInProgress = false;
+
+export function setAccountSwitchInProgress(value: boolean): void {
+  _accountSwitchInProgress = value;
+}
+
+export function isAccountSwitchInProgress(): boolean {
+  return _accountSwitchInProgress;
+}
+
 // Timeout constants for sign-out operations
 const TOKEN_DEACTIVATION_TIMEOUT = 6000; // 6 seconds
 const SIGNOUT_TIMEOUT = 8000; // 8 seconds
@@ -279,23 +291,7 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
         router.replace(targetRouteWithFresh);
       }
     } else {
-      // Mobile: Use dismissAll first to clear the entire navigation stack
-      // This prevents back button from going to authenticated screens
-      try {
-        // Only call dismissAll if there are screens to dismiss
-        // This prevents "POP_TO_TOP was not handled" warning when already at root
-        if (router.canDismiss && router.canDismiss()) {
-          console.log('[authActions] Clearing navigation stack...');
-          router.dismissAll();
-        } else {
-          console.debug('[authActions] No screens to dismiss, skipping dismissAll');
-        }
-      } catch (dismissErr) {
-        console.debug('[authActions] dismissAll not available:', dismissErr);
-      }
-      
-      // Then navigate to sign-in with a small delay to ensure stack is cleared
-      // Awaited so navigation fires before the finally block resets activeSignOutId
+      // Mobile: Navigate to auth screen without dismissAll to avoid "POP_TO_TOP was not handled"
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           try {
@@ -307,7 +303,6 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
             console.log('[authActions] Mobile navigation executed');
           } catch (navErr) {
             console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
-            // Fallback: try direct sign-in route
             try {
               router.replace('/(auth)/sign-in?fresh=1' as any);
             } catch (fallbackErr) {

@@ -5,6 +5,7 @@
 import { ToolRegistry } from './AgentTools';
 import { MemoryService } from './MemoryService';
 import { EventBus, Events } from './EventBus';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { assertSupabase } from '@/lib/supabase';
 import { getCurrentProfile } from '@/lib/sessionManager';
 import { getAssistant } from './core/getAssistant';
@@ -430,6 +431,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
       const supabase = assertSupabase();
       const traceId = `${context.runId}_plan_${context.step}`;
 
+      const model = getDefaultModelIdForTier(perception.userTier ?? 'free');
       const { data, error } = await this.invokeWithRetry(() =>
         supabase.functions.invoke('ai-proxy', {
           body: {
@@ -437,7 +439,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
             service_type: 'agent_plan',
             payload: {
               messages,
-              model: 'claude-3-5-haiku-20241022',
+              model,
             },
             enable_tools: true,
             stream: false,
@@ -536,6 +538,9 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
 
     try {
       const supabase = assertSupabase();
+      const profile = await getCurrentProfile();
+      const userTier = String((profile as any)?.tier || 'free').toLowerCase();
+      const model = getDefaultModelIdForTier(userTier);
       const traceId = `${runId}_verify_${Date.now()}`;
 
       const prompt = [
@@ -562,7 +567,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
                   content: `${prompt}\n\nRecent conversation:\n${JSON.stringify(recent)}`,
                 },
               ],
-              model: 'claude-3-5-haiku-20241022',
+              model,
             },
             enable_tools: false,
             stream: false,
@@ -627,6 +632,9 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
   ): Promise<string> {
     try {
       const supabase = assertSupabase();
+      const profile = await getCurrentProfile();
+      const userTier = String((profile as any)?.tier || 'free').toLowerCase();
+      const model = getDefaultModelIdForTier(userTier);
 
       const reflectionPrompt = `
 Based on the execution:
@@ -649,7 +657,7 @@ Provide a brief reflection (1-2 sentences) on:
                 { role: 'system', content: 'You are Dash reflecting on task execution.' },
                 { role: 'user', content: reflectionPrompt },
               ],
-              model: 'claude-3-5-haiku-20241022',
+              model,
             },
             enable_tools: false,
             stream: false,

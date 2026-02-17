@@ -23,6 +23,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/ToastProvider';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import { QuotaBar } from '@/components/ai-lesson-generator';
+import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
+import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips';
 import {
   buildQuickLessonThemeHint,
   loadQuickLessonThemeContext,
@@ -226,7 +228,9 @@ export default function AILessonGeneratorScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]}>
       <ScreenHeader title="AI Lesson Generator" subtitle="Create AI-powered lesson plans" showBackButton />
-
+      <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+        <ModelInUseIndicator modelId={selectedModel} label="Using" showCostDots compact />
+      </View>
       <View style={styles.headerRow}>
         <View style={[styles.avatar, { backgroundColor: theme.primary }]}><Ionicons name="sparkles" size={16} color={theme.onPrimary} /></View>
         <Text style={[styles.headerText, { color: palette.text }]}>Dash • Lesson Generator</Text>
@@ -270,16 +274,15 @@ export default function AILessonGeneratorScreen() {
         </View>
 
         {/* Model Selector */}
-        {!modelsLoading && availableModels.length > 0 && (
-          <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.cardTitle, { color: palette.text }]}>AI Model</Text>
-              {tierInfo && <View style={{ marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: tierInfo.color + '20' }}><Text style={{ color: tierInfo.color, fontSize: 10, fontWeight: '600' }}>{tierInfo.badge}</Text></View>}
-            </View>
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-              {availableModels.map(m => <TouchableOpacity key={m.id} onPress={() => { setSelectedModel(m.id); setPreferredModel(m.id, 'lesson_generation').catch(() => {}); }} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: selectedModel === m.id ? theme.primary : palette.outline, backgroundColor: selectedModel === m.id ? theme.primary + '10' : 'transparent' }}><Text style={{ color: selectedModel === m.id ? theme.primary : palette.text, fontSize: 13, fontWeight: selectedModel === m.id ? '600' : '400' }}>{m.displayName || m.name}</Text></TouchableOpacity>)}
-            </View>
-          </View>
+        {!modelsLoading && (
+          <ModelSelectorChips
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onSelect={setSelectedModel}
+            feature="lesson_generation"
+            onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'lesson_generation'); }}
+            title="AI Model"
+          />
         )}
 
         {/* Buttons */}

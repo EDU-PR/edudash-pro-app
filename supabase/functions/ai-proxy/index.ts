@@ -456,6 +456,15 @@ function normalizeTierName(input: unknown): string {
   return String(input || 'free').trim().toLowerCase();
 }
 
+/** Default model ID by tier when client does not send model. Aligned with lib/ai/models.ts getDefaultModelForTier. */
+function getDefaultModelIdForTierProxy(tierRaw: string): string {
+  const tier = normalizeTierName(tierRaw);
+  if (tier.includes('enterprise') || tier === 'superadmin' || tier === 'super_admin') return 'claude-sonnet-4-20250514';
+  if (tier.includes('premium') || tier.includes('pro') || tier.includes('plus') || tier.includes('basic')) return 'claude-3-7-sonnet-20250219';
+  if (tier.includes('starter') || tier === 'trial') return 'claude-3-5-sonnet-20241022';
+  return 'claude-3-haiku-20240307';
+}
+
 function isFreeOrTrialTier(tier: string): boolean {
   return tier === 'free' || tier === 'trial' || tier.includes('free') || tier.includes('trial');
 }
@@ -2657,7 +2666,10 @@ serve(async (req) => {
     const superAdminAllowed = parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS);
     const openaiAllowed = parseAllowedModels('OPENAI_ALLOWED_MODELS', DEFAULT_OPENAI_ALLOWED_MODELS);
     const anthropicAllowed = parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
-    const requestedModel = normalizedRequestedModel;
+    let requestedModel = normalizedRequestedModel;
+    if (!requestedModel && quotaDataForRequest?.current_tier != null && serviceType !== 'image_generation') {
+      requestedModel = getDefaultModelIdForTierProxy(normalizeTierName(quotaDataForRequest.current_tier));
+    }
     const requestedIsOpenAI = requestedModel ? openaiAllowed.includes(requestedModel) : false;
     const requestedIsAnthropic = requestedModel ? anthropicAllowed.includes(requestedModel) : false;
     const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;

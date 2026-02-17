@@ -208,6 +208,7 @@ interface PushDevice {
   expo_push_token: string;
   fcm_token?: string | null;
   language?: string;
+  device_metadata?: Record<string, unknown> | null;
 }
 
 // Environment variables
@@ -1198,10 +1199,22 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
 /**
  * Get push tokens for users
  */
-async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
+function normalizeExpoProjectId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getExpoProjectIdFromMetadata(metadata: unknown): string {
+  if (!metadata || typeof metadata !== 'object') return '';
+  return normalizeExpoProjectId((metadata as Record<string, unknown>).expo_project_id);
+}
+
+async function getPushTokensForUsers(
+  userIds: string[],
+  options?: { expectedExpoProjectId?: string }
+): Promise<PushDevice[]> {
   const { data, error } = await supabase
     .from('push_devices')
-    .select('user_id, expo_push_token, fcm_token, language')
+    .select('user_id, expo_push_token, fcm_token, language, device_metadata')
     .in('user_id', userIds)
     .eq('is_active', true)
     .order('updated_at', { ascending: false });
@@ -1211,9 +1224,16 @@ async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
     return [];
   }
 
-  // Deduplicate by user_id (keeping the most recent)
+  const expectedExpoProjectId = normalizeExpoProjectId(options?.expectedExpoProjectId);
+  const candidates = expectedExpoProjectId
+    ? (data || []).filter((device: PushDevice) => {
+        return getExpoProjectIdFromMetadata(device.device_metadata) === expectedExpoProjectId;
+      })
+    : (data || []);
+
+  // Deduplicate by user_id (keeping the most recent token after optional project filter)
   const uniqueTokens = new Map<string, PushDevice>();
-  (data || []).forEach((device: PushDevice) => {
+  candidates.forEach((device: PushDevice) => {
     if (!uniqueTokens.has(device.user_id)) {
       uniqueTokens.set(device.user_id, device);
     }
@@ -1275,9 +1295,13 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
   switch (request.event_type) {
     case 'build_update_available': {
       const platform = String(request.platform || request.custom_payload?.platform || '').toLowerCase();
+      const expectedExpoProjectId = normalizeExpoProjectId(
+        request.custom_payload?.expo_project_id ||
+        request.custom_payload?.expected_expo_project_id
+      );
       let query = supabase
         .from('push_devices')
-        .select('user_id')
+        .select('user_id, device_metadata')
         .eq('is_active', true)
         .not('expo_push_token', 'is', null);
 
@@ -1287,7 +1311,12 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
 
       const { data: devices } = await query;
       if (devices) {
-        userIds.push(...devices.map((row: { user_id: string }) => row.user_id));
+        const filtered = expectedExpoProjectId
+          ? devices.filter((row: { user_id: string; device_metadata?: Record<string, unknown> }) => {
+              return getExpoProjectIdFromMetadata(row.device_metadata) === expectedExpoProjectId;
+            })
+          : devices;
+        userIds.push(...filtered.map((row: { user_id: string }) => row.user_id));
       }
       break;
     }
@@ -2606,8 +2635,26 @@ async function sendExpoNotification(notification: ExpoNotificationPayload): Prom
     }
 
     const result = await response.json();
+    const tickets = Array.isArray(result?.data) ? result.data : [];
+    const failedTicket = tickets.find((ticket: Record<string, unknown>) => ticket?.status === 'error');
+
+    if (failedTicket) {
+      const errorMessage =
+        String(failedTicket?.message || failedTicket?.details?.error || 'Expo ticket error');
+      console.error('Expo ticket error:', failedTicket);
+      return {
+        success: false,
+        data: { id: String(failedTicket?.id || '') || undefined },
+        error: errorMessage
+      };
+    }
+
+    const firstTicket = tickets[0] || {};
     console.log('Expo notification sent successfully:', result);
-    return result;
+    return {
+      success: true,
+      data: { id: String(firstTicket?.id || '') || undefined },
+    };
   } catch (error) {
     console.error('Error sending Expo notification:', error);
     throw error;
@@ -2975,6 +3022,10 @@ async function dispatchNotification(request: Request): Promise<Response> {
       );
     }
     console.log('Processing notification request:', notificationRequest);
+    const expectedExpoProjectId = normalizeExpoProjectId(
+      notificationRequest.custom_payload?.expo_project_id ||
+      notificationRequest.custom_payload?.expected_expo_project_id
+    );
 
     // Deduplication: prevent double-send for pop_uploaded (both DB trigger and client may fire)
     if (notificationRequest.event_type === 'pop_uploaded' && notificationRequest.pop_upload_id) {
@@ -3029,7 +3080,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
           await sendEmailNotification(emails, `[TEST] ${template.title}`, emailHtml, template.body);
         }
       } else {
-        const pushTokens = await getPushTokensForUsers([targetUserId]);
+        const pushTokens = await getPushTokensForUsers([targetUserId], {
+          expectedExpoProjectId,
+        });
         if (pushTokens.length > 0) {
           await sendExpoNotification({
             to: pushTokens.map((t) => t.expo_push_token),
@@ -3092,7 +3145,11 @@ async function dispatchNotification(request: Request): Promise<Response> {
       }
     }
 
-    const pushTokens = filteredUserIds.length > 0 ? await getPushTokensForUsers(filteredUserIds) : [];
+    const pushTokens = filteredUserIds.length > 0
+      ? await getPushTokensForUsers(filteredUserIds, {
+          expectedExpoProjectId,
+        })
+      : [];
     console.log(`[dispatch] Event: ${notificationRequest.event_type}, UserIDs: ${filteredUserIds.length}, PushTokens: ${pushTokens.length}`);
     if (pushTokens.length > 0) {
       console.log(`[dispatch] Push tokens found for: ${pushTokens.map(t => t.user_id).join(', ')}`);
@@ -3246,12 +3303,15 @@ async function dispatchNotification(request: Request): Promise<Response> {
       }
     }
 
+    const pushSuccessCount = expoResults.filter((result) => result.success).length;
+    const pushFailureCount = expoResults.filter((result) => result.success === false).length;
+
     await trackAnalyticsEvent('edudash.notifications.sent', {
       event_type: notificationRequest.event_type,
       channel: isInvoiceEvent ? 'email' : 'push',
       recipients: filteredUserIds.length + recipientEmails.length,
-      success_count: pushTokens.length + (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
-      failure_count: 0
+      success_count: pushSuccessCount + (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
+      failure_count: pushFailureCount
     });
 
     if (filteredUserIds.length > 0) {
@@ -3326,6 +3386,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
         direct_email_recipients: recipientEmails.length,
         event_type: notificationRequest.event_type,
         expo_result: expoResult,
+        push_success_count: pushSuccessCount,
+        push_failure_count: pushFailureCount,
+        expected_expo_project_id: expectedExpoProjectId || null,
         sent_immediately: notificationRequest.send_immediately !== false,
         preferences_filtered: userIds.length - filteredUserIds.length
       }),

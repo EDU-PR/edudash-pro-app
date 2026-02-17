@@ -275,10 +275,17 @@ export class EnhancedBiometricAuth {
         }
       }
 
-      // 2) sessionManager stored session
+      // 2) sessionManager stored session — only use when it's for the target user
       const { getCurrentSession } = await import('@/lib/sessionManager');
       const storedSession = await getCurrentSession();
-      if (storedSession?.refresh_token) {
+      if (__DEV__ && storedSession) {
+        console.log('[AccountSwitch] restoreSupabaseSession storedSession', {
+          storedUserId: storedSession.user_id,
+          targetUserId: sessionData.userId,
+          useStored: storedSession.user_id === sessionData.userId,
+        });
+      }
+      if (storedSession?.refresh_token && storedSession.user_id === sessionData.userId) {
         const { data: refreshed, error } =
           await assertSupabase().auth.refreshSession({
             refresh_token: storedSession.refresh_token,
@@ -379,35 +386,35 @@ export class EnhancedBiometricAuth {
         };
       }
 
-      // Restore Supabase session using per-user refresh token
+      // Restore Supabase session: try target user's refresh token WITHOUT signing out
+      // current user first. If restore fails we keep the current user (no redirect to sign-in).
       let sessionRestored = false;
+      if (__DEV__) console.log('[AccountSwitch] Biometric auth passed, restoring session for', userId);
       try {
         const { assertSupabase } = await import('@/lib/supabase');
         const { data: existingSession } = await assertSupabase().auth.getSession();
 
         if (existingSession?.session?.user?.id === userId) {
           sessionRestored = true;
+          if (__DEV__) console.log('[AccountSwitch] Already on target user');
         }
 
         if (!sessionRestored) {
-          // Sign out current user FIRST to avoid overlapping sessions.
-          if (existingSession?.session) {
-            try {
-              await assertSupabase().auth.signOut({ scope: 'local' } as any);
-            } catch {
-              /* best-effort */
-            }
-          }
-
           const refresh = await getRefreshTokenForUser(userId);
           if (refresh) {
             const { data: refreshed, error: refreshErr } =
               await assertSupabase().auth.refreshSession({
                 refresh_token: refresh,
               });
-            if (!refreshErr && refreshed?.session?.user) {
+            if (__DEV__) {
+              console.log('[AccountSwitch] refreshSession(per-user)', {
+                error: refreshErr?.message ?? null,
+                gotUserId: refreshed?.session?.user?.id ?? null,
+                expected: userId,
+              });
+            }
+            if (!refreshErr && refreshed?.session?.user?.id === userId) {
               sessionRestored = true;
-              // Store the rotated refresh token
               if (
                 refreshed.session.refresh_token &&
                 refreshed.session.refresh_token !== refresh
@@ -417,25 +424,44 @@ export class EnhancedBiometricAuth {
                   refreshed.session.refresh_token,
                 );
               }
+            } else if (refreshErr) {
+              const msg = String((refreshErr as any)?.message || '').toLowerCase();
+              const invalid =
+                msg.includes('invalid') ||
+                msg.includes('refresh token') ||
+                msg.includes('invalid_grant');
+              if (invalid) {
+                try {
+                  await clearRefreshTokenForUser(userId);
+                } catch {
+                  /* best-effort */
+                }
+              }
             }
           }
-        }
 
-        // Fallback: try global biometric refresh token
-        if (!sessionRestored) {
-          const globalRefresh = await getGlobalRefreshToken();
-          if (globalRefresh) {
-            const { data: refreshed, error: refreshErr } =
-              await assertSupabase().auth.refreshSession({
-                refresh_token: globalRefresh,
-              });
-            if (!refreshErr && refreshed?.session?.user?.id === userId) {
-              sessionRestored = true;
-              if (refreshed.session.refresh_token) {
-                await setRefreshTokenForUser(
-                  userId,
-                  refreshed.session.refresh_token,
-                );
+          if (!sessionRestored) {
+            const globalRefresh = await getGlobalRefreshToken();
+            if (globalRefresh) {
+              const { data: refreshed, error: refreshErr } =
+                await assertSupabase().auth.refreshSession({
+                  refresh_token: globalRefresh,
+                });
+              if (__DEV__) {
+                console.log('[AccountSwitch] refreshSession(global)', {
+                  error: refreshErr?.message ?? null,
+                  gotUserId: refreshed?.session?.user?.id ?? null,
+                  expected: userId,
+                });
+              }
+              if (!refreshErr && refreshed?.session?.user?.id === userId) {
+                sessionRestored = true;
+                if (refreshed.session.refresh_token) {
+                  await setRefreshTokenForUser(
+                    userId,
+                    refreshed.session.refresh_token,
+                  );
+                }
               }
             }
           }
@@ -472,6 +498,7 @@ export class EnhancedBiometricAuth {
     sessionRestored?: boolean;
     error?: string;
   }> {
+    if (__DEV__) console.log('[AccountSwitch] restoreSessionForUser (token path)', { targetUserId: userId });
     try {
       const sessions = await getSessionsMap();
       const sessionData = sessions[userId];

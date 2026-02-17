@@ -44,6 +44,12 @@ const buildNumber =
   process.env.BUILD_NUMBER ||
   undefined;
 
+const expoProjectId =
+  argMap.get('expo-project-id') ||
+  process.env.EAS_PROJECT_ID ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  '';
+
 const mandatory = normalizeBoolean(argMap.get('mandatory') || process.env.OTA_NOTIFY_MANDATORY_UPDATE);
 const packageId =
   process.env.EXPO_PUBLIC_ANDROID_PACKAGE ||
@@ -71,7 +77,8 @@ const dispatcherUrl = `${supabaseUrl}/functions/v1/notifications-dispatcher`;
 async function main() {
   console.log('[ota-notify] Dispatching OTA update push notifications');
   console.log(
-    `[ota-notify] version=${appVersion} release_type=${releaseType} mandatory=${mandatory} platforms=${platforms.join(',')}`
+    `[ota-notify] version=${appVersion} release_type=${releaseType} mandatory=${mandatory} platforms=${platforms.join(',')}` +
+      (expoProjectId ? ` project_id=${expoProjectId}` : ' project_id=unset')
   );
 
   let hasError = false;
@@ -89,6 +96,7 @@ async function main() {
       custom_payload: {
         release_type: releaseType,
         source: 'ota-script',
+        ...(expoProjectId ? { expo_project_id: expoProjectId } : {}),
       },
     };
 

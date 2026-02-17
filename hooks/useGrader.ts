@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { isAIEnabled } from '@/lib/ai/aiConfig';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { getCurrentLanguage } from '@/lib/i18n';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 
 export type GraderOptions = {
   submissionText: string;
@@ -19,10 +21,12 @@ export type GraderCallOptions = {
 };
 
 export function useGrader() {
+  const { tier } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const defaultModel = getDefaultModelIdForTier(tier ?? 'free');
 
   /** Cancel any in-flight grading request */
   const cancel = useCallback(() => {
@@ -94,7 +98,7 @@ export function useGrader() {
             stream: true,
             payload: {
               prompt: gradingPrompt,
-              model: callOpts?.model || 'claude-3-5-haiku-20241022',
+              model: callOpts?.model || defaultModel,
             },
             metadata: {
               assignment_title: assignmentStr,
@@ -111,7 +115,7 @@ export function useGrader() {
             body: {
               scope: 'teacher',
               service_type: 'grading',
-              payload: { prompt: gradingPrompt, model: callOpts?.model || 'claude-3-5-haiku-20241022' },
+              payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
               metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
             } as any,
           });
@@ -170,7 +174,7 @@ export function useGrader() {
           body: {
             scope: 'teacher',
             service_type: 'grading',
-            payload: { prompt: gradingPrompt, model: callOpts?.model || 'claude-3-5-haiku-20241022' },
+            payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
             metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
           } as any,
         });
@@ -217,7 +221,7 @@ export function useGrader() {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [cancel]);
+  }, [cancel, defaultModel]);
 
   return { loading, error, result, grade, cancel } as const;
 }

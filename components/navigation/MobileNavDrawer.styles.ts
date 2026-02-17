@@ -15,7 +15,7 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.88)' : 'rgba(0, 0, 0, 0.7)',
     },
     overlayPressable: {
       flex: 1,
@@ -27,6 +27,7 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       bottom: 0,
       width: DRAWER_WIDTH,
       backgroundColor: theme.surface,
+      opacity: 1,
       paddingTop: insets.top,
       shadowColor: '#000',
       shadowOffset: { width: 2, height: 0 },

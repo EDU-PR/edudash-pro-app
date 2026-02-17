@@ -12,6 +12,7 @@
  * ≤500 lines per WARP.md
  */
 
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { logger } from '@/lib/logger';
 import type { AgentTool } from '../DashToolRegistry';
 
@@ -57,8 +58,10 @@ function buildStrategyTool(): AgentTool {
       required: ['subject', 'topic', 'grade'],
     },
     risk: 'low',
-    execute: async (args) => {
+    execute: async (args, context?) => {
       try {
+        const tier = (context as any)?.tier ?? 'free';
+        const model = getDefaultModelIdForTier(tier);
         const duration = args.duration_minutes || 30;
 
         const prompt = [
@@ -110,10 +113,9 @@ function buildStrategyTool(): AgentTool {
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              messages: [{ role: 'user', content: prompt }],
+              scope: 'teacher',
               service_type: 'lesson_generation',
-              model: 'claude-3-5-haiku-20241022',
-              max_tokens: 2048,
+              payload: { prompt, model },
             }),
           },
         );
@@ -197,8 +199,10 @@ function buildHomeworkTool(): AgentTool {
       required: ['subject', 'topic', 'grade'],
     },
     risk: 'low',
-    execute: async (args) => {
+    execute: async (args, context?) => {
       try {
+        const tier = (context as any)?.tier ?? 'free';
+        const model = getDefaultModelIdForTier(tier);
         const numQ = Math.min(args.num_questions || 5, 20);
         const types = args.question_types?.join(', ') || 'multiple_choice, short_answer';
         const difficulty = args.difficulty || 'mixed';
@@ -257,10 +261,9 @@ function buildHomeworkTool(): AgentTool {
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              messages: [{ role: 'user', content: prompt }],
+              scope: 'teacher',
               service_type: 'homework_generation',
-              model: 'claude-3-5-haiku-20241022',
-              max_tokens: 4096,
+              payload: { prompt, model },
             }),
           },
         );
@@ -318,13 +321,15 @@ function buildBatchGradeTool(): AgentTool {
       required: ['assignment_id'],
     },
     risk: 'medium',
-    execute: async (args) => {
+    execute: async (args, context?) => {
       try {
+        const tier = (context as any)?.tier ?? 'free';
         const { GradingEngine } = await import('@/lib/services/GradingEngine');
         const result = await GradingEngine.batchGrade({
           assignmentId: args.assignment_id,
           rubric: args.rubric,
           maxSubmissions: args.max_submissions,
+          tier,
         });
 
         return {

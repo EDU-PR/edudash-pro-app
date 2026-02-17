@@ -17,6 +17,8 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { useGradingModels } from '@/hooks/useAIModelSelection'
 import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
+import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator'
+import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips'
 import EduDashSpinner from '@/components/ui/EduDashSpinner'
 
 /** Parsed grading result from AI */
@@ -25,7 +27,6 @@ interface ParsedResult {
   strengths: string[]; areasForImprovement: string[]
 }
 
-const COST_DOTS = (cost: number) => cost <= 1 ? '●' : cost <= 5 ? '●●' : '●●●'
 const SCORE_COLOR = (s: number) => s >= 90 ? '#34D399' : s >= 80 ? '#60A5FA' : s >= 70 ? '#FCD34D' : '#F87171'
 
 export default function AIHomeworkGraderLive() {
@@ -208,7 +209,9 @@ export default function AIHomeworkGraderLive() {
       </LinearGradient>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
+        <View style={{ marginBottom: 12 }}>
+          <ModelInUseIndicator modelId={selectedModel} label="Using" showCostDots compact />
+        </View>
         {/* ── INPUT CARD ───────────────────────────────────────────────────── */}
         <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
           <InputField label="Assignment Title" value={assignmentTitle} onChangeText={setAssignmentTitle} placeholder="e.g., Counting to 10" theme={theme} />
@@ -220,30 +223,14 @@ export default function AIHomeworkGraderLive() {
         </View>
 
         {/* ── MODEL SELECTOR ───────────────────────────────────────────────── */}
-        {availableModels.length > 0 && (
-          <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={s.sectionHeader}>
-              <Ionicons name="hardware-chip-outline" size={16} color={theme.accent} />
-              <Text style={[s.sectionTitle, { color: theme.text }]}>AI Model</Text>
-            </View>
-            <View style={s.chipRow}>
-              {availableModels.map((m) => {
-                const active = selectedModel === m.id
-                return (
-                  <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }}
-                    style={[s.chip, active ? { backgroundColor: theme.accent, borderColor: theme.accent } : { backgroundColor: 'transparent', borderColor: theme.border }]}>
-                    <Text style={[s.chipText, { color: active ? '#FFF' : theme.text }]} numberOfLines={1}>
-                      {m.displayName || m.name}
-                    </Text>
-                    <Text style={[s.chipMeta, { color: active ? 'rgba(255,255,255,0.7)' : theme.textTertiary }]}>
-                      {COST_DOTS(m.relativeCost)}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-        )}
+        <ModelSelectorChips
+          availableModels={availableModels}
+          selectedModel={selectedModel}
+          onSelect={setSelectedModel}
+          feature="grading_assistance"
+          onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'grading_assistance') }}
+          title="AI Model"
+        />
 
         {/* ── GRADE BUTTON ─────────────────────────────────────────────────── */}
         <TouchableOpacity onPress={startStreaming} disabled={pending || isStreaming || !aiGradingEnabled} activeOpacity={0.85}>

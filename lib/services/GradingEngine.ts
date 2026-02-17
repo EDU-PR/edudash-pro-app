@@ -14,6 +14,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import { isAIEnabled } from '@/lib/ai/aiConfig';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { track } from '@/lib/analytics';
 import { getCurrentLanguage } from '@/lib/i18n';
 import { logger } from '@/lib/logger';
@@ -37,6 +38,8 @@ export interface GradingInput {
   rubric?: string[];
   /** AI model override */
   model?: string;
+  /** Subscription tier for default model when model not set */
+  tier?: string;
 }
 
 export interface GradingResult {
@@ -58,6 +61,8 @@ export interface BatchGradingInput {
   rubric?: string;
   maxSubmissions?: number;
   model?: string;
+  /** Subscription tier for default model when model not set */
+  tier?: string;
 }
 
 export interface BatchGradingResult {
@@ -176,11 +181,12 @@ export class GradingEngine {
     try {
       // 1. Call AI
       const prompt = buildPrompt(input);
+      const model = input.model || getDefaultModelIdForTier(input.tier ?? 'free');
       const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
         body: {
           scope: 'teacher',
           service_type: 'grading_assistance',
-          payload: { prompt, model: input.model },
+          payload: { prompt, model },
           metadata: {
             assignment_title: input.assignmentTitle,
             grade_level: input.gradeLevel,
@@ -307,7 +313,10 @@ export class GradingEngine {
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
           service_type: 'grading_assistance',
-          model: input.model || 'claude-3-5-haiku-20241022',
+          payload: {
+            prompt,
+            model: input.model || getDefaultModelIdForTier(input.tier ?? 'free'),
+          },
           max_tokens: 4096,
         }),
       },

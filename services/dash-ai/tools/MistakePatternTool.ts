@@ -24,8 +24,9 @@
  * - Respects RLS policies
  */
 
-import { Tool, ToolCategory, RiskLevel, ToolExecutionContext, ToolExecutionResult } from '../types';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
 import { assertSupabase } from '@/lib/supabase';
+import { Tool, ToolCategory, RiskLevel, ToolExecutionContext, ToolExecutionResult } from '../types';
 
 export const MistakePatternTool: Tool = {
   id: 'mistake_pattern_detector',
@@ -143,7 +144,7 @@ export const MistakePatternTool: Tool = {
           return await trackImprovement(client, targetStudentId, subject, days_back);
 
         case 'ai_deep_analysis':
-          return await aiDeepAnalysis(client, targetStudentId, subject, days_back);
+          return await aiDeepAnalysis(client, targetStudentId, subject, days_back, (context as any)?.tier);
 
         default:
           return {
@@ -419,7 +420,9 @@ async function aiDeepAnalysis(
   studentId: string,
   subject: string | undefined,
   daysBack: number,
+  tier?: string,
 ): Promise<ToolExecutionResult> {
+  const model = getDefaultModelIdForTier(tier ?? 'free');
   const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
 
   // Fetch recent conversations with mistakes
@@ -498,10 +501,9 @@ async function aiDeepAnalysis(
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
+          scope: 'teacher',
           service_type: 'grading',
-          model: 'claude-3-5-haiku-20241022',
-          max_tokens: 2048,
+          payload: { prompt, model },
         }),
       },
     );

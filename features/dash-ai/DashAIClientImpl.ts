@@ -18,6 +18,7 @@
 import { unifiedToolRegistry } from '@/services/tools/UnifiedToolRegistry';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { buildImagePayloadsFromAttachments } from '@/lib/dash-ai/imagePayloadBuilder';
+import { dashAiDevLog } from '@/lib/dash-ai/dashAiDevLogger';
 
 // Global declarations for React Native environment
 // Reference: https://reactnative.dev/docs/javascript-environment
@@ -186,6 +187,18 @@ export class DashAIClient {
 
       // Quota exhausted is deterministic; no retry loop.
       if (!isRateLimited || isHardQuota || attempt >= maxRetryAttempts) {
+        if (__DEV__) {
+          const parsed = this.parseEdgeFunctionError(result.error);
+          dashAiDevLog('ai_proxy_error', {
+            status: parsed.status,
+            code: parsed.code,
+            message: parsed.message,
+            details: parsed.details,
+            rawError: result.error,
+            phase,
+            traceId,
+          });
+        }
         return result;
       }
 
@@ -489,6 +502,14 @@ export class DashAIClient {
           console.warn('[DashAIClient] AI service rate-limited:', logPayload);
         } else {
           console.error('[DashAIClient] AI service error:', logPayload);
+          dashAiDevLog('ai_proxy_error', {
+            status: errorDetails.status,
+            code: errorDetails.code,
+            message: errorDetails.message,
+            rawError: error,
+            phase: 'initial',
+            traceId,
+          });
         }
         return {
           content: this.getFriendlyErrorMessage(errorDetails),
@@ -803,6 +824,11 @@ export class DashAIClient {
     if (error.status === 403) {
       return 'Your account needs to be linked to a school to use Dash AI.';
     }
+    if (error.status === 400) {
+      return error.message && __DEV__
+        ? `[Dev] ${error.message}`
+        : 'Dash received an invalid request. Please try again or rephrase.';
+    }
     if (error.status === 503 || error.code === 'provider_not_configured') {
       return 'Dash AI is temporarily unavailable. Please try again in a moment.';
     }
@@ -957,6 +983,14 @@ export class DashAIClient {
                 metadata: {},
               });
             } else {
+              if (__DEV__) {
+                dashAiDevLog('voice_response_error', {
+                  status: xhr.status,
+                  message: `Streaming failed: ${xhr.status}`,
+                  responsePreview: xhr.responseText?.slice(0, 500),
+                  phase: 'streaming_xhr',
+                });
+              }
               reject(new Error(`Streaming failed: ${xhr.status}`));
             }
           };
@@ -984,6 +1018,15 @@ export class DashAIClient {
       });
 
       if (!response.ok) {
+        const errText = await response.text();
+        if (__DEV__) {
+          dashAiDevLog('voice_response_error', {
+            status: response.status,
+            message: `Streaming failed: ${response.status}`,
+            responsePreview: errText.slice(0, 500),
+            phase: 'streaming_fetch',
+          });
+        }
         throw new Error(`Streaming failed: ${response.status}`);
       }
       
