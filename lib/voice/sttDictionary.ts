@@ -51,6 +51,11 @@ export const STT_CONTEXTUAL_STRINGS: string[] = [
   'generate',
   'create a lesson',
   'grade this',
+  'voice chunks',
+  'chunking',
+  'breaking up',
+  'letter sound',
+  'phoneme',
 
   // Educational
   'phonics',
@@ -111,6 +116,10 @@ export const STT_CORRECTIONS: Array<[RegExp, string]> = [
   // ── Generic misrecognitions ──
   [/\bit socks\b/gi, "it's socks"],
   [/\bsummeriz(e|ing|ed|er)\b/gi, 'summarize$1'],
+  [/\bbreaking up junks\b/gi, 'breaking up chunks'],
+  [/\bjunks\b/gi, 'chunks'],
+  [/\bhi dish\b/gi, 'Hi Dash'],
+  [/\bhey dish\b/gi, 'Hey Dash'],
 
   // ── "superadmin" — the #1 misrecognised domain term ──
   [/\bsuper\s*8[\s-]*mon\b/gi, 'superadmin'],

@@ -104,6 +104,61 @@ const extractJson = (value: string): WeeklyProgramAIResponse | null => {
   }
 };
 
+const extractFunctionErrorMessage = async (error: unknown): Promise<string | null> => {
+  const maybeError = error as { context?: unknown; message?: string };
+  const context = maybeError?.context as
+    | {
+        status?: number;
+        clone?: () => {
+          json?: () => Promise<unknown>;
+          text?: () => Promise<string>;
+        };
+        json?: () => Promise<unknown>;
+        text?: () => Promise<string>;
+      }
+    | undefined;
+
+  if (!context) {
+    return maybeError?.message || null;
+  }
+
+  const status = typeof context.status === 'number' ? context.status : null;
+  const response = typeof context.clone === 'function' ? context.clone() : context;
+
+  try {
+    if (typeof response.json === 'function') {
+      const payload = await response.json();
+      if (payload && typeof payload === 'object') {
+        const record = payload as Record<string, unknown>;
+        const message =
+          typeof record.message === 'string'
+            ? record.message
+            : typeof record.error === 'string'
+              ? record.error
+              : null;
+        if (message) {
+          return status ? `${message} (HTTP ${status})` : message;
+        }
+      }
+    }
+  } catch {
+    // ignore JSON parsing issues and try plain text fallback
+  }
+
+  try {
+    if (typeof response.text === 'function') {
+      const text = (await response.text()).trim();
+      if (text) {
+        return status ? `${text} (HTTP ${status})` : text;
+      }
+    }
+  } catch {
+    // ignore fallback parsing errors
+  }
+
+  return maybeError?.message || null;
+};
+
 const toBlocksFromFlat = (blocks: unknown[]): DailyProgramBlock[] =>
   blocks
     .map((item, index) => {
@@ -185,6 +240,29 @@ const normalizeAIResponse = (
 const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
   const constraints = input.constraints || {};
   const objectivesText = (input.weeklyObjectives || []).join('; ') || 'Age-appropriate learning outcomes';
+  const routineRequirements: string[] = [];
+
+  if (constraints.includeToiletRoutine) {
+    routineRequirements.push('Include a toilet or bathroom routine support moment each day.');
+  }
+  if (constraints.includeNapTime) {
+    routineRequirements.push('Include a nap or quiet-rest block suitable for the age group.');
+  }
+  if (constraints.includeMealBlocks) {
+    routineRequirements.push('Include practical meal/snack windows every day.');
+  }
+  if (constraints.includeOutdoorPlay) {
+    routineRequirements.push('Include an outdoor gross-motor play block each day.');
+  }
+  if (constraints.includeStoryCircle) {
+    routineRequirements.push('Include at least one story, read-aloud, or circle-time literacy block per day.');
+  }
+  if (constraints.includeTransitionCues) {
+    routineRequirements.push('Provide explicit transition cues between blocks.');
+  }
+  if (constraints.includeHygieneChecks) {
+    routineRequirements.push('Include hygiene routines (e.g., handwashing or cleanup) as part of the daily flow.');
+  }
 
   return [
     'Generate a preschool weekly program from term context.',
@@ -193,6 +271,9 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     `Week start: ${startOfWeekMonday(input.weekStartDate)}`,
     `Weekly objectives: ${objectivesText}`,
     `Constraints: ${JSON.stringify(constraints)}`,
+    ...(routineRequirements.length > 0
+      ? [`Routine essentials to enforce: ${routineRequirements.join(' ')}`]
+      : []),
     'Return STRICT JSON only with shape:',
     '{',
     '  "title": "string",',
@@ -230,15 +311,21 @@ export class WeeklyProgramCopilotService {
 
     const { data, error } = await supabase.functions.invoke('ai-proxy', {
       body: {
-        task: 'weekly_program_copilot',
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2500,
-        prompt,
+        service_type: 'lesson_generation',
+        payload: {
+          prompt,
+        },
+        stream: false,
+        enable_tools: false,
+        metadata: {
+          source: 'weekly_program_copilot',
+        },
       },
     });
 
     if (error) {
-      throw new Error(error.message || 'Failed to generate weekly program');
+      const detailedMessage = await extractFunctionErrorMessage(error);
+      throw new Error(detailedMessage || error.message || 'Failed to generate weekly program');
     }
 
     const content =

@@ -32,12 +32,15 @@ interface UseAISettingsReturn {
   lastSavedRef: React.MutableRefObject<string>;
 }
 
+const STREAMING_PREF_KEY = '@dash_streaming_enabled';
+const STREAMING_PREF_USER_SET_KEY = '@dash_streaming_pref_user_set';
+
 export function useAISettings(): UseAISettingsReturn {
   const [dashAIInstance, setDashAIInstance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<AISettings>({ ...DEFAULT_SETTINGS, localProcessing: Platform.OS === 'ios' });
-  const [streamingPref, setStreamingPref] = useState<boolean>(false);
+  const [streamingPref, setStreamingPref] = useState<boolean>(true);
   const lastSavedRef = useRef<string>('');
 
   const computeSignature = useCallback((s: AISettings) => {
@@ -85,10 +88,23 @@ export function useAISettings(): UseAISettingsReturn {
   useEffect(() => {
     (async () => {
       try {
-        const v = await AsyncStorage.getItem('@dash_streaming_enabled');
-        if (v !== null) setStreamingPref(v === 'true');
+        const [v, userSet] = await Promise.all([
+          AsyncStorage.getItem(STREAMING_PREF_KEY),
+          AsyncStorage.getItem(STREAMING_PREF_USER_SET_KEY),
+        ]);
+        if (userSet === 'true') {
+          setStreamingPref(v !== 'false');
+        } else {
+          // Migration: legacy builds defaulted streaming to false unintentionally.
+          setStreamingPref(true);
+          await AsyncStorage.multiSet([
+            [STREAMING_PREF_KEY, 'true'],
+            [STREAMING_PREF_USER_SET_KEY, 'false'],
+          ]);
+        }
       } catch (e) {
         if (__DEV__) console.warn('[useAISettings] load streaming pref', e);
+        setStreamingPref(true);
       }
     })();
   }, []);
@@ -176,7 +192,10 @@ export function useAISettings(): UseAISettingsReturn {
   const toggleStreamingPref = useCallback(async (v: boolean) => {
     setStreamingPref(v);
     try {
-      await AsyncStorage.setItem('@dash_streaming_enabled', v ? 'true' : 'false');
+      await AsyncStorage.multiSet([
+        [STREAMING_PREF_KEY, v ? 'true' : 'false'],
+        [STREAMING_PREF_USER_SET_KEY, 'true'],
+      ]);
     } catch (e) {
       if (__DEV__) console.warn('[useAISettings] save streaming pref', e);
     }

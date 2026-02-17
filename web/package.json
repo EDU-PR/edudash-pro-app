@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev --webpack",
+    "dev:lan": "next dev --webpack --hostname 0.0.0.0",
     "prebuild": "node scripts/bump-sw-version.mjs",
     "build": "next build",
     "postbuild": "node scripts/notify-deployment.mjs || true",

@@ -26,6 +26,12 @@ export interface ModelSelectorChipsProps {
   showWhenFree?: boolean;
   /** When false, do not render the section header (icon + title). Default true. */
   showSectionTitle?: boolean;
+  /** Collapse model options behind a compact selected-model row. */
+  collapsible?: boolean;
+  /** Initial collapsed state when `collapsible` is enabled. */
+  defaultCollapsed?: boolean;
+  /** Auto-collapse options after selecting a model. */
+  autoCollapseOnSelect?: boolean;
 }
 
 export function ModelSelectorChips({
@@ -37,13 +43,28 @@ export function ModelSelectorChips({
   title = 'AI Model',
   showWhenFree = true,
   showSectionTitle = true,
+  collapsible = false,
+  defaultCollapsed = false,
+  autoCollapseOnSelect = false,
 }: ModelSelectorChipsProps): React.ReactElement | null {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const titleText = title ?? t('common.ai_model_label');
+  const [collapsed, setCollapsed] = React.useState(collapsible ? defaultCollapsed : false);
+
+  React.useEffect(() => {
+    if (!collapsible) {
+      setCollapsed(false);
+      return;
+    }
+    setCollapsed(defaultCollapsed);
+  }, [collapsible, defaultCollapsed]);
 
   if (availableModels.length === 0) return null;
   if (!showWhenFree && availableModels.length <= 1) return null;
+
+  const selectedInfo =
+    availableModels.find((model) => model.id === selectedModel) || availableModels[0];
 
   const handlePress = async (modelId: AIModelId | string) => {
     onSelect(modelId);
@@ -53,6 +74,9 @@ export function ModelSelectorChips({
       } catch {
         // Silent
       }
+    }
+    if (collapsible && autoCollapseOnSelect) {
+      setCollapsed(true);
     }
   };
 
@@ -64,38 +88,63 @@ export function ModelSelectorChips({
           {titleText ? <Text style={[styles.sectionTitle, { color: theme.text }]}>{titleText}</Text> : null}
         </View>
       )}
-      <View style={styles.chipRow}>
-        {availableModels.map((m) => {
-          const active = selectedModel === m.id;
-          return (
-            <TouchableOpacity
-              key={m.id}
-              onPress={() => handlePress(m.id)}
-              style={[
-                styles.chip,
-                active
-                  ? { backgroundColor: theme.accent, borderColor: theme.accent }
-                  : { backgroundColor: 'transparent', borderColor: theme.border },
-              ]}
-            >
-              <Text
-                style={[styles.chipText, { color: active ? '#FFF' : theme.text }]}
-                numberOfLines={1}
-              >
-                {m.displayName || m.name}
-              </Text>
-              <Text
+      {collapsible && selectedInfo ? (
+        <TouchableOpacity
+          style={[styles.summaryRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+          onPress={() => setCollapsed((prev) => !prev)}
+          accessibilityLabel={collapsed ? 'Expand model selector' : 'Collapse model selector'}
+        >
+          <View style={styles.summaryLeft}>
+            <View style={[styles.summaryDot, { backgroundColor: theme.accent }]} />
+            <Text style={[styles.summaryTitle, { color: theme.text }]} numberOfLines={1}>
+              {selectedInfo.displayName || selectedInfo.name}
+            </Text>
+            <Text style={[styles.summaryMeta, { color: theme.textSecondary }]}>
+              {COST_DOTS(selectedInfo.relativeCost)}
+            </Text>
+          </View>
+          <View style={[styles.summaryBadge, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.summaryBadgeText, { color: theme.textSecondary }]}>
+              {collapsed ? 'Change' : 'Close'}
+            </Text>
+            <Ionicons name={collapsed ? 'chevron-down' : 'chevron-up'} size={14} color={theme.textSecondary} />
+          </View>
+        </TouchableOpacity>
+      ) : null}
+      {(!collapsible || !collapsed) && (
+        <View style={styles.chipRow}>
+          {availableModels.map((m) => {
+            const active = selectedModel === m.id;
+            return (
+              <TouchableOpacity
+                key={m.id}
+                onPress={() => handlePress(m.id)}
                 style={[
-                  styles.chipMeta,
-                  { color: active ? 'rgba(255,255,255,0.7)' : theme.textTertiary },
+                  styles.chip,
+                  active
+                    ? { backgroundColor: theme.accent, borderColor: theme.accent }
+                    : { backgroundColor: 'transparent', borderColor: theme.border },
                 ]}
               >
-                {COST_DOTS(m.relativeCost)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                <Text
+                  style={[styles.chipText, { color: active ? '#FFF' : theme.text }]}
+                  numberOfLines={1}
+                >
+                  {m.displayName || m.name}
+                </Text>
+                <Text
+                  style={[
+                    styles.chipMeta,
+                    { color: active ? 'rgba(255,255,255,0.7)' : theme.textTertiary },
+                  ]}
+                >
+                  {COST_DOTS(m.relativeCost)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -115,6 +164,51 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  summaryRow: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  summaryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    paddingRight: 8,
+  },
+  summaryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  summaryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  summaryMeta: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  summaryBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  summaryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   chipRow: {
     flexDirection: 'row',

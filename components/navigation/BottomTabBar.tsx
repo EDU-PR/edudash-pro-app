@@ -572,7 +572,7 @@ export function BottomTabBar() {
     }
     // K12 parent center Dash tab → Tutor Chat (locked decision)
     if (item.id === 'parent-dash' && userRole === 'parent' && resolvedSchoolType === 'k12_school') {
-      return { ...item, route: '/screens/dash-assistant?mode=tutor&source=k12_parent_tab' };
+      return { ...item, route: '/screens/dash-assistant?mode=advisor&source=k12_parent_tab' };
     }
     if (homeDashboardRoute && item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
       return { ...item, route: homeDashboardRoute };

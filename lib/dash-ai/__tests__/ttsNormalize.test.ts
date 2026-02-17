@@ -26,6 +26,26 @@ describe('ttsNormalize', () => {
     expect(out).not.toContain('m-m-m');
   });
 
+  it('converts continuous sustained sounds in phonics mode', () => {
+    const out = normalizeForTTS('Say ssss then mmmm', {
+      phonicsMode: true,
+      preservePhonicsMarkers: true,
+    });
+    expect(out).toContain('/s/');
+    expect(out).toContain('/m/');
+    expect(out).not.toContain('ssss');
+    expect(out).not.toContain('mmmm');
+  });
+
+  it('converts repeated digraph sounds in phonics mode', () => {
+    const out = normalizeForTTS('Say sh sh sh and th-th-th', {
+      phonicsMode: true,
+      preservePhonicsMarkers: true,
+    });
+    expect(out).toContain('/sh/');
+    expect(out).toContain('/th/');
+  });
+
   it('preserves phonics markers in phonics mode', () => {
     const out = normalizeForTTS('/b/ and [c] and c-a-t', {
       phonicsMode: true,

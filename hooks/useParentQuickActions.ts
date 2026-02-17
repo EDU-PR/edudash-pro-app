@@ -65,6 +65,7 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
       { id: 'dash_grade_test', title: t('parent.dash_grade_test', { defaultValue: 'Dash Grade Test Run' }), icon: 'checkmark-done-outline', color: '#8B5CF6' },
       { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
       { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
+      { id: 'announcements', title: t('parent.announcements', { defaultValue: 'School Announcements' }), icon: 'megaphone', color: '#F59E0B', subtitle: t('parent.announcements_subtitle', { defaultValue: 'Daily routines, menus & school updates' }) },
       { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
       { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
       { id: 'homework_history', title: t('parent.homework_history', { defaultValue: 'Homework History' }), icon: 'time', color: '#6366F1' },

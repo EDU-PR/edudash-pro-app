@@ -459,9 +459,11 @@ function normalizeTierName(input: unknown): string {
 /** Default model ID by tier when client does not send model. Aligned with lib/ai/models.ts getDefaultModelForTier. */
 function getDefaultModelIdForTierProxy(tierRaw: string): string {
   const tier = normalizeTierName(tierRaw);
-  if (tier.includes('enterprise') || tier === 'superadmin' || tier === 'super_admin') return 'claude-sonnet-4-20250514';
-  if (tier.includes('premium') || tier.includes('pro') || tier.includes('plus') || tier.includes('basic')) return 'claude-3-7-sonnet-20250219';
-  if (tier.includes('starter') || tier === 'trial') return 'claude-3-5-sonnet-20241022';
+  const sonnet37 = getEnv('ANTHROPIC_SONNET_3_7_MODEL') || 'claude-3-7-sonnet-20250219';
+  const sonnet4 = getEnv('ANTHROPIC_SONNET_4_MODEL') || 'claude-sonnet-4-20250514';
+  if (tier.includes('enterprise') || tier === 'superadmin' || tier === 'super_admin') return sonnet4;
+  if (tier.includes('premium') || tier.includes('pro') || tier.includes('plus') || tier.includes('basic')) return sonnet37;
+  if (tier.includes('starter') || tier === 'trial') return sonnet37;
   return 'claude-3-haiku-20240307';
 }
 
@@ -1090,6 +1092,7 @@ function normalizeRequestedModel(raw?: string | null): string | null {
   const key = trimmed.toLowerCase();
   const sonnet4 = getEnv('ANTHROPIC_SONNET_4_MODEL') || 'claude-sonnet-4-20250514';
   const sonnet45 = getEnv('ANTHROPIC_SONNET_4_5_MODEL') || 'claude-sonnet-4-5-20250514';
+  const sonnet37 = getEnv('ANTHROPIC_SONNET_3_7_MODEL') || 'claude-3-7-sonnet-20250219';
   const aliases: Record<string, string> = {
     'claude-3-haiku': 'claude-3-haiku-20240307',
     'claude-3-haiku-latest': 'claude-3-haiku-20240307',
@@ -1099,8 +1102,11 @@ function normalizeRequestedModel(raw?: string | null): string | null {
     'claude-3-sonnet-latest': 'claude-3-sonnet-20240229',
     'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
     'claude-3-5-haiku-latest': 'claude-3-5-haiku-20241022',
-    'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
-    'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-20241022',
+    // Claude 3.5 Sonnet aliases are remapped to an actively supported Sonnet model
+    // to avoid not_found retries that increase first-token latency.
+    'claude-3-5-sonnet': sonnet37,
+    'claude-3-5-sonnet-latest': sonnet37,
+    'claude-3-5-sonnet-20241022': sonnet37,
     'claude-3-7-sonnet': 'claude-3-7-sonnet-20250219',
     'claude-3-7-sonnet-latest': 'claude-3-7-sonnet-20250219',
     'claude-sonnet-4': sonnet4,
@@ -1113,15 +1119,67 @@ function normalizeRequestedModel(raw?: string | null): string | null {
   return aliases[key] || trimmed;
 }
 
+function normalizeAnthropicAllowedModels(models: string[]): string[] {
+  const unique = new Set<string>();
+  for (const raw of models) {
+    const normalized = normalizeRequestedModel(raw) || String(raw || '').trim();
+    if (normalized) unique.add(normalized);
+  }
+  return Array.from(unique);
+}
+
+function canonicalToolName(value: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
 async function webSearchTool(args: z.infer<typeof WebSearchArgsSchema>): Promise<JsonRecord> {
-  // Try Brave Search API first (much better quality than DuckDuckGo Instant Answers)
+  // Provider priority:
+  // 1) Brave Search (best general web coverage)
+  // 2) Bing Web Search API
+  // 3) Google Custom Search API
+  // 4) DuckDuckGo Instant Answer (last-resort, limited)
   const braveApiKey = getEnv('BRAVE_SEARCH_API_KEY');
-  if (braveApiKey) {
-    return braveSearch(args, braveApiKey);
+  if (braveApiKey && braveApiKey.trim().length > 0) {
+    try {
+      return await braveSearch(args, braveApiKey);
+    } catch (err) {
+      console.error('[webSearch] Brave failed, trying Bing/Google fallback:', err);
+    }
   }
 
-  // Fallback to DuckDuckGo Instant Answer API (no key required, lower quality)
+  const bingApiKey = getEnv('BING_SEARCH_API_KEY');
+  if (bingApiKey && bingApiKey.trim().length > 0) {
+    try {
+      return await bingSearch(args, bingApiKey);
+    } catch (err) {
+      console.error('[webSearch] Bing failed, trying Google/DDG fallback:', err);
+    }
+  }
+
+  const googleApiKey = getEnv('GOOGLE_SEARCH_API_KEY');
+  const googleCseId = getEnv('GOOGLE_CSE_ID');
+  if (googleApiKey && googleCseId) {
+    try {
+      return await googleCustomSearch(args, googleApiKey, googleCseId);
+    } catch (err) {
+      console.error('[webSearch] Google CSE failed, falling back to DDG:', err);
+    }
+  }
+
   return duckDuckGoSearch(args);
+}
+
+function filterResultsByDomains(
+  results: Array<JsonRecord>,
+  domains?: string[]
+): Array<JsonRecord> {
+  if (!domains || domains.length === 0) return results;
+  const normalizedDomains = domains.map((domain) => String(domain || '').toLowerCase()).filter(Boolean);
+  if (normalizedDomains.length === 0) return results;
+  return results.filter((result) => {
+    const urlStr = String(result.url || '').toLowerCase();
+    return normalizedDomains.some((domain) => urlStr.includes(domain));
+  });
 }
 
 async function braveSearch(
@@ -1148,8 +1206,8 @@ async function braveSearch(
     });
 
     if (!response.ok) {
-      console.error(`[webSearch] Brave API error: ${response.status}`);
-      return duckDuckGoSearch(args);
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Brave API error ${response.status}: ${errText.slice(0, 180)}`);
     }
 
     const data = (await response.json()) as JsonRecord;
@@ -1162,22 +1220,98 @@ async function braveSearch(
       source: 'brave',
     }));
 
-    // Apply domain filter if specified
-    const filtered = args.domains && args.domains.length > 0
-      ? results.filter((r) => {
-          const urlStr = typeof r.url === 'string' ? r.url : '';
-          return args.domains!.some((domain) => urlStr.includes(domain));
-        })
-      : results;
+    const filtered = filterResultsByDomains(results, args.domains);
 
     const infobox = (data as any).infobox?.results?.[0];
     const abstract = infobox?.long_desc || infobox?.description || undefined;
 
     return { query: args.query, results: filtered, abstract, provider: 'brave' };
   } catch (err) {
-    console.error('[webSearch] Brave search failed, falling back to DuckDuckGo:', err);
-    return duckDuckGoSearch(args);
+    throw err instanceof Error ? err : new Error(String(err));
   }
+}
+
+async function bingSearch(
+  args: z.infer<typeof WebSearchArgsSchema>,
+  apiKey: string,
+): Promise<JsonRecord> {
+  const params = new URLSearchParams({
+    q: args.query,
+    count: '5',
+    textDecorations: 'false',
+    textFormat: 'Raw',
+  });
+
+  if (args.recency === 'day') params.set('freshness', 'Day');
+  else if (args.recency === 'week') params.set('freshness', 'Week');
+  else if (args.recency === 'month') params.set('freshness', 'Month');
+
+  const response = await fetch(`https://api.bing.microsoft.com/v7.0/search?${params}`, {
+    headers: {
+      'Ocp-Apim-Subscription-Key': apiKey,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Bing API error ${response.status}: ${errText.slice(0, 180)}`);
+  }
+
+  const data = (await response.json()) as JsonRecord;
+  const rows = Array.isArray((data as any).webPages?.value) ? (data as any).webPages.value : [];
+  const results: Array<JsonRecord> = rows.slice(0, 5).map((row: any) => ({
+    title: String(row?.name || ''),
+    url: String(row?.url || ''),
+    snippet: String(row?.snippet || row?.name || ''),
+    source: 'bing',
+  }));
+
+  return {
+    query: args.query,
+    results: filterResultsByDomains(results, args.domains),
+    provider: 'bing',
+  };
+}
+
+async function googleCustomSearch(
+  args: z.infer<typeof WebSearchArgsSchema>,
+  apiKey: string,
+  cseId: string,
+): Promise<JsonRecord> {
+  const params = new URLSearchParams({
+    key: apiKey,
+    cx: cseId,
+    q: args.query,
+    num: '5',
+    safe: 'off',
+    hl: 'en',
+  });
+
+  if (args.recency === 'day') params.set('dateRestrict', 'd1');
+  else if (args.recency === 'week') params.set('dateRestrict', 'w1');
+  else if (args.recency === 'month') params.set('dateRestrict', 'm1');
+
+  const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`);
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Google CSE error ${response.status}: ${errText.slice(0, 180)}`);
+  }
+
+  const data = (await response.json()) as JsonRecord;
+  const items = Array.isArray((data as any).items) ? (data as any).items : [];
+  const results: Array<JsonRecord> = items.slice(0, 5).map((item: any) => ({
+    title: String(item?.title || ''),
+    url: String(item?.link || ''),
+    snippet: String(item?.snippet || item?.title || ''),
+    source: 'google',
+  }));
+
+  return {
+    query: args.query,
+    results: filterResultsByDomains(results, args.domains),
+    provider: 'google',
+  };
 }
 
 async function duckDuckGoSearch(args: z.infer<typeof WebSearchArgsSchema>): Promise<JsonRecord> {
@@ -1218,12 +1352,7 @@ async function duckDuckGoSearch(args: z.infer<typeof WebSearchArgsSchema>): Prom
     }
   }
 
-  const filtered = args.domains && args.domains.length > 0
-    ? results.filter((r) => {
-        const urlStr = typeof r.url === 'string' ? r.url : '';
-        return args.domains!.some((domain) => urlStr.includes(domain));
-      })
-    : results;
+  const filtered = filterResultsByDomains(results, args.domains);
 
   return {
     query: args.query,
@@ -1538,12 +1667,23 @@ function buildOpenAITools(enableTools: boolean, clientTools?: Array<{ name: stri
     },
   ];
   // Merge client-side tools into OpenAI format
+  const seenToolNames = new Set(
+    serverTools.map((tool) => canonicalToolName(String((tool as any)?.function?.name || ''))).filter(Boolean),
+  );
   if (clientTools && clientTools.length > 0) {
     for (const ct of clientTools) {
+      const toolName = String(ct?.name || '').trim();
+      if (!toolName) continue;
+      const canonicalName = canonicalToolName(toolName);
+      if (seenToolNames.has(canonicalName)) {
+        console.warn('[ai-proxy] Skipping duplicate OpenAI tool name from client_tools:', toolName);
+        continue;
+      }
+      seenToolNames.add(canonicalName);
       serverTools.push({
         type: 'function',
         function: {
-          name: ct.name,
+          name: toolName,
           description: ct.description,
           parameters: ct.input_schema as any,
         },
@@ -1626,16 +1766,135 @@ function buildAnthropicTools(enableTools: boolean, clientTools?: Array<{ name: s
     },
   ];
   // Merge client-side tools
+  const seenToolNames = new Set(tools.map((tool) => canonicalToolName(String(tool?.name || ''))).filter(Boolean));
   if (clientTools && clientTools.length > 0) {
     for (const ct of clientTools) {
+      const toolName = String(ct?.name || '').trim();
+      if (!toolName) continue;
+      const canonicalName = canonicalToolName(toolName);
+      if (seenToolNames.has(canonicalName)) {
+        console.warn('[ai-proxy] Skipping duplicate Anthropic tool name from client_tools:', toolName);
+        continue;
+      }
+      seenToolNames.add(canonicalName);
       tools.push({
-        name: ct.name,
+        name: toolName,
         description: ct.description,
         input_schema: ct.input_schema,
       });
     }
   }
   return tools;
+}
+
+function stripBase64DataUri(value: string): string {
+  const trimmed = String(value || '').trim();
+  const match = trimmed.match(/^data:[^;]+;base64,(.+)$/i);
+  return match ? match[1] : trimmed;
+}
+
+function normalizeVisionMediaType(raw: string): {
+  mediaType: string;
+  blockType: 'image' | 'document';
+} {
+  const lower = String(raw || '').trim().toLowerCase();
+  if (lower === 'application/pdf') {
+    return { mediaType: 'application/pdf', blockType: 'document' };
+  }
+  if (lower === 'image/jpg') {
+    return { mediaType: 'image/jpeg', blockType: 'image' };
+  }
+  if (lower === 'image/jpeg' || lower === 'image/png' || lower === 'image/gif' || lower === 'image/webp') {
+    return { mediaType: lower, blockType: 'image' };
+  }
+  if (lower.startsWith('image/')) {
+    // Normalize uncommon/unsupported image formats (e.g. HEIC) to a supported hint.
+    return { mediaType: 'image/jpeg', blockType: 'image' };
+  }
+  return { mediaType: 'image/jpeg', blockType: 'image' };
+}
+
+function hasMessageContent(content: unknown): boolean {
+  if (typeof content === 'string') {
+    return content.trim().length > 0;
+  }
+  if (Array.isArray(content)) {
+    return content.some((part) => {
+      if (!part || typeof part !== 'object') return false;
+      const block = part as JsonRecord;
+      if (typeof block.text === 'string' && block.text.trim().length > 0) return true;
+      if (block.type === 'image' || block.type === 'document') return true;
+      const source = block.source as JsonRecord | undefined;
+      if (source && typeof source.data === 'string' && source.data.trim().length > 0) return true;
+      return false;
+    });
+  }
+  if (content && typeof content === 'object') {
+    return Object.keys(content as Record<string, unknown>).length > 0;
+  }
+  return false;
+}
+
+function normalizeConversationRole(value: unknown): 'system' | 'user' | 'assistant' | null {
+  const role = String(value || '').trim().toLowerCase();
+  if (role === 'system' || role === 'user' || role === 'assistant') return role;
+  if (role === 'model') return 'assistant';
+  return null;
+}
+
+function hasActionableUserMessages(messages: Array<JsonRecord>): boolean {
+  return messages.some((msg) => {
+    const role = normalizeConversationRole((msg as JsonRecord).role);
+    if (role !== 'user') return false;
+    return hasMessageContent((msg as JsonRecord).content);
+  });
+}
+
+function buildProviderConversationMessages(messages: Array<JsonRecord>): Array<JsonRecord> {
+  const normalized: Array<JsonRecord> = [];
+  for (const raw of messages) {
+    const role = normalizeConversationRole(raw?.role);
+    if (!role || role === 'system') continue;
+    if (!hasMessageContent(raw?.content)) continue;
+    normalized.push({ ...raw, role });
+  }
+  return normalized;
+}
+
+function isNonRetryableInvalidRequest(message: string): boolean {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('invalid_request_error') ||
+    normalized.includes('invalid_request_no_user_message') ||
+    normalized.includes('messages: at least one message is required') ||
+    normalized.includes('please send a question or attach a file')
+  );
+}
+
+function shouldAttemptCrossProviderFallback(message: string): boolean {
+  return !isNonRetryableInvalidRequest(message);
+}
+
+function mapProviderErrorStatus(message: string): number {
+  const normalized = String(message || '').toLowerCase();
+  if (isNonRetryableInvalidRequest(message)) return 400;
+  if (normalized.includes('insufficient_quota') || normalized.includes('rate limit') || normalized.includes(' 429 ')) {
+    return 429;
+  }
+  if (
+    normalized.includes('provider_not_configured') ||
+    normalized.includes('api_key') ||
+    normalized.includes('not configured') ||
+    normalized.includes('missing')
+  ) {
+    return 503;
+  }
+  const statusMatch = message.match(/\b(\d{3})\b/);
+  if (statusMatch) {
+    const status = Number(statusMatch[1]);
+    if (status >= 400 && status <= 599) return status;
+  }
+  return 502;
 }
 
 function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], systemPrompt: string) {
@@ -1645,24 +1904,39 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
   messages.push({ role: 'system', content: systemPrompt });
 
   if (Array.isArray(baseMessages) && baseMessages.length > 0) {
-    for (const msg of baseMessages) {
-      messages.push(msg as JsonRecord);
+    for (const rawMsg of baseMessages) {
+      if (!rawMsg || typeof rawMsg !== 'object') continue;
+      const msg = rawMsg as JsonRecord;
+      const role = normalizeConversationRole(msg.role);
+      if (!role || role === 'system') continue;
+      if (!hasMessageContent(msg.content)) continue;
+      messages.push({ ...msg, role });
     }
-  } else if (payload.prompt) {
-    messages.push({ role: 'user', content: payload.prompt });
+  }
+
+  const promptText = typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
+  if (promptText.length > 0) {
+    const isDuplicatePrompt = messages.some((msg) =>
+      String(msg.role || '').toLowerCase() === 'user' &&
+      typeof msg.content === 'string' &&
+      msg.content.trim() === promptText
+    );
+    if (!isDuplicatePrompt) {
+      messages.push({ role: 'user', content: promptText });
+    }
   }
 
   const images = Array.isArray(payload.images) ? payload.images : [];
   if (images.length > 0) {
     const imageBlocks = images.map((img) => {
-      const mediaType = String(img.media_type || '').toLowerCase();
-      const blockType = mediaType === 'application/pdf' ? 'document' : 'image';
+      const normalized = normalizeVisionMediaType(String(img.media_type || ''));
+      const blockType = normalized.blockType;
       return {
         type: blockType,
         source: {
           type: 'base64',
-          media_type: img.media_type,
-          data: img.data,
+          media_type: normalized.mediaType,
+          data: stripBase64DataUri(String(img.data || '')),
         },
       };
     });
@@ -1709,7 +1983,8 @@ function mapOpenAIContent(content: unknown) {
       return { type: 'text', text: `[Attached ${mediaType} document for OCR review]` };
     }
     if (part?.type === 'tool_use' || part?.type === 'tool_result') {
-      return { type: 'text', text: JSON.stringify(part) };
+      // Never surface raw tool payload JSON in user-visible assistant text.
+      return { type: 'text', text: '' };
     }
     if (typeof part?.text === 'string') {
       return { type: 'text', text: part.text };
@@ -1743,6 +2018,56 @@ function chunkText(text: string, maxLen = 120): string[] {
   }
   if (buffer) chunks.push(buffer);
   return chunks;
+}
+
+function summarizeServerToolResult(toolName: string, output: JsonRecord): string | null {
+  const success = Boolean(output?.success);
+  if (!success) return null;
+
+  if (toolName === 'web_search') {
+    const results = Array.isArray(output?.results) ? output.results : [];
+    const top = results
+      .slice(0, 3)
+      .map((entry) => String((entry as JsonRecord)?.title || '').trim())
+      .filter(Boolean);
+    if (top.length > 0) {
+      return `\n\nI checked the web and found: ${top.join(' | ')}.`;
+    }
+    const count = Number(output?.count || 0);
+    if (Number.isFinite(count) && count > 0) {
+      return `\n\nI checked the web and found ${count} relevant source${count === 1 ? '' : 's'}.`;
+    }
+    return null;
+  }
+
+  if (toolName === 'search_caps_curriculum' || toolName === 'caps_curriculum_query' || toolName === 'get_caps_documents') {
+    const documents = Array.isArray(output?.documents) ? output.documents : [];
+    const topDocs = documents
+      .slice(0, 3)
+      .map((entry) => String((entry as JsonRecord)?.title || '').trim())
+      .filter(Boolean);
+    if (topDocs.length > 0) {
+      return `\n\nI found CAPS documents: ${topDocs.join(' | ')}.`;
+    }
+    const count = Number(output?.count || 0);
+    if (Number.isFinite(count) && count > 0) {
+      return `\n\nI found ${count} CAPS document${count === 1 ? '' : 's'} relevant to this request.`;
+    }
+    return null;
+  }
+
+  if (toolName === 'get_caps_subjects') {
+    const subjects = Array.isArray(output?.subjects) ? output.subjects : [];
+    const topSubjects = subjects
+      .slice(0, 6)
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    if (topSubjects.length > 0) {
+      return `\n\nAvailable CAPS subjects include: ${topSubjects.join(', ')}.`;
+    }
+  }
+
+  return null;
 }
 
 function buildSseStream(content: string): ReadableStream<Uint8Array> {
@@ -1787,15 +2112,28 @@ function callAnthropicStreaming(
   const apiKey = getAnthropicApiKey();
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured.');
 
-  const allowed = allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
-  const fallbackModel = DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
-  const superAdminAllowed = parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS);
+  const allowed = normalizeAnthropicAllowedModels(
+    allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS)
+  );
+  const fallbackModel = normalizeRequestedModel(DEFAULT_ANTHROPIC_ALLOWED_MODELS[0]) || DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
+  const superAdminAllowed = normalizeAnthropicAllowedModels(
+    parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS)
+  );
   const selectionAllowed = isSuperAdmin ? superAdminAllowed : allowed;
-  const selection = pickAllowedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'), selectionAllowed, selectionAllowed[0] || fallbackModel);
+  const normalizedRequestedModel = normalizeRequestedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'));
+  const selection = pickAllowedModel(
+    normalizedRequestedModel,
+    selectionAllowed,
+    selectionAllowed[0] || fallbackModel
+  );
   if (selection.usedFallback) console.warn('[ai-proxy] Anthropic streaming model fallback:', selection.reason);
   const model = selection.model;
 
   const systemPrompt = messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT;
+  const providerMessages = buildProviderConversationMessages(messages);
+  if (!hasActionableUserMessages(providerMessages)) {
+    throw new Error('invalid_request_no_user_message: Please send a question or attach a file before asking Dash.');
+  }
   const encoder = new TextEncoder();
 
   // Mutable collectors for post-call logging (resolved via metaPromise)
@@ -1815,42 +2153,129 @@ function callAnthropicStreaming(
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: maxTokens,
-            temperature: 0.4,
-            stream: true,
-            messages: messages.filter((m) => m.role !== 'system'),
-            system: systemPrompt,
-            ...(enableTools ? { tools: buildAnthropicTools(true, clientTools) } : {}),
-          }),
-        });
+        const callAnthropicStream = async (modelName: string, withTools: boolean) =>
+          await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: modelName,
+              max_tokens: maxTokens,
+              temperature: 0.4,
+              stream: true,
+              messages: providerMessages,
+              system: systemPrompt,
+              ...(withTools ? { tools: buildAnthropicTools(true, clientTools) } : {}),
+            }),
+          });
 
-        if (!response.ok || !response.body) {
-          const errText = await response.text();
-          // Send both an error event AND a content event with user-friendly message
-          // so the client always has displayable text
-          const userMessage = response.status === 529
-            ? 'The AI service is temporarily overloaded. Please try again in a moment.'
-            : response.status === 401 || response.status === 403
-              ? 'AI service authentication error. Please contact support.'
-              : `Sorry, the AI service returned an error (${response.status}). Please try again.`;
+        const isModelNotFoundError = (status: number, errText: string): boolean => {
+          if (status !== 404) return false;
+          try {
+            const parsed = JSON.parse(errText) as JsonRecord;
+            const errorObj = parsed?.error as JsonRecord | undefined;
+            const errType = String(errorObj?.type || '').toLowerCase();
+            const errMsg = String(errorObj?.message || '').toLowerCase();
+            return errType === 'not_found_error' || errMsg.includes('model:');
+          } catch {
+            return errText.toLowerCase().includes('model:');
+          }
+        };
+
+        const modelCandidates = [model, ...selectionAllowed.filter((m) => m !== model)];
+        let usedToolsForRequest = enableTools;
+        let responseModel = model;
+        let response: Response | null = null;
+        let failureErrText = '';
+
+        for (const candidateModel of modelCandidates) {
+          responseModel = candidateModel;
+          usedToolsForRequest = enableTools;
+          let candidatePrimaryError = '';
+          let candidateResponse = await callAnthropicStream(candidateModel, usedToolsForRequest);
+
+          if ((!candidateResponse.ok || !candidateResponse.body) && candidateResponse.status === 400 && usedToolsForRequest) {
+            candidatePrimaryError = await candidateResponse.text();
+            console.warn('[ai-proxy] Anthropic streaming 400 with tools enabled; retrying without tools', {
+              model: candidateModel,
+              error: candidatePrimaryError.slice(0, 320),
+            });
+            usedToolsForRequest = false;
+            candidateResponse = await callAnthropicStream(candidateModel, false);
+          }
+
+          if (candidateResponse.ok && candidateResponse.body) {
+            response = candidateResponse;
+            failureErrText = '';
+            break;
+          }
+
+          const candidateErrText = candidatePrimaryError || await candidateResponse.text();
+          if (isModelNotFoundError(candidateResponse.status, candidateErrText)) {
+            console.warn('[ai-proxy] Anthropic streaming model not found, trying next allowed model', {
+              model: candidateModel,
+            });
+            failureErrText = candidateErrText;
+            continue;
+          }
+
+          response = candidateResponse;
+          failureErrText = candidateErrText;
+          break;
+        }
+
+        if (!response || !response.ok || !response.body) {
+          const status = response?.status || 500;
+          const errText = failureErrText || 'Anthropic streaming request failed.';
+          const errLower = errText.toLowerCase();
+          const hasVisualAttachmentInput = messages.some((msg) => {
+            if (!Array.isArray(msg.content)) return false;
+            return msg.content.some((part) => {
+              const type = String((part as JsonRecord)?.type || '').toLowerCase();
+              const source = (part as JsonRecord)?.source as JsonRecord | undefined;
+              const mediaType = String(source?.media_type || '').toLowerCase();
+              return (
+                type === 'image' ||
+                type === 'image_url' ||
+                type === 'document' ||
+                mediaType.startsWith('image/') ||
+                mediaType === 'application/pdf'
+              );
+            });
+          });
+          const attachmentErrorSignal = /image|jpeg|jpg|png|webp|gif|pdf|base64|mime|media[_\s-]?type|unsupported|too large|too_big|payload|exceed|size|bytes/i;
+          const isLikelyAttachmentRelated =
+            status === 400 &&
+            hasVisualAttachmentInput &&
+            attachmentErrorSignal.test(errLower);
+          const userMessage = status === 529
+              ? 'The AI service is temporarily overloaded. Please try again in a moment.'
+              : status === 401 || status === 403
+                ? 'AI service authentication error. Please contact support.'
+                : status === 400 && isLikelyAttachmentRelated
+                ? 'That file may be too large or in an unsupported format. Try a JPG/PNG image under 12MB, or retake with lower resolution.'
+                : `Sorry, the AI service returned an error (${status}). Please try again.`;
+          console.warn('[ai-proxy] Anthropic streaming failed', {
+            status,
+            model: responseModel,
+            usedToolsForRequest,
+            hasVisualAttachmentInput,
+            error: errText.slice(0, 320),
+          });
           const errEvent = { type: 'error', error: errText };
           const contentEvent = { type: 'content_block_delta', delta: { text: userMessage } };
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(errEvent)}\n\n`));
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(contentEvent)}\n\n`));
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
-          rejectMetaPromise!(new Error(`Anthropic streaming error: ${response.status} ${errText}`));
+          rejectMetaPromise!(new Error(`Anthropic streaming error: ${status} ${errText}`));
           return;
         }
+
+        modelUsed = responseModel;
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -1971,13 +2396,18 @@ function callAnthropicStreaming(
                 output = { success: false, error: 'tool_not_supported', tool: toolName };
               }
 
-              const label = toolName === 'web_search'
-                ? `Web Search: ${String((rawInput as any)?.query || '')}`
-                : `Tool: ${toolName}`;
-              const toolResultText = JSON.stringify(output);
-              fullContent += `\n\n[${label}]\n${toolResultText}`;
-              const searchEvent = { type: 'content_block_delta', delta: { text: `\n\n${toolResultText}` } };
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(searchEvent)}\n\n`));
+              // Keep tool execution server-side only; never stream raw JSON results
+              // into the visible assistant message.
+              console.log('[ai-proxy] server_tool_executed', {
+                tool: toolName,
+                success: Boolean((output as JsonRecord)?.success),
+              });
+              const summary = summarizeServerToolResult(toolName, output);
+              if (summary) {
+                fullContent += summary;
+                const summaryEvent = { type: 'content_block_delta', delta: { text: summary } };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(summaryEvent)}\n\n`));
+              }
             } catch {
               // Tool execution failed, continue
             }
@@ -2006,6 +2436,184 @@ function callAnthropicStreaming(
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch { /* controller already closed */ }
+        rejectMetaPromise!(err instanceof Error ? err : new Error(errMsg));
+      }
+    },
+  });
+
+  return { stream, meta: metaPromise };
+}
+
+/**
+ * Call OpenAI with native SSE streaming.
+ * Streams token deltas to the client in the same content_block_delta format
+ * consumed by the app streaming parser.
+ */
+function callOpenAIStreaming(
+  messages: Array<JsonRecord>,
+  requestedModel: string | null | undefined,
+  maxTokens: number = DEFAULT_MAX_TOKENS,
+): { stream: ReadableStream<Uint8Array>; meta: Promise<ProviderResponse> } {
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured.');
+
+  const allowed = parseAllowedModels('OPENAI_ALLOWED_MODELS', DEFAULT_OPENAI_ALLOWED_MODELS);
+  const fallbackModel = DEFAULT_OPENAI_ALLOWED_MODELS[0];
+  const selection = pickAllowedModel(requestedModel || Deno.env.get('OPENAI_MODEL'), allowed, fallbackModel);
+  if (selection.usedFallback) console.warn('[ai-proxy] OpenAI streaming model fallback:', selection.reason);
+  const model = selection.model;
+
+  const encoder = new TextEncoder();
+  let fullContent = '';
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let modelUsed = model;
+  let resolveMetaPromise: (v: ProviderResponse) => void;
+  let rejectMetaPromise: (e: Error) => void;
+  const metaPromise = new Promise<ProviderResponse>((res, rej) => {
+    resolveMetaPromise = res;
+    rejectMetaPromise = rej;
+  });
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const requestBody: JsonRecord = {
+          model,
+          messages: normalizeOpenAIMessages(messages),
+          temperature: 0.4,
+          max_tokens: maxTokens,
+          stream: true,
+          stream_options: { include_usage: true },
+        };
+
+        const callOpenAIStream = async () => {
+          return await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(requestBody),
+          });
+        };
+
+        let response = await callOpenAIStream();
+        if (!response.ok && RETRYABLE_PROVIDER_STATUSES.has(response.status)) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          response = await callOpenAIStream();
+        }
+
+        if (!response.ok || !response.body) {
+          const errText = await response.text();
+          const userMessage = response.status === 529
+            ? 'The AI service is temporarily overloaded. Please try again in a moment.'
+            : response.status === 401 || response.status === 403
+              ? 'AI service authentication error. Please contact support.'
+              : `Sorry, the AI service returned an error (${response.status}). Please try again.`;
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errText })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text: userMessage } })}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+          rejectMetaPromise!(new Error(`OpenAI streaming error: ${response.status} ${errText}`));
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let sawDone = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue;
+            if (!trimmed.startsWith('data:')) continue;
+
+            const dataStr = trimmed.slice(5).trim();
+            if (!dataStr) continue;
+            if (dataStr === '[DONE]') {
+              sawDone = true;
+              continue;
+            }
+
+            try {
+              const event = JSON.parse(dataStr) as JsonRecord;
+              const eventModel = event.model;
+              if (typeof eventModel === 'string' && eventModel.length > 0) {
+                modelUsed = eventModel;
+              }
+
+              const usage = event.usage as JsonRecord | undefined;
+              if (usage) {
+                const promptTokens = usage.prompt_tokens;
+                const completionTokens = usage.completion_tokens;
+                if (typeof promptTokens === 'number') tokensIn = promptTokens;
+                if (typeof completionTokens === 'number') tokensOut = completionTokens;
+              }
+
+              const choices = Array.isArray(event.choices) ? event.choices : [];
+              const firstChoice = choices[0] as JsonRecord | undefined;
+              const delta = firstChoice?.delta as JsonRecord | undefined;
+              const text = typeof delta?.content === 'string' ? delta.content : '';
+              if (!text) continue;
+
+              fullContent += text;
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text } })}\n\n`)
+              );
+            } catch {
+              // Skip malformed SSE lines.
+            }
+          }
+        }
+
+        if (!sawDone && buffer.trim().startsWith('data:')) {
+          const finalData = buffer.trim().slice(5).trim();
+          if (finalData && finalData !== '[DONE]') {
+            try {
+              const event = JSON.parse(finalData) as JsonRecord;
+              const choices = Array.isArray(event.choices) ? event.choices : [];
+              const firstChoice = choices[0] as JsonRecord | undefined;
+              const delta = firstChoice?.delta as JsonRecord | undefined;
+              const text = typeof delta?.content === 'string' ? delta.content : '';
+              if (text) {
+                fullContent += text;
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text } })}\n\n`)
+                );
+              }
+            } catch {
+              // Ignore malformed trailing chunk.
+            }
+          }
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+        resolveMetaPromise!({
+          content: fullContent,
+          model: modelUsed,
+          usage: { tokens_in: tokensIn, tokens_out: tokensOut },
+        });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        try {
+          const userMessage = 'Sorry, something went wrong while processing your request. Please try again.';
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errMsg })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text: userMessage } })}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch {
+          // controller already closed
+        }
         rejectMetaPromise!(err instanceof Error ? err : new Error(errMsg));
       }
     },
@@ -2250,22 +2858,29 @@ async function callAnthropic(
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured.');
   }
-  const allowed = allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
-  const fallbackModel = DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
-  const selection = pickAllowedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'), allowed, fallbackModel);
+  const allowed = normalizeAnthropicAllowedModels(
+    allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS)
+  );
+  const fallbackModel = normalizeRequestedModel(DEFAULT_ANTHROPIC_ALLOWED_MODELS[0]) || DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
+  const normalizedRequestedModel = normalizeRequestedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'));
+  const selection = pickAllowedModel(normalizedRequestedModel, allowed, fallbackModel);
   if (selection.usedFallback) {
     console.warn('[ai-proxy] Anthropic model fallback:', selection.reason);
   }
   const preferredModel = selection.model;
   const tools = buildAnthropicTools(enableTools, clientTools);
   const systemPrompt = messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT;
+  const providerMessages = buildProviderConversationMessages(messages);
+  if (!hasActionableUserMessages(providerMessages)) {
+    throw new Error('invalid_request_no_user_message: Please send a question or attach a file before asking Dash.');
+  }
 
   const callAnthropicOnce = async (model: string) => {
     const body: JsonRecord = {
       model,
       max_tokens: maxTokens,
       temperature: 0.4,
-      messages: messages.filter((m) => m.role !== 'system'),
+      messages: providerMessages,
       system: systemPrompt,
     };
 
@@ -2533,7 +3148,11 @@ serve(async (req) => {
     }
     const parsed = RequestSchema.safeParse(body);
     if (!parsed.success) {
-      return new Response(JSON.stringify({ error: 'Invalid request payload' }), {
+      const hasPayloadImages = body && typeof body === 'object' && Array.isArray((body as any).payload?.images) && (body as any).payload.images.length > 0;
+      const message = hasPayloadImages
+        ? 'Invalid request payload. If you attached files, try a smaller image or a supported format (e.g. JPEG, PNG).'
+        : 'Invalid request payload';
+      return new Response(JSON.stringify({ error: 'invalid_request', message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -2637,8 +3256,32 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(mergedContext, normalizedServiceType, requestMetadata);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
+    if (!hasActionableUserMessages(rawMessages)) {
+      return new Response(JSON.stringify({
+        error: 'invalid_request',
+        message: 'Please send a question or attach a file before asking Dash.',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     // Redact PII before sending to AI providers
-    const messages = redactMessagesForProvider(rawMessages);
+    const redactedMessages = redactMessagesForProvider(rawMessages);
+    const providerConversationMessages = buildProviderConversationMessages(redactedMessages);
+    if (!hasActionableUserMessages(providerConversationMessages)) {
+      return new Response(JSON.stringify({
+        error: 'invalid_request',
+        message: 'Please send a question or attach a file before asking Dash.',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const redactedSystemPrompt = redactedMessages.find((msg) => msg.role === 'system')?.content || systemPrompt;
+    const messages = [
+      { role: 'system', content: redactedSystemPrompt },
+      ...providerConversationMessages,
+    ];
     const serviceType = normalizedServiceType;
     const maxTokens = getMaxTokensForService(requestedOCRMode ? 'image_analysis' : serviceType);
 
@@ -2663,9 +3306,13 @@ serve(async (req) => {
 
     const profileRole = String(profile.role || '').toLowerCase();
     const isSuperAdmin = profileRole === 'superadmin' || profileRole === 'super_admin';
-    const superAdminAllowed = parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS);
+    const superAdminAllowed = normalizeAnthropicAllowedModels(
+      parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS)
+    );
     const openaiAllowed = parseAllowedModels('OPENAI_ALLOWED_MODELS', DEFAULT_OPENAI_ALLOWED_MODELS);
-    const anthropicAllowed = parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
+    const anthropicAllowed = normalizeAnthropicAllowedModels(
+      parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS)
+    );
     let requestedModel = normalizedRequestedModel;
     if (!requestedModel && quotaDataForRequest?.current_tier != null && serviceType !== 'image_generation') {
       requestedModel = getDefaultModelIdForTierProxy(normalizeTierName(quotaDataForRequest.current_tier));
@@ -2871,12 +3518,10 @@ serve(async (req) => {
       });
     }
 
-    // ── TRUE STREAMING (Anthropic, including tool calls) ──────────────
-    // When the client wants streaming AND we're using Anthropic,
-    // use native Anthropic SSE streaming for real-time token delivery.
-    // Tool use blocks are handled inline during streaming.
-    const canTrueStream = wantsStream && hasAnthropic && !shouldPreferOpenAI;
-    if (canTrueStream) {
+    // ── TRUE STREAMING (Anthropic + OpenAI) ──────────────
+    // Anthropic supports tools in-stream; OpenAI true-stream path below is text-only.
+    const canAnthropicTrueStream = wantsStream && hasAnthropic && !shouldPreferOpenAI;
+    if (canAnthropicTrueStream) {
       try {
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
         const clientToolDefs = enableTools && payload.client_tools?.length > 0
@@ -2923,8 +3568,10 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
             Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Transfer-Encoding': 'chunked',
           },
         });
       } catch (streamError) {
@@ -2933,14 +3580,87 @@ serve(async (req) => {
       }
     }
 
+    // OpenAI streaming is enabled only for text-only requests (no server/client tools, no OCR JSON normalization).
+    const canOpenAITrueStream = wantsStream
+      && !canAnthropicTrueStream
+      && hasOpenAI
+      && !enableTools
+      && !requestedOCRMode;
+    if (canOpenAITrueStream) {
+      try {
+        const { stream, meta } = callOpenAIStreaming(
+          messages,
+          requestedModel,
+          maxTokens,
+        );
+
+        meta.then(async (providerResponse) => {
+          try {
+            await supabase.rpc('record_ai_usage', {
+              p_user_id: userData.user.id,
+              p_feature_used: normalizeServiceType(payload.service_type),
+              p_model_used: providerResponse.model || 'openai',
+              p_tokens_used: (providerResponse.usage?.tokens_in || 0) + (providerResponse.usage?.tokens_out || 0),
+              p_request_tokens: providerResponse.usage?.tokens_in || 0,
+              p_response_tokens: providerResponse.usage?.tokens_out || 0,
+              p_success: true,
+              p_metadata: {
+                scope: payload.scope,
+                organization_id: profile.organization_id || profile.preschool_id || null,
+                streaming: true,
+                request_metadata: payload.metadata || {},
+              },
+            });
+          } catch (usageErr) {
+            console.warn('[ai-proxy] OpenAI streaming usage recording failed (non-fatal):', usageErr);
+          }
+        }).catch((streamErr) => {
+          console.warn('[ai-proxy] OpenAI streaming meta error (non-fatal):', streamErr);
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Transfer-Encoding': 'chunked',
+          },
+        });
+      } catch (streamError) {
+        console.warn('[ai-proxy] OpenAI true streaming failed, falling back to post-hoc:', streamError);
+      }
+    }
+
     const clientTools = payload.client_tools || undefined;
 
     let providerResponse: ProviderResponse;
-    const primaryProvider: 'anthropic' | 'openai' = isSuperAdmin
+    let primaryProvider: 'anthropic' | 'openai' = isSuperAdmin
       ? 'anthropic'
       : shouldPreferOpenAI
         ? 'openai'
         : 'anthropic';
+
+    // Respect preference/model intent, but never pick a provider that is not configured.
+    if (primaryProvider === 'anthropic' && !hasAnthropic && hasOpenAI) {
+      primaryProvider = 'openai';
+    } else if (primaryProvider === 'openai' && !hasOpenAI && hasAnthropic) {
+      primaryProvider = 'anthropic';
+    }
+
+    if ((primaryProvider === 'anthropic' && !hasAnthropic) || (primaryProvider === 'openai' && !hasOpenAI)) {
+      return new Response(JSON.stringify({
+        error: 'provider_not_configured',
+        message: primaryProvider === 'anthropic'
+          ? 'ANTHROPIC_API_KEY missing and Anthropic not configured.'
+          : 'OPENAI_API_KEY missing and OpenAI not configured.',
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const callProvider = async (provider: 'anthropic' | 'openai'): Promise<ProviderResponse> => {
       if (provider === 'anthropic') {
@@ -2959,8 +3679,9 @@ serve(async (req) => {
       providerResponse = await callProvider(primaryProvider);
     } catch (providerError) {
       const providerMessage = providerError instanceof Error ? providerError.message : String(providerError);
+      const providerStatus = mapProviderErrorStatus(providerMessage);
       // For non-superadmin, try alternate provider if available
-      if (!isSuperAdmin && hasOpenAI && hasAnthropic) {
+      if (!isSuperAdmin && hasOpenAI && hasAnthropic && shouldAttemptCrossProviderFallback(providerMessage)) {
         const fallbackProvider = primaryProvider === 'anthropic' ? 'openai' : 'anthropic';
         console.warn('[ai-proxy] Primary provider failed, attempting fallback:', {
           primaryProvider,
@@ -2971,13 +3692,14 @@ serve(async (req) => {
           providerResponse = await callProvider(fallbackProvider);
         } catch (fallbackError) {
           const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          const fallbackStatus = mapProviderErrorStatus(fallbackMessage);
           console.error('[ai-proxy] Provider error:', providerMessage, 'Fallback error:', fallbackMessage);
           return new Response(JSON.stringify({
             error: 'provider_error',
             message: providerMessage,
             fallback: fallbackMessage,
           }), {
-            status: 502,
+            status: fallbackStatus,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -2987,7 +3709,7 @@ serve(async (req) => {
           error: 'provider_error',
           message: providerMessage,
         }), {
-          status: 502,
+          status: providerStatus,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -3032,8 +3754,10 @@ serve(async (req) => {
         headers: {
           ...corsHeaders,
           'Content-Type': 'text/event-stream; charset=utf-8',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
           Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Transfer-Encoding': 'chunked',
         },
       });
     }

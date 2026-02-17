@@ -24,6 +24,7 @@ export interface TTSRequest {
   speaking_rate?: number;
   pitch?: number;
   volume?: number;
+  phonics_mode?: boolean;
 }
 
 export interface TTSResponse {

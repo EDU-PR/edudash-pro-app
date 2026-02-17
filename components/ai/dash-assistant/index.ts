@@ -14,3 +14,5 @@ export { DashHeader } from './DashHeader';
 export { DashUsageBanner } from './DashUsageBanner';
 export { DashModelSelector } from './DashModelSelector';
 export { DashContextChips } from './DashContextChips';
+export { AttachmentOptionsSheet } from './AttachmentOptionsSheet';
+export { DashOptionsSheet } from './DashOptionsSheet';

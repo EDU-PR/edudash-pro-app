@@ -126,6 +126,78 @@ const PLATFORM_SCHOOL_IDS = [
   '00000000-0000-0000-0000-000000000002', // EduDash Pro Main
 ];
 
+const SERVICE_TO_REQUEST_TYPES: Record<string, string[]> = {
+  chat_messages: ['chat_message', 'dash_conversation', 'conversation', 'chat_messages'],
+  lesson_generation: ['lesson_generation'],
+  grading_assistance: ['grading_assistance', 'exam_generation'],
+  homework_help: ['homework_help', 'explanation', 'tutor_help', 'tutor_session'],
+  homework_help_agentic: ['homework_help_agentic', 'explanation'],
+  transcription: ['transcription'],
+  explanation: ['explanation', 'homework_help'],
+  exam_generation: ['exam_generation', 'grading_assistance'],
+  image_generation: ['image_generation', 'generate_image'],
+};
+
+function normalizeServiceType(raw: string): string {
+  const value = (raw || '').trim().toLowerCase();
+  if (!value) return 'chat_messages';
+  if (value === 'chat_message' || value === 'conversation' || value === 'dash_conversation') return 'chat_messages';
+  if (value === 'exam_generation') return 'grading_assistance';
+  if (value === 'explanation' || value === 'tutor_help' || value === 'tutor_session') return 'homework_help';
+  if (value === 'generate_image') return 'image_generation';
+  return value;
+}
+
+function getRequestTypesForService(rawServiceType: string): string[] {
+  const normalized = normalizeServiceType(rawServiceType);
+  return SERVICE_TO_REQUEST_TYPES[normalized] || [normalized];
+}
+
+function mapRequestTypeToService(rawRequestType?: string | null): string {
+  const requestType = (rawRequestType || '').trim().toLowerCase();
+  if (!requestType) return 'unknown';
+  if (requestType === 'chat_message' || requestType === 'conversation' || requestType === 'dash_conversation') {
+    return 'chat_messages';
+  }
+  if (requestType === 'explanation' || requestType === 'tutor_help' || requestType === 'tutor_session') {
+    return 'homework_help';
+  }
+  if (requestType === 'exam_generation') return 'grading_assistance';
+  if (requestType === 'generate_image') return 'image_generation';
+  return requestType;
+}
+
+async function getSchoolUserIds(supabase: any, preschoolId: string): Promise<string[]> {
+  const ids = new Set<string>();
+  const { data: byOrganization, error: byOrganizationError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('organization_id', preschoolId)
+    .limit(5000);
+  if (byOrganizationError) {
+    console.warn('[ai-usage] organization_id profile lookup failed:', byOrganizationError.message);
+  }
+
+  for (const row of byOrganization || []) {
+    if (row?.id) ids.add(row.id);
+  }
+
+  const { data: byPreschool, error: byPreschoolError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('preschool_id', preschoolId)
+    .limit(5000);
+  if (byPreschoolError) {
+    console.warn('[ai-usage] preschool_id profile lookup failed:', byPreschoolError.message);
+  }
+
+  for (const row of byPreschool || []) {
+    if (row?.id) ids.add(row.id);
+  }
+
+  return Array.from(ids);
+}
+
 serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -180,13 +252,13 @@ serve(async (req: Request) => {
 
         const { data: usage } = await supabase
           .from('ai_request_log')
-          .select('service_type')
+          .select('request_type')
           .eq('user_id', user.id)
           .gte('created_at', monthStart);
 
         const counts: Record<string, number> = {};
         for (const row of usage || []) {
-          const key = row.service_type || 'unknown';
+          const key = mapRequestTypeToService(row.request_type);
           counts[key] = (counts[key] || 0) + 1;
         }
 
@@ -219,12 +291,27 @@ serve(async (req: Request) => {
         const event = body.event;
         if (!event) return respond({ error: 'Missing event' }, 400);
 
+        const serviceType = normalizeServiceType(
+          event.feature || event.service_type || event.request_type || 'chat_messages',
+        );
+        const requestType = getRequestTypesForService(serviceType)[0] || 'chat_message';
+        const tokensIn = Number(event.tokens_in || 0);
+        const tokensOut = Number(event.tokens_out || 0);
+
         await supabase.from('ai_request_log').insert({
           user_id: user.id,
-          service_type: event.feature || event.service_type || 'unknown',
-          model: event.model || 'unknown',
-          tokens_in: event.tokens_in || 0,
-          tokens_out: event.tokens_out || 0,
+          request_type: requestType,
+          function_name: event.function_name || null,
+          status: event.status || 'success',
+          response_time_ms: event.response_time_ms || null,
+          tokens_used: Number.isFinite(tokensIn + tokensOut) ? tokensIn + tokensOut : null,
+          metadata: {
+            ...(event.metadata || {}),
+            service_type: serviceType,
+            model: event.model || 'unknown',
+            tokens_in: tokensIn,
+            tokens_out: tokensOut,
+          },
           created_at: event.timestamp || new Date().toISOString(),
         });
 
@@ -235,13 +322,19 @@ serve(async (req: Request) => {
       case 'bulk_increment': {
         const { feature, count } = body;
         if (!feature || !count) return respond({ error: 'Missing feature or count' }, 400);
+        const serviceType = normalizeServiceType(feature);
+        const requestType = getRequestTypesForService(serviceType)[0] || 'chat_message';
 
         const rows = Array.from({ length: count }, () => ({
           user_id: user.id,
-          service_type: feature,
-          model: 'bulk_sync',
-          tokens_in: 0,
-          tokens_out: 0,
+          request_type: requestType,
+          function_name: 'bulk_increment',
+          status: 'success',
+          tokens_used: 0,
+          metadata: {
+            service_type: serviceType,
+            source: 'bulk_increment',
+          },
           created_at: new Date().toISOString(),
         }));
 
@@ -267,13 +360,13 @@ serve(async (req: Request) => {
 
         const { data: usage } = await supabase
           .from('ai_request_log')
-          .select('service_type')
+          .select('request_type')
           .eq('user_id', targetUserId)
           .gte('created_at', monthStart);
 
         const currentUsage: Record<string, number> = {};
         for (const row of usage || []) {
-          const key = row.service_type || 'unknown';
+          const key = mapRequestTypeToService(row.request_type);
           currentUsage[key] = (currentUsage[key] || 0) + 1;
         }
 
@@ -318,11 +411,23 @@ serve(async (req: Request) => {
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const schoolUserIds = await getSchoolUserIds(supabase, preschool_id);
+
+        if (schoolUserIds.length === 0) {
+          return respond({
+            preschool_id,
+            period_start: monthStart,
+            total_requests: 0,
+            by_service: {},
+            by_user: {},
+            by_day: {},
+          });
+        }
 
         const { data: usage } = await supabase
           .from('ai_request_log')
-          .select('service_type, user_id, created_at, model')
-          .eq('organization_id', preschool_id)
+          .select('request_type, user_id, created_at')
+          .in('user_id', schoolUserIds)
           .gte('created_at', monthStart)
           .limit(5000);
 
@@ -331,7 +436,8 @@ serve(async (req: Request) => {
         const byDay: Record<string, number> = {};
 
         for (const row of usage || []) {
-          byService[row.service_type] = (byService[row.service_type] || 0) + 1;
+          const serviceKey = mapRequestTypeToService(row.request_type);
+          byService[serviceKey] = (byService[serviceKey] || 0) + 1;
           byUser[row.user_id] = (byUser[row.user_id] || 0) + 1;
           const day = (row.created_at || '').slice(0, 10);
           byDay[day] = (byDay[day] || 0) + 1;
@@ -361,18 +467,27 @@ serve(async (req: Request) => {
         if (body.scope === 'user' || body.user_id) {
           query = query.eq('user_id', body.user_id || user.id);
         } else if (body.scope === 'school' && body.preschool_id) {
-          query = query.eq('organization_id', body.preschool_id);
+          const schoolUserIds = await getSchoolUserIds(supabase, body.preschool_id);
+          if (schoolUserIds.length === 0) {
+            return respond({ logs: [], total: 0 });
+          }
+          query = query.in('user_id', schoolUserIds);
         } else {
           query = query.eq('user_id', user.id);
         }
 
         if (body.service_type) {
-          query = query.eq('service_type', body.service_type);
+          query = query.in('request_type', getRequestTypesForService(body.service_type));
         }
 
         const { data, count } = await query;
 
-        return respond({ logs: data || [], total: count || 0 });
+        const logs = (data || []).map((row: any) => ({
+          ...row,
+          service_type: mapRequestTypeToService(row.request_type),
+        }));
+
+        return respond({ logs, total: count || 0 });
       }
 
       // Quota status for a specific service
@@ -380,6 +495,8 @@ serve(async (req: Request) => {
         const serviceType = body.service_type;
         const targetUserId = body.user_id || user.id;
         if (!serviceType) return respond({ error: 'Missing service_type' }, 400);
+        const normalizedServiceType = normalizeServiceType(serviceType);
+        const requestTypes = getRequestTypesForService(normalizedServiceType);
 
         const { data: tierRow } = await supabase
           .from('user_ai_tiers')
@@ -389,7 +506,7 @@ serve(async (req: Request) => {
 
         const tier = normalizeTier(tierRow?.tier || 'free');
         const quotas = getQuotasForTier(tier);
-        const limit = quotas[serviceType] || 0;
+        const limit = quotas[normalizedServiceType] ?? quotas[serviceType] ?? 0;
 
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -398,7 +515,7 @@ serve(async (req: Request) => {
           .from('ai_request_log')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', targetUserId)
-          .eq('service_type', serviceType)
+          .in('request_type', requestTypes)
           .gte('created_at', monthStart);
 
         const current = count || 0;
@@ -406,7 +523,7 @@ serve(async (req: Request) => {
 
         return respond({
           user_id: targetUserId,
-          service_type: serviceType,
+          service_type: normalizedServiceType,
           tier,
           limit,
           current,

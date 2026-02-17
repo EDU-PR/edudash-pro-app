@@ -104,6 +104,61 @@ const extractJson = (value: string): WeeklyProgramAIResponse | null => {
   }
 };
 
+const extractFunctionErrorMessage = async (error: unknown): Promise<string | null> => {
+  const maybeError = error as { context?: unknown; message?: string };
+  const context = maybeError?.context as
+    | {
+        status?: number;
+        clone?: () => {
+          json?: () => Promise<unknown>;
+          text?: () => Promise<string>;
+        };
+        json?: () => Promise<unknown>;
+        text?: () => Promise<string>;
+      }
+    | undefined;
+
+  if (!context) {
+    return maybeError?.message || null;
+  }
+
+  const status = typeof context.status === 'number' ? context.status : null;
+  const response = typeof context.clone === 'function' ? context.clone() : context;
+
+  try {
+    if (typeof response.json === 'function') {
+      const payload = await response.json();
+      if (payload && typeof payload === 'object') {
+        const record = payload as Record<string, unknown>;
+        const message =
+          typeof record.message === 'string'
+            ? record.message
+            : typeof record.error === 'string'
+              ? record.error
+              : null;
+        if (message) {
+          return status ? `${message} (HTTP ${status})` : message;
+        }
+      }
+    }
+  } catch {
+    // ignore JSON parsing issues and try plain text fallback
+  }
+
+  try {
+    if (typeof response.text === 'function') {
+      const text = (await response.text()).trim();
+      if (text) {
+        return status ? `${text} (HTTP ${status})` : text;
+      }
+    }
+  } catch {
+    // ignore fallback parsing errors
+  }
+
+  return maybeError?.message || null;
+};
+
 const toBlocksFromFlat = (blocks: unknown[]): DailyProgramBlock[] =>
   blocks
     .map((item, index) => {
@@ -230,15 +285,21 @@ export class WeeklyProgramCopilotService {
 
     const { data, error } = await supabase.functions.invoke('ai-proxy', {
       body: {
-        task: 'weekly_program_copilot',
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2500,
-        prompt,
+        service_type: 'lesson_generation',
+        payload: {
+          prompt,
+        },
+        stream: false,
+        enable_tools: false,
+        metadata: {
+          source: 'weekly_program_copilot',
+        },
       },
     });
 
     if (error) {
-      throw new Error(error.message || 'Failed to generate weekly program');
+      const detailedMessage = await extractFunctionErrorMessage(error);
+      throw new Error(detailedMessage || error.message || 'Failed to generate weekly program');
     }
 
     const content =

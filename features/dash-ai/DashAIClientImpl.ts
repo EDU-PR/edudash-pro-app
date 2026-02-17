@@ -243,6 +243,22 @@ export class DashAIClient {
     return Math.min(max, Math.max(min, parsed));
   }
 
+  private isAbortLikeError(error: unknown): boolean {
+    const err = error as { name?: string; message?: string; code?: string } | null;
+    const name = String(err?.name || '');
+    const code = String(err?.code || '');
+    const message = String(err?.message || '');
+    if (name === 'AbortError' || code === 'ABORT_ERR') return true;
+    return message === 'Aborted' || /aborted/i.test(message);
+  }
+
+  private createStreamContinuationError(toolNames: string[]): Error {
+    const label = toolNames.length > 0 ? toolNames.join(', ') : 'client_tools';
+    const error = new Error(`Streaming requires continuation for tool calls: ${label}`);
+    (error as Error & { code?: string }).code = 'stream_requires_continuation';
+    return error;
+  }
+
   private getOrchestrationConfig(): {
     orchestration_mode: string;
     loop_budget: {
@@ -281,6 +297,18 @@ export class DashAIClient {
         0.99
       ),
     };
+  }
+
+  private normalizeRequestedModelId(model?: string | null): string | undefined {
+    const raw = String(model || '').trim();
+    if (!raw) return undefined;
+    const key = raw.toLowerCase();
+    const aliases: Record<string, string> = {
+      'claude-3-5-sonnet': 'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-latest': 'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-20241022': 'claude-3-7-sonnet-20250219',
+    };
+    return aliases[key] || raw;
   }
 
   private normalizeRoleAndScope(roleValue?: string | null): {
@@ -399,12 +427,14 @@ export class DashAIClient {
     try {
       // Tools enabled - Dash can now autonomously call tools like Claude Sonnet 4.5
       const ENABLE_TOOLS = true;
+      const normalizedModel = this.normalizeRequestedModelId(params.model);
       
       if (__DEV__) {
         console.log('[DashAIClient] Calling AI service:', {
           action: params.action,
           streaming: params.stream || false,
           toolsEnabled: ENABLE_TOOLS,
+          model: normalizedModel || params.model || null,
         });
       }
       
@@ -415,23 +445,42 @@ export class DashAIClient {
         const promptText = messagesArr.length > 0
           ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
           : String(params.content || params.userInput || '');
-        return await this.callAIServiceStreaming(
-          {
-            promptText,
-            context: params.context || undefined,
-            model: params.model,
-            serviceType: params.serviceType,
-            ocrMode: params.ocrMode,
-            ocrTask: params.ocrTask,
-            ocrResponseFormat: params.ocrResponseFormat,
-            metadata: params.metadata,
-            // Forward image data so streaming path can include vision payloads
-            attachments: params.attachments,
-            images: params.images,
-          },
-          params.onChunk,
-          params.signal
-        );
+        try {
+          return await this.callAIServiceStreaming(
+            {
+              promptText,
+              context: params.context || undefined,
+              model: normalizedModel,
+              serviceType: params.serviceType,
+              ocrMode: params.ocrMode,
+              ocrTask: params.ocrTask,
+              ocrResponseFormat: params.ocrResponseFormat,
+              metadata: params.metadata,
+              // Forward image data so streaming path can include vision payloads
+              attachments: params.attachments,
+              images: params.images,
+            },
+            params.onChunk,
+            params.signal
+          );
+        } catch (streamError) {
+          if (this.isAbortLikeError(streamError)) {
+            throw streamError;
+          }
+          console.warn('[DashAIClient] Streaming path failed, retrying with non-stream orchestration:', streamError);
+          if (__DEV__) {
+            dashAiDevLog('voice_request', {
+              phase: 'streaming_fallback_non_stream',
+              message: streamError instanceof Error ? streamError.message : String(streamError),
+              details: {
+                model: params.model || null,
+                normalized_model: normalizedModel || null,
+                service_type: params.serviceType || null,
+                response_mode: (params.metadata as any)?.response_mode || null,
+              },
+            });
+          }
+        }
       }
       
       // Non-streaming call to ai-proxy
@@ -444,6 +493,14 @@ export class DashAIClient {
         : this.buildAttachmentContext(params.attachments);
       const mergedContext = [params.context, attachmentContext].filter(Boolean).join('\n\n') || undefined;
       const images = await this.buildImagePayloads(params.attachments, params.images);
+      if (__DEV__ && (Array.isArray(params.attachments) || images.length > 0)) {
+        console.log('[DashAIClient] Vision payload (non-stream)', {
+          attachmentCount: Array.isArray(params.attachments) ? params.attachments.length : 0,
+          imagePayloadCount: images.length,
+          imageMediaTypes: images.map((img) => img.media_type),
+          imagePayloadSizes: images.map((img) => img.data?.length || 0),
+        });
+      }
       const profile = this.getUserProfile() as any;
       const { role, scope } = this.normalizeRoleAndScope(profile?.role);
       const userTier = this.resolveUserTier(profile);
@@ -466,14 +523,14 @@ export class DashAIClient {
           ocr_mode: params.ocrMode || undefined,
           ocr_task: params.ocrTask || undefined,
           ocr_response_format: params.ocrResponseFormat || undefined,
-          model: params.model || undefined,
+          model: normalizedModel,
         },
         stream: false,
         enable_tools: ENABLE_TOOLS,
         client_tools: clientToolDefs,
         metadata: {
           role: scope,
-          model: params.model || undefined,
+          model: normalizedModel,
           ...(params.metadata || {}),
           trace_id: traceId,
           tool_plan: toolPlan,
@@ -735,6 +792,9 @@ export class DashAIClient {
         } 
       };
     } catch (error) {
+      if (this.isAbortLikeError(error)) {
+        throw error;
+      }
       console.error('[DashAIClient] AI service call failed:', error);
       return {
         content: 'I ran into a hiccup while preparing your help. Try again, or tell me what you need and I’ll guide you step-by-step.',
@@ -825,9 +885,12 @@ export class DashAIClient {
       return 'Your account needs to be linked to a school to use Dash AI.';
     }
     if (error.status === 400) {
-      return error.message && __DEV__
+      if (error.message && typeof error.message === 'string' && error.message.length > 0) {
+        return error.message;
+      }
+      return __DEV__ && error.message
         ? `[Dev] ${error.message}`
-        : 'Dash received an invalid request. Please try again or rephrase.';
+        : 'That request could not be processed. If you attached an image, retry (Dash auto-compresses JPG/PNG), or try a clearer scan.';
     }
     if (error.status === 503 || error.code === 'provider_not_configured') {
       return 'Dash AI is temporarily unavailable. Please try again in a moment.';
@@ -875,6 +938,54 @@ export class DashAIClient {
     const startTime = Date.now();
     let firstTokenTime: number | null = null;
     let tokenCount = 0;
+    const normalizedModel = this.normalizeRequestedModelId(params.model);
+    let sawPendingToolCalls = false;
+    const pendingToolNames = new Set<string>();
+    let streamErrorText: string | null = null;
+
+    const extractDeltaFromStreamEvent = (parsed: any): string | null => {
+      const eventType = String(parsed?.type || '').trim().toLowerCase();
+      if (eventType === 'pending_tool_calls') {
+        sawPendingToolCalls = true;
+        const toolCalls = Array.isArray(parsed?.tool_calls) ? parsed.tool_calls : [];
+        for (const toolCall of toolCalls) {
+          const toolName = String((toolCall as any)?.name || '').trim();
+          if (toolName) pendingToolNames.add(toolName);
+        }
+        return null;
+      }
+
+      if (eventType === 'error') {
+        const errorMessage = typeof parsed?.error === 'string'
+          ? parsed.error
+          : String((parsed?.error?.message || parsed?.message || 'Streaming provider error')).trim();
+        if (errorMessage) {
+          streamErrorText = errorMessage;
+        }
+        return null;
+      }
+
+      const deltaText = typeof parsed?.delta?.text === 'string'
+        ? parsed.delta.text
+        : typeof parsed?.content === 'string'
+          ? parsed.content
+          : null;
+
+      return deltaText && deltaText.length > 0 ? deltaText : null;
+    };
+
+    const finalizeStreamOrThrow = (accumulatedText: string): AIServiceResponse => {
+      if (streamErrorText) {
+        throw new Error(streamErrorText);
+      }
+      if (sawPendingToolCalls) {
+        throw this.createStreamContinuationError(Array.from(pendingToolNames));
+      }
+      return {
+        content: accumulatedText || 'No content extracted from stream',
+        metadata: {},
+      };
+    };
 
     try {
       const { data: sessionData } = await this.supabaseClient.auth.getSession();
@@ -901,6 +1012,14 @@ export class DashAIClient {
 
       // Build image payloads for streaming (vision support)
       const streamImages = await this.buildImagePayloads(params.attachments, params.images);
+      if (__DEV__ && (Array.isArray(params.attachments) || streamImages.length > 0)) {
+        console.log('[DashAIClient] Vision payload (stream)', {
+          attachmentCount: Array.isArray(params.attachments) ? params.attachments.length : 0,
+          imagePayloadCount: streamImages.length,
+          imageMediaTypes: streamImages.map((img) => img.media_type),
+          imagePayloadSizes: streamImages.map((img) => img.data?.length || 0),
+        });
+      }
 
       const requestBody = JSON.stringify({
         scope: scope,
@@ -912,14 +1031,14 @@ export class DashAIClient {
           ocr_mode: params.ocrMode || undefined,
           ocr_task: params.ocrTask || undefined,
           ocr_response_format: params.ocrResponseFormat || undefined,
-          model: params.model || undefined,
+          model: normalizedModel,
         },
         stream: true,
         enable_tools: true,
         client_tools: clientToolDefs,
         metadata: {
           role: userRole,
-          model: params.model || undefined,
+          model: normalizedModel,
           ...(params.metadata || {}),
           trace_id: traceId,
           tool_plan: toolPlan,
@@ -949,7 +1068,7 @@ export class DashAIClient {
               if (payload === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(payload);
-                const deltaText = parsed.delta?.text || parsed.content;
+                const deltaText = extractDeltaFromStreamEvent(parsed);
                 if (deltaText) {
                   if (firstTokenTime === null) firstTokenTime = Date.now();
                   tokenCount++;
@@ -978,10 +1097,11 @@ export class DashAIClient {
               processNewData(xhr.responseText.slice(processedLen));
             }
             if (xhr.status >= 200 && xhr.status < 300) {
-              resolve({
-                content: accumulated || 'No content extracted from stream',
-                metadata: {},
-              });
+              try {
+                resolve(finalizeStreamOrThrow(accumulated));
+              } catch (finalizeError) {
+                reject(finalizeError);
+              }
             } else {
               if (__DEV__) {
                 dashAiDevLog('voice_response_error', {
@@ -1052,15 +1172,15 @@ export class DashAIClient {
             
             try {
               const parsed = JSON.parse(data);
-              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                // Capture first token time
-                if (firstTokenTime === null) {
-                  firstTokenTime = Date.now();
-                }
-                tokenCount++;
-                accumulated += parsed.delta.text;
-                onChunk(parsed.delta.text);
+              const deltaText = extractDeltaFromStreamEvent(parsed);
+              if (!deltaText) continue;
+              // Capture first token time
+              if (firstTokenTime === null) {
+                firstTokenTime = Date.now();
               }
+              tokenCount++;
+              accumulated += deltaText;
+              onChunk(deltaText);
             } catch (e) {
               console.warn('[DashAIClient] Failed to parse SSE chunk:', e);
             }
@@ -1076,13 +1196,14 @@ export class DashAIClient {
           if (data !== '[DONE]') {
             try {
               const parsed = JSON.parse(data);
-              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              const deltaText = extractDeltaFromStreamEvent(parsed);
+              if (deltaText) {
                 if (firstTokenTime === null) {
                   firstTokenTime = Date.now();
                 }
                 tokenCount++;
-                accumulated += parsed.delta.text;
-                onChunk(parsed.delta.text);
+                accumulated += deltaText;
+                onChunk(deltaText);
               }
             } catch (e) {
               console.warn('[DashAIClient] Failed to parse remaining SSE buffer:', e);
@@ -1108,10 +1229,7 @@ export class DashAIClient {
         }
       }
 
-      return {
-        content: accumulated,
-        metadata: {},
-      };
+      return finalizeStreamOrThrow(accumulated);
     } catch (error) {
       console.error('[DashAIClient] Streaming failed:', error);
       throw error;
@@ -1147,6 +1265,7 @@ export class DashAIClient {
     }
 
     const wsImages = await this.buildImagePayloads(params.attachments, params.images);
+    const normalizedModel = this.normalizeRequestedModelId(params.model);
 
     return new Promise((resolve, reject) => {
       try {
@@ -1165,17 +1284,32 @@ export class DashAIClient {
         const ws = new WebSocket(wsUrl);
         let accumulated = '';
         let hasError = false;
+        let isSettled = false;
+        let sawPendingToolCalls = false;
+        const pendingToolNames = new Set<string>();
+
+        const resolveOnce = (result: AIServiceResponse) => {
+          if (isSettled) return;
+          isSettled = true;
+          resolve(result);
+        };
+
+        const rejectOnce = (error: Error) => {
+          if (isSettled) return;
+          hasError = true;
+          isSettled = true;
+          reject(error);
+        };
 
         // Wire AbortSignal to close WebSocket on cancel
         if (signal) {
           if (signal.aborted) {
-            reject(new Error('Aborted'));
+            rejectOnce(new Error('Aborted'));
             return;
           }
           signal.addEventListener('abort', () => {
-            hasError = true;
             ws.close();
-            reject(new Error('Aborted'));
+            rejectOnce(new Error('Aborted'));
           }, { once: true });
         }
         
@@ -1191,13 +1325,13 @@ export class DashAIClient {
               ocr_mode: params.ocrMode || undefined,
               ocr_task: params.ocrTask || undefined,
               ocr_response_format: params.ocrResponseFormat || undefined,
-              model: params.model || undefined,
+              model: normalizedModel,
             },
             enable_tools: true,
             client_tools: clientTools,
             metadata: {
               role,
-              model: params.model || undefined,
+              model: normalizedModel,
               ...(params.metadata || {}),
               trace_id: traceId,
               tool_plan: toolPlan,
@@ -1213,23 +1347,40 @@ export class DashAIClient {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
+            const eventType = String(msg?.type || '').trim().toLowerCase();
             
-            if (msg.type === 'start') {
+            if (eventType === 'start') {
               // Stream started
               if (__DEV__) {
                 console.log('[DashAIClient] WebSocket stream started');
               }
-            } else if (msg.type === 'delta' && msg.text) {
+            } else if (eventType === 'pending_tool_calls') {
+              sawPendingToolCalls = true;
+              const toolCalls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+              for (const toolCall of toolCalls) {
+                const toolName = String((toolCall as any)?.name || '').trim();
+                if (toolName) pendingToolNames.add(toolName);
+              }
+            } else if (
+              (eventType === 'delta' && typeof msg?.text === 'string') ||
+              (eventType === 'content_block_delta' && typeof msg?.delta?.text === 'string')
+            ) {
+              const deltaText = eventType === 'delta' ? msg.text : msg.delta.text;
               // Capture first token time
               if (firstTokenTime === null) {
                 firstTokenTime = Date.now();
               }
               tokenCount++;
-              accumulated += msg.text;
-              onChunk(msg.text);
-            } else if (msg.type === 'done') {
+              accumulated += deltaText;
+              onChunk(deltaText);
+            } else if (eventType === 'done') {
               // Stream completed
               ws.close();
+
+              if (sawPendingToolCalls) {
+                rejectOnce(this.createStreamContinuationError(Array.from(pendingToolNames)));
+                return;
+              }
               
               // Emit performance metrics (production only)
               if (!__DEV__ && firstTokenTime !== null) {
@@ -1248,16 +1399,19 @@ export class DashAIClient {
                 }
               }
               
-              resolve({
+              resolveOnce({
                 content: accumulated || 'No content received from WebSocket stream',
                 metadata: {},
               });
-            } else if (msg.type === 'error') {
-              hasError = true;
-              reject(new Error(msg.message || 'WebSocket streaming error'));
-            } else if (msg.type === 'cancelled') {
-              hasError = true;
-              reject(new Error('Stream cancelled'));
+            } else if (eventType === 'error') {
+              const errorMessage = typeof msg?.error === 'string'
+                ? msg.error
+                : typeof msg?.message === 'string'
+                  ? msg.message
+                  : 'WebSocket streaming error';
+              rejectOnce(new Error(errorMessage));
+            } else if (eventType === 'cancelled') {
+              rejectOnce(new Error('Stream cancelled'));
             }
           } catch (e) {
             console.error('[DashAIClient] Failed to parse WebSocket message:', e);
@@ -1265,10 +1419,9 @@ export class DashAIClient {
         };
         
         ws.onerror = (error) => {
-          if (!hasError) {
-            hasError = true;
+          if (!isSettled) {
             console.error('[DashAIClient] WebSocket error:', error);
-            reject(new Error('WebSocket connection error'));
+            rejectOnce(new Error('WebSocket connection error'));
           }
         };
         
@@ -1276,8 +1429,8 @@ export class DashAIClient {
           if (__DEV__) {
             console.log('[DashAIClient] WebSocket closed:', event.code, event.reason);
           }
-          if (!hasError && accumulated.length === 0) {
-            reject(new Error('WebSocket closed without receiving data'));
+          if (!hasError && !isSettled && accumulated.length === 0) {
+            rejectOnce(new Error('WebSocket closed without receiving data'));
           }
         };
         

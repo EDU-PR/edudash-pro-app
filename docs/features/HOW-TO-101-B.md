@@ -5,6 +5,8 @@
 
 This section covers step-by-step tutorials for all dashboards, registration flows, and debugging guides.
 
+**Workshop manual convention:** All role tutorials use the same behavior: **Test instructions (UI)** give numbered steps with which screen to open and which button to tap (no code or unit-test summaries). **App visuals** reference screenshots from the current native mobile app — see [Workshop Screenshots](../workshop-screenshots/README.md) for how to capture and add them.
+
 ---
 
 ## Table of Contents
@@ -213,6 +215,23 @@ Principal Dashboard
     └── Notifications
 ```
 
+#### Test instructions (UI)
+
+1. Sign in as a principal and land on the principal dashboard.
+2. Open the **Learning** section (expand if collapsed).
+3. Tap **AI Daily Routine** to open the Daily Program Planner.
+4. To add a teacher: tap **Teachers** in Quick Actions, then **Invite Teacher**.
+5. To generate a parent code: tap **Parents**, then **Generate Code**.
+
+#### App visuals (native mobile)
+
+| Step / screen | Screenshot |
+|---------------|------------|
+| Dashboard overview | ![Principal dashboard](../workshop-screenshots/principal-dashboard-overview.png) |
+| Learning section with AI Daily Routine | ![Principal Learning](../workshop-screenshots/principal-dashboard-learning-section.png) |
+
+*(Add the PNG files to `docs/workshop-screenshots/` as per the [screenshots README](../workshop-screenshots/README.md).)*
+
 ---
 
 ### 2.3 Teacher Dashboard
@@ -280,6 +299,23 @@ End of Day:
 8. Update any progress notes
 ```
 
+#### Test instructions (UI)
+
+1. Sign in as a teacher and land on the teacher dashboard.
+2. Tap **Daily Program** or **Open Planner** to open today’s routine (or the daily program planner).
+3. To take attendance: tap the class card, then **Take Attendance**.
+4. To start a tutor session: tap **Start Tutor Session** (or **Dash AI** then describe the need).
+5. To assign homework: tap **Homework** (or equivalent) → **Assign New**.
+
+#### App visuals (native mobile)
+
+| Step / screen | Screenshot |
+|---------------|------------|
+| Teacher dashboard overview | ![Teacher dashboard](../workshop-screenshots/teacher-dashboard-overview.png) |
+| Daily Program / Planner entry | ![Teacher Daily Program](../workshop-screenshots/teacher-daily-program-open.png) |
+
+*(Add PNGs to `docs/workshop-screenshots/` per the [screenshots README](../workshop-screenshots/README.md).)*
+
 ---
 
 ### 2.4 Parent Dashboard
@@ -328,6 +364,23 @@ End of Day:
 | Make payment      | Tap "Payments"                   | `manage-subscription.tsx`       |
 | View reports      | Tap "Progress Reports"           | View PDF reports                |
 | Add child         | Profile → "Add Another Child"    | `parent-child-registration.tsx` |
+
+#### Test instructions (UI)
+
+1. Sign in as a parent and land on the parent dashboard.
+2. Tap **School Announcements** (megaphone icon) to open the list — shared daily routines and menus appear here.
+3. To view a child’s homework: tap **My Child's Homework** (or **Homework** in quick actions).
+4. To message the teacher: tap **Message Teacher** or **Messages**.
+5. To pay fees: tap **Fees & Payments** or **Payments**.
+
+#### App visuals (native mobile)
+
+| Step / screen | Screenshot |
+|---------------|------------|
+| Parent dashboard overview | ![Parent dashboard](../workshop-screenshots/parent-dashboard-overview.png) |
+| School Announcements list (routines appear here) | ![Parent Announcements](../workshop-screenshots/parent-announcements-list.png) |
+
+*(Add PNGs to `docs/workshop-screenshots/` per the [screenshots README](../workshop-screenshots/README.md).)*
 
 ---
 

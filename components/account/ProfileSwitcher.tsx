@@ -4,7 +4,7 @@
  * Allows users to switch between stored biometric accounts without signing out.
  * Uses EnhancedBiometricAuth for multi-account storage and session restoration.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -13,15 +13,17 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { clearAllNavigationLocks } from '@/lib/routeAfterLogin';
+import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { signOutAndRedirect, setAccountSwitchInProgress, setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
 import { registerPushDevice } from '@/lib/notifications';
 import { MAX_BIOMETRIC_ACCOUNTS } from '@/services/biometricStorage';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { fetchEnhancedUserProfile } from '@/lib/rbac';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface StoredAccount {
@@ -53,12 +55,28 @@ export function ProfileSwitcher({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
+  const pathname = usePathname();
   const { showAlert, alertProps } = useAlertModal();
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const pathnameRef = useRef(pathname);
+  const routeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
+    return () => {
+      if (routeFallbackTimerRef.current) {
+        clearTimeout(routeFallbackTimerRef.current);
+        routeFallbackTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Load stored biometric accounts
   const loadAccounts = useCallback(async () => {
@@ -163,6 +181,7 @@ export function ProfileSwitcher({
           from: user?.id,
           to: account.userId,
           method: biometricAvailable ? 'biometric' : 'token',
+          path: pathnameRef.current,
         });
       }
 
@@ -180,6 +199,7 @@ export function ProfileSwitcher({
           sessionRestored: result.sessionRestored,
           to: account.userId,
           error: result.error ?? null,
+          path: pathnameRef.current,
         });
       }
       if (!result.success) {
@@ -215,6 +235,7 @@ export function ProfileSwitcher({
         console.log('[AccountSwitch] Success', {
           to: account.userId,
           sessionRestored: result.sessionRestored,
+          path: pathnameRef.current,
         });
       }
 
@@ -235,10 +256,86 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
-        // Routing is handled by the auth pipeline:
-        // session restore fires SIGNED_IN → handleSignedIn → routeAfterLogin.
-        // We do NOT call routeAfterLogin directly to avoid competing routes.
-        console.log('[ProfileSwitcher] Session restored, auth pipeline will handle routing');
+        // Route handoff:
+        // Prefer auth pipeline, but when user remains on account/auth screens immediately
+        // after successful restore, proactively resolve dashboard route.
+        const currentPath = pathnameRef.current || '';
+        const shouldForceRoute =
+          currentPath.includes('/screens/account') ||
+          currentPath.includes('/(auth)/sign-in') ||
+          currentPath.includes('/sign-in');
+        if (__DEV__) {
+          console.log('[AccountSwitch] Route handoff decision', {
+            currentPath,
+            shouldForceRoute,
+            expectedUserId: account.userId,
+          });
+        }
+        if (shouldForceRoute) {
+          try {
+            const supabase = assertSupabase();
+            const { data: activeUserData } = await supabase.auth.getUser();
+            const activeUser = activeUserData?.user || null;
+            if (activeUser?.id === account.userId) {
+              const nextProfile = await fetchEnhancedUserProfile(activeUser.id).catch(() => null);
+              await routeAfterLogin(activeUser, nextProfile);
+              if (__DEV__) {
+                console.log('[AccountSwitch] Route handoff applied', {
+                  userId: activeUser.id,
+                  currentPath,
+                });
+              }
+            }
+          } catch (routeErr) {
+            console.warn('[AccountSwitch] Immediate route handoff failed:', routeErr);
+          }
+        }
+
+        // Fallback router handoff:
+        // In some account-switch races the auth event updates session/profile but route
+        // does not advance. If user is still on account/auth screens after a short delay,
+        // force route resolution once.
+        if (routeFallbackTimerRef.current) {
+          clearTimeout(routeFallbackTimerRef.current);
+        }
+        routeFallbackTimerRef.current = setTimeout(async () => {
+          try {
+            const supabase = assertSupabase();
+            const { data: activeUserData } = await supabase.auth.getUser();
+            const activeUser = activeUserData?.user || null;
+            const currentPath = pathnameRef.current || '';
+            const stuckPath =
+              currentPath.includes('/screens/account') ||
+              currentPath.includes('/(auth)/sign-in') ||
+              currentPath.includes('/sign-in');
+
+            if (__DEV__) {
+              console.log('[AccountSwitch] Route fallback check', {
+                expectedUserId: account.userId,
+                activeUserId: activeUser?.id || null,
+                currentPath,
+                stuckPath,
+              });
+            }
+
+            if (!activeUser?.id || activeUser.id !== account.userId || !stuckPath) {
+              return;
+            }
+
+            const nextProfile = await fetchEnhancedUserProfile(activeUser.id).catch(() => null);
+            await routeAfterLogin(activeUser, nextProfile);
+            if (__DEV__) {
+              console.log('[AccountSwitch] Route fallback invoked', {
+                userId: activeUser.id,
+                pathBefore: currentPath,
+              });
+            }
+          } catch (routeErr) {
+            console.warn('[AccountSwitch] Route fallback failed:', routeErr);
+          } finally {
+            routeFallbackTimerRef.current = null;
+          }
+        }, 1200);
       } else {
         // That account's session expired; current user is unchanged — don't sign out
         showAlert({

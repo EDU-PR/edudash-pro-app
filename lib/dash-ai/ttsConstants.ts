@@ -15,11 +15,11 @@
 /** Normal speech rate (0% = Azure default) */
 export const AZURE_RATE_NORMAL = 0;
 
-/** Phonics sentence-level rate: slower pacing for clarity during phonics */
-export const AZURE_RATE_PHONICS = -15;
+/** Phonics sentence-level rate: keep full sentence delivery at normal pace */
+export const AZURE_RATE_PHONICS = 0;
 
 /** Phonics phoneme-level rate: applied to individual /s/, /m/ SSML tags */
-export const AZURE_RATE_PHONEME = -15;
+export const AZURE_RATE_PHONEME = -18;
 
 // ── Device TTS Rates ────────────────────────────────────────────────
 // expo-speech rate: 1.0 = normal.
@@ -27,19 +27,19 @@ export const AZURE_RATE_PHONEME = -15;
 /** Device TTS normal rate */
 export const DEVICE_RATE_NORMAL = 1.0;
 
-/** Device TTS phonics rate: slightly slower for young learners */
-export const DEVICE_RATE_PHONICS = 0.92;
+/** Device TTS phonics rate: keep sentence-level pacing natural */
+export const DEVICE_RATE_PHONICS = 1.0;
 
 // ── Phonics SSML Break Durations ────────────────────────────────────
 
 /** Pause after a single phoneme marker (e.g. /s/) in ms */
-export const PHONICS_MARKER_BREAK_MS = 160;
+export const PHONICS_MARKER_BREAK_MS = 220;
 
 /** Pause between blend segments (/k/ - /a/ - /t/) in ms */
-export const PHONICS_BLEND_SEGMENT_BREAK_MS = 180;
+export const PHONICS_BLEND_SEGMENT_BREAK_MS = 250;
 
 /** Pause after the full blend before speaking the word in ms */
-export const PHONICS_BLEND_FINAL_BREAK_MS = 240;
+export const PHONICS_BLEND_FINAL_BREAK_MS = 320;
 
 /** Fallback pause for individual letters in ms */
-export const PHONICS_FALLBACK_LETTER_BREAK_MS = 140;
+export const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;

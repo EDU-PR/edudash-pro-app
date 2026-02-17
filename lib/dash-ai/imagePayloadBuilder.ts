@@ -14,6 +14,63 @@ export interface BuildImagePayloadOptions {
 }
 
 export const DEFAULT_MAX_IMAGES_PER_REQUEST = 5;
+const SUPPORTED_IMAGE_MEDIA_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+const SUPPORTED_DOCUMENT_MEDIA_TYPES = new Set([
+  'application/pdf',
+]);
+
+function stripDataUriPrefix(value?: string | null): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  const match = trimmed.match(/^data:[^;]+;base64,(.+)$/i);
+  return match ? match[1] : trimmed;
+}
+
+function normalizeMediaType(raw?: string | null): {
+  mediaType: string;
+  blockType: 'image' | 'document';
+  requiresImageReencode: boolean;
+} {
+  const lower = String(raw || '').trim().toLowerCase();
+  if (SUPPORTED_DOCUMENT_MEDIA_TYPES.has(lower)) {
+    return {
+      mediaType: 'application/pdf',
+      blockType: 'document',
+      requiresImageReencode: false,
+    };
+  }
+  if (lower === 'image/jpg') {
+    return {
+      mediaType: 'image/jpeg',
+      blockType: 'image',
+      requiresImageReencode: false,
+    };
+  }
+  if (SUPPORTED_IMAGE_MEDIA_TYPES.has(lower)) {
+    return {
+      mediaType: lower,
+      blockType: 'image',
+      requiresImageReencode: false,
+    };
+  }
+  if (lower.startsWith('image/')) {
+    return {
+      mediaType: 'image/jpeg',
+      blockType: 'image',
+      requiresImageReencode: true,
+    };
+  }
+  return {
+    mediaType: 'image/jpeg',
+    blockType: 'image',
+    requiresImageReencode: true,
+  };
+}
 
 function sanitizeInlineImages(
   images: DashImagePayload[],
@@ -21,7 +78,17 @@ function sanitizeInlineImages(
   maxBase64Length: number
 ): DashImagePayload[] {
   return images
-    .filter((image) => typeof image?.data === 'string' && image.data.length > 0)
+    .map((image) => {
+      const normalized = normalizeMediaType(image?.media_type);
+      const data = stripDataUriPrefix(image?.data);
+      return {
+        data,
+        media_type: normalized.mediaType,
+        blockType: normalized.blockType,
+      };
+    })
+    .filter((image) => image.blockType === 'image' || image.blockType === 'document')
+    .filter((image) => typeof image.data === 'string' && image.data.length > 0)
     .filter((image) => image.data.length <= maxBase64Length)
     .slice(0, maxImages)
     .map((image) => ({
@@ -56,15 +123,18 @@ export async function buildImagePayloadsFromAttachments(
         ? attachment.meta.base64
         : null;
 
-    let base64 = metadataBase64;
-    let mediaType = String(
+    let base64 = stripDataUriPrefix(metadataBase64);
+    const rawMediaType = String(
       attachment?.mimeType ||
       attachment?.meta?.image_media_type ||
       attachment?.meta?.media_type ||
       'image/jpeg'
     );
+    const normalizedMedia = normalizeMediaType(rawMediaType);
+    let mediaType = normalizedMedia.mediaType;
 
-    if (!base64 && attachment?.previewUri) {
+    // Re-encode unsupported image formats (e.g., HEIC) to JPEG via compression.
+    if ((!base64 || normalizedMedia.requiresImageReencode) && attachment?.previewUri) {
       try {
         const compressed = await compressImageForAI(String(attachment.previewUri), maxBase64Length);
         base64 = compressed.base64;
@@ -77,6 +147,11 @@ export async function buildImagePayloadsFromAttachments(
         });
         base64 = null;
       }
+    }
+
+    if (base64 && normalizedMedia.requiresImageReencode && !attachment?.previewUri) {
+      // Best-effort fallback: use provided base64 but force a supported image media type.
+      mediaType = 'image/jpeg';
     }
 
     if (!base64 || base64.length > maxBase64Length) continue;

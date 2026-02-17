@@ -29,7 +29,7 @@ export function useVoiceController(dash: DashAIAssistant | null, opts: Options =
   const [prefAutoSilence, setPrefAutoSilence] = useState<number>(7000);
   const [prefListenCap, setPrefListenCap] = useState<number>(15000);
   const [prefDefaultLocked, setPrefDefaultLocked] = useState<boolean>(false);
-  const [streamingEnabled, setStreamingEnabled] = useState(false);
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
   const [state, setState] = useState<VoiceState>('idle');
   const [isLocked, setLocked] = useState(false);
   const [timerMs, setTimerMs] = useState(0);
@@ -48,10 +48,14 @@ export function useVoiceController(dash: DashAIAssistant | null, opts: Options =
     (async () => {
       try {
         const envEnabled = String(process.env.EXPO_PUBLIC_DASH_STREAMING || '').toLowerCase() === 'true';
-        const prefValue = await AsyncStorage.getItem('@dash_streaming_enabled');
-        setStreamingEnabled(envEnabled || prefValue === 'true');
+        const [prefValue, prefUserSet] = await Promise.all([
+          AsyncStorage.getItem('@dash_streaming_enabled'),
+          AsyncStorage.getItem('@dash_streaming_pref_user_set'),
+        ]);
+        const prefEnabled = prefUserSet === 'true' ? prefValue !== 'false' : true;
+        setStreamingEnabled(envEnabled || prefEnabled);
       } catch {
-        setStreamingEnabled(false);
+        setStreamingEnabled(true);
       }
     })();
   }, []);

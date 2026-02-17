@@ -106,7 +106,33 @@ function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): strin
     }
   );
 
-  // 2. In phonics mode, convert sustained-sound words to slash markers:
+  // 2. Convert continuous repeated letters: "ssss" -> "/s/" (phonics) or "ssss" (non-phonics)
+  result = result.replace(
+    /\b([a-z])\1{2,11}\b/gi,
+    (match, letter: string) => {
+      const lower = letter.toLowerCase();
+      if (phonicsMode) return `/${lower}/`;
+      const repeats = Math.max(3, Math.min(6, match.length));
+      return lower.repeat(repeats);
+    }
+  );
+
+  // 3. Convert spaced digraph repetitions: "sh sh sh" -> "/sh/"
+  result = result.replace(
+    /\b(sh|ch|th|ph|ng)(?:[\s,;:/\\|._-]+\1){1,6}\b/gi,
+    (match, token: string) => {
+      const lower = String(token || '').toLowerCase();
+      if (phonicsMode) return `/${lower}/`;
+      const repeats = match
+        .replace(/[^\w\s-]/g, ' ')
+        .split(/[\s-]+/)
+        .filter(Boolean).length;
+      const size = Math.max(2, Math.min(4, repeats));
+      return lower.repeat(size);
+    }
+  );
+
+  // 4. In phonics mode, convert sustained-sound words to slash markers:
   //    "sss" → "/s/", "buh" → "/b/", "mmm" → "/m/", etc.
   if (phonicsMode) {
     const sustainedPattern = new RegExp(

@@ -309,9 +309,14 @@ export function useChatGPTVoice(options: UseChatGPTVoiceOptions): ChatGPTVoiceCo
       setCurrentResponse('');
       setVoiceActivity({ isActive: false, level: 0, duration: 0 });
       
-      // Check streaming availability
-      const streamingEnabled = await AsyncStorage.getItem('@dash_streaming_enabled');
-      if (streamingEnabled !== 'true' && !process.env.EXPO_PUBLIC_DASH_STREAMING) {
+      // Check streaming availability (default-on unless user explicitly disabled)
+      const envEnabled = String(process.env.EXPO_PUBLIC_DASH_STREAMING || '').toLowerCase() === 'true';
+      const [streamingEnabled, streamingPrefUserSet] = await Promise.all([
+        AsyncStorage.getItem('@dash_streaming_enabled'),
+        AsyncStorage.getItem('@dash_streaming_pref_user_set'),
+      ]);
+      const prefEnabled = streamingPrefUserSet === 'true' ? streamingEnabled !== 'false' : true;
+      if (!(envEnabled || prefEnabled)) {
         setState('error');
         return false;
       }

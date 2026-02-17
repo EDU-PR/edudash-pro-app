@@ -42,7 +42,9 @@ interface DashInputBarProps {
   onQuickAction?: (text: string) => void;
   onCancel?: () => void;
   onInterrupt?: () => void | Promise<void>;
+  onInputFocus?: () => void;
   hideQuickChips?: boolean;
+  showAttachmentDropzone?: boolean;
   /** Web: paste image from clipboard (receives File). Optional. */
   onPasteImage?: (file: File) => void;
 }
@@ -70,7 +72,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onQuickAction,
   onCancel,
   onInterrupt,
+  onInputFocus,
   hideQuickChips = false,
+  showAttachmentDropzone = true,
   onPasteImage,
 }) => {
   const { t } = useTranslation();
@@ -82,34 +86,48 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   const renderAttachmentStrip = () => (
     <>
       {selectedAttachments.length === 0 ? (
-        <TouchableOpacity
+        showAttachmentDropzone ? (
+          <TouchableOpacity
+            style={[
+              styles.attachmentStrip,
+              {
+                backgroundColor: theme.surfaceVariant + '40',
+                borderColor: theme.border,
+              },
+            ]}
+            onPress={() => {
+              try {
+                Haptics.selectionAsync?.();
+              } catch {}
+              onAttachFile();
+            }}
+            activeOpacity={0.7}
+            accessibilityLabel={t('common.ai_drop_files_or_tap')}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.attachmentDropZoneText, { color: theme.textSecondary }]}>
+              {t('common.ai_drop_files_or_tap')}
+            </Text>
+            <Text style={[styles.attachmentDropZoneSubtext, { color: theme.textTertiary }]}>
+              {t('common.ai_drop_files_subtext')}
+            </Text>
+          </TouchableOpacity>
+        ) : null
+        ) : (
+        <View
           style={[
-            styles.attachmentStrip,
+            styles.attachmentChipsContainer,
             {
-              backgroundColor: theme.surfaceVariant + '40',
+              backgroundColor: theme.surfaceVariant + '66',
               borderColor: theme.border,
             },
           ]}
-          onPress={() => {
-            try {
-              Haptics.selectionAsync?.();
-            } catch {}
-            onAttachFile();
-          }}
-          activeOpacity={0.7}
-          accessibilityLabel={t('common.ai_drop_files_or_tap')}
-          accessibilityRole="button"
         >
-          <Text style={[styles.attachmentDropZoneText, { color: theme.textSecondary }]}>
-            {t('common.ai_drop_files_or_tap')}
-          </Text>
-          <Text style={[styles.attachmentDropZoneSubtext, { color: theme.textTertiary }]}>
-            {t('common.ai_drop_files_subtext')}
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.attachmentChipsContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.attachmentChipsScroll}
+          >
           {selectedAttachments.map((attachment) => {
             // Get real-time progress from the hook
             const progress = attachmentProgress?.get(attachment.id);
@@ -386,6 +404,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}
             onChangeText={setInputText}
+            onFocus={onInputFocus}
             {...(Platform.OS === 'web' && onPasteImage
               ? ({
                   onPaste: (e: { nativeEvent?: { clipboardData?: DataTransfer } }) => {

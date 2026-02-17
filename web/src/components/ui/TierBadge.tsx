@@ -22,14 +22,23 @@ function getTierMeta(tier?: string): TierMeta {
   const t = String(tier || 'free').toLowerCase();
   switch (t) {
     case 'starter':
+    case 'school_starter':
       return { label: 'Starter', color: '#059669', icon: Sparkles };
     case 'premium':
+    case 'school_premium':
       return { label: 'Premium', color: '#7C3AED', icon: Crown };
+    case 'school_pro':
+    case 'pro':
+    case 'professional':
+      return { label: 'Pro', color: '#6366F1', icon: Crown };
     case 'enterprise':
+    case 'school_enterprise':
       return { label: 'Enterprise', color: '#DC2626', icon: Crown };
     case 'parent-starter':
+    case 'parent_starter':
       return { label: 'Parent Starter', color: '#06B6D4', icon: Sparkles };
     case 'parent-plus':
+    case 'parent_plus':
       return { label: 'Parent Plus', color: '#22C55E', icon: Crown };
     case 'free':
     default:

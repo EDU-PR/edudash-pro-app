@@ -31,6 +31,7 @@ export default function DashAssistantScreen() {
   const initialMessage = typeof params?.initialMessage === 'string' ? params.initialMessage : undefined;
   const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
   const handoffSource = typeof params?.source === 'string' ? params.source : undefined;
+  const isK12ParentDashSource = handoffSource === 'k12_parent_tab';
   const mode = typeof params?.mode === 'string' ? params.mode.toLowerCase() : undefined;
   const tutorMode = (typeof params?.tutorMode === 'string' ? params.tutorMode.toLowerCase() : null) as TutorMode | null;
   const tutorConfig = {
@@ -39,9 +40,13 @@ export default function DashAssistantScreen() {
     topic: typeof params?.topic === 'string' ? params.topic : undefined,
   };
   const hasTutorConfig = Boolean(tutorConfig.subject || tutorConfig.grade || tutorConfig.topic);
-  const shouldForceTutorMode = mode === 'tutor' || !!tutorMode;
+  const shouldForceTutorMode = !isK12ParentDashSource && (mode === 'tutor' || !!tutorMode);
   const uiMode: 'advisor' | 'tutor' | 'orb' | 'exam' | null =
-    mode === 'advisor' || mode === 'orb' || mode === 'tutor' || mode === 'exam' ? mode : null;
+    isK12ParentDashSource
+      ? 'advisor'
+      : mode === 'advisor' || mode === 'orb' || mode === 'tutor' || mode === 'exam'
+        ? mode
+        : null;
 
   const handleClose = () => {
     // Navigate back to the previous screen

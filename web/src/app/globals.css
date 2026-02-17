@@ -1081,6 +1081,9 @@ html {
 .navIcon { width: 18px; height: 18px; }
 .navItemBadge { margin-left: auto; }
 .sidenavFooter { margin-top: auto; display: grid; gap: 8px; }
+/* Mobile nav drawer: flex layout so the nav list scrolls and all options are visible */
+.mobile-nav-drawer-flex { display: flex !important; flex-direction: column; overflow: hidden; }
+.mobile-nav-drawer-nav { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .brandPill { display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #7c3aed, #ec4899); color: #fff; font-weight: 700; }
 .right { display: none; }
 @media (min-width: 1024px) { .right { display: flex; flex-direction: column; height: calc(100dvh - var(--topnav-offset) - var(--space-4)); overflow: hidden; min-height: 0; } }

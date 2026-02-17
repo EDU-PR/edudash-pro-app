@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   // Allow LAN testing in dev without cross-origin warnings
+  // When opening the app via LAN IP (e.g. 192.168.0.31:3000), run `npm run dev:lan` so HMR
+  // WebSocket connects and the page does not keep refreshing.
   allowedDevOrigins: ['http://localhost:3000', 'http://192.168.0.31:3000'],
   
   // Turbopack configuration (Next.js 16+ default bundler)
