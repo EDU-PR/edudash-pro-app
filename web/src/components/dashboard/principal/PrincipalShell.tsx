@@ -258,7 +258,7 @@ export function PrincipalShell({
             className="mobile-nav-overlay"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div 
+          <div
             style={{
               position: 'fixed',
               top: 0,
@@ -268,16 +268,16 @@ export function PrincipalShell({
               maxWidth: 320,
               background: 'var(--surface-1)',
               zIndex: 9999,
-              overflowY: 'auto',
-              padding: 'var(--space-4)',
               display: 'none',
               animation: 'slideInLeft 0.3s ease-out',
+              flexDirection: 'column',
+              overflow: 'hidden',
             }}
-            className="mobile-nav-drawer"
+            className="mobile-nav-drawer mobile-nav-drawer-flex"
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-4)', flexShrink: 0 }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
-              <button 
+              <button
                 onClick={() => setMobileNavOpen(false)}
                 className="iconBtn"
                 aria-label="Close"
@@ -285,15 +285,14 @@ export function PrincipalShell({
                 <X className="icon20" />
               </button>
             </div>
-            
-            {/* Navigation Links */}
-            <nav className="nav" style={{ display: 'grid', gap: 6 }}>
+            {/* Scrollable nav so all options are visible */}
+            <nav className="nav mobile-nav-drawer-nav" style={{ display: 'grid', gap: 6, overflowY: 'auto', overflowX: 'hidden', flex: '1 1 0', minHeight: 0, padding: '0 var(--space-4)' }}>
               {nav.map((it) => {
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <button 
-                    key={it.href} 
+                  <button
+                    key={it.href}
                     className={`navItem ${active ? 'navItemActive' : ''}`}
                     onClick={() => {
                       setMobileNavOpen(false);
@@ -312,9 +311,7 @@ export function PrincipalShell({
                 );
               })}
             </nav>
-            
-            {/* Footer */}
-            <div style={{ marginTop: 'auto', paddingTop: 'var(--space-4)' }}>
+            <div style={{ flexShrink: 0, padding: 'var(--space-4)', paddingTop: 'var(--space-2)' }}>
               <button
                 className="navItem"
                 style={{ width: '100%' }}
@@ -430,6 +427,15 @@ export function PrincipalShell({
           .mobile-nav-drawer,
           .mobile-widgets-overlay {
             display: block !important;
+          }
+          .mobile-nav-drawer-flex {
+            display: flex !important;
+            flex-direction: column;
+            overflow: hidden;
+          }
+          .mobile-nav-drawer-nav {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
           }
           /* Mobile widgets drawer needs flex for sticky header */
           .mobile-widgets-drawer {

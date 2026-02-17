@@ -19,6 +19,16 @@ import type {
 interface UseAIYearPlannerOptions {
   organizationId?: string;
   userId?: string;
+  onShowAlert?: (config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: 'default' | 'cancel' | 'destructive';
+    }>;
+  }) => void;
 }
 
 interface UseAIYearPlannerReturn {
@@ -240,20 +250,64 @@ function normalizeGeneratedPlan(raw: unknown, config: YearPlanConfig): Generated
   };
 }
 
+/**
+ * Find the index of the closing brace matching the first `{` in `str` starting at `start`,
+ * ignoring braces inside double-quoted strings.
+ */
+function findMatchingBrace(str: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let quote = '"';
+  for (let i = start; i < str.length; i++) {
+    const c = str[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (c === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (!inString) {
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) return i;
+      } else if (c === '"' || c === "'") {
+        inString = true;
+        quote = c;
+      }
+      continue;
+    }
+    if (c === quote) inString = false;
+  }
+  return -1;
+}
+
 function extractJsonObject(content: string): Record<string, unknown> | null {
   const text = String(content || '').trim();
   if (!text) return null;
 
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fenced?.[1] || text;
+  const candidate = (fenced?.[1] ?? text).trim();
 
   const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+  if (start < 0) {
+    __DEV__ && console.warn('[AI Year Planner] No JSON object found in response; sample:', text.slice(0, 400));
+    return null;
+  }
+
+  const end = findMatchingBrace(candidate, start);
+  const slice = end >= 0 ? candidate.slice(start, end + 1) : candidate.slice(start);
 
   try {
-    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
+    return JSON.parse(slice) as Record<string, unknown>;
+  } catch (e) {
+    if (__DEV__) {
+      console.warn('[AI Year Planner] Failed to parse AI response as JSON:', e);
+      console.warn('[AI Year Planner] Response sample (first 800 chars):', text.slice(0, 800));
+    }
     return null;
   }
 }
@@ -536,6 +590,7 @@ async function persistExcursionsMeetingsAndEvents(params: {
 export function useAIYearPlanner({
   organizationId,
   userId,
+  onShowAlert,
 }: UseAIYearPlannerOptions): UseAIYearPlannerReturn {
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedYearPlan | null>(null);
   const [generationConfig, setGenerationConfig] = useState<YearPlanConfig | null>(null);
@@ -543,14 +598,31 @@ export function useAIYearPlanner({
   const [isSaving, setIsSaving] = useState(false);
   const [expandedTerm, setExpandedTerm] = useState<number | null>(null);
 
+  const showPlannerAlert = useCallback((config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: Array<{
+      text: string;
+      onPress?: () => void;
+      style?: 'default' | 'cancel' | 'destructive';
+    }>;
+  }) => {
+    if (onShowAlert) {
+      onShowAlert(config);
+      return;
+    }
+    Alert.alert(config.title, config.message || '', config.buttons as any);
+  }, [onShowAlert]);
+
   const generateYearPlan = useCallback(async (config: YearPlanConfig) => {
     if (config.ageGroups.length === 0) {
-      Alert.alert('Validation Error', 'Please select at least one age group');
+      showPlannerAlert({ title: 'Validation Error', message: 'Please select at least one age group', type: 'warning' });
       return;
     }
 
     if (config.focusAreas.length === 0) {
-      Alert.alert('Validation Error', 'Please select at least one focus area');
+      showPlannerAlert({ title: 'Validation Error', message: 'Please select at least one focus area', type: 'warning' });
       return;
     }
 
@@ -562,6 +634,7 @@ export function useAIYearPlanner({
         buildYearPlanUserPrompt(config),
         '',
         `CRITICAL OUTPUT RULES:`,
+        `- Return ONLY a single JSON object. No markdown code fences, no explanation before or after.`,
         `- Return exactly ${config.numberOfTerms} terms in the \"terms\" array.`,
         `- Term numbers must be 1..${config.numberOfTerms} with no gaps.`,
         `- Use only valid YYYY-MM-DD dates.`,
@@ -570,16 +643,19 @@ export function useAIYearPlanner({
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
         body: {
           scope: 'principal',
-          service_type: 'chat_message',
+          // Use lesson_generation token budget (larger than chat_message) to reduce JSON truncation.
+          service_type: 'lesson_generation',
           payload: {
             prompt,
             context: YEAR_PLAN_SYSTEM_PROMPT,
-            model: 'claude-3-5-sonnet-20241022',
           },
           stream: false,
           enable_tools: false,
           metadata: {
             source: 'principal_ai_year_planner',
+            planner_version: 'native_v2',
+            strict_json: true,
+            response_format: 'json',
             requested_terms: config.numberOfTerms,
             organization_id: organizationId || null,
           },
@@ -587,6 +663,13 @@ export function useAIYearPlanner({
       });
 
       if (error) {
+        if (__DEV__) {
+          console.warn('[AI Year Planner] ai-proxy invoke error:', {
+            message: error.message || null,
+            name: (error as any)?.name || null,
+            context: (error as any)?.context || null,
+          });
+        }
         throw new Error(error.message || 'Failed to generate plan');
       }
 
@@ -599,7 +682,10 @@ export function useAIYearPlanner({
 
       const parsed = extractJsonObject(content);
       if (!parsed) {
-        throw new Error('Could not parse AI response');
+        if (__DEV__) {
+          console.warn('[AI Year Planner] Raw response length:', content.length, 'chars');
+        }
+        throw new Error('Could not parse AI response. The plan may be in an unexpected format—please try again.');
       }
 
       const normalized = normalizeGeneratedPlan(parsed, config);
@@ -609,30 +695,36 @@ export function useAIYearPlanner({
 
       const aiTerms = Array.isArray((parsed as any).terms) ? (parsed as any).terms.length : 0;
       if (aiTerms !== config.numberOfTerms) {
-        Alert.alert(
-          'Plan normalized',
-          `Dash returned ${aiTerms || 0} term(s). The planner normalized this to ${config.numberOfTerms} term(s) so all quarters are fully wired.`,
-        );
+        showPlannerAlert({
+          title: 'Plan normalized',
+          message: `Dash returned ${aiTerms || 0} term(s). The planner normalized this to ${config.numberOfTerms} term(s) so all quarters are fully wired.`,
+          type: 'info',
+        });
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
       console.error('AI generation error:', error);
+      if (__DEV__) {
+        console.warn('[AI Year Planner] Falling back to demo plan due to generation error:', errorMessage);
+      }
       const mockPlan = normalizeGeneratedPlan(generateMockYearPlan(config), config);
       setGeneratedPlan(mockPlan);
       setGenerationConfig(config);
       setExpandedTerm(mockPlan.terms[0]?.termNumber ?? null);
-      Alert.alert(
-        'Using Demo Plan',
-        'AI service unavailable. Showing a sample plan instead.',
-        [{ text: 'OK' }],
-      );
+      showPlannerAlert({
+        title: 'Using Demo Plan',
+        message: 'AI service unavailable. Showing a sample plan instead.',
+        type: 'warning',
+        buttons: [{ text: 'OK' }],
+      });
     } finally {
       setIsGenerating(false);
     }
-  }, [organizationId]);
+  }, [organizationId, showPlannerAlert]);
 
   const savePlanToDatabase = useCallback(async () => {
     if (!generatedPlan || !organizationId || !userId) {
-      Alert.alert('Missing details', 'Please generate a plan and ensure your profile is loaded.');
+      showPlannerAlert({ title: 'Missing details', message: 'Please generate a plan and ensure your profile is loaded.', type: 'warning' });
       return;
     }
 
@@ -699,9 +791,9 @@ export function useAIYearPlanner({
         termIdMap,
       });
 
-      Alert.alert(
-        'Success',
-        [
+      showPlannerAlert({
+        title: 'Success',
+        message: [
           `Year plan saved successfully (${usedRpc ? 'transactional' : 'fallback'} mode).`,
           `Terms: ${termsSaved}`,
           `Weekly themes: ${themesSaved}`,
@@ -709,18 +801,23 @@ export function useAIYearPlanner({
           `Meetings: ${extraSaved.meetingsSaved}`,
           `Special events: ${extraSaved.specialEventsSaved}`,
         ].join('\n'),
-        [
+        type: 'success',
+        buttons: [
           { text: 'View Terms', onPress: () => router.push('/screens/principal-year-planner') },
           { text: 'OK' },
         ],
-      );
+      });
     } catch (error: unknown) {
       console.error('Error saving plan:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save plan. Please try again.');
+      showPlannerAlert({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to save plan. Please try again.',
+        type: 'error',
+      });
     } finally {
       setIsSaving(false);
     }
-  }, [generatedPlan, generationConfig, organizationId, userId]);
+  }, [generatedPlan, generationConfig, organizationId, userId, showPlannerAlert]);
 
   return {
     generatedPlan,

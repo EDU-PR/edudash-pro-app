@@ -67,32 +67,32 @@ const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
   c: 'kuh',
   d: 'duh',
   e: 'eh',
-  f: 'fff',
+  f: 'ffffff',
   g: 'guh',
-  h: 'hhh',
+  h: 'hhhhhh',
   i: 'ih',
   j: 'juh',
   k: 'kuh',
-  l: 'lll',
-  m: 'mmm',
-  n: 'nnn',
+  l: 'llllll',
+  m: 'mmmmmm',
+  n: 'nnnnnn',
   o: 'aw',
   p: 'puh',
   q: 'kuh',
-  r: 'rrr',
-  s: 'sss',
+  r: 'rrrrrr',
+  s: 'ssssss',
   t: 'tuh',
   u: 'uh',
-  v: 'vvv',
+  v: 'vvvvvv',
   w: 'wuh',
   x: 'ks',
   y: 'yuh',
-  z: 'zzz',
-  sh: 'shhh',
-  ch: 'chh',
-  th: 'thh',
-  ph: 'fff',
-  ng: 'nnng',
+  z: 'zzzzzz',
+  sh: 'shhhhh',
+  ch: 'chhhhh',
+  th: 'thhhhh',
+  ph: 'ffffff',
+  ng: 'nggggg',
 };
 
 const normalizeVoiceGender = (value: unknown): 'male' | 'female' => {
@@ -406,6 +406,7 @@ export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
 export function useVoiceTTS(): UseVoiceTTSReturn {
   const { user, profile } = useAuth();
   const { tier } = useSubscription();
+  const VOICE_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
@@ -418,6 +419,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   const cachedVoicePreferenceRef = useRef<VoicePreference | null | undefined>(undefined);
   const cachedAISettingsVoiceRef = useRef<string | null | undefined>(undefined);
   const lastAppliedVoiceSignatureRef = useRef<string | null>(null);
+
+  const logVoiceTrace = useCallback((event: string, payload?: Record<string, unknown>) => {
+    if (!VOICE_TRACE_ENABLED) return;
+    console.log(`[VoiceTTSTrace] ${event}`, payload || {});
+  }, [VOICE_TRACE_ENABLED]);
 
   // ── Session cache: avoid getSession() on every TTS chunk ──────────
   const sessionCacheRef = useRef<{ token: string; expiresAt: number } | null>(null);
@@ -768,6 +774,15 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       ? Number(options.rate)
       : (phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE);
     const effectivePitch = Number.isFinite(options.pitch as number) ? Number(options.pitch) : 0;
+    const timeoutRaw = Number.parseInt(
+      String(process.env.EXPO_PUBLIC_TTS_PROXY_TIMEOUT_MS || '6500'),
+      10
+    );
+    const requestTimeoutMs = Number.isFinite(timeoutRaw)
+      ? Math.min(15000, Math.max(2500, timeoutRaw))
+      : 6500;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
 
     let response: Response;
     try {
@@ -787,9 +802,15 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           phonics_mode: phonicsMode,
           format: 'mp3',
         }),
+        signal: controller.signal,
       });
     } catch (networkError) {
+      if (networkError instanceof Error && networkError.name === 'AbortError') {
+        throw new Error(`NETWORK_TIMEOUT_${requestTimeoutMs}MS`);
+      }
       throw new Error(`NETWORK_ERROR:${networkError instanceof Error ? networkError.message : String(networkError)}`);
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     if (!response.ok) {
@@ -984,6 +1005,19 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
       // Keep chunking consistent in phonics mode to avoid extra request gaps.
       const chunks = splitIntoChunks(cleanText, 1200);
+      const speechStartedAt = Date.now();
+      const azureRate = Number.isFinite(effectiveOptions.rate as number)
+        ? Number(effectiveOptions.rate)
+        : (phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE);
+      logVoiceTrace('tts_start', {
+        language: effectiveLanguage,
+        voiceId: effectiveOptions.voice || 'default',
+        phonicsMode,
+        rate: azureRate,
+        chars: cleanText.length,
+        chunks: chunks.length,
+        preview: cleanText.slice(0, 160),
+      });
 
       // Pre-cache auth token so chunks don't each call getSession()
       const cachedToken = await getSessionTokenCached();
@@ -991,12 +1025,37 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       if (!policy.shouldUseCloudVoice) {
         reportTTSError(new Error('FREE_QUOTA_EXHAUSTED_DEVICE_VOICE'));
         fallbackUsed = 'device';
+        let firstDeviceChunkAt: number | null = null;
         for (const chunk of chunks) {
           if (stopRequestedRef.current) break;
+          const chunkStartedAt = Date.now();
+          logVoiceTrace('tts_chunk_device', {
+            language: effectiveLanguage,
+            chars: chunk.length,
+            preview: chunk.slice(0, 120),
+          });
           await speakWithDeviceTTS(chunk, effectiveLanguage, {
             ...effectiveOptions,
           });
+          if (firstDeviceChunkAt === null) {
+            firstDeviceChunkAt = Date.now();
+            logVoiceTrace('tts_first_chunk_complete', {
+              firstChunkIndex: 1,
+              timeToFirstChunkCompleteMs: firstDeviceChunkAt - speechStartedAt,
+              transport: 'device',
+            });
+          }
+          logVoiceTrace('tts_chunk_done', {
+            transport: 'device',
+            chars: chunk.length,
+            totalMs: Date.now() - chunkStartedAt,
+          });
         }
+        logVoiceTrace('tts_done', {
+          mode: 'device_only',
+          durationMs: Date.now() - speechStartedAt,
+          chunksSpoken: chunks.length,
+        });
         return;
       }
       
@@ -1005,6 +1064,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       let anyChunkSucceeded = false;
       let cloudChunkSucceeded = false;
       let lastErr: Error | null = null;
+      let firstChunkPlayedAt: number | null = null;
+      let firstAudioReadyAt: number | null = null;
       let prefetchedNextIndex: number | null = null;
       let prefetchedNextPromise: Promise<string | null> | null = null;
 
@@ -1031,7 +1092,16 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       for (let ci = 0; ci < chunks.length; ci += 1) {
         const chunk = chunks[ci];
         if (stopRequestedRef.current) break;
+        const chunkStartedAt = Date.now();
+        let requestDurationMs: number | null = null;
         const prefetchedUrl = await consumePrefetched(ci);
+        logVoiceTrace('tts_chunk_start', {
+          index: ci + 1,
+          total: chunks.length,
+          chars: chunk.length,
+          preview: chunk.slice(0, 120),
+          prefetched: !!prefetchedUrl,
+        });
 
         try {
           cloudAttempted = true;
@@ -1041,13 +1111,47 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           // For ci=1+ the current chunk was already prefetched; this fires chunk+2.
           ensurePrefetch(ci + 1);
 
+          const requestStartedAt = Date.now();
           const audioUrl = prefetchedUrl || await requestAzureAudioUrl(chunk, effectiveLanguage, effectiveOptions, cachedToken);
+          requestDurationMs = Date.now() - requestStartedAt;
+          if (firstAudioReadyAt === null) {
+            firstAudioReadyAt = Date.now();
+            logVoiceTrace('tts_first_audio_ready', {
+              firstChunkIndex: ci + 1,
+              timeToAudioReadyMs: firstAudioReadyAt - speechStartedAt,
+              requestMs: requestDurationMs,
+            });
+          }
 
+          const playbackStartedAt = Date.now();
           await playAudioUrl(audioUrl, estimatePlaybackTimeoutMs(chunk));
+          const playbackDurationMs = Date.now() - playbackStartedAt;
           anyChunkSucceeded = true;
           cloudChunkSucceeded = true;
+          if (firstChunkPlayedAt === null) {
+            firstChunkPlayedAt = Date.now();
+            logVoiceTrace('tts_first_chunk_complete', {
+              firstChunkIndex: ci + 1,
+              timeToFirstChunkCompleteMs: firstChunkPlayedAt - speechStartedAt,
+            });
+          }
+          logVoiceTrace('tts_chunk_done', {
+            index: ci + 1,
+            total: chunks.length,
+            transport: 'azure',
+            chars: chunk.length,
+            requestMs: requestDurationMs,
+            playbackMs: playbackDurationMs,
+            totalMs: Date.now() - chunkStartedAt,
+          });
         } catch (azureErr) {
           let effectiveAzureErr: unknown = azureErr;
+          logVoiceTrace('tts_chunk_error', {
+            index: ci + 1,
+            total: chunks.length,
+            chars: chunk.length,
+            error: String(azureErr instanceof Error ? azureErr.message : azureErr || 'unknown'),
+          });
           const throttleRetry = String(effectiveAzureErr instanceof Error ? effectiveAzureErr.message : effectiveAzureErr || '')
             .toLowerCase()
             .includes('tts_throttled_429');
@@ -1097,6 +1201,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
               ...effectiveOptions,
             });
             anyChunkSucceeded = true;
+            logVoiceTrace('tts_chunk_done', {
+              index: ci + 1,
+              total: chunks.length,
+              transport: 'device_fallback',
+              chars: chunk.length,
+              totalMs: Date.now() - chunkStartedAt,
+            });
           } catch (deviceErr) {
             console.warn('[VoiceTTS] Device fallback also failed:', deviceErr);
             reportTTSError(deviceErr);
@@ -1127,6 +1238,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         upstream_status: successDiagnostics.statusCode || null,
         request_id: successDiagnostics.requestId || null,
         success: true,
+      });
+      logVoiceTrace('tts_done', {
+        mode: cloudChunkSucceeded ? 'azure' : fallbackUsed || 'device',
+        durationMs: Date.now() - speechStartedAt,
+        chunksSpoken: chunks.length,
       });
       
     } catch (err) {

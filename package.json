@@ -53,7 +53,7 @@
     "eas:new": "./scripts/switch-eas-project.sh new",
     "eas": "node scripts/eas-wrapper.mjs",
     "eas:build": "node scripts/eas-wrapper.mjs build",
-    "ota": "NODE_OPTIONS=\"--max-old-space-size=8192\" node scripts/eas-wrapper.mjs update --branch production && node scripts/notify-ota-update.mjs --release-type ota --platforms android,ios",
+    "ota": "NODE_OPTIONS=\"--max-old-space-size=8192\" node scripts/eas-wrapper.mjs update --branch production --auto --non-interactive && node scripts/notify-ota-update.mjs --release-type ota --platforms android,ios",
     "ota:mark1": "./scripts/switch-eas-project.sh old && NODE_OPTIONS=\"--max-old-space-size=8192\" node scripts/eas-wrapper.mjs update --channel production && node scripts/notify-ota-update.mjs --release-type ota --platforms android,ios",
     "ota:release8": "./scripts/switch-eas-project.sh new && NODE_OPTIONS=\"--max-old-space-size=8192\" node scripts/eas-wrapper.mjs update --channel production && node scripts/notify-ota-update.mjs --release-type ota --platforms android,ios",
     "ota:playstore": "NODE_OPTIONS=\"--max-old-space-size=8192\" node scripts/eas-wrapper.mjs update --branch production && node scripts/notify-ota-update.mjs --release-type ota --platforms android,ios",

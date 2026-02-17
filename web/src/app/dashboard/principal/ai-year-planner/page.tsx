@@ -193,12 +193,14 @@ export default function AIYearPlannerPage() {
 You help principals plan their academic year according to CAPS (Curriculum and Assessment Policy Statement) guidelines.
 You create comprehensive, practical year plans that consider the South African school calendar, public holidays, and developmentally appropriate practices.
 Always respond with valid JSON that matches the requested structure. Output only JSON, no markdown.`,
-            model: 'claude-3-5-sonnet-20241022',
           },
           metadata: {
             role: 'principal',
             source: 'ai_year_planner',
             planner_version: 'v2',
+            strict_json: true,
+            response_format: 'json',
+            requested_terms: config.terms_per_year,
           },
         }),
       });

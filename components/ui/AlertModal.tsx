@@ -12,6 +12,89 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView }
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+const toOpaqueColor = (input?: string, fallback = '#111827'): string => {
+  const color = String(input || '').trim();
+  if (!color) return fallback;
+  if (color.toLowerCase() === 'transparent') return fallback;
+
+  // rgba(r,g,b,a) -> rgb(r,g,b)
+  const rgbaMatch = color.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbaMatch) {
+    const parts = rgbaMatch[1].split(',').map((part) => part.trim());
+    if (parts.length >= 3) {
+      const [r, g, b] = parts;
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  }
+
+  // #RRGGBBAA -> #RRGGBB
+  if (/^#[0-9a-f]{8}$/i.test(color)) {
+    return color.slice(0, 7);
+  }
+
+  // #RGBA -> #RRGGBB
+  if (/^#[0-9a-f]{4}$/i.test(color)) {
+    const [, r, g, b] = color;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+
+  // hsla(h,s%,l%,a) / hsl(h,s%,l%) -> rgb(r,g,b)
+  const hslMatch = color.match(/^hsla?\(([^)]+)\)$/i);
+  if (hslMatch) {
+    const parts = hslMatch[1].split(',').map((part) => part.trim());
+    if (parts.length >= 3) {
+      const h = Number(parts[0]);
+      const s = Number(parts[1].replace('%', '')) / 100;
+      const l = Number(parts[2].replace('%', '')) / 100;
+      if (Number.isFinite(h) && Number.isFinite(s) && Number.isFinite(l)) {
+        const c = (1 - Math.abs((2 * l) - 1)) * s;
+        const hh = ((h % 360) + 360) % 360 / 60;
+        const x = c * (1 - Math.abs((hh % 2) - 1));
+        let r1 = 0; let g1 = 0; let b1 = 0;
+        if (hh >= 0 && hh < 1) { r1 = c; g1 = x; b1 = 0; }
+        else if (hh < 2) { r1 = x; g1 = c; b1 = 0; }
+        else if (hh < 3) { r1 = 0; g1 = c; b1 = x; }
+        else if (hh < 4) { r1 = 0; g1 = x; b1 = c; }
+        else if (hh < 5) { r1 = x; g1 = 0; b1 = c; }
+        else { r1 = c; g1 = 0; b1 = x; }
+        const m = l - c / 2;
+        const r = Math.round((r1 + m) * 255);
+        const g = Math.round((g1 + m) * 255);
+        const b = Math.round((b1 + m) * 255);
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+    }
+  }
+
+  return color;
+};
+
+const withAlpha = (input: string, alpha: number, fallback = 'rgba(17,24,39,0.16)'): string => {
+  const clamped = Math.max(0, Math.min(alpha, 1));
+  const color = toOpaqueColor(input, '');
+  if (!color) return fallback;
+
+  const rgbMatch = color.match(/^rgb\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const parts = rgbMatch[1].split(',').map((part) => Number(part.trim()));
+    if (parts.length >= 3 && parts.every((part) => Number.isFinite(part))) {
+      const [r, g, b] = parts;
+      return `rgba(${r}, ${g}, ${b}, ${clamped})`;
+    }
+  }
+
+  const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${clamped})`;
+  }
+
+  return fallback;
+};
+
 export interface AlertButton {
   text: string;
   onPress?: () => void | Promise<void>;
@@ -75,6 +158,9 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   }, [type, icon]);
 
   const finalIconColor = iconColor || getTypeColor();
+  const modalSurfaceColor = toOpaqueColor((theme as any).cardBackground || theme.surface, toOpaqueColor(theme.background, '#111827'));
+  const subtleSurfaceColor = toOpaqueColor((theme as any).surfaceVariant || theme.surface, modalSurfaceColor);
+  const borderColor = toOpaqueColor(theme.border, '#334155');
 
   const handleButtonPress = async (button: AlertButton) => {
     onClose();
@@ -109,7 +195,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
       };
     }
     return {
-      backgroundColor: theme.surface,
+      backgroundColor: subtleSurfaceColor,
       borderColor: theme.border,
     };
   };
@@ -138,7 +224,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: 'rgba(2, 6, 23, 0.94)' }]}>
         <TouchableOpacity 
           style={StyleSheet.absoluteFill} 
           activeOpacity={1} 
@@ -149,14 +235,14 @@ export const AlertModal: React.FC<AlertModalProps> = ({
           style={[
             styles.modalContainer,
             {
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
+              backgroundColor: modalSurfaceColor,
+              borderColor,
               transform: [{ scale: scaleAnim }],
             },
           ]}
         >
           {/* Icon */}
-          <View style={[styles.iconContainer, { backgroundColor: finalIconColor + '15' }]}>
+          <View style={[styles.iconContainer, { backgroundColor: withAlpha(finalIconColor, 0.14, subtleSurfaceColor) }]}>
             <Ionicons name={getTypeIcon()} size={56} color={finalIconColor} />
           </View>
 
@@ -244,7 +330,6 @@ export const useAlertModal = (): UseAlertModalReturn => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -261,6 +346,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 24,
     elevation: 16,
+    overflow: 'hidden',
   },
   iconContainer: {
     width: 96,

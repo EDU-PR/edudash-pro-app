@@ -518,12 +518,10 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
             className="mobile-nav-overlay"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div 
-            className="mobile-nav-drawer"
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+          <div className="mobile-nav-drawer">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-4)', flexShrink: 0 }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}</h3>
-              <button 
+              <button
                 onClick={() => setMobileNavOpen(false)}
                 className="iconBtn"
                 aria-label={t('common.close', { defaultValue: 'Close' })}
@@ -531,25 +529,20 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 <X className="icon20" />
               </button>
             </div>
-            
-            {/* Navigation Links */}
-            <nav className="nav" style={{ display: 'grid', gap: 6 }}>
+            {/* Scrollable nav so all options are visible */}
+            <nav className="nav mobile-nav-drawer-nav" style={{ display: 'grid', gap: 6, padding: '0 var(--space-4)' }}>
               {nav.map((it) => {
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <button 
-                    key={it.href} 
+                  <button
+                    key={it.href}
                     className={`navItem ${active ? 'navItemActive' : ''}`}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      // Close drawer immediately
                       setMobileNavOpen(false);
-                      // Navigate after a tiny delay to ensure drawer animation starts
-                      requestAnimationFrame(() => {
-                        router.push(it.href);
-                      });
+                      requestAnimationFrame(() => router.push(it.href));
                     }}
                     style={{ width: '100%' }}
                   >
@@ -562,9 +555,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 );
               })}
             </nav>
-            
-            {/* Footer */}
-            <div style={{ marginTop: 'auto', paddingTop: 'var(--space-4)' }}>
+            <div style={{ flexShrink: 0, padding: 'var(--space-4)', paddingTop: 'var(--space-2)' }}>
               <button
                 className="navItem"
                 style={{ width: '100%' }}
@@ -601,7 +592,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           z-index: 9998;
         }
         
-        /* Mobile drawer - visible when rendered */
+        /* Mobile drawer - flex so nav scrolls and all options visible */
         .mobile-nav-drawer {
           position: fixed;
           top: 0;
@@ -611,9 +602,19 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           max-width: 320px;
           background: var(--surface-1);
           z-index: 9999;
-          overflow-y: auto;
-          padding: var(--space-4);
+          padding: 0;
           animation: slideInLeft 0.3s ease-out;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .mobile-nav-drawer .mobile-nav-drawer-nav {
+          flex: 1 1 0;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
         }
         
         @media (max-width: 1023px) {

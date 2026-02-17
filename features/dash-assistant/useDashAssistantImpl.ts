@@ -205,7 +205,7 @@ interface UseDashAssistantReturn {
   stopAllActivity: () => Promise<void>;
   speakResponse: (message: DashMessage) => Promise<void>;
   stopSpeaking: () => Promise<void>;
-  scrollToBottom: (opts?: { animated?: boolean; delay?: number }) => void;
+  scrollToBottom: (opts?: { animated?: boolean; delay?: number; force?: boolean }) => void;
   handleAttachFile: () => Promise<void>;
   handlePickDocuments: () => Promise<void>;
   handlePickImages: () => Promise<void>;
@@ -260,6 +260,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     () => getFeatureFlagsSync().dash_tutor_sessions_v1,
     []
   );
+  const aiStreamingEnabled = useMemo(
+    () => getFeatureFlagsSync().ai_streaming_enabled !== false,
+    []
+  );
+  const DASH_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_CHAT_TRACE === 'true';
+  const logDashTrace = useCallback((event: string, payload?: Record<string, unknown>) => {
+    if (!DASH_TRACE_ENABLED) return;
+    console.log(`[DashChatTrace] ${event}`, payload || {});
+  }, [DASH_TRACE_ENABLED]);
 
   const toolShortcuts = useMemo(() => {
     const shortcuts = getDashToolShortcutsForRole(profile?.role || null);
@@ -267,13 +276,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [profile?.role]);
 
   const autoToolShortcuts = useMemo(() => {
+    const role = String(profile?.role || '').toLowerCase();
+    const capsAllowedForRole = !['parent', 'student'].includes(role);
     return toolShortcuts.filter((tool) =>
-      tool.category === 'caps' ||
+      (tool.category === 'caps' && capsAllowedForRole) ||
       tool.category === 'data' ||
       tool.category === 'navigation' ||
       (tool.category === 'communication' && tool.name === 'export_pdf')
     );
-  }, [toolShortcuts]);
+  }, [toolShortcuts, profile?.role]);
 
   const plannerTools = useMemo(() => {
     return autoToolShortcuts
@@ -314,7 +325,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [showTypingIndicator, setShowTypingIndicator] = useState(true);
   const [autoSuggestQuestions, setAutoSuggestQuestions] = useState(true);
   const [contextualHelp, setContextualHelp] = useState(true);
-  const [streamingEnabledPref, setStreamingEnabledPref] = useState(false);
+  const [streamingEnabledPref, setStreamingEnabledPref] = useState(true);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
@@ -386,11 +397,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const lastSpeakStartRef = useRef<number>(0);
   const ttsSessionIdRef = useRef<string | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutoScrollAtRef = useRef<number>(0);
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
   const isProcessingRef = useRef(false);
   const prevLengthRef = useRef<number>(0);
   const messagesLengthRef = useRef<number>(0);
-  const isSpeakingStateRef = useRef<boolean>(false);
+  const isNearBottomRef = useRef<boolean>(true);
+  const wasTypingActiveRef = useRef<boolean>(false);
   const tutorOverridesRef = useRef<Record<string, string>>({});
   const learnerContextRef = useRef<LearnerContext | null>(null);
   const inputTextRef = useRef('');
@@ -422,8 +435,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [messages.length]);
 
   useEffect(() => {
-    isSpeakingStateRef.current = isSpeaking;
-  }, [isSpeaking]);
+    isNearBottomRef.current = isNearBottom;
+  }, [isNearBottom]);
 
   // Save conversation ID whenever it changes for persistence
   useEffect(() => {
@@ -717,9 +730,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   ]);
 
   // Scroll utility
-  const scrollToBottom = useCallback((opts?: { animated?: boolean; delay?: number }) => {
+  const scrollToBottom = useCallback((opts?: { animated?: boolean; delay?: number; force?: boolean }) => {
     const delay = opts?.delay ?? 120;
     const animated = opts?.animated ?? true;
+    const force = opts?.force ?? false;
+    const now = Date.now();
+
+    // Prevent competing scroll loops while still allowing explicit user-triggered jumps.
+    if (!force && now - lastAutoScrollAtRef.current < (animated ? 180 : 120)) {
+      return;
+    }
 
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
@@ -733,27 +753,31 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       try {
         if (typeof list.scrollToEnd === 'function') {
           list.scrollToEnd({ animated });
-        }
-        if (typeof list.scrollToOffset === 'function') {
-          list.scrollToOffset({ offset: 999999, animated: false });
-        }
-        const lastIndex = Math.max(0, (messages?.length || 1) - 1);
-        if (typeof list.scrollToIndex === 'function') {
+        } else if (typeof list.scrollToOffset === 'function') {
+          list.scrollToOffset({ offset: Number.MAX_SAFE_INTEGER, animated });
+        } else if (typeof list.scrollToIndex === 'function') {
+          const lastIndex = Math.max(0, (messagesLengthRef.current || 1) - 1);
           list.scrollToIndex({ index: lastIndex, animated, viewPosition: 1 });
         }
+        lastAutoScrollAtRef.current = Date.now();
       } catch (e) {
         console.debug('[useDashAssistant] scrollToBottom failed:', e);
       }
     };
 
+    if (delay <= 0 || force) {
+      requestAnimationFrame(() => {
+        performScroll();
+      });
+      return;
+    }
+
     scrollTimeoutRef.current = setTimeout(() => {
       requestAnimationFrame(() => {
         performScroll();
-        // Second pass to catch late layout (large images/markdown)
-        setTimeout(() => performScroll(), animated ? 250 : 0);
       });
     }, delay);
-  }, [messages?.length]);
+  }, []);
 
   const normalizeConversationMessages = useCallback((items: DashMessage[]) => {
     return items.map((msg) => {
@@ -868,9 +892,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setEnterToSend(chatUiPrefs.enterToSend);
       }
       try {
-        const streamingPref = await AsyncStorage.getItem('@dash_streaming_enabled');
-        setStreamingEnabledPref(streamingPref === 'true');
-      } catch {}
+        const [streamingPref, streamingPrefUserSet] = await Promise.all([
+          AsyncStorage.getItem('@dash_streaming_enabled'),
+          AsyncStorage.getItem('@dash_streaming_pref_user_set'),
+        ]);
+        if (streamingPrefUserSet === 'true') {
+          setStreamingEnabledPref(streamingPref !== 'false');
+        } else {
+          // Migration: older builds defaulted this preference to false.
+          setStreamingEnabledPref(true);
+          void AsyncStorage.multiSet([
+            ['@dash_streaming_enabled', 'true'],
+            ['@dash_streaming_pref_user_set', 'false'],
+          ]);
+        }
+      } catch {
+        setStreamingEnabledPref(true);
+      }
     } catch {
       try {
         const enterToSendSetting = await AsyncStorage.getItem('@dash_ai_enter_to_send');
@@ -950,14 +988,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const turnStartedAt = Date.now();
     const normalizedRole = String(profile?.role || '').toLowerCase();
     const isTeacherDashboardTutorEntry = handoffSource === 'teacher_dashboard';
+    const isK12ParentDashEntry = handoffSource === 'k12_parent_tab';
     const shouldForceTutorInteractive = isTeacherDashboardTutorEntry || !!externalTutorMode;
+    const disableImplicitTutorInAdvisor = isK12ParentDashEntry && !shouldForceTutorInteractive;
     const tutorEntrySource: 'teacher_dashboard' | 'default' = isTeacherDashboardTutorEntry
       ? 'teacher_dashboard'
       : 'default';
     const initialResponseMode = classifyResponseMode({
       text,
       hasAttachments: attachments.length > 0,
-      hasActiveTutorSession: !!tutorSessionRef.current?.awaitingAnswer,
+      hasActiveTutorSession: disableImplicitTutorInAdvisor ? false : !!tutorSessionRef.current?.awaitingAnswer,
       explicitTutorMode: shouldForceTutorInteractive,
     });
     const turnModeHint = initialResponseMode === 'tutor_interactive'
@@ -981,7 +1021,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Create AbortController so cancelGeneration can abort in-flight requests
       const controller = new AbortController();
       abortControllerRef.current = controller;
-      scrollToBottom({ animated: true, delay: 120 });
+      if (isNearBottomRef.current) {
+        scrollToBottom({ animated: true, delay: 120 });
+      }
       
       if (attachments.length > 0) {
         setLoadingStatus('uploading');
@@ -1006,12 +1048,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Upload attachments using dashAttachments hook
       const uploadedAttachments = await dashAttachments.uploadAttachments(attachments, conversationIdForUpload);
       if (attachments.length > 0 && uploadedAttachments.length === 0) {
-        throw new Error('All selected attachments failed to upload. Please retry with a smaller image or check your connection.');
+        throw new Error('All selected attachments failed to upload. Please retry; Dash can auto-compress JPG/PNG images.');
       }
       const hasAttachmentPayload = uploadedAttachments.length > 0 || attachments.length > 0;
       setLoadingStatus(hasAttachmentPayload ? 'analyzing' : 'thinking');
       setStatusStartTime(Date.now());
-      scrollToBottom({ animated: true, delay: 120 });
+      if (isNearBottomRef.current) {
+        scrollToBottom({ animated: true, delay: 120 });
+      }
 
       const userText = text || 'Attached files';
       let outgoingText = userText;
@@ -1055,7 +1099,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const activeSession = tutorSessionRef.current;
       const roleForTutor = String(profile?.role || '').toLowerCase();
       const isLearnerRole = ['parent', 'student', 'learner'].includes(roleForTutor);
-      const canRunTutorPipeline = isLearnerRole || shouldForceTutorInteractive;
+      const canRunTutorPipeline = (isLearnerRole || shouldForceTutorInteractive) && !disableImplicitTutorInAdvisor;
       const phonicsRequested = isLearnerRole && detectPhonicsTutorRequest(userText);
       const hasLearningAttachment = attachments.some(
         (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
@@ -1063,15 +1107,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const responseMode = classifyResponseMode({
         text: userText,
         hasAttachments: hasLearningAttachment,
-        hasActiveTutorSession: !!activeSession?.awaitingAnswer,
+        hasActiveTutorSession: disableImplicitTutorInAdvisor ? false : !!activeSession?.awaitingAnswer,
         explicitTutorMode: shouldForceTutorInteractive,
       });
       const stopTutor = isTutorStopIntent(userText);
       const leaveTutorMode = activeSession && responseMode !== 'tutor_interactive';
-      if (stopTutor && activeSession) {
+      if ((stopTutor || disableImplicitTutorInAdvisor) && activeSession) {
         setTutorSession(null);
       }
-      if (leaveTutorMode) {
+      if (leaveTutorMode && !disableImplicitTutorInAdvisor) {
         setTutorSession(null);
       }
 
@@ -1091,7 +1135,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (!tutorIntent && shouldForceTutorInteractive && !stopTutor) {
         tutorIntent = externalTutorMode || activeSession?.mode || 'diagnostic';
       }
-      if (activeSession?.awaitingAnswer && !stopTutor) {
+      if (!disableImplicitTutorInAdvisor && activeSession?.awaitingAnswer && !stopTutor) {
         tutorAction = 'evaluate';
         tutorModeForMetadata = activeSession.mode;
         sessionForTutorAction = activeSession;
@@ -1213,7 +1257,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         process.env.EXPO_PUBLIC_AI_STREAMING_ENABLED === 'true' || 
         process.env.EXPO_PUBLIC_ENABLE_AI_STREAMING === 'true';
       // Streaming works on both web (ReadableStream) and mobile (XHR progressive loading).
-      const streamingEnabled = streamingEnabledPref || envStreamingEnabled;
+      const streamingEnabled = aiStreamingEnabled && (streamingEnabledPref || envStreamingEnabled);
       
       let response: DashMessage;
       const contextWindow = resolveConversationWindowByTier(capabilityTier);
@@ -1236,52 +1280,138 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       
       if (streamingEnabled) {
         const tempStreamingMsgId = `streaming_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const streamStartAt = Date.now();
+        let firstChunkAt: number | null = null;
+        let lastStreamLogAt = 0;
+        let hasReceivedFirstChunk = false;
+        let streamTextDraft = '';
+        let streamPaintFrame: number | null = null;
+        let lastStreamAutoScrollAt = 0;
+        const instantPlaceholder = 'Got it. Let me work on that now...';
         setStreamingMessageId(tempStreamingMsgId);
-        setStreamingContent('');
+        setStreamingContent(instantPlaceholder);
         
         const tempStreamingMessage: DashMessage = {
           id: tempStreamingMsgId,
           type: 'assistant',
-          content: '',
+          content: instantPlaceholder,
           timestamp: Date.now(),
         };
         setMessages(prev => [...prev, tempStreamingMessage]);
         
-        response = await dashInstance.sendMessage(
-          outgoingText, 
-          conversationIdForUpload || undefined, 
-          aiAttachments.length > 0 ? aiAttachments : undefined,
-          (chunk: string) => {
-            setStreamingContent(prev => {
-              const newContent = prev + chunk;
-              setMessages(prevMessages => 
-                prevMessages.map(msg => 
-                  msg.id === tempStreamingMsgId 
-                    ? { ...msg, content: newContent }
-                    : msg
-                )
-              );
-              return newContent;
-            });
-            scrollToBottom({ animated: true, delay: 60 });
+        const sendOptions = {
+          contextOverride: mergedContextOverride,
+          modelOverride: selectedModel,
+          messagesOverride,
+          metadata: {
+            response_mode: responseMode,
+            language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
+            detected_language: requestLanguage.locale || undefined,
+            tutor_entry_source: tutorEntrySource,
           },
-          {
-            contextOverride: mergedContextOverride,
-            modelOverride: selectedModel,
-            messagesOverride,
-            metadata: {
-              response_mode: responseMode,
-              language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
-              detected_language: requestLanguage.locale || undefined,
-              tutor_entry_source: tutorEntrySource,
-            },
-            signal: controller.signal,
+          signal: controller.signal,
+        } as const;
+
+        const flushStreamDraft = () => {
+          const currentDraft = streamTextDraft;
+          setStreamingContent(currentDraft);
+          setMessages((prevMessages) => {
+            let changed = false;
+            const next = prevMessages.map((msg) => {
+              if (msg.id !== tempStreamingMsgId) return msg;
+              if (msg.content === currentDraft) return msg;
+              changed = true;
+              return { ...msg, content: currentDraft };
+            });
+            return changed ? next : prevMessages;
+          });
+        };
+
+        const handleStreamChunk = (chunk: string) => {
+          if (firstChunkAt === null) {
+            firstChunkAt = Date.now();
+            if (__DEV__) {
+              console.log('[useDashAssistant] Streaming first token latency (ms):', firstChunkAt - streamStartAt);
+            }
+            logDashTrace('stream_first_chunk', {
+              latencyMs: firstChunkAt - streamStartAt,
+              messageId: tempStreamingMsgId,
+              model: selectedModel,
+              responseMode,
+            });
+            if (isNearBottomRef.current) {
+              scrollToBottom({ animated: false, delay: 0 });
+            }
           }
-        );
-        
-        setStreamingMessageId(null);
-        setStreamingContent('');
-        setMessages(prev => prev.filter(msg => msg.id !== tempStreamingMsgId));
+          const now = Date.now();
+          if (now - lastStreamLogAt > 900) {
+            lastStreamLogAt = now;
+            logDashTrace('stream_progress', {
+              elapsedMs: now - streamStartAt,
+              chunkChars: chunk.length,
+              chunkPreview: chunk.slice(0, 80),
+            });
+          }
+          streamTextDraft = hasReceivedFirstChunk ? `${streamTextDraft}${chunk}` : chunk;
+          hasReceivedFirstChunk = true;
+          if (streamPaintFrame === null) {
+            streamPaintFrame = requestAnimationFrame(() => {
+              streamPaintFrame = null;
+              flushStreamDraft();
+            });
+          }
+          if (isNearBottomRef.current && now - lastStreamAutoScrollAt > 700) {
+            lastStreamAutoScrollAt = now;
+            scrollToBottom({ animated: false, delay: 0 });
+          }
+        };
+
+        try {
+          response = await dashInstance.sendMessage(
+            outgoingText,
+            conversationIdForUpload || undefined,
+            aiAttachments.length > 0 ? aiAttachments : undefined,
+            handleStreamChunk,
+            sendOptions
+          );
+        } catch (streamError) {
+          const aborted = streamError instanceof Error
+            && (streamError.name === 'AbortError' || streamError.message === 'Aborted');
+          if (aborted) {
+            throw streamError;
+          }
+          console.warn('[useDashAssistant] Streaming failed, retrying without stream:', streamError);
+          logDashTrace('stream_retry_non_stream', {
+            error: streamError instanceof Error ? streamError.message : String(streamError),
+            model: selectedModel,
+            responseMode,
+          });
+          response = await dashInstance.sendMessage(
+            outgoingText,
+            conversationIdForUpload || undefined,
+            aiAttachments.length > 0 ? aiAttachments : undefined,
+            undefined,
+            sendOptions
+          );
+        } finally {
+          if (__DEV__) {
+            const totalMs = Date.now() - streamStartAt;
+            console.log('[useDashAssistant] Streaming request completed (ms):', totalMs);
+          }
+          logDashTrace('stream_done', {
+            totalMs: Date.now() - streamStartAt,
+            firstTokenLatencyMs: firstChunkAt ? firstChunkAt - streamStartAt : null,
+            model: selectedModel,
+            responseMode,
+          });
+          if (streamPaintFrame !== null) {
+            cancelAnimationFrame(streamPaintFrame);
+            streamPaintFrame = null;
+          }
+          setStreamingMessageId(null);
+          setStreamingContent('');
+          setMessages(prev => prev.filter(msg => msg.id !== tempStreamingMsgId));
+        }
       } else {
         response = await dashInstance.sendMessage(
           outgoingText, 
@@ -1500,11 +1630,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
 
       // Add assistant message locally for immediate UI feedback
+      logDashTrace('assistant_response', {
+        responseId: response.id,
+        model: selectedModel,
+        responseMode,
+        chars: String(response.content || '').length,
+        preview: String(response.content || '').slice(0, 180),
+        language: String((response.metadata as any)?.detected_language || requestLanguage.locale || ''),
+      });
       setMessages(prev => [...prev, response]);
       
       setLoadingStatus('responding');
       setStatusStartTime(Date.now());
-      scrollToBottom({ animated: true, delay: 120 });
+      if (isNearBottomRef.current) {
+        scrollToBottom({ animated: true, delay: 120 });
+      }
       
       // Handle dashboard actions
       if (response.metadata?.dashboard_action?.type === 'switch_layout') {
@@ -1549,7 +1689,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         });
         setMessages(prev => (merged.length >= prev.length ? merged : prev));
         setConversation(updatedConv);
-        scrollToBottom({ animated: true, delay: 150 });
+        if (isNearBottomRef.current) {
+          scrollToBottom({ animated: true, delay: 150 });
+        }
         persistConversationSnapshot(updatedConv).catch(() => {});
 
         // Server-side conversation trim to prevent unbounded DB row growth
@@ -1634,6 +1776,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         return;
       }
       console.error('Failed to send message:', error);
+      logDashTrace('assistant_error', {
+        error: error instanceof Error ? error.message : String(error),
+        model: selectedModel,
+      });
       track(
         'dash.turn.failed',
         {
@@ -1669,6 +1815,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     autoSpeakResponses,
     voiceEnabled,
     streamingEnabledPref,
+    aiStreamingEnabled,
     detectTutorIntent,
     detectPhonicsTutorRequest,
     isTutorStopIntent,
@@ -1688,9 +1835,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     getTutorPhaseLabel,
     persistConversationSnapshot,
     resolveActiveConversationId,
+    logDashTrace,
     learnerContext,
     capsReady,
     canInteractiveLessons,
+    selectedModel,
     user?.id,
     profile?.role,
     handoffSource,
@@ -2318,15 +2467,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   useEffect(() => {
     const isTypingActive = isLoading || !!loadingStatus;
-    if (isTypingActive && flashListRef.current) {
-      // Scroll immediately when loading starts
+    const becameActive = isTypingActive && !wasTypingActiveRef.current;
+    if (becameActive && isNearBottomRef.current && flashListRef.current) {
       scrollToBottom({ animated: false, delay: 0 });
-      // Then scroll again to catch any late renders
-      const timer = setTimeout(() => {
-        scrollToBottom({ animated: true, delay: 0 });
-      }, 100);
-      return () => clearTimeout(timer);
     }
+    wasTypingActiveRef.current = isTypingActive;
   }, [isLoading, loadingStatus, scrollToBottom]);
 
   // Unread count tracking
@@ -2364,15 +2509,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
       return () => {
         active = false;
-        if (isSpeakingStateRef.current) {
-          stopSpeaking().catch(() => {});
-        }
+        stopAllActivity().catch(() => {});
       };
     }, [
       dashInstance,
       conversation?.id,
       loadChatPrefs,
-      stopSpeaking,
+      stopAllActivity,
       normalizeConversationMessages,
       persistConversationSnapshot,
     ])

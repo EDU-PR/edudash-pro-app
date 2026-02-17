@@ -265,7 +265,7 @@ export const ParentDashHome: React.FC<ParentDashHomeProps> = ({
             style={[s.primaryBtn, { backgroundColor: theme.primary }]}
             onPress={() =>
               sendWithContext(
-                'Help with homework. Ask me which subject and I\'ll describe the problem.'
+                'Please help with homework now. Use the child context, explain step-by-step, and finish with one quick check question.'
               )
             }
           >
@@ -322,7 +322,7 @@ export const ParentDashHome: React.FC<ParentDashHomeProps> = ({
           style={[s.actionRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
           onPress={() =>
             sendWithContext(
-              'Create a fun quiz. Ask me which subject and difficulty level.'
+              `Create a fun 5-question mixed-subject quiz for ${gradeLabel || 'this grade'}. Start immediately, keep score, and include answers at the end.`
             )
           }
         >
@@ -342,7 +342,7 @@ export const ParentDashHome: React.FC<ParentDashHomeProps> = ({
           style={[s.actionRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
           onPress={() =>
             sendWithContext(
-              `Explain a concept in simple language for ${childName}. Ask me which concept.`
+              `Explain today’s most likely tricky concept for ${childName} in simple language, with one example and one mini practice question.`
             )
           }
         >

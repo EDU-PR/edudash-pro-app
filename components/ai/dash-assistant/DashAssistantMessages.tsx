@@ -25,7 +25,7 @@ export interface DashAssistantMessagesProps {
   setIsNearBottom: (v: boolean) => void;
   unreadCount: number;
   setUnreadCount: (n: number) => void;
-  scrollToBottom: (opts: { animated?: boolean; delay?: number }) => void;
+  scrollToBottom: (opts: { animated?: boolean; delay?: number; force?: boolean }) => void;
   renderTypingIndicator: () => React.ReactElement | null;
   renderSuggestedActions: () => React.ReactElement | null;
   onSendMessage?: (text: string) => void;
@@ -78,6 +78,8 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   userRole,
   tutorMode,
 }) => {
+  const contentHeightRef = React.useRef(0);
+  const lastAutoScrollAtRef = React.useRef(0);
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
     if (explicitPhase) {
@@ -175,11 +177,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       data={messages}
       keyExtractor={(item: any, index: number) => item.id || `msg-${index}`}
       renderItem={({ item, index }) => renderMessage(item, index)}
+      estimatedItemSize={220}
       style={listStyle}
       contentContainerStyle={listContentStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      removeClippedSubviews={Platform.OS === 'android'}
+      removeClippedSubviews={false}
       onScroll={(e: any) => {
         try {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent as any;
@@ -199,11 +202,18 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
         } catch {}
       }}
       scrollEventThrottle={16}
-      onContentSizeChange={() => {
-        // Auto-scroll when content grows (new messages)
-        if (isLoading || isNearBottom) {
-          scrollToBottom({ animated: true, delay: 80 });
-        }
+      onContentSizeChange={(_width: number, height: number) => {
+        const previousHeight = contentHeightRef.current;
+        contentHeightRef.current = height;
+
+        // Keep the viewport stable when the user is reading older messages.
+        if (!isNearBottom) return;
+        if (Math.abs(height - previousHeight) < 6) return;
+
+        const now = Date.now();
+        if (now - lastAutoScrollAtRef.current < 220) return;
+        lastAutoScrollAtRef.current = now;
+        scrollToBottom({ animated: !isLoading, delay: 0 });
       }}
       ListHeaderComponent={
         messages.length > 0 ? (

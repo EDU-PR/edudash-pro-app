@@ -50,6 +50,7 @@ import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
 import { shouldGreetToday, buildDynamicGreeting } from '@/lib/ai/greetingManager';
 import {
   buildSystemPrompt,
+  buildVoicePlaybackText,
   cleanForTTS,
   cleanRawJSON,
   createStreamingRequest,
@@ -71,6 +72,7 @@ if (!isWeb) {
 type VoiceOrbRef = {
   speakText: (text: string, language?: SupportedLanguage, options?: { phonicsMode?: boolean }) => Promise<void>;
   stopSpeaking: () => Promise<void>;
+  stopListening?: () => Promise<void>;
   isSpeaking: boolean;
 };
 
@@ -123,12 +125,19 @@ export default function DashVoiceScreen() {
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
+  const DASH_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
 
-  // Streaming-to-speech: speak the first complete sentence ASAP to cut perceived latency.
-  const STREAMING_TTS_ENABLED = process.env.EXPO_PUBLIC_DASH_VOICE_STREAMING_TTS !== 'false';
+  // Streaming-to-speech can sound choppy on mobile because each sentence becomes a separate TTS request.
+  // Keep it opt-in; default is final-response TTS for smoother playback.
+  const STREAMING_TTS_ENABLED = process.env.EXPO_PUBLIC_DASH_VOICE_STREAMING_TTS === 'true';
   const streamedPrefixQueuedRef = useRef('');
   const streamedHasQueuedRef = useRef(false);
   const streamedLastQueuedAtRef = useRef(0);
+
+  const logDashTrace = useCallback((event: string, payload?: Record<string, unknown>) => {
+    if (!DASH_TRACE_ENABLED) return;
+    console.log(`[DashVoiceTrace] ${event}`, payload || {});
+  }, [DASH_TRACE_ENABLED]);
 
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
@@ -262,32 +271,38 @@ export default function DashVoiceScreen() {
     } else if (full.startsWith(prev)) {
       delta = full.slice(prev.length);
     } else {
-      // Fallback: keep the longest shared prefix so we don't re-speak.
       const lcp = longestCommonPrefixLen(full, prev);
       streamedPrefixQueuedRef.current = full.slice(0, lcp);
       delta = full.slice(lcp);
     }
 
     if (delta.trim().length < 5) return;
-    const boundaryIdx = findSpeakBoundaryIndex(delta);
+    // Only speak on sentence-ending punctuation (. ! ?) during stream to avoid choppy one-chunk-at-a-time TTS.
+    const sentenceEnd = /[.!?](?=\s|$)/.exec(delta);
+    const boundaryIdx = sentenceEnd ? sentenceEnd.index : -1;
     if (boundaryIdx < 0) return;
 
     const rawChunk = delta.slice(0, boundaryIdx + 1);
     const speakChunk = rawChunk.trim();
     if (!speakChunk) return;
 
-    // Never split in the middle of a phonics marker (/s/, /m/, etc.) — preserves sustained sounds.
+    // Require a minimum phrase length so we don't queue many tiny utterances (e.g. "Yes." "Okay.").
+    const MIN_STREAMING_PHRASE_CHARS = 35;
+    if (speakChunk.length < MIN_STREAMING_PHRASE_CHARS) return;
+
     if (/\/[a-z]*$/i.test(speakChunk) || /^[a-z]*\//i.test(speakChunk)) return;
 
-    // Throttle tiny chunks so we don't spam the speech queue on fast streams.
+    // Throttle: avoid queueing another phrase too soon or too short (reduces choppiness on native).
     const now = Date.now();
-    if (now - streamedLastQueuedAtRef.current < 120 && speakChunk.length < 30) return;
+    const throttleMs = 400;
+    const minCharsToBypassThrottle = 60;
+    if (now - streamedLastQueuedAtRef.current < throttleMs && speakChunk.length < minCharsToBypassThrottle) return;
     streamedLastQueuedAtRef.current = now;
 
     streamedHasQueuedRef.current = true;
     streamedPrefixQueuedRef.current = `${streamedPrefixQueuedRef.current}${rawChunk}`;
     enqueueSpeech(speakChunk);
-  }, [STREAMING_TTS_ENABLED, enqueueSpeech, findSpeakBoundaryIndex, longestCommonPrefixLen]);
+  }, [STREAMING_TTS_ENABLED, enqueueSpeech, longestCommonPrefixLen]);
 
   const handleVoiceError = useCallback((message: string) => {
     const normalized = String(message || '').toLowerCase();
@@ -388,12 +403,21 @@ export default function DashVoiceScreen() {
       source: 'dash-voice.sendMessage',
     });
     track('dash.turn.started', turnTelemetryBase);
+    logDashTrace('turn_started', {
+      turnId,
+      role,
+      orgType,
+      language: preferredLanguage,
+      inputChars: trimmed.length,
+      inputPreview: trimmed.slice(0, 140),
+      hasImage: !!attachedImage?.base64,
+    });
     activeRequestRef.current?.abort();
     resetStreamingSpeech();
     speechQueueRef.current = [];
     setIsProcessing(true);
     setLastResponse('');
-    setStreamingText('');
+    setStreamingText('Got it. Let me work on that now...');
 
     // Add user message to history (use ref to avoid dependency on state)
     const updatedHistory = [...conversationHistoryRef.current, { role: 'user' as const, content: trimmed }];
@@ -478,6 +502,12 @@ export default function DashVoiceScreen() {
             : '';
         const cleaned = cleanRawJSON(content);
         const displayText = cleaned || 'I analyzed the image but did not find readable text.';
+        logDashTrace('ocr_response', {
+          turnId,
+          responseChars: displayText.length,
+          responsePreview: displayText.slice(0, 160),
+          ocrTask: ocrTask || 'document',
+        });
         setLastResponse(displayText);
         setStreamingText('');
         setIsProcessing(false);
@@ -486,7 +516,8 @@ export default function DashVoiceScreen() {
           conversationHistoryRef.current = withResponse;
           setConversationHistory(withResponse);
           persistOrbMessages(withResponse);
-          enqueueSpeech(displayText);
+          const spoken = buildVoicePlaybackText(displayText, { maxChars: 220, maxSentences: 2 });
+          enqueueSpeech(spoken || displayText);
         }
         track(
           'dash.turn.completed',
@@ -499,8 +530,26 @@ export default function DashVoiceScreen() {
         return;
       }
 
+      let firstChunkAt: number | null = null;
+      let lastProgressLogAt = 0;
       const req = createStreamingRequest(url, session.access_token, body,
         (accumulated) => {
+          if (firstChunkAt === null) {
+            firstChunkAt = Date.now();
+            logDashTrace('stream_first_chunk', {
+              turnId,
+              firstTokenLatencyMs: firstChunkAt - turnStartedAt,
+            });
+          }
+          const now = Date.now();
+          if (now - lastProgressLogAt > 900) {
+            lastProgressLogAt = now;
+            logDashTrace('stream_progress', {
+              turnId,
+              chars: accumulated.length,
+              elapsedMs: now - turnStartedAt,
+            });
+          }
           // Guard: never show raw SSE artifacts in the streaming display
           if (accumulated && !/^\s*data:\s*(\[DONE\])?\s*$/i.test(accumulated)) {
             setStreamingText(accumulated);
@@ -514,6 +563,13 @@ export default function DashVoiceScreen() {
           const displayText = isSseArtifact
             ? 'I couldn\'t get a response. Please try again.'
             : cleaned;
+          logDashTrace('stream_done', {
+            turnId,
+            latencyMs: Date.now() - turnStartedAt,
+            chars: displayText.length,
+            preview: displayText.slice(0, 160),
+            artifact: isSseArtifact,
+          });
           setLastResponse(displayText);
           setStreamingText('');
           setIsProcessing(false);
@@ -528,7 +584,15 @@ export default function DashVoiceScreen() {
               const remaining = cleaned.slice(lcp).trim();
               if (remaining) enqueueSpeech(remaining);
             } else {
-              enqueueSpeech(cleaned);
+              const spoken = buildVoicePlaybackText(cleaned, { maxChars: 220, maxSentences: 2 });
+              if (spoken.length < cleaned.length) {
+                logDashTrace('tts_compact_playback', {
+                  turnId,
+                  fullChars: cleaned.length,
+                  spokenChars: spoken.length,
+                });
+              }
+              enqueueSpeech(spoken || cleaned);
             }
           }
           track(
@@ -541,6 +605,11 @@ export default function DashVoiceScreen() {
           activeRequestRef.current = null;
         },
         (error) => {
+          logDashTrace('stream_error', {
+            turnId,
+            latencyMs: Date.now() - turnStartedAt,
+            message: error.message,
+          });
           resetStreamingSpeech();
           setLastResponse(`Sorry, ${error.message}. Please try again.`);
           setStreamingText('');
@@ -559,6 +628,11 @@ export default function DashVoiceScreen() {
     } catch (error) {
       resetStreamingSpeech();
       const msg = error instanceof Error ? error.message : 'Something went wrong';
+      logDashTrace('turn_error', {
+        turnId,
+        latencyMs: Date.now() - turnStartedAt,
+        message: msg,
+      });
       setLastResponse(`Sorry, ${msg}. Please try again.`);
       setStreamingText('');
       setIsProcessing(false);
@@ -581,6 +655,7 @@ export default function DashVoiceScreen() {
     maybeEnqueueStreamingSpeech,
     resetStreamingSpeech,
     longestCommonPrefixLen,
+    logDashTrace,
     persistOrbMessages,
     profile,
     dashPolicy.defaultMode,
@@ -618,6 +693,11 @@ export default function DashVoiceScreen() {
   const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
     // Guard against ORB hearing its own TTS output during brief state races.
     if (isSpeakingRef.current || isSpeaking || isProcessing) {
+      logDashTrace('voice_input_ignored', {
+        reason: isSpeakingRef.current || isSpeaking ? 'speaking' : 'processing',
+        language: language || preferredLanguage,
+        preview: String(transcript || '').slice(0, 120),
+      });
       return;
     }
     const formatted = formatTranscript(transcript, language, {
@@ -626,17 +706,34 @@ export default function DashVoiceScreen() {
       preschoolMode: orgType === 'preschool',
       maxSummaryWords: orgType === 'preschool' ? 16 : 20,
     });
+    logDashTrace('voice_input_received', {
+      language: language || preferredLanguage,
+      rawChars: String(transcript || '').length,
+      cleanChars: formatted.trim().length,
+      rawPreview: String(transcript || '').slice(0, 120),
+      cleanPreview: formatted.trim().slice(0, 120),
+    });
     if (language) setPreferredLanguage(language);
     const cleaned = formatted.trim();
     if (!cleaned) return;
     setLiveUserTranscript('');
     setLastUserTranscript(cleaned);
     sendMessage(cleaned);
-  }, [isProcessing, isSpeaking, orgType, sendMessage]);
+  }, [isProcessing, isSpeaking, logDashTrace, orgType, preferredLanguage, sendMessage]);
 
   const handleSubmit = useCallback(() => {
     if (inputText.trim()) { sendMessage(inputText); setInputText(''); }
   }, [inputText, sendMessage]);
+
+  const handleInputFocus = useCallback(() => {
+    if (isSpeakingRef.current || isSpeaking) {
+      voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
+    }
+    if (isListening) {
+      voiceOrbRef.current?.stopListening?.().catch(() => {});
+      setIsListening(false);
+    }
+  }, [isListening, isSpeaking]);
 
   // ── Derived ───────────────────────────────────────────────────────
   const greeting = useMemo(() => {
@@ -918,6 +1015,7 @@ export default function DashVoiceScreen() {
               placeholderTextColor={theme.textSecondary}
               value={inputText}
               onChangeText={setInputText}
+              onFocus={handleInputFocus}
               onSubmitEditing={handleSubmit}
               returnKeyType="send"
               editable={!isProcessing}

@@ -539,6 +539,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 borderColor: theme.border, 
                 borderWidth: 1.5 
               },
+          isUser && isLastUserMessage && !isLoading ? { paddingBottom: 34 } : null,
           bubbleShadow,
         ]}
       >

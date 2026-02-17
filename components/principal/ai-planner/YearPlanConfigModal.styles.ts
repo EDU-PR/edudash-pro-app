@@ -2,7 +2,7 @@
 
 import { StyleSheet } from 'react-native';
 
-export const createStyles = (theme: any, insetBottom: number) =>
+export const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
   StyleSheet.create({
     modalContainer: {
       flex: 1,

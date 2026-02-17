@@ -21,6 +21,7 @@ import {
   Star,
   Gift,
   Home,
+  MonitorPlay,
 } from 'lucide-react';
 import type { NavItem } from './types';
 
@@ -88,6 +89,12 @@ export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
         { href: '/dashboard/teacher/tutor-analytics', label: 'Tutor Analytics', icon: Sparkles },
         { href: '/dashboard/teacher/family-review', label: 'Family Activity', icon: Home },
         { href: '/dashboard/teacher/reputation', label: 'My Reputation', icon: Star },
+      ],
+    },
+    {
+      label: 'Display',
+      items: [
+        { href: '/display', label: 'Room Display (TV link)', icon: MonitorPlay },
       ],
     },
     {

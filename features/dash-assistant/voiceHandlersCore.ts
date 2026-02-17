@@ -1,4 +1,4 @@
-import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { AudioModule } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
@@ -18,6 +18,75 @@ type VoiceRefs = {
   lastSpeakStartRef: React.MutableRefObject<number | null>;
   ttsSessionIdRef?: React.MutableRefObject<string | null>;
 };
+
+const DEFAULT_DASH_VOICE_LOCALE = 'en-ZA';
+
+function countMatches(input: string, pattern: RegExp): number {
+  return (input.match(pattern) || []).length;
+}
+
+function isJsonLikeToolDump(input: string): boolean {
+  const value = String(input || '');
+  if (!value.trim()) return false;
+  const quoteColonPairs = countMatches(value, /"[a-z0-9_]+":/gi);
+  const unicodeEscapes = countMatches(value, /\\u[0-9a-f]{4}/gi);
+  const jsonBraces = countMatches(value, /[\{\}]/g);
+  const looksLikeCapsTool = /"documents"\s*:|"content_preview"\s*:|search_caps_curriculum/i.test(value);
+  return looksLikeCapsTool || quoteColonPairs >= 10 || unicodeEscapes >= 4 || jsonBraces >= 16;
+}
+
+function stripToolDumpForSpeech(input: string): string {
+  const text = String(input || '').trim();
+  if (!text) return '';
+  const splitMatch = text.match(/\n+\s*[\{\[]/);
+  if (splitMatch?.index && splitMatch.index > 0) {
+    const lead = text.slice(0, splitMatch.index).trim();
+    const tail = text.slice(splitMatch.index).trim();
+    if (isJsonLikeToolDump(tail)) return lead;
+  }
+  return isJsonLikeToolDump(text) ? '' : text;
+}
+
+function shouldUseDetectedLocaleForSpeech(text: string, locale: string, source: string): boolean {
+  const normalizedLocale = String(locale || '').toLowerCase();
+  if (!normalizedLocale || normalizedLocale === 'en-za') return true;
+  if (source !== 'explicit_override') return false;
+
+  const value = String(text || '').toLowerCase();
+  const englishMarkers = countMatches(
+    value,
+    /\b(the|and|you|your|is|are|to|for|with|can|will|please|what|how|when|where|school|lesson|class|student|parent)\b/g
+  );
+  const afMarkers = countMatches(
+    value,
+    /\b(afrikaans|asseblief|dankie|baie|goeie|middag|aand|verduidelik|som|antwoord|wiskunde|leerling|onderwyser)\b/g
+  );
+  const zuMarkers = countMatches(
+    value,
+    /\b(isizulu|ngiyacela|ngiyabonga|yebo|cha|sawubona|umfundi|uthisha|isikole|isifundo)\b/g
+  );
+
+  if (normalizedLocale === 'af-za') {
+    return afMarkers >= 3 && afMarkers >= englishMarkers / 2;
+  }
+  if (normalizedLocale === 'zu-za') {
+    return zuMarkers >= 3 && zuMarkers >= englishMarkers / 2;
+  }
+  return false;
+}
+
+function resolveSpeechLocale(message: DashMessage, responseText: string, fallbackLocale: string): string {
+  const detectedLocale = String(
+    message.metadata?.detected_language ||
+    (message.metadata as any)?.language ||
+    ''
+  ).trim();
+  const languageSource = String((message.metadata as any)?.language_source || '').trim().toLowerCase();
+  if (!detectedLocale) return fallbackLocale;
+  return shouldUseDetectedLocaleForSpeech(responseText, detectedLocale, languageSource)
+    ? detectedLocale
+    : DEFAULT_DASH_VOICE_LOCALE;
+}
 
 export async function stopDashVoiceRecording(params: {
   voiceRefs: VoiceRefs;
@@ -149,19 +218,19 @@ export async function speakDashResponse(params: {
         console.warn('[useDashAssistant] Voice budget update failed, continuing with playback:', budgetError);
       }
     }
-    const isPhonics = shouldUsePhonicsMode(message.content || '');
-    const cleaned = cleanForTTS(message.content || '', { phonicsMode: isPhonics });
+    const speechInput = stripToolDumpForSpeech(message.content || '');
+    const isPhonics = shouldUsePhonicsMode(speechInput || '');
+    const cleaned = cleanForTTS(speechInput || '', { phonicsMode: isPhonics });
     const chunks = splitForTTS(cleaned, TTS_CHUNK_MAX_LEN);
     if (chunks.length === 0) {
       setIsSpeaking(false);
       setSpeakingMessageId(null);
       return;
     }
-    const preferredVoiceLocale = String(
-      message.metadata?.detected_language ||
-      (message.metadata as any)?.language ||
-      dashInstance?.getPersonality?.()?.voice_settings?.language ||
-      'en-ZA'
+    const preferredVoiceLocale = resolveSpeechLocale(
+      message,
+      speechInput,
+      String(dashInstance?.getPersonality?.()?.voice_settings?.language || DEFAULT_DASH_VOICE_LOCALE)
     );
     const stableLocale = preferredVoiceLocale.includes('-')
       ? preferredVoiceLocale
@@ -235,6 +304,7 @@ export async function speakDashResponse(params: {
       }
 
       const chunk = chunks[idx];
+      const chunkStartedAt = Date.now();
       const chunkMessage: DashMessage = {
         ...message,
         content: chunk,
@@ -293,6 +363,14 @@ export async function speakDashResponse(params: {
         chunkFailed = true;
         throwSpeechError(error);
       });
+      if (__DEV__ && !chunkFailed) {
+        console.log('[DashVoice] TTS chunk playback completed', {
+          index: idx + 1,
+          total: chunks.length,
+          chars: chunk.length,
+          duration_ms: Date.now() - chunkStartedAt,
+        });
+      }
       if (chunkFailed) {
         break;
       }

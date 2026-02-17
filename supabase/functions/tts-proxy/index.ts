@@ -102,12 +102,12 @@ const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
  * - Only slow/hold the phoneme segments (slash markers) for clarity.
  */
 // ── Phonics pacing — values MUST match lib/dash-ai/ttsConstants.ts (SSOT) ──
-const DEFAULT_PHONICS_SPEAKING_RATE = -15;   // AZURE_RATE_PHONICS
-const PHONICS_PHONEME_RATE = -15;            // AZURE_RATE_PHONEME
-const PHONICS_MARKER_BREAK_MS = 160;
-const PHONICS_BLEND_SEGMENT_BREAK_MS = 180;
-const PHONICS_BLEND_FINAL_BREAK_MS = 240;
-const PHONICS_FALLBACK_LETTER_BREAK_MS = 140;
+const DEFAULT_PHONICS_SPEAKING_RATE = 0;     // AZURE_RATE_PHONICS
+const PHONICS_PHONEME_RATE = -18;            // AZURE_RATE_PHONEME
+const PHONICS_MARKER_BREAK_MS = 220;
+const PHONICS_BLEND_SEGMENT_BREAK_MS = 250;
+const PHONICS_BLEND_FINAL_BREAK_MS = 320;
+const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;
 
 /** Audio format for pronunciation assessment & streaming */
 const STREAMING_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
@@ -261,6 +261,21 @@ const DIGRAPH_IPA: Record<string, string> = {
   ch: 'tʃ',
 };
 
+const SUSTAINED_PHONEME_TEXT: Record<string, string> = {
+  s: 'ssssss',
+  m: 'mmmmmm',
+  f: 'ffffff',
+  z: 'zzzzzz',
+  n: 'nnnnnn',
+  l: 'llllll',
+  r: 'rrrrrr',
+  v: 'vvvvvv',
+  h: 'hhhhhh',
+  sh: 'shhhhh',
+  th: 'thhhhh',
+  ng: 'nggggg',
+};
+
 function phonemeTagSustained(tokenRaw: string): string {
   const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
   if (!token) return '';
@@ -272,12 +287,12 @@ function phonemeTagSustained(tokenRaw: string): string {
     const entry = LETTER_IPA[token];
     if (!entry) return escapeXml(tokenRaw);
     ipa = `${entry.ipa}ː`;
-    sound = entry.sound || token;
+    sound = SUSTAINED_PHONEME_TEXT[token] || entry.sound || token;
   } else {
     const digraphIpa = DIGRAPH_IPA[token];
     if (!digraphIpa) return phonemeTag(token);
     ipa = `${digraphIpa}ː`;
-    sound = token;
+    sound = SUSTAINED_PHONEME_TEXT[token] || token;
   }
 
   return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(ipa)}">${escapeXml(sound)}</phoneme></prosody>`;
@@ -325,6 +340,9 @@ const SUSTAINED_SOUND_PATTERN = new RegExp(
   `\\b(${Object.keys(SUSTAINED_SOUND_TO_LETTER).join('|')})\\b`,
   'gi'
 );
+const REPEATED_LETTER_PATTERN = /\b([a-z])\1{2,11}\b/gi;
+const SPACED_REPEATED_LETTER_PATTERN = /\b([a-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi;
+const SPACED_REPEATED_DIGRAPH_PATTERN = /\b(sh|ch|th|ph|ng)(?:[\s,;:/\\|._-]+\1){1,6}\b/gi;
 
 function normalizeChoiceLabelsForSpeech(input: string): string {
   let next = String(input || '');
@@ -389,11 +407,26 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
   // c-a-t markers → blending SSML
   text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
 
+  // Convert repeated digraph cues like "sh sh sh" into sustained phoneme tags.
+  text = text.replace(SPACED_REPEATED_DIGRAPH_PATTERN, (_match, token: string) => {
+    return `${phonemeTagSustained(token)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+  });
+
+  // Convert repeated single-letter cues like "s s s s" into sustained phoneme tags.
+  text = text.replace(SPACED_REPEATED_LETTER_PATTERN, (_match, letter: string) => {
+    return `${phonemeTagSustained(letter)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+  });
+
   // Fallback: catch bare sustained-sound text that slipped past the prompt
   // e.g. "sss" → <phoneme ipa="s">sss</phoneme>, "buh" → <phoneme ipa="b">buh</phoneme>
   text = text.replace(SUSTAINED_SOUND_PATTERN, (match) => {
     const letter = SUSTAINED_SOUND_TO_LETTER[match.toLowerCase()];
     return letter ? phonemeTagSustained(letter) : match;
+  });
+
+  // Also catch continuous repeated letters that are not in the fixed map (e.g. "ssss", "mmmm").
+  text = text.replace(REPEATED_LETTER_PATTERN, (_match, letter: string) => {
+    return phonemeTagSustained(letter);
   });
 
   // Remove only orphaned phonics-style slashes (e.g. a stray /s that was not

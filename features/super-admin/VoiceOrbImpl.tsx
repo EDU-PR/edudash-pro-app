@@ -61,6 +61,8 @@ export interface VoiceOrbRef {
   speakText: (text: string, language?: SupportedLanguage, options?: TTSOptions) => Promise<void>;
   /** Stop TTS playback */
   stopSpeaking: () => Promise<void>;
+  /** Stop any active listening/recording session */
+  stopListening: () => Promise<void>;
   /** Get current speaking state */
   isSpeaking: boolean;
 }
@@ -151,24 +153,39 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, [externalLanguage]);
 
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
+  const VOICE_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
   // Perceived latency is dominated by "silence → final transcript → send".
   // Keep preschool more forgiving, but default faster for staff/older learners.
-  const defaultLiveSilenceMs = preschoolMode ? 3000 : 1200;
+  const defaultLiveSilenceMs = preschoolMode ? 3200 : 2400;
   const liveSilenceTimeoutRaw = Number.parseInt(
     process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || String(defaultLiveSilenceMs),
     10
   );
-  const liveSilenceMin = preschoolMode ? 1600 : 900;
+  const liveSilenceMin = preschoolMode ? 2200 : 2000;
   const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
     ? Math.min(12000, Math.max(liveSilenceMin, liveSilenceTimeoutRaw))
     : defaultLiveSilenceMs;
-  const LIVE_FINAL_FALLBACK_MS = preschoolMode ? 900 : 350;
+  const defaultFinalFallbackMs = preschoolMode ? 450 : 650;
+  const liveFinalFallbackRaw = Number.parseInt(
+    process.env.EXPO_PUBLIC_VOICE_LIVE_FINAL_FALLBACK_MS || String(defaultFinalFallbackMs),
+    10
+  );
+  const LIVE_FINAL_FALLBACK_MS = Number.isFinite(liveFinalFallbackRaw)
+    ? Math.min(3000, Math.max(250, liveFinalFallbackRaw))
+    : defaultFinalFallbackMs;
   const usingLiveSTTRef = useRef(false);
   const liveSessionRef = useRef(0);
   const liveFinalizedRef = useRef(false);
   const lastPartialRef = useRef('');
+  const liveSessionStartedAtRef = useRef<number | null>(null);
+  const liveLastPartialAtRef = useRef<number | null>(null);
   const liveSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const logVoiceTrace = useCallback((event: string, payload?: Record<string, unknown>) => {
+    if (!VOICE_TRACE_ENABLED) return;
+    console.log(`[VoiceOrbTrace] ${event}`, payload || {});
+  }, [VOICE_TRACE_ENABLED]);
   
   // Ref to hold the latest transcribe function
   const transcribeRef = useRef<((uri: string) => Promise<void>) | null>(null);
@@ -219,6 +236,17 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     return () => clearTimeout(timer);
   }, [ttsError, onVoiceError]);
 
+  useEffect(() => {
+    if (isParentProcessing) {
+      setStatusText('Thinking...');
+      return;
+    }
+    if (isTranscribing || isSpeaking || ttsIsSpeaking) return;
+    if (!recorderState.isRecording && !usingLiveSTTRef.current) {
+      setStatusText('Listening...');
+    }
+  }, [isParentProcessing, isTranscribing, isSpeaking, ttsIsSpeaking, recorderState.isRecording]);
+
   const clearLiveTimers = useCallback(() => {
     if (liveSilenceTimerRef.current) {
       clearTimeout(liveSilenceTimerRef.current);
@@ -245,16 +273,31 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     onPartialResult: (text) => {
       if (!usingLiveSTTRef.current) return;
       lastPartialRef.current = text;
+      liveLastPartialAtRef.current = Date.now();
       setLiveTranscript(text);
       onPartialTranscript?.(text, selectedLanguage);
+      logVoiceTrace('stt_partial', {
+        sessionId: liveSessionRef.current,
+        chars: text.length,
+        preview: text.slice(0, 80),
+      });
       resetLiveSilenceTimerRef.current?.();
     },
     onFinalResult: (text) => {
       if (!usingLiveSTTRef.current) return;
+      logVoiceTrace('stt_final_event', {
+        sessionId: liveSessionRef.current,
+        chars: text.length,
+        preview: text.slice(0, 80),
+      });
       finalizeLiveRef.current?.(text);
     },
     onError: (errorMsg) => {
       console.warn('[VoiceOrb] Live STT error:', errorMsg);
+      logVoiceTrace('stt_error', {
+        sessionId: liveSessionRef.current,
+        error: errorMsg,
+      });
       if (usingLiveSTTRef.current) {
         setUsingLiveSTT(false);
       }
@@ -266,6 +309,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const finalizeLiveTranscript = useCallback((text: string) => {
     if (liveFinalizedRef.current) return;
     liveFinalizedRef.current = true;
+    const finalizedAt = Date.now();
+    const startedAt = liveSessionStartedAtRef.current;
+    const sessionMs = startedAt ? finalizedAt - startedAt : null;
+    const lastPartialAgoMs = liveLastPartialAtRef.current ? finalizedAt - liveLastPartialAtRef.current : null;
     clearLiveTimers();
     setUsingLiveSTT(false);
     setIsProcessing(false);
@@ -280,11 +327,19 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     const cleaned = formatted.trim();
     if (cleaned) {
       setLastDetectedLanguage(selectedLanguage);
+      logVoiceTrace('stt_finalize_success', {
+        sessionId: liveSessionRef.current,
+        source: 'final',
+        sessionMs,
+        lastPartialAgoMs,
+        chars: cleaned.length,
+        preview: cleaned.slice(0, 120),
+      });
       onTranscript(cleaned, selectedLanguage, {
         source: 'live',
         capturedAt: Date.now(),
       });
-      setStatusText('Listening...');
+      setStatusText('Thinking...');
       return;
     }
 
@@ -296,17 +351,32 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     }).trim();
     if (fallback) {
       setLastDetectedLanguage(selectedLanguage);
+      logVoiceTrace('stt_finalize_success', {
+        sessionId: liveSessionRef.current,
+        source: 'partial_fallback',
+        sessionMs,
+        lastPartialAgoMs,
+        chars: fallback.length,
+        preview: fallback.slice(0, 120),
+      });
       onTranscript(fallback, selectedLanguage, {
         source: 'live',
         capturedAt: Date.now(),
       });
-      setStatusText('Listening...');
+      setStatusText('Thinking...');
       return;
     }
 
+    logVoiceTrace('stt_finalize_empty', {
+      sessionId: liveSessionRef.current,
+      sessionMs,
+      lastPartialAgoMs,
+      lastPartialChars: lastPartialRef.current.length,
+      lastPartialPreview: lastPartialRef.current.slice(0, 120),
+    });
     setStatusText('No speech detected');
     setTimeout(() => setStatusText('Listening...'), 2000);
-  }, [clearLiveTimers, onPartialTranscript, onTranscript, selectedLanguage]);
+  }, [clearLiveTimers, onPartialTranscript, onTranscript, selectedLanguage, logVoiceTrace]);
 
   useEffect(() => {
     finalizeLiveRef.current = finalizeLiveTranscript;
@@ -331,11 +401,30 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     liveSilenceTimerRef.current = setTimeout(() => {
       if (liveSessionRef.current !== sessionId || liveFinalizedRef.current) return;
       console.log('[VoiceOrb] 🔇 Live STT silence detected, stopping...');
+      const partialSnapshot = lastPartialRef.current.trim();
+      logVoiceTrace('stt_silence_timeout', {
+        sessionId,
+        timeoutMs: LIVE_SILENCE_TIMEOUT_MS,
+        lastPartialChars: partialSnapshot.length,
+        lastPartialPreview: partialSnapshot.slice(0, 120),
+      });
+      if (partialSnapshot.length > 0) {
+        setStatusText('Thinking...');
+        logVoiceTrace('stt_silence_finalize_partial', {
+          sessionId,
+          chars: partialSnapshot.length,
+          preview: partialSnapshot.slice(0, 120),
+        });
+        stopLiveListening().catch(() => {});
+        onStopListening();
+        finalizeLiveTranscript(partialSnapshot);
+        return;
+      }
       stopLiveListening().catch(() => {});
       onStopListening();
       scheduleLiveFallback();
     }, LIVE_SILENCE_TIMEOUT_MS);
-  }, [stopLiveListening, onStopListening, scheduleLiveFallback]);
+  }, [stopLiveListening, onStopListening, scheduleLiveFallback, LIVE_SILENCE_TIMEOUT_MS, logVoiceTrace, finalizeLiveTranscript]);
 
   useEffect(() => {
     resetLiveSilenceTimerRef.current = resetLiveSilenceTimer;
@@ -348,7 +437,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     
     try {
       if (usingLiveSTTRef.current) {
-        setStatusText('Processing...');
+        setStatusText('Thinking...');
         try {
           await stopLiveListening();
         } catch (stopError) {
@@ -442,10 +531,43 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     stopSpeaking: async () => {
       await stopSpeaking();
     },
+    stopListening: async () => {
+      if (recorderState.isRecording) {
+        try {
+          await recorderActions.stopRecording();
+        } catch (stopErr) {
+          console.warn('[VoiceOrb] stopListening recorder stop failed:', stopErr);
+        }
+      }
+      if (usingLiveSTTRef.current) {
+        try {
+          await cancelLiveListening();
+        } catch (stopErr) {
+          console.warn('[VoiceOrb] stopListening live STT cancel failed:', stopErr);
+        }
+        clearLiveTimers();
+        setUsingLiveSTT(false);
+      }
+      onStopListening();
+      setStatusText('Listening...');
+    },
     get isSpeaking() {
       return ttsIsSpeaking;
     },
-  }), [speak, stopSpeaking, ttsIsSpeaking, selectedLanguage, onTTSStart, onTTSEnd, suspendListeningForTTS]);
+  }), [
+    speak,
+    stopSpeaking,
+    ttsIsSpeaking,
+    selectedLanguage,
+    onTTSStart,
+    onTTSEnd,
+    suspendListeningForTTS,
+    recorderState.isRecording,
+    recorderActions,
+    cancelLiveListening,
+    clearLiveTimers,
+    onStopListening,
+  ]);
   
   // CRITICAL: Stop recording when TTS starts to prevent feedback loop (Dash hearing itself)
   useEffect(() => {
@@ -683,6 +805,14 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       liveSessionRef.current += 1;
       liveFinalizedRef.current = false;
       lastPartialRef.current = '';
+      liveSessionStartedAtRef.current = Date.now();
+      liveLastPartialAtRef.current = null;
+      logVoiceTrace('stt_session_start', {
+        sessionId: liveSessionRef.current,
+        language: selectedLanguage,
+        liveSilenceTimeoutMs: LIVE_SILENCE_TIMEOUT_MS,
+        finalFallbackMs: LIVE_FINAL_FALLBACK_MS,
+      });
       setLiveTranscript('');
       clearLiveTimers();
       clearLiveResults();
@@ -708,7 +838,24 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       onVoiceError?.('Microphone permission denied');
       setTimeout(() => setStatusText('Listening...'), 2000);
     }
-  }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking, liveAvailable, startLiveListening, clearLiveResults, clearLiveTimers, onVoiceError]);
+  }, [
+    isMuted,
+    isProcessing,
+    recorderState.isRecording,
+    recorderActions,
+    onStartListening,
+    isSpeaking,
+    ttsIsSpeaking,
+    liveAvailable,
+    startLiveListening,
+    clearLiveResults,
+    clearLiveTimers,
+    onVoiceError,
+    logVoiceTrace,
+    selectedLanguage,
+    LIVE_SILENCE_TIMEOUT_MS,
+    LIVE_FINAL_FALLBACK_MS,
+  ]);
   
   // Update ref for use in effects
   useEffect(() => {

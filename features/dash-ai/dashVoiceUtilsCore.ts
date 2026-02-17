@@ -331,6 +331,45 @@ export function cleanForTTS(t: string, options?: { phonicsMode?: boolean }): str
   });
 }
 
+/**
+ * Build a concise spoken variant for voice-first UX.
+ * Keeps on-screen answer complete while reducing TTS delay/choppiness.
+ */
+export function buildVoicePlaybackText(
+  text: string,
+  opts?: { maxChars?: number; maxSentences?: number }
+): string {
+  const maxChars = Number.isFinite(opts?.maxChars as number) ? Number(opts?.maxChars) : 220;
+  const maxSentences = Number.isFinite(opts?.maxSentences as number) ? Number(opts?.maxSentences) : 2;
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxChars) return normalized;
+
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) {
+    const clipped = normalized.slice(0, maxChars);
+    const lastSpace = clipped.lastIndexOf(' ');
+    return `${(lastSpace > 60 ? clipped.slice(0, lastSpace) : clipped).trim()}.`;
+  }
+
+  let spoken = '';
+  for (let i = 0; i < sentences.length && i < maxSentences; i += 1) {
+    const candidate = spoken ? `${spoken} ${sentences[i]}` : sentences[i];
+    if (candidate.length > maxChars) break;
+    spoken = candidate;
+  }
+
+  if (spoken) return spoken;
+  const first = sentences[0];
+  const clipped = first.slice(0, maxChars);
+  const lastSpace = clipped.lastIndexOf(' ');
+  return `${(lastSpace > 40 ? clipped.slice(0, lastSpace) : clipped).trim()}.`;
+}
+
 export function cleanRawJSON(text: string): string {
   // Strip SSE artifacts that should never reach the UI
   const stripped = text
@@ -356,8 +395,8 @@ export function cleanRawJSON(text: string): string {
 
 // ── TTS Chunking ─────────────────────────────────────────────────────
 
-/** Canonical max chunk length for TTS. All consumers should use this. */
-export const TTS_CHUNK_MAX_LEN = 1200;
+/** Canonical max chunk length for TTS. Tuned higher to reduce chunk round-trips. */
+export const TTS_CHUNK_MAX_LEN = 1800;
 
 /**
  * Split text into sentence-aligned chunks for TTS.
@@ -510,12 +549,15 @@ export function createStreamingRequest(
         const payload = line.slice(6).trim();
         if (payload === '[DONE]') continue;
         try {
-          const parsed = JSON.parse(payload);
-          // Extract streaming content
-          if (parsed.delta?.text) accumulated += parsed.delta.text;
-          else if (parsed.content) accumulated += parsed.content;
+          const parsed = JSON.parse(payload) as Record<string, unknown>;
+          // Extract streaming content: Anthropic content_block_delta and generic delta/content
+          const delta = parsed?.delta as { text?: string } | undefined;
+          const text = delta?.text ?? (parsed?.content as string | undefined);
+          if (typeof text === 'string' && text) {
+            accumulated += text;
+          }
           // Capture server-side error events so they reach the user
-          else if (parsed.type === 'error' && parsed.error) {
+          if (parsed?.type === 'error' && parsed.error != null) {
             serverError = typeof parsed.error === 'string'
               ? parsed.error
               : JSON.stringify(parsed.error);
@@ -527,14 +569,18 @@ export function createStreamingRequest(
       if (accumulated) onChunk(accumulated);
     };
 
-    // Fires as data arrives (incremental streaming on supported runtimes)
-    request.onreadystatechange = () => {
+    // Process incremental response: onreadystatechange (readyState 3) and onprogress.
+    // On React Native, some runtimes only populate responseText at readyState 4; server
+    // sends chunked SSE with X-Accel-Buffering: no to minimize proxy buffering.
+    const processIncremental = () => {
       if (request.readyState >= 3 && request.responseText) {
         const newData = request.responseText.substring(processedLen);
         processedLen = request.responseText.length;
         if (newData) processNewData(newData);
       }
     };
+    request.onreadystatechange = processIncremental;
+    request.onprogress = processIncremental;
 
     request.onload = () => {
       if (aborted) return;

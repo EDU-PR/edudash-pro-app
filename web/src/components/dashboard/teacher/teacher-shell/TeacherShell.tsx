@@ -93,10 +93,15 @@ export function TeacherShell({
       <PushNotificationPrompt />
 
       <style jsx global>{`
+        /* Desktop: ensure teacher sidebar fills height so nav can scroll */
+        @media (min-width: 1024px) {
+          .teacher-sidenav { align-self: stretch !important; }
+        }
         @media (max-width: 1023px) {
           .mobile-nav-btn { display: grid !important; }
           .desktop-back-btn { display: none !important; }
-          .mobile-nav-overlay, .mobile-nav-drawer, .mobile-widgets-overlay { display: block !important; }
+          .mobile-nav-overlay, .mobile-widgets-overlay { display: block !important; }
+          .mobile-nav-drawer { display: flex !important; flex-direction: column; overflow: hidden; }
           .mobile-widgets-drawer { display: flex !important; }
         }
         @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }

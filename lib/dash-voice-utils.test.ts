@@ -1,9 +1,9 @@
-import { splitForTTS, TTS_CHUNK_MAX_LEN } from './dash-voice-utils';
+import { buildVoicePlaybackText, splitForTTS, TTS_CHUNK_MAX_LEN } from './dash-voice-utils';
 
 describe('dash-voice-utils', () => {
   describe('TTS_CHUNK_MAX_LEN', () => {
-    it('is 1200', () => {
-      expect(TTS_CHUNK_MAX_LEN).toBe(1200);
+    it('is 1800', () => {
+      expect(TTS_CHUNK_MAX_LEN).toBe(1800);
     });
   });
 
@@ -43,6 +43,25 @@ describe('dash-voice-utils', () => {
       chunks.forEach((chunk) => {
         expect(chunk.length).toBeLessThanOrEqual(TTS_CHUNK_MAX_LEN);
       });
+    });
+  });
+
+  describe('buildVoicePlaybackText', () => {
+    it('returns original text when already short', () => {
+      const text = 'This is short and clear.';
+      expect(buildVoicePlaybackText(text)).toBe(text);
+    });
+
+    it('returns concise spoken text when response is long', () => {
+      const text = [
+        'First sentence is helpful and complete.',
+        'Second sentence adds context for the listener.',
+        'Third sentence should usually be omitted for faster speech playback.',
+      ].join(' ');
+      const spoken = buildVoicePlaybackText(text, { maxChars: 120, maxSentences: 2 });
+      expect(spoken.length).toBeLessThanOrEqual(120);
+      expect(spoken).toContain('First sentence');
+      expect(spoken).not.toContain('Third sentence');
     });
   });
 });

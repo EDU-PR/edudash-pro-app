@@ -81,6 +81,7 @@ import { assertSupabase } from '../lib/supabase';
 import { checkAndRefreshTokenIfNeeded, registerPushDevice } from '../lib/notifications';
 import { resolveExplicitSchoolTypeFromProfile } from '../lib/schoolTypeResolver';
 import { initPerformanceMonitoring } from '../lib/perf';
+import { installThemedNativeAlert } from '@/lib/ui/installThemedNativeAlert';
 
 patchNativeEventEmitterModules();
 
@@ -163,6 +164,10 @@ function LayoutContent() {
 
   const shouldShowOverlay = (!isAuthRoute && (authLoading || profileLoading)) || loadingOverlay.visible;
   const isReadyForFAB = !authLoading && !profileLoading && !isAuthRoute && !!user;
+
+  useEffect(() => {
+    installThemedNativeAlert(isDark);
+  }, [isDark]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;

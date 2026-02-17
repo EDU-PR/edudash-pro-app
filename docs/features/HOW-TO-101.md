@@ -5,6 +5,8 @@
 
 This manual has been expanded into three sections for better organization. Click the links below to navigate to the specific section you need.
 
+**Workshop manuals:** All role tutorials (Section B) and related SOPs use the same behavior: **Test instructions (UI)** are numbered steps that say which screen to open and which button to tap. **App visuals** are screenshots from the current native mobile app, stored in [docs/workshop-screenshots/](../workshop-screenshots/README.md) and referenced in the docs so workshops show real UI.
+
 ---
 
 ## 📚 Manual Sections
@@ -39,6 +41,7 @@ Operational and hiring documentation:
 
 | Document | Purpose |
 |----------|---------|
+| [Workshop Screenshots](../workshop-screenshots/README.md) | Native app screenshots for manuals |
 | [ROAD-MAP.md](../../ROAD-MAP.md) | Product roadmap with phases 1-5 |
 | [WARP.md](../../WARP.md) | Development standards & rules |
 | [README.md](../../README.md) | Quick start for developers |

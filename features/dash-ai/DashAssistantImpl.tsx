@@ -23,6 +23,8 @@ import {
   DashMessageBubble,
   DashInputBar,
   DashTypingIndicator,
+  AttachmentOptionsSheet,
+  DashOptionsSheet,
 } from '@/components/ai/dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
@@ -79,6 +81,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
+  const [optionsSheetVisible, setOptionsSheetVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_MIN_HEIGHT);
@@ -105,6 +109,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setInputText,
     isLoading,
     loadingStatus,
+    streamingMessageId,
     isSpeaking,
     speakingMessageId,
     dashInstance,
@@ -132,11 +137,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     stopAllActivity,
     startNewConversation,
     scrollToBottom,
-    handleAttachFile,
     handleTakePhoto,
+    handlePickImages,
+    handlePickDocuments,
     handleInputMicPress,
     handleRemoveAttachment,
     addAttachments,
+    runTool,
     extractFollowUps,
     tier,
     subReady,
@@ -149,12 +156,16 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const isTypingActive = isLoading || !!loadingStatus;
   const { profile } = useAuth();
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
+  const isK12ParentDashEntry = handoffSource === 'k12_parent_tab';
+  const useMinimalNextGenLayout = isK12ParentDashEntry;
   const isTutorUiActive = uiMode === 'tutor' || !!externalTutorMode || !!tutorSession;
   const activeTutorMode = tutorSession?.mode || externalTutorMode;
   const tutorModeLabel = activeTutorMode
     ? `${String(activeTutorMode).charAt(0).toUpperCase()}${String(activeTutorMode).slice(1)}`
     : 'Diagnose → Teach → Practice';
-  const shellSubtitle = isTutorUiActive
+  const shellSubtitle = useMinimalNextGenLayout
+    ? 'Your AI assistant'
+    : isTutorUiActive
     ? 'Tutor Session Active'
     : uiMode === 'advisor'
       ? 'Advisor Mode'
@@ -168,6 +179,43 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     await stopAllActivity();
     await startNewConversation();
   }, [startNewConversation, stopAllActivity]);
+
+  const handleComposerFocus = useCallback(() => {
+    if (isRecording) {
+      handleInputMicPress();
+    }
+    if (isSpeaking) {
+      void stopSpeaking();
+    }
+  }, [isRecording, handleInputMicPress, isSpeaking, stopSpeaking]);
+
+  const openAttachmentSheet = useCallback(() => {
+    if (isRecording) {
+      handleInputMicPress();
+    }
+    if (isSpeaking) {
+      void stopSpeaking();
+    }
+    setAttachmentSheetVisible(true);
+  }, [isRecording, handleInputMicPress, isSpeaking, stopSpeaking]);
+
+  const closeAttachmentSheet = useCallback(() => {
+    setAttachmentSheetVisible(false);
+  }, []);
+
+  const openOptionsSheet = useCallback(() => {
+    if (isRecording) {
+      handleInputMicPress();
+    }
+    if (isSpeaking) {
+      void stopSpeaking();
+    }
+    setOptionsSheetVisible(true);
+  }, [isRecording, handleInputMicPress, isSpeaking, stopSpeaking]);
+
+  const closeOptionsSheet = useCallback(() => {
+    setOptionsSheetVisible(false);
+  }, []);
 
   const handlePasteImage = useCallback(
     (file: File) => {
@@ -194,6 +242,38 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     setScannerVisible(true);
   }, [handleTakePhoto]);
+
+  const handleAttachmentTakePhoto = useCallback(() => {
+    openScanner();
+  }, [openScanner]);
+
+  const handleAttachmentPickImages = useCallback(() => {
+    void handlePickImages();
+  }, [handlePickImages]);
+
+  const handleAttachmentPickDocuments = useCallback(() => {
+    void handlePickDocuments();
+  }, [handlePickDocuments]);
+
+  const handleOpenHistory = useCallback(() => {
+    router.push('/screens/dash-conversations-history');
+  }, []);
+
+  const handleOpenSearch = useCallback(() => {
+    router.push('/screens/app-search?scope=dash&q=dash');
+  }, []);
+
+  const handleOpenOrb = useCallback(() => {
+    router.push('/screens/dash-voice?mode=orb');
+  }, []);
+
+  const handleRunScheduleTool = useCallback(() => {
+    void runTool('get_schedule', { start_date: 'today', days: 7 });
+  }, [runTool]);
+
+  const handleRunAssignmentsTool = useCallback(() => {
+    void runTool('get_assignments', { status: 'pending', days_ahead: 14 });
+  }, [runTool]);
 
   const handleScannerScanned = useCallback((result: HomeworkScanResult) => {
     if (!result?.base64) return;
@@ -223,13 +303,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
   // Scroll to bottom on keyboard show
   useEffect(() => {
-    if (keyboardVisible && messages.length > 0) {
+    if (keyboardVisible && messages.length > 0 && isNearBottom) {
       const timer = setTimeout(() => {
         scrollToBottom({ animated: true, delay: 50 });
       }, Platform.OS === 'android' ? 150 : 50);
       return () => clearTimeout(timer);
     }
-  }, [keyboardVisible, scrollToBottom, messages.length]);
+  }, [keyboardVisible, isNearBottom, scrollToBottom, messages.length]);
 
   // Render message
   const renderMessage = useCallback((message: DashMessage, index: number) => (
@@ -251,9 +331,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
 
   const renderTypingIndicator = useCallback(() => {
+    if (streamingMessageId) return null;
     if (!isTypingActive) return null;
     return <DashTypingIndicator isLoading={isTypingActive} loadingStatus={loadingStatus} />;
-  }, [isTypingActive, loadingStatus]);
+  }, [isTypingActive, loadingStatus, streamingMessageId]);
 
   // Loading state
   if (!isInitialized) {
@@ -306,7 +387,21 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
           {/* Clean header — ChatGPT style */}
           <View style={[headerStyles.header, { backgroundColor: 'transparent' }]}>
-            <View style={[headerStyles.headerShell, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View
+              style={[
+                headerStyles.headerShell,
+                {
+                  backgroundColor: theme.surface + 'CC',
+                  borderColor: 'transparent',
+                  borderWidth: 0,
+                  shadowColor: '#020617',
+                  shadowOpacity: 0.25,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 6,
+                },
+              ]}
+            >
               <View style={headerStyles.headerTopRow}>
                 <View style={headerStyles.headerLeft}>
                   <View style={headerStyles.headerTitleRow}>
@@ -316,8 +411,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   <Text style={[headerStyles.headerSubtitle, { color: theme.textSecondary }]}>
                     {shellSubtitle}
                   </Text>
-                  <ModelInUseIndicator modelId={selectedModel} compact showCostDots />
-                  {availableModels.length > 1 && (
+                  {!useMinimalNextGenLayout && <ModelInUseIndicator modelId={selectedModel} compact showCostDots />}
+                  {!useMinimalNextGenLayout && availableModels.length > 1 && (
                     <View style={{ marginTop: 6 }}>
                       <ModelSelectorChips
                         availableModels={availableModels}
@@ -327,15 +422,32 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                         onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'chat_message'); }}
                         showSectionTitle={false}
                         showWhenFree={true}
+                        collapsible
+                        defaultCollapsed
+                        autoCollapseOnSelect
                       />
                     </View>
                   )}
                 </View>
                 <View style={headerStyles.headerRight}>
-                  <View style={[headerStyles.actionRail, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                  <View
+                    style={[
+                      headerStyles.actionRail,
+                      {
+                        backgroundColor: theme.surfaceVariant + 'D9',
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        shadowColor: '#020617',
+                        shadowOpacity: 0.22,
+                        shadowRadius: 12,
+                        shadowOffset: { width: 0, height: 6 },
+                        elevation: 5,
+                      },
+                    ]}
+                  >
                     {(isSpeaking || isTypingActive || isRecording) && (
                       <TouchableOpacity
-                        style={[headerStyles.iconButton, { backgroundColor: theme.error, borderColor: theme.error }]}
+                        style={[headerStyles.iconButton, { backgroundColor: theme.error, borderColor: 'transparent', borderWidth: 0 }]}
                         accessibilityLabel="Stop Dash activity"
                         onPress={stopAllActivity}
                       >
@@ -343,36 +455,26 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
-                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                      accessibilityLabel="New chat"
-                      onPress={handleNewChat}
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: 'transparent', borderWidth: 0 }]}
+                      accessibilityLabel="Open Dash options"
+                      onPress={openOptionsSheet}
                     >
-                      <Ionicons name="add-circle-outline" size={18} color={theme.text} />
+                      <Ionicons name="ellipsis-horizontal" size={18} color={theme.text} />
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                      accessibilityLabel="History"
-                      onPress={() => router.push('/screens/dash-conversations-history')}
-                    >
-                      <Ionicons name="time-outline" size={18} color={theme.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                      accessibilityLabel="Find app feature"
-                      onPress={() => router.push('/screens/app-search?scope=dash&q=dash')}
-                    >
-                      <Ionicons name="search-outline" size={18} color={theme.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                      style={[
+                        headerStyles.iconButton,
+                        headerStyles.orbIconButton,
+                        { backgroundColor: theme.primary + '22', borderColor: 'transparent', borderWidth: 0 },
+                      ]}
                       accessibilityLabel="Open Dash Orb"
-                      onPress={() => router.push('/screens/dash-voice?mode=orb')}
+                      onPress={handleOpenOrb}
                     >
-                      <Ionicons name="planet-outline" size={18} color={theme.text} />
+                      <Ionicons name="planet" size={19} color={theme.primary} />
                     </TouchableOpacity>
                     {onClose && (
                       <TouchableOpacity
-                        style={[headerStyles.closeButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                        style={[headerStyles.closeButton, { backgroundColor: theme.surfaceVariant, borderColor: 'transparent', borderWidth: 0 }]}
                         onPress={async () => {
                           await stopSpeaking();
                           dashInstance?.cleanup?.();
@@ -386,7 +488,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </View>
                 </View>
               </View>
-              {isTutorUiActive && (
+              {isTutorUiActive && !useMinimalNextGenLayout && (
                 <View style={headerStyles.headerStatusRow}>
                   <View
                     style={[
@@ -444,7 +546,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
             <TouchableOpacity
               style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: messageViewportInset + 12 }]}
-              onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0 }); }}
+              onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0, force: true }); }}
               accessibilityLabel="Jump to bottom"
               activeOpacity={0.8}
             >
@@ -488,12 +590,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onMicPress={handleInputMicPress}
               onInterrupt={stopAllActivity}
               onTakePhoto={openScanner}
-              onAttachFile={handleAttachFile}
+              onAttachFile={openAttachmentSheet}
               onRemoveAttachment={handleRemoveAttachment}
               onQuickAction={(text) => sendMessage(text)}
               onCancel={cancelGeneration}
               bottomInset={0}
-              hideQuickChips={false}
+              hideQuickChips={useMinimalNextGenLayout}
+              showAttachmentDropzone={!useMinimalNextGenLayout}
+              onInputFocus={handleComposerFocus}
               onPasteImage={handlePasteImage}
             />
           </View>
@@ -507,6 +611,36 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             icon={alertState.icon as any}
             buttons={alertState.buttons}
             onClose={hideAlert}
+          />
+          <AttachmentOptionsSheet
+            visible={attachmentSheetVisible}
+            onClose={closeAttachmentSheet}
+            onTakePhoto={handleAttachmentTakePhoto}
+            onPickImages={handleAttachmentPickImages}
+            onPickDocuments={handleAttachmentPickDocuments}
+            showDocuments
+            isBusy={isLoading || isUploading}
+          />
+          <DashOptionsSheet
+            visible={optionsSheetVisible}
+            onClose={closeOptionsSheet}
+            onNewChat={handleNewChat}
+            onOpenHistory={handleOpenHistory}
+            onOpenSearch={handleOpenSearch}
+            onOpenOrb={handleOpenOrb}
+            onOpenScanner={openScanner}
+            onRunScheduleTool={handleRunScheduleTool}
+            onRunAssignmentsTool={handleRunAssignmentsTool}
+            models={availableModels}
+            selectedModelId={selectedModel}
+            onSelectModel={(modelId) => {
+              try {
+                setSelectedModel(modelId as any);
+              } catch {
+                // ignore invalid model id
+              }
+            }}
+            isBusy={isLoading || isUploading}
           />
           <HomeworkScanner
             visible={scannerVisible}

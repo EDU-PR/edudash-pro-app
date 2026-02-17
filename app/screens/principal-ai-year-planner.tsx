@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useTranslation } from 'react-i18next';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Extracted components and hooks
 import {
@@ -31,6 +32,7 @@ export default function PrincipalAIYearPlannerScreen() {
   const { profile, user } = useAuth();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
   
   const orgId = extractOrganizationId(profile);
   
@@ -43,7 +45,7 @@ export default function PrincipalAIYearPlannerScreen() {
     setExpandedTerm,
     generateYearPlan,
     savePlanToDatabase,
-  } = useAIYearPlanner({ organizationId: orgId, userId: user?.id });
+  } = useAIYearPlanner({ organizationId: orgId, userId: user?.id, onShowAlert: showAlert });
   
   // Modal state
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -108,6 +110,7 @@ export default function PrincipalAIYearPlannerScreen() {
         onClose={() => setShowConfigModal(false)}
         onGenerate={generateYearPlan}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 

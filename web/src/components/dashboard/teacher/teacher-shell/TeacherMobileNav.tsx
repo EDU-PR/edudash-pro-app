@@ -44,7 +44,7 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
         className="mobile-nav-overlay"
         onClick={onClose}
       />
-      <div 
+      <div
         style={{
           position: 'fixed',
           top: 0,
@@ -54,26 +54,26 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
           maxWidth: 320,
           background: 'var(--surface-1)',
           zIndex: 9999,
-          overflowY: 'auto',
-          padding: 'var(--space-4)',
           animation: 'slideInLeft 0.3s ease-out',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
-        className="mobile-nav-drawer"
+        className="mobile-nav-drawer mobile-nav-drawer-flex"
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-4)', flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
           <button onClick={onClose} className="iconBtn" aria-label="Close">
             <X className="icon20" />
           </button>
         </div>
-        
-        <nav className="nav" style={{ display: 'grid', gap: 6 }}>
+        <nav className="nav mobile-nav-drawer-nav" style={{ display: 'grid', gap: 6, padding: '0 var(--space-4)' }}>
           {nav.map((it) => {
             const Icon = it.icon as any;
             const active = pathname === it.href || pathname?.startsWith(it.href + '/');
             return (
-              <button 
-                key={it.href} 
+              <button
+                key={it.href}
                 className={`navItem ${active ? 'navItemActive' : ''}`}
                 onClick={() => handleNavClick(it.href)}
                 style={{ width: '100%' }}
@@ -87,8 +87,7 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
             );
           })}
         </nav>
-        
-        <div style={{ marginTop: 'auto', paddingTop: 'var(--space-4)' }}>
+        <div style={{ flexShrink: 0, padding: 'var(--space-4)', paddingTop: 'var(--space-2)' }}>
           <button
             className="navItem"
             style={{ width: '100%' }}

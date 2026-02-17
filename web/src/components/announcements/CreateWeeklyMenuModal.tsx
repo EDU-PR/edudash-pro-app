@@ -112,7 +112,7 @@ export function CreateWeeklyMenuModal({
 
   const canRunOCR = useMemo(() => {
     if (!sourceFile) return false;
-    return sourceFile.type.startsWith('image/');
+    return sourceFile.type.startsWith('image/') || sourceFile.type === 'application/pdf';
   }, [sourceFile]);
 
   const updateDay = (date: string, patch: Partial<WeeklyMenuDay>) => {
@@ -131,15 +131,16 @@ export function CreateWeeklyMenuModal({
     setParsing(true);
     setError('');
     try {
-      const imageDataUrl = sourceFile.type.startsWith('image/')
-        ? await readFileAsDataUrl(sourceFile)
-        : undefined;
+      const fileDataUrl = await readFileAsDataUrl(sourceFile);
+      const imageDataUrl = sourceFile.type.startsWith('image/') ? fileDataUrl : undefined;
+      const fileBase64 = fileDataUrl.split(',')[1] || undefined;
 
       const result = await MenuParsingService.parseWeeklyMenuFromUpload({
         weekStartDate,
         mimeType: sourceFile.type,
         fileName: sourceFile.name,
         imageDataUrl,
+        fileBase64,
       });
 
       setParseResult(result);
@@ -334,7 +335,7 @@ export function CreateWeeklyMenuModal({
                 onClick={() => void handleParse()}
                 disabled={parsing || !sourceFile}
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                title={canRunOCR ? 'Run OCR parse' : 'OCR parsing is currently image-only; PDFs require manual completion'}
+                title={canRunOCR ? 'Run OCR parse' : 'OCR parsing supports image files and PDFs'}
               >
                 <Sparkles className="icon16" />
                 {parsing ? 'Parsing...' : 'Parse with Dash OCR'}
@@ -343,7 +344,7 @@ export function CreateWeeklyMenuModal({
 
             {sourceFile && !canRunOCR && (
               <div style={{ fontSize: 12, color: 'var(--textLight)' }}>
-                PDF selected: OCR parsing is image-first. You can still publish by completing the editable grid below.
+                Unsupported file type selected. OCR currently supports image files and PDFs.
               </div>
             )}
 

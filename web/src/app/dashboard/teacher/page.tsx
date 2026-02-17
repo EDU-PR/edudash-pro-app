@@ -32,6 +32,7 @@ import {
   Laptop,
   Sparkles,
   Wand2,
+  MonitorPlay,
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -276,6 +277,18 @@ export default function TeacherDashboard() {
           <button className="qa" onClick={() => router.push('/dashboard/teacher/messages')}>
             <MessageCircle className="icon20" />
             <span>Messaging Hub</span>
+          </button>
+          <button
+            className="qa"
+            onClick={() => router.push('/display')}
+            style={{
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <MonitorPlay className="icon20" />
+            <span>Get TV link</span>
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/teacher/groups')}>
             <Calendar className="icon20" />
