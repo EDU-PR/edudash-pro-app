@@ -1091,7 +1091,17 @@ html {
 .h1 { font-size: 20px; font-weight: 700; margin: var(--space-2) 0 var(--space-3); }
 .h2 { font-size: 18px; font-weight: 700; margin: 0; }
 .h3 { font-size: 16px; font-weight: 700; margin: 0; }
-.section { margin-top: var(--space-4); }
+.section { margin-top: var(--space-4); margin-bottom: var(--space-6); }
+
+/* Teacher dashboard: keep Overview and Quick actions as two distinct grids */
+.dashboardSections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-4);
+}
+.dashboardSections .section { margin-top: 0; margin-bottom: 0; }
+.dashboardSections .section:first-child .sectionTitle { margin-top: 0; }
 
 .listItem { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); border-radius: var(--radius-1); background: var(--surface-2); border: 1px solid var(--border); }
 

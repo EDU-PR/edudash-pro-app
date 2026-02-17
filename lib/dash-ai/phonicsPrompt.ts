@@ -2,6 +2,9 @@
  * Shared phonics teaching rules injected into Dash prompts.
  */
 
+import { getMouthTip } from './phonemeLookup';
+import type { PhonemeLanguage } from './phonemeLookup';
+
 export const SHARED_PHONICS_PROMPT_BLOCK = [
   'PHONICS MODE (preschool and early primary):',
   '- Teach letter SOUNDS, not letter names.',
@@ -22,4 +25,22 @@ export const SHARED_PHONICS_PROMPT_BLOCK = [
 
 export function buildPhonicsPromptBlock(extra?: string | null): string {
   return [SHARED_PHONICS_PROMPT_BLOCK, extra || null].filter(Boolean).join('\n');
+}
+
+/**
+ * Build a coaching hint block for when learner accuracy < 60.
+ * Injects mouth tip from phonemeLookup so Dash can coach: "Try this: [mouthTip]"
+ */
+export function buildPhonicsCoachingHint(
+  phonemeOrKey: string,
+  lang: PhonemeLanguage = 'en-ZA'
+): string | null {
+  const key = String(phonemeOrKey || '').trim().toLowerCase();
+  if (!key) return null;
+  const tip =
+    getMouthTip(key, lang) ??
+    getMouthTip(`long_${key}`, lang) ??
+    getMouthTip(`short_${key}`, lang);
+  if (!tip) return null;
+  return `COACHING (learner struggled with /${key}/): Include this mouth tip in your next response: "${tip}"`;
 }

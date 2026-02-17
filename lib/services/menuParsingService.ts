@@ -6,6 +6,7 @@ interface ParseWeeklyMenuInput {
   mimeType: string;
   fileName: string;
   imageDataUrl?: string;
+  fileBase64?: string;
 }
 
 type ParsedPayload = {
@@ -77,13 +78,17 @@ function buildEmptyWeekDraft(weekStartDate: string): WeeklyMenuDraft {
 function normalizeList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
-      .map((item) => String(item ?? '').trim())
+      .flatMap((item) => {
+        const s = String(item ?? '').trim();
+        if (!s) return [];
+        return s.split(/\s+and\s+|\s*;\s*|[\n,|]/g).map((x) => x.trim()).filter(Boolean);
+      })
       .filter((item) => item.length > 0);
   }
 
   if (typeof value === 'string') {
     return value
-      .split(/[\n,;|]/g)
+      .split(/\s+and\s+|\s*;\s*|[\n,|]/g)
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
   }
@@ -91,22 +96,96 @@ function normalizeList(value: unknown): string[] {
   return [];
 }
 
-function extractJson(text: string): ParsedPayload | null {
+function toConfidence(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function coerceParsedPayload(value: unknown, depth = 0): ParsedPayload | null {
+  if (depth > 4 || value === null || value === undefined) return null;
+
+  if (Array.isArray(value)) {
+    return {
+      days: value.filter((item) => item && typeof item === 'object') as Array<Record<string, unknown>>,
+    };
+  }
+
+  if (typeof value !== 'object') return null;
+
+  const raw = value as Record<string, unknown>;
+  if (Array.isArray(raw.days)) {
+    return {
+      week_start_date: typeof raw.week_start_date === 'string' ? raw.week_start_date : undefined,
+      confidence: toConfidence(raw.confidence),
+      days: raw.days as Array<Record<string, unknown>>,
+    };
+  }
+
+  // Handle common wrappers returned by AI/OCR services.
+  const nestedObjects = [raw.menu, raw.result, raw.payload, raw.data, raw.response, raw.ocr];
+  for (const candidate of nestedObjects) {
+    const nested = coerceParsedPayload(candidate, depth + 1);
+    if (nested) return nested;
+  }
+
+  // Handle text wrappers where JSON is embedded in `analysis` or `extracted_text`.
+  const nestedText = [raw.analysis, raw.extracted_text, raw.text, raw.content];
+  for (const candidate of nestedText) {
+    if (typeof candidate !== 'string' || candidate.trim().length === 0) continue;
+    const nested = extractJson(candidate, depth + 1);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function extractJson(text: string, depth = 0): ParsedPayload | null {
   const trimmed = String(text || '').trim();
   if (!trimmed) return null;
 
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fenced?.[1] || trimmed;
+  const candidates: string[] = [];
+  const pushCandidate = (value: string | undefined) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || candidates.includes(normalized)) return;
+    candidates.push(normalized);
+  };
 
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+  pushCandidate(trimmed);
 
-  try {
-    return JSON.parse(candidate.slice(start, end + 1));
-  } catch {
-    return null;
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+  let fenceMatch: RegExpExecArray | null = fenceRegex.exec(trimmed);
+  while (fenceMatch) {
+    pushCandidate(fenceMatch[1]);
+    fenceMatch = fenceRegex.exec(trimmed);
   }
+
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    pushCandidate(trimmed.slice(objectStart, objectEnd + 1));
+  }
+
+  const arrayStart = trimmed.indexOf('[');
+  const arrayEnd = trimmed.lastIndexOf(']');
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    pushCandidate(trimmed.slice(arrayStart, arrayEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      const normalized = coerceParsedPayload(parsed, depth + 1);
+      if (normalized) return normalized;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return null;
 }
 
 function resolveDateForDay(raw: Record<string, unknown>, weekStartDate: string): string | null {
@@ -116,6 +195,17 @@ function resolveDateForDay(raw: Record<string, unknown>, weekStartDate: string):
     if (!Number.isNaN(d.getTime())) {
       return toDateOnly(d);
     }
+  }
+
+  const dayIndex = typeof raw.day_index === 'number' && raw.day_index >= 0 && raw.day_index <= 6
+    ? raw.day_index
+    : typeof raw.day_index === 'string'
+      ? parseInt(String(raw.day_index), 10)
+      : NaN;
+  if (Number.isFinite(dayIndex) && dayIndex >= 0 && dayIndex <= 4) {
+    const monday = new Date(`${toMonday(weekStartDate)}T00:00:00.000Z`);
+    monday.setUTCDate(monday.getUTCDate() + dayIndex);
+    return toDateOnly(monday);
   }
 
   const day = typeof raw.day === 'string' ? raw.day.trim().toLowerCase() : '';
@@ -222,21 +312,22 @@ export class MenuParsingService {
 
   static async parseWeeklyMenuFromUpload(input: ParseWeeklyMenuInput): Promise<WeeklyMenuParseResult> {
     const fallback = buildEmptyWeekDraft(input.weekStartDate);
-
-    if (!input.imageDataUrl || !input.imageDataUrl.startsWith('data:')) {
+    const normalizedMime = String(input.mimeType || '').toLowerCase();
+    const supportedUpload = normalizedMime.startsWith('image/') || normalizedMime === 'application/pdf';
+    if (!supportedUpload) {
       return {
         success: false,
         confidence: 0,
         lowConfidence: true,
         malformed: true,
         issues: [
-          'Automatic parsing requires an image upload (JPG/PNG/WebP). Please complete the menu manually for this file.',
+          'Automatic parsing supports image (JPG/PNG/WebP) or PDF uploads. Please complete the menu manually for this file type.',
         ],
         draft: fallback,
       };
     }
 
-    const base64 = input.imageDataUrl.split(',')[1] || '';
+    const base64 = input.fileBase64 || (input.imageDataUrl?.split(',')[1] || '');
     if (!base64) {
       return {
         success: false,
@@ -249,14 +340,19 @@ export class MenuParsingService {
     }
 
     const prompt = [
-      'You are parsing a preschool weekly food menu.',
-      'Return STRICT JSON only with this exact schema:',
-      '{"week_start_date":"YYYY-MM-DD","confidence":0.0,"days":[{"date":"YYYY-MM-DD","day":"Monday","breakfast":["item"],"lunch":["item"],"snack":["item"],"notes":"optional"}]}',
-      'Rules:',
-      '- Week start is Monday.',
-      '- Include Monday to Friday rows when visible.',
-      '- Never include markdown or prose outside JSON.',
-      '- If uncertain, leave array empty and put uncertainty in notes.',
+      'CONTEXT: You are extracting a school or preschool weekly meal menu from an image or PDF. The document shows meals for Monday through Friday (weekdays only).',
+      '',
+      'OUTPUT: Return ONLY valid JSON. No markdown, no code fences, no explanation before or after. Use this exact schema:',
+      '{"week_start_date":"YYYY-MM-DD","confidence":0.0-1.0,"days":[{"date":"YYYY-MM-DD","day":"Monday","breakfast":["item1","item2"],"lunch":["item1"],"snack":["item1"],"notes":null}]}',
+      '',
+      'RULES:',
+      '- week_start_date: the Monday of the week (YYYY-MM-DD). Infer from the document or use the week containing the first day shown.',
+      '- days: array of exactly 5 objects, one per weekday Monday–Friday. Use keys: date (YYYY-MM-DD), day ("Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"), breakfast, lunch, snack (each an array of strings), notes (string or null).',
+      '- Alternate keys accepted: breakfast_items, lunch_items, snack_items instead of breakfast, lunch, snack.',
+      '- Each meal array: one food item per element. Split comma- or newline-separated items into separate array elements. Preserve exact wording (e.g. "Oats porridge", "Chicken stew").',
+      '- If a day or meal is missing or unreadable, use an empty array [] and put a brief reason in notes.',
+      '- confidence: number 0–1 indicating how confident the extraction is overall.',
+      '- If the file is a PDF, treat each page or table as the same weekly menu and extract the same JSON structure.',
     ].join('\n');
 
     try {
@@ -292,17 +388,37 @@ export class MenuParsingService {
         };
       }
 
-      const text = typeof data?.content === 'string'
-        ? data.content
-        : typeof data?.ocr?.analysis === 'string'
-          ? data.ocr.analysis
-          : JSON.stringify(data || {});
+      const payload = data as {
+        content?: string;
+        analysis?: string;
+        extracted_text?: string;
+        ocr?: { analysis?: string; extracted_text?: string };
+      } | null;
 
-      const parsed = extractJson(text);
+      const textCandidates = [
+        typeof payload?.content === 'string' ? payload.content : null,
+        typeof payload?.ocr?.analysis === 'string' ? payload.ocr.analysis : null,
+        typeof payload?.ocr?.extracted_text === 'string' ? payload.ocr.extracted_text : null,
+        typeof payload?.analysis === 'string' ? payload.analysis : null,
+        typeof payload?.extracted_text === 'string' ? payload.extracted_text : null,
+        payload?.ocr ? JSON.stringify(payload.ocr) : null,
+        JSON.stringify(data || {}),
+      ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+      let parsed: ParsedPayload | null = null;
+      let rawResponse = textCandidates[0] || '';
+      for (const candidate of textCandidates) {
+        const result = extractJson(candidate);
+        if (!result) continue;
+        parsed = result;
+        rawResponse = candidate;
+        break;
+      }
+
       const normalized = normalizeParsedPayload(parsed, input.weekStartDate);
       return {
         ...normalized,
-        rawResponse: text,
+        rawResponse,
       };
     } catch (error: unknown) {
       return {

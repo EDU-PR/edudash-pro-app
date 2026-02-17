@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Sparkles, Upload, Save, AlertTriangle } from 'lucide-react';
 import { MenuParsingService } from '@/lib/services/menuParsingService';
 import { SchoolMenuAnnouncementService } from '@/lib/services/schoolMenuAnnouncementService';
@@ -12,6 +12,9 @@ interface CreateWeeklyMenuModalProps {
   authorId: string;
   onClose: () => void;
   onPublished: () => void;
+  /** When provided, modal opens in edit mode with this draft and week pre-filled. */
+  initialDraft?: WeeklyMenuDraft | null;
+  initialWeekStartDate?: string | null;
 }
 
 function toDateOnly(date: Date): string {
@@ -50,14 +53,29 @@ export function CreateWeeklyMenuModal({
   authorId,
   onClose,
   onPublished,
+  initialDraft = null,
+  initialWeekStartDate = null,
 }: CreateWeeklyMenuModalProps) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
 
-  const [weekStartDate, setWeekStartDate] = useState<string>(() => getMonday(new Date()));
-  const [draft, setDraft] = useState<WeeklyMenuDraft>(() => SchoolMenuService.buildEmptyWeekDraft(getMonday(new Date())));
+  const initialWeek = initialWeekStartDate && /^\d{4}-\d{2}-\d{2}$/.test(initialWeekStartDate)
+    ? initialWeekStartDate
+    : getMonday(new Date());
+  const initialDraftValid = initialDraft?.days?.length && initialDraft?.week_start_date;
+
+  const [weekStartDate, setWeekStartDate] = useState<string>(() =>
+    initialDraftValid ? SchoolMenuService.startOfWeekMonday(initialDraft.week_start_date) : initialWeek
+  );
+  const [draft, setDraft] = useState<WeeklyMenuDraft>(() =>
+    initialDraftValid
+      ? { week_start_date: initialDraft.week_start_date, days: [...initialDraft.days] }
+      : SchoolMenuService.buildEmptyWeekDraft(initialWeek)
+  );
   const [parseResult, setParseResult] = useState<WeeklyMenuParseResult | null>(null);
+  const isEditMode = Boolean(initialDraftValid);
+  const initialWeekRef = useRef(weekStartDate);
 
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [allowBlankDays, setAllowBlankDays] = useState(false);
@@ -65,12 +83,14 @@ export function CreateWeeklyMenuModal({
   const [confirmParseReview, setConfirmParseReview] = useState(false);
 
   useEffect(() => {
+    if (weekStartDate === initialWeekRef.current && isEditMode) return;
+    initialWeekRef.current = weekStartDate;
     setDraft(SchoolMenuService.buildEmptyWeekDraft(weekStartDate));
     setParseResult(null);
     setAllowBlankDays(false);
     setAllowIncompleteMeals(false);
     setConfirmParseReview(false);
-  }, [weekStartDate]);
+  }, [weekStartDate, isEditMode]);
 
   const blankDays = useMemo(() => {
     return draft.days.filter((day) => {
@@ -227,9 +247,11 @@ export function CreateWeeklyMenuModal({
             }}
           >
             <div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Upload Weekly Menu</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                {isEditMode ? 'Edit Weekly Menu' : 'Upload Weekly Menu'}
+              </h2>
               <p style={{ margin: '4px 0 0 0', color: 'var(--textLight)', fontSize: 13 }}>
-                Publish a school-wide weekly menu for parents.
+                {isEditMode ? 'Update the published menu for this week.' : 'Publish a school-wide weekly menu for parents.'}
               </p>
             </div>
             <button className="iconBtn" onClick={onClose}>
@@ -520,7 +542,7 @@ export function CreateWeeklyMenuModal({
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
               {saving ? <Upload className="icon16" /> : <Save className="icon16" />}
-              {saving ? 'Publishing...' : 'Publish Weekly Menu'}
+              {saving ? (isEditMode ? 'Saving...' : 'Publishing...') : (isEditMode ? 'Save changes' : 'Publish Weekly Menu')}
             </button>
           </div>
         </div>

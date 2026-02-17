@@ -145,7 +145,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   ai_stem_activities: AI_DEFAULT,
   ai_progress_analysis: AI_DEFAULT,
   ai_insights: AI_DEFAULT,
-  ai_streaming_enabled: false,
+  ai_streaming_enabled: true, // NEXT-GEN: streaming by default for ChatGPT-like responsiveness
   ENABLE_DASH_IMAGE_GEN: process.env.EXPO_PUBLIC_ENABLE_DASH_IMAGE_GEN !== 'false',
   ENABLE_IMAGE_PROVIDER_FALLBACK: process.env.EXPO_PUBLIC_ENABLE_IMAGE_PROVIDER_FALLBACK === 'true',
   ENABLE_PARENT_TEMP_LESSONS: process.env.EXPO_PUBLIC_ENABLE_PARENT_TEMP_LESSONS !== 'false',

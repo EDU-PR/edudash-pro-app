@@ -1,7 +1,9 @@
 /**
- * Shared text normalization for all Dash TTS paths.
- * Keeps pronunciation consistent across mobile/web/edge proxies.
+ * SINGLE SOURCE OF TRUTH for Dash TTS text normalization.
+ * All TTS paths (VoiceOrb, DashVoiceController, DashVoiceService, web useTTS)
+ * MUST use this module. Do not create platform-specific copies.
  *
+ * Keeps pronunciation consistent across mobile/web/edge proxies.
  * Uses the central pronunciation dictionary for brand names, SA language
  * names, abbreviations, and educational terms.
  *
@@ -89,7 +91,7 @@ function normalizePhonicsMarkers(
 function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): string {
   // 1. Convert spaced repetitions: "s s s" → "/s/"
   let result = text.replace(
-    /\b([b-df-hj-np-tv-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi,
+    /\b([a-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi,
     (match, letter: string) => {
       const lower = letter.toLowerCase();
       if (phonicsMode) {

@@ -12,6 +12,7 @@ dotenv.config({ path: '.env.eas', override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const EAS_NPM_PACKAGE = 'eas-cli@18.0.1';
 
 const projectMap = await import(path.join(__dirname, 'eas-projects.js'));
 const { EAS_PROJECTS, resolveEasProjectConfig } = projectMap.default || projectMap;
@@ -50,8 +51,13 @@ if (selectedConfig) {
   );
 }
 
-const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(cmd, ['eas', ...args], { stdio: 'inherit', env });
+const { command, commandArgs, source } = resolveEasCommand(args);
+console.log(`[eas-wrapper] Using EAS CLI from: ${source}`);
+const result = spawnSync(command, commandArgs, { stdio: 'inherit', env });
+if (result.error) {
+  console.error(`[eas-wrapper] Failed to execute EAS CLI: ${result.error.message}`);
+  process.exit(1);
+}
 process.exit(result.status ?? 1);
 
 function buildProjectList(projects) {
@@ -206,4 +212,59 @@ function writeEnvFile(values) {
   } catch (error) {
     console.warn('[eas-wrapper] Unable to write .env.eas. Continuing without persisting selection.');
   }
+}
+
+function resolveEasCommand(passthroughArgs) {
+  const easBinName = process.platform === 'win32' ? 'eas.cmd' : 'eas';
+
+  const npmBin = getGlobalNpmBin();
+  if (npmBin) {
+    const globalEasPath = path.join(npmBin, easBinName);
+    if (fs.existsSync(globalEasPath)) {
+      return {
+        command: globalEasPath,
+        commandArgs: passthroughArgs,
+        source: `npm global bin (${globalEasPath})`,
+      };
+    }
+  }
+
+  const localEasPath = path.join(process.cwd(), 'node_modules', '.bin', easBinName);
+  if (fs.existsSync(localEasPath)) {
+    return {
+      command: localEasPath,
+      commandArgs: passthroughArgs,
+      source: `project local bin (${localEasPath})`,
+    };
+  }
+
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  return {
+    command: npxCmd,
+    commandArgs: ['--yes', '--package', EAS_NPM_PACKAGE, 'eas', ...passthroughArgs],
+    source: `npx --package ${EAS_NPM_PACKAGE}`,
+  };
+}
+
+function getGlobalNpmBin() {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const legacyResult = spawnSync(npmCmd, ['bin', '-g'], { encoding: 'utf8' });
+  if (!legacyResult.error && legacyResult.status === 0) {
+    const legacyOutput = (legacyResult.stdout || '').trim();
+    if (legacyOutput) {
+      return legacyOutput;
+    }
+  }
+
+  const prefixResult = spawnSync(npmCmd, ['config', 'get', 'prefix'], { encoding: 'utf8' });
+  if (prefixResult.error || prefixResult.status !== 0) {
+    return null;
+  }
+
+  const prefix = (prefixResult.stdout || '').trim();
+  if (!prefix) {
+    return null;
+  }
+
+  return process.platform === 'win32' ? prefix : path.join(prefix, 'bin');
 }

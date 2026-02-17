@@ -104,9 +104,9 @@ export function YearPlanConfigModal({
           
           {/* Number of Terms */}
           <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Number of Terms</Text>
+            <Text style={styles.formLabel}>Number of Terms (Quarters)</Text>
             <View style={styles.termSelector}>
-              {[3, 4].map((num) => (
+              {[4].map((num) => (
                 <TouchableOpacity
                   key={num}
                   style={[

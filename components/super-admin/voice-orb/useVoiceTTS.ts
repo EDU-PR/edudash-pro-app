@@ -17,6 +17,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { SupportedLanguage } from './useVoiceSTT';
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { getVoiceIdForLanguage } from '@/lib/voice/voiceMapping';
 import { track } from '@/lib/analytics';
 import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
@@ -42,14 +43,21 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
-/** Normal speech rate — keep at 0% for consistent pacing */
-const DEFAULT_AZURE_RATE = 0;
-/** Phonics: keep sentence pace natural; phoneme markers are slowed in SSML */
-const DEFAULT_PHONICS_AZURE_RATE = 0;
-/** Device TTS: 1.0 = natural pace (matches Azure 0%) */
-const DEFAULT_DEVICE_RATE = 1.0;
-/** Device TTS phonics: slightly slower for clarity */
-const DEFAULT_PHONICS_DEVICE_RATE = 0.96;
+import {
+  AZURE_RATE_NORMAL,
+  AZURE_RATE_PHONICS,
+  DEVICE_RATE_NORMAL,
+  DEVICE_RATE_PHONICS,
+} from '@/lib/dash-ai/ttsConstants';
+
+/** Normal speech rate — imported from ttsConstants SSOT */
+const DEFAULT_AZURE_RATE = AZURE_RATE_NORMAL;
+/** Phonics sentence-level rate — imported from ttsConstants SSOT */
+const DEFAULT_PHONICS_AZURE_RATE = AZURE_RATE_PHONICS;
+/** Device TTS normal rate — imported from ttsConstants SSOT */
+const DEFAULT_DEVICE_RATE = DEVICE_RATE_NORMAL;
+/** Device TTS phonics rate — imported from ttsConstants SSOT */
+const DEFAULT_PHONICS_DEVICE_RATE = DEVICE_RATE_PHONICS;
 const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
   process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
 
@@ -87,19 +95,6 @@ const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
   ng: 'nnng',
 };
 
-const AZURE_VOICES_BY_LANG: Record<string, { male: string; female: string }> = {
-  en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
-  af: { male: 'af-ZA-AdriNeural', female: 'af-ZA-AdriNeural' },
-  zu: { male: 'zu-ZA-ThandoNeural', female: 'zu-ZA-ThandoNeural' },
-  xh: { male: 'xh-ZA-NomalungaNeural', female: 'xh-ZA-NomalungaNeural' },
-  nso: { male: 'nso-ZA-DidiNeural', female: 'nso-ZA-DidiNeural' },
-  st: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' }, // Sesotho — no native Azure voice
-  fr: { male: 'fr-FR-HenriNeural', female: 'fr-FR-DeniseNeural' },
-  pt: { male: 'pt-BR-AntonioNeural', female: 'pt-BR-FranciscaNeural' },
-  es: { male: 'es-ES-AlvaroNeural', female: 'es-ES-ElviraNeural' },
-  de: { male: 'de-DE-ConradNeural', female: 'de-DE-KatjaNeural' },
-};
-
 const normalizeVoiceGender = (value: unknown): 'male' | 'female' => {
   return String(value || '').toLowerCase() === 'male' ? 'male' : 'female';
 };
@@ -113,10 +108,7 @@ const normalizeLanguageBase = (language: string): string =>
     .trim() || 'en';
 
 const resolveLocaleDefaultVoice = (language: string, fallbackGender: 'male' | 'female'): string => {
-  const base = normalizeLanguageBase(language);
-  const byLang = AZURE_VOICES_BY_LANG[base];
-  if (byLang) return byLang[fallbackGender];
-  return AZURE_VOICES_BY_LANG.en[fallbackGender];
+  return getVoiceIdForLanguage(language, fallbackGender);
 };
 
 const isVoiceId = (value: unknown): boolean => {
@@ -610,13 +602,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         const reachedEnd = durationMs > 0 && positionMs >= Math.max(durationMs - 180, 0);
         if (reachedEnd) {
           endConfidenceTicks += 1;
-          if (endConfidenceTicks >= 2) {
+          if (endConfidenceTicks >= 1) {
             finalize();
           }
           return;
         }
 
-        const nearEndStall = durationMs > 0 && positionMs >= durationMs * 0.95 && stallTicks >= 6;
+        const nearEndStall = durationMs > 0 && positionMs >= durationMs * 0.95 && stallTicks >= 3;
         if (nearEndStall) {
           finalize();
         }
@@ -723,7 +715,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     // Delay after Speech.stop() to prevent Android race condition where
     // an immediate Speech.speak() call is silently ignored.
     if (Platform.OS === 'android') {
-      await new Promise(r => setTimeout(r, 350));
+      await new Promise(r => setTimeout(r, 150));
     }
     await new Promise<void>((resolve, reject) => {
       // Safety timeout: if neither onDone nor onError fires within 30s, resolve
@@ -1043,11 +1035,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
         try {
           cloudAttempted = true;
-          const audioUrl = prefetchedUrl || await requestAzureAudioUrl(chunk, effectiveLanguage, effectiveOptions, cachedToken);
 
-          // Start prefetch ONLY after current URL is ready so we don't delay time-to-first-audio.
-          // This overlaps next-chunk fetch with current playback.
+          // Eagerly kick off next-chunk prefetch in parallel with current fetch.
+          // For ci=0 this means chunk 1 fetches alongside chunk 0 (separate HTTP).
+          // For ci=1+ the current chunk was already prefetched; this fires chunk+2.
           ensurePrefetch(ci + 1);
+
+          const audioUrl = prefetchedUrl || await requestAzureAudioUrl(chunk, effectiveLanguage, effectiveOptions, cachedToken);
 
           await playAudioUrl(audioUrl, estimatePlaybackTimeoutMs(chunk));
           anyChunkSucceeded = true;

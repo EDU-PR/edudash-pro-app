@@ -5,8 +5,39 @@
  * Compresses images in multiple steps to stay under API limits.
  */
 
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+type ImageManipulatorModule = typeof import('expo-image-manipulator');
+type LegacyFileSystemModule = typeof import('expo-file-system/legacy');
+
+let cachedImageManipulator: ImageManipulatorModule | null = null;
+let cachedLegacyFileSystem: LegacyFileSystemModule | null = null;
+
+function loadImageManipulator(): ImageManipulatorModule {
+  if (cachedImageManipulator) return cachedImageManipulator;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    cachedImageManipulator = require('expo-image-manipulator') as ImageManipulatorModule;
+    return cachedImageManipulator;
+  } catch (error) {
+    throw new Error(
+      `expo-image-manipulator is unavailable in this runtime: ${String((error as Error)?.message || error)}`
+    );
+  }
+}
+
+function loadLegacyFileSystem(): LegacyFileSystemModule {
+  if (cachedLegacyFileSystem) return cachedLegacyFileSystem;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    cachedLegacyFileSystem = require('expo-file-system/legacy') as LegacyFileSystemModule;
+    return cachedLegacyFileSystem;
+  } catch (error) {
+    throw new Error(
+      `expo-file-system/legacy is unavailable in this runtime: ${String((error as Error)?.message || error)}`
+    );
+  }
+}
 
 export const MAX_IMAGE_BASE64_LEN = 4_000_000; // ~3MB payload after base64 encoding
 
@@ -32,6 +63,7 @@ export async function compressImageForAI(
   imageUri: string,
   maxBase64Length: number = MAX_IMAGE_BASE64_LEN
 ): Promise<CompressedImage> {
+  const imageManipulator = loadImageManipulator();
   let currentUri = imageUri;
   let base64Data = '';
   let finalWidth = 0;
@@ -39,12 +71,12 @@ export async function compressImageForAI(
 
   // Try each compression step
   for (const step of IMAGE_COMPRESS_STEPS) {
-    const result = await ImageManipulator.manipulateAsync(
+    const result = await imageManipulator.manipulateAsync(
       currentUri,
       [{ resize: { width: step.width } }],
       {
         compress: step.compress,
-        format: ImageManipulator.SaveFormat.JPEG,
+        format: imageManipulator.SaveFormat.JPEG,
         base64: true,
       }
     );
@@ -103,7 +135,7 @@ export async function compressImagesForAI(
  */
 export async function getImageSize(uri: string): Promise<number> {
   try {
-    const info = await LegacyFileSystem.getInfoAsync(uri);
+    const info = await loadLegacyFileSystem().getInfoAsync(uri);
     return info.exists ? info.size || 0 : 0;
   } catch {
     return 0;

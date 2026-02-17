@@ -14,8 +14,15 @@ describe('phonicsDetection', () => {
     expect(isPreschoolContext({ ageYears: 9, gradeLevel: 'Grade 4' })).toBe(false);
   });
 
+  it('detects spaced letter repetitions and sustained sounds for phonics TTS', () => {
+    expect(detectPhonicsIntent('Say s s s slowly')).toBe(true);
+    expect(detectPhonicsIntent('The sound sss like a snake')).toBe(true);
+    expect(detectPhonicsIntent('m m m for monkey')).toBe(true);
+  });
+
   it('enables phonics mode from explicit content or preschool reading cues', () => {
     expect(shouldUsePhonicsMode('Use /b/ and c-a-t markers')).toBe(true);
+    expect(shouldUsePhonicsMode('Say s s s like a snake')).toBe(true);
     expect(
       shouldUsePhonicsMode('let us practice reading letters', {
         organizationType: 'ecd_center',

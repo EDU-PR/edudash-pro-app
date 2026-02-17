@@ -3,9 +3,51 @@ import { StyleSheet } from 'react-native';
 /**
  * Main layout styles for PrincipalDashboardV2 (header, scroll, section blocks).
  */
-export const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.background },
+
+const isDarkHex = (hex: string): boolean => {
+  const match = String(hex || '').trim().match(/^#([0-9a-f]{6})$/i);
+  if (!match) return false;
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance < 0.55;
+};
+
+export const createStyles = (theme: any, insetTop: number, insetBottom: number) => {
+  const isDark = isDarkHex(theme?.background);
+  const glassSurface = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.72)';
+  const glassSurfaceStrong = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.82)';
+  const glassBorder = isDark ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.88)';
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+      position: 'relative',
+    },
+    backgroundGradient: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    backgroundOrbOne: {
+      position: 'absolute',
+      top: insetTop + 30,
+      right: -40,
+      width: 180,
+      height: 180,
+      borderRadius: 999,
+      backgroundColor: theme.primary + '1c',
+    },
+    backgroundOrbTwo: {
+      position: 'absolute',
+      top: insetTop + 220,
+      left: -70,
+      width: 210,
+      height: 210,
+      borderRadius: 999,
+      backgroundColor: theme.info + '16',
+    },
     scrollContent: {
       paddingTop: insetTop + 12,
       paddingBottom: Math.max(insetBottom, 8),
@@ -24,7 +66,14 @@ export const createStyles = (theme: any, insetTop: number, insetBottom: number) 
       justifyContent: 'space-between',
       gap: 10,
     },
-    greeting: { fontSize: 18, fontWeight: '800', color: theme.text },
+    greeting: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.text,
+      textShadowColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
     headerMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -32,14 +81,18 @@ export const createStyles = (theme: any, insetTop: number, insetBottom: number) 
       gap: 8,
       marginTop: 4,
     },
-    schoolName: { fontSize: 14, fontWeight: '800', color: theme.textSecondary },
+    schoolName: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.textSecondary,
+    },
     manageButton: {
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 999,
-      backgroundColor: theme.surface,
+      backgroundColor: glassSurfaceStrong,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: glassBorder,
     },
     manageButtonText: {
       fontSize: 11,
@@ -52,10 +105,15 @@ export const createStyles = (theme: any, insetTop: number, insetBottom: number) 
       marginHorizontal: 16,
       marginBottom: 8,
       padding: 12,
-      borderRadius: 12,
-      backgroundColor: theme.surface,
+      borderRadius: 16,
+      backgroundColor: glassSurface,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: glassBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      elevation: 4,
     },
     layoutControlsTitle: {
       fontSize: 12,
@@ -71,8 +129,8 @@ export const createStyles = (theme: any, insetTop: number, insetBottom: number) 
     layoutControlButton: {
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: theme.primary + '55',
-      backgroundColor: theme.primary + '14',
+      borderColor: theme.primary + '66',
+      backgroundColor: theme.primary + '16',
       paddingHorizontal: 10,
       paddingVertical: 6,
     },
@@ -94,13 +152,19 @@ export const createStyles = (theme: any, insetTop: number, insetBottom: number) 
     },
     loadingText: { textAlign: 'center', color: theme.textSecondary, marginTop: 8 },
   });
+};
 
 /**
  * Shared styles used by section components (DailyOps, AdmissionsCashflow, LearnersSection).
  * Call once per render with the current theme.
  */
-export const createSectionStyles = (theme: any) =>
-  StyleSheet.create({
+export const createSectionStyles = (theme: any) => {
+  const isDark = isDarkHex(theme?.background);
+  const cardGlass = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.72)';
+  const cardGlassStrong = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.82)';
+  const cardBorder = isDark ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.92)';
+
+  return StyleSheet.create({
     sectionBody: {
       paddingTop: 12,
       gap: 12,
@@ -114,9 +178,14 @@ export const createSectionStyles = (theme: any) =>
     card: {
       padding: 14,
       borderRadius: 16,
-      backgroundColor: theme.surface,
+      backgroundColor: cardGlass,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: cardBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      elevation: 4,
     },
     inlineSectionTitle: {
       fontSize: 14,
@@ -166,6 +235,7 @@ export const createSectionStyles = (theme: any) =>
       paddingVertical: 6,
       borderRadius: 999,
       borderWidth: 1,
+      backgroundColor: cardGlassStrong,
     },
     uniformPaidPill: {
       backgroundColor: theme.success + '1c',
@@ -216,3 +286,4 @@ export const createSectionStyles = (theme: any) =>
     loadingText: { textAlign: 'center', color: theme.textSecondary, marginTop: 8 },
     emptyText: { textAlign: 'center', color: theme.textSecondary, marginVertical: 8 },
   });
+};

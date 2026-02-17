@@ -29,6 +29,8 @@ interface TeacherMetricsCardProps {
   trend?: string;
   onPress?: () => void;
   size?: 'small' | 'medium' | 'large';
+  /** When true, card fills its container (e.g. in a two-column grid row) */
+  fillContainer?: boolean;
 }
 
 export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
@@ -38,7 +40,8 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
   color,
   trend,
   onPress,
-  size = 'medium'
+  size = 'medium',
+  fillContainer = false,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -52,7 +55,9 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
         styles.metricCard,
         size === 'large' && styles.metricCardLarge,
         size === 'small' && styles.metricCardSmall,
-        { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap }
+        fillContainer && styles.metricCardFill,
+        fillContainer && { width: undefined },
+        !fillContainer && { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap },
       ]}
       onPress={onPress}
       disabled={!onPress}
@@ -139,6 +144,12 @@ const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => {
     },
     metricCardSmall: {
       width: (layout.containerWidth - layout.cardGap) / 3,
+    },
+    metricCardFill: {
+      flex: 1,
+      minWidth: 0,
+      marginHorizontal: 0,
+      marginBottom: 0,
     },
     metricContent: {
       flex: 1,
