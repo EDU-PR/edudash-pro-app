@@ -87,22 +87,152 @@ const toBlockType = (value: unknown): DailyProgramBlockType => {
   return 'learning';
 };
 
-const extractJson = (value: string): WeeklyProgramAIResponse | null => {
+const WEEKLY_PROGRAM_CONTAINER_KEYS = ['weekly_program', 'program', 'data', 'result', 'response', 'content'] as const;
+
+const looksLikeWeeklyProgramResponse = (value: unknown): value is WeeklyProgramAIResponse => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Array.isArray(record.days) ||
+    Array.isArray(record.blocks) ||
+    typeof record.title === 'string' ||
+    typeof record.summary === 'string'
+  );
+};
+
+const sanitizeJsonCandidate = (value: string): string =>
+  value
+    .replace(/^\uFEFF/, '')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .trim();
+
+const tryParseJsonCandidate = (value: string): unknown | null => {
+  const normalized = sanitizeJsonCandidate(value);
+  if (!normalized) return null;
+
+  const attempts = [
+    normalized,
+    // Common AI formatting mistake: trailing commas in objects/arrays.
+    normalized.replace(/,\s*([}\]])/g, '$1'),
+  ];
+
+  for (const candidate of attempts) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try next strategy
+    }
+  }
+  return null;
+};
+
+const findBalancedJsonObjects = (value: string, limit = 8): string[] => {
+  const matches: string[] = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+      continue;
+    }
+
+    if (ch === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        matches.push(value.slice(start, i + 1));
+        start = -1;
+        if (matches.length >= limit) break;
+      }
+    }
+  }
+
+  return matches;
+};
+
+const parseWeeklyProgramFromUnknown = (value: unknown, depth = 0): WeeklyProgramAIResponse | null => {
+  if (depth > 4 || value == null) return null;
+
+  if (looksLikeWeeklyProgramResponse(value)) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const looksLikeDays = value.every((item) => item && typeof item === 'object' && !Array.isArray(item));
+    if (looksLikeDays) {
+      return { days: value as WeeklyProgramAIResponse['days'] };
+    }
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return parseWeeklyProgramFromText(value, depth + 1);
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of WEEKLY_PROGRAM_CONTAINER_KEYS) {
+      if (!(key in record)) continue;
+      const parsed = parseWeeklyProgramFromUnknown(record[key], depth + 1);
+      if (parsed) return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseWeeklyProgramFromText = (value: string, depth = 0): WeeklyProgramAIResponse | null => {
+  if (depth > 4) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidate = fenced?.[1] || trimmed;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+  const candidates = [fenced?.[1], trimmed].filter(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0,
+  );
 
-  try {
-    return JSON.parse(candidate.slice(start, end + 1)) as WeeklyProgramAIResponse;
-  } catch {
-    return null;
+  for (const candidate of candidates) {
+    const direct = tryParseJsonCandidate(candidate);
+    if (direct != null) {
+      const parsed = parseWeeklyProgramFromUnknown(direct, depth + 1);
+      if (parsed) return parsed;
+    }
+
+    const jsonObjects = findBalancedJsonObjects(candidate);
+    for (const jsonObject of jsonObjects) {
+      const parsedObject = tryParseJsonCandidate(jsonObject);
+      if (parsedObject == null) continue;
+      const parsed = parseWeeklyProgramFromUnknown(parsedObject, depth + 1);
+      if (parsed) return parsed;
+    }
   }
+
+  return null;
 };
+
+const extractJson = (value: string): WeeklyProgramAIResponse | null => parseWeeklyProgramFromText(value);
 
 const extractFunctionErrorMessage = async (error: unknown): Promise<string | null> => {
   const maybeError = error as { context?: unknown; message?: string };
@@ -274,6 +404,7 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     ...(routineRequirements.length > 0
       ? [`Routine essentials to enforce: ${routineRequirements.join(' ')}`]
       : []),
+    'Do not include markdown fences, comments, or any text before/after the JSON object.',
     'Return STRICT JSON only with shape:',
     '{',
     '  "title": "string",',
@@ -339,7 +470,7 @@ export class WeeklyProgramCopilotService {
 
     const parsed = extractJson(content);
     if (!parsed) {
-      throw new Error('Failed to parse weekly program response');
+      throw new Error('Failed to parse weekly program response (AI returned non-JSON output).');
     }
 
     return normalizeAIResponse(parsed, input);
