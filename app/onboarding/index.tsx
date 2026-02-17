@@ -18,7 +18,7 @@ export default function OnboardingIndex() {
       router.replace('/onboarding/role');
     } else if (!state.dateOfBirth) {
       router.replace('/onboarding/dob');
-    } else if (state.isMinor && !state.guardianInviteSent) {
+    } else if (state.isMinor && !state.guardianStepCompleted) {
       router.replace('/onboarding/guardian');
     } else {
       router.replace('/onboarding/complete');

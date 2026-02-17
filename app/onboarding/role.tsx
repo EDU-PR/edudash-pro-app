@@ -80,7 +80,7 @@ export default function RoleSelectionScreen() {
     // Navigate to next step
     if (!state.dateOfBirth) {
       router.push('/onboarding/dob');
-    } else if (state.isMinor && !state.guardianInviteSent) {
+    } else if (state.isMinor && !state.guardianStepCompleted) {
       router.push('/onboarding/guardian');
     } else {
       router.replace('/onboarding/complete');
