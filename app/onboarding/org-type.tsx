@@ -132,7 +132,7 @@ export default function OrgTypeSelectionScreen() {
       router.push('/onboarding/role');
     } else if (!state.dateOfBirth) {
       router.push('/onboarding/dob');
-    } else if (isMinor && !state.guardianInviteSent) {
+    } else if (isMinor && !state.guardianStepCompleted) {
       router.push('/onboarding/guardian');
     } else {
       router.replace('/onboarding/complete');
