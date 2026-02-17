@@ -87,13 +87,14 @@ export default function AccountScreen() {
     settingsButton: { padding: 8 },
     profileHeader: {
       alignItems: "center" as const,
-      paddingVertical: 32,
+      paddingTop: 18,
+      paddingBottom: 14,
       paddingHorizontal: 20,
       backgroundColor: theme.surface,
       borderBottomWidth: 1,
       borderBottomColor: theme.divider,
     },
-    avatarContainer: { position: "relative" as const, marginBottom: 16 },
+    avatarContainer: { position: "relative" as const, marginBottom: 10 },
     avatar: { width: 100, height: 100, borderRadius: 50 },
     avatarPlaceholder: {
       width: 100, height: 100, borderRadius: 50,
@@ -110,8 +111,8 @@ export default function AccountScreen() {
     },
     loadingIcon: { width: 32, height: 32, justifyContent: "center" as const, alignItems: "center" as const },
     loadingText: { fontSize: 16, color: theme.onSecondary },
-    displayName: { fontSize: 24, fontWeight: "600" as const, color: theme.text, marginBottom: 4 },
-    email: { fontSize: 16, color: theme.textSecondary, marginBottom: 12 },
+    displayName: { fontSize: 24, fontWeight: "600" as const, color: theme.text, marginBottom: 2 },
+    email: { fontSize: 16, color: theme.textSecondary, marginBottom: 8 },
     roleBadge: { backgroundColor: theme.primaryLight, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
     roleText: { fontSize: 12, fontWeight: "600" as const, color: theme.onPrimary },
     infoSection: { padding: 20 },
@@ -490,11 +491,7 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen 
         options={{ 
-          headerShown: true,
-          title: t('navigation.account', { defaultValue: 'Account' }),
-          headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.text,
-          headerTitleStyle: { color: theme.text, fontWeight: '600' },
+          headerShown: false,
         }} 
       />
 

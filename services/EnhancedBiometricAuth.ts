@@ -28,6 +28,7 @@ import {
   updateCachedProfile,
   clearRefreshTokenForUser,
   clearGlobalRefreshToken,
+  MAX_BIOMETRIC_ACCOUNTS,
 } from './biometricStorage';
 
 // Re-export for consumers that import from this module
@@ -101,7 +102,14 @@ export class EnhancedBiometricAuth {
       try {
         const sessions = await getSessionsMap();
         sessions[userId] = sessionData;
-        await setSessionsMap(sessions);
+        const prunedSessions = Object.values(sessions)
+          .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
+          .slice(0, MAX_BIOMETRIC_ACCOUNTS)
+          .reduce<Record<string, BiometricSessionData>>((acc, item) => {
+            acc[item.userId] = item;
+            return acc;
+          }, {});
+        await setSessionsMap(prunedSessions);
         await setActiveUserId(userId);
       } catch (e) {
         console.warn('Could not persist v2 biometric sessions map:', e);

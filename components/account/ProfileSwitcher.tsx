@@ -21,6 +21,7 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
 import { registerPushDevice } from '@/lib/notifications';
+import { MAX_BIOMETRIC_ACCOUNTS } from '@/services/biometricStorage';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -62,12 +63,41 @@ export function ProfileSwitcher({
 
   // Load stored biometric accounts
   const loadAccounts = useCallback(async () => {
+    let capabilitiesResolved = false;
     try {
       setLoading(true);
-      
-      // Check biometric availability
-      const capabilities = await BiometricAuthService.checkCapabilities();
-      setBiometricAvailable(capabilities.isAvailable && capabilities.isEnrolled);
+
+      // Ensure currently signed-in account is present in quick-switch storage.
+      if (user?.id && user?.email) {
+        try {
+          const { getCurrentSession } = await import('@/lib/sessionManager');
+          const currentSession = await getCurrentSession();
+          await EnhancedBiometricAuth.storeBiometricSession(
+            user.id,
+            user.email,
+            profile || undefined,
+            currentSession?.refresh_token,
+          );
+        } catch (storeErr) {
+          if (__DEV__) {
+            console.warn(
+              '[ProfileSwitcher] Failed to persist active account before loading list:',
+              storeErr,
+            );
+          }
+        }
+      }
+
+      // Check biometric availability (non-blocking for account list rendering).
+      try {
+        const capabilities = await BiometricAuthService.checkCapabilities();
+        setBiometricAvailable(capabilities.isAvailable && capabilities.isEnrolled);
+        capabilitiesResolved = true;
+      } catch (capErr) {
+        if (__DEV__) {
+          console.warn('[ProfileSwitcher] Biometric capability check failed:', capErr);
+        }
+      }
 
       // Get stored accounts
       const storedAccounts = await EnhancedBiometricAuth.getBiometricAccounts();
@@ -77,6 +107,17 @@ export function ProfileSwitcher({
         ...acc,
         isActive: acc.userId === user?.id,
       }));
+
+      // Absolute fallback: always show currently signed-in account in switcher.
+      if (user?.id && !accountsWithActive.some((acc) => acc.userId === user.id)) {
+        accountsWithActive.unshift({
+          userId: user.id,
+          email: user.email || 'Current account',
+          lastUsed: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          isActive: true,
+        });
+      }
 
       // Sort: active first, then by last used
       accountsWithActive.sort((a, b) => {
@@ -90,9 +131,12 @@ export function ProfileSwitcher({
       console.error('Failed to load accounts:', error);
       setAccounts([]);
     } finally {
+      if (!capabilitiesResolved) {
+        setBiometricAvailable(false);
+      }
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [profile, user?.email, user?.id]);
 
   useEffect(() => {
     if (visible) {
@@ -378,7 +422,13 @@ export function ProfileSwitcher({
               {t('account.switch_account', { defaultValue: 'Switch Account' })}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {t('account.switch_account_desc', { defaultValue: 'Tap an account to switch instantly' })}
+              {t('account.switch_account_desc', {
+                defaultValue: `Tap an account to switch instantly (up to ${MAX_BIOMETRIC_ACCOUNTS} saved accounts).`,
+              })}
+            </Text>
+            <Text style={[styles.debugText, { color: theme.textSecondary }]}>
+              Saved accounts: {accounts.length}/{MAX_BIOMETRIC_ACCOUNTS}
+              {user?.email ? ` • Active: ${user.email}` : ''}
             </Text>
           </View>
 
@@ -470,6 +520,10 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
+  },
+  debugText: {
+    fontSize: 11,
+    marginTop: 6,
   },
   loadingContainer: {
     paddingVertical: 40,

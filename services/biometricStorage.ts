@@ -117,6 +117,7 @@ export const BIOMETRIC_USER_PROFILE_KEY = 'biometric_user_profile';
 export const BIOMETRIC_REFRESH_TOKEN_KEY = 'biometric_refresh_token';
 export const BIOMETRIC_SESSIONS_KEY = 'biometric_sessions_v2';
 export const BIOMETRIC_ACTIVE_USER_ID_KEY = 'biometric_active_user_id_v2';
+export const MAX_BIOMETRIC_ACCOUNTS = 10;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,7 +139,26 @@ export interface BiometricSessionData {
 export async function getSessionsMap(): Promise<Record<string, BiometricSessionData>> {
   try {
     const raw = await storage.getItem(BIOMETRIC_SESSIONS_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed) return {};
+
+    if (Array.isArray(parsed)) {
+      const migrated: Record<string, BiometricSessionData> = {};
+      parsed.forEach((item) => {
+        if (!item || typeof item !== 'object') return;
+        const userId = String((item as any).userId || '').trim();
+        if (!userId) return;
+        migrated[userId] = item as BiometricSessionData;
+      });
+      return migrated;
+    }
+
+    if (typeof parsed === 'object') {
+      return parsed as Record<string, BiometricSessionData>;
+    }
+
+    return {};
   } catch {
     return {};
   }
@@ -395,7 +415,37 @@ export async function getBiometricAccounts(): Promise<
       /* Intentional: non-fatal */
     }
 
-    const accounts = Object.values(accountsMap);
+    // Include legacy BiometricAuthService payload (single-account format)
+    // so users upgrading from older app versions still see their account.
+    try {
+      let legacyUserRaw: string | null = null;
+      if (SecureStore) {
+        legacyUserRaw = await SecureStore.getItemAsync('biometric_user_data').catch(
+          () => null,
+        );
+      }
+      if (!legacyUserRaw && AsyncStorage) {
+        legacyUserRaw = await AsyncStorage.getItem('biometric_user_data');
+      }
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        const userId = String(parsed?.userId || '').trim();
+        const email = String(parsed?.email || '').trim();
+        if (userId && !accountsMap[userId]) {
+          const nowIso = new Date().toISOString();
+          accountsMap[userId] = {
+            userId,
+            email,
+            lastUsed: typeof parsed?.lastUsed === 'string' ? parsed.lastUsed : nowIso,
+            expiresAt: typeof parsed?.enabledAt === 'string' ? parsed.enabledAt : nowIso,
+          };
+        }
+      }
+    } catch {
+      /* Intentional: non-fatal */
+    }
+
+    const accounts = Object.values(accountsMap).filter((account) => !!account.userId);
     accounts.sort(
       (a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime(),
     );

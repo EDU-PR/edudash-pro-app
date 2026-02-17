@@ -15,6 +15,7 @@ interface DesktopLayoutProps {
   role?: 'principal' | 'teacher' | 'parent' | 'super_admin' | 'student';
   title?: string; // Custom title for mobile header (overrides tenant slug)
   showBackButton?: boolean; // Show back button instead of hamburger menu
+  mobileHeaderTopInsetOffset?: number; // Extra top spacing after safe-area inset on mobile header
 }
 
 interface NavItem {
@@ -80,7 +81,13 @@ const NAV_ITEMS: NavItem[] = [
  *   <YourScreenContent />
  * </DesktopLayout>
  */
-export function DesktopLayout({ children, role, title, showBackButton }: DesktopLayoutProps) {
+export function DesktopLayout({
+  children,
+  role,
+  title,
+  showBackButton,
+  mobileHeaderTopInsetOffset = 12,
+}: DesktopLayoutProps) {
   const { theme } = useTheme();
   const { user, profile, profileLoading } = useAuth();
   const permissions = usePermissions();
@@ -146,7 +153,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
       alignItems: 'center' as const,
       justifyContent: 'space-between' as const,
       paddingHorizontal: 16,
-      paddingTop: insets.top + 12,
+      paddingTop: insets.top + mobileHeaderTopInsetOffset,
       paddingBottom: 12,
       backgroundColor: theme.surface,
       borderBottomWidth: 1,
@@ -176,7 +183,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
       padding: 8,
       borderRadius: 8,
     },
-  }), [theme, insets]);
+  }), [theme, insets, mobileHeaderTopInsetOffset]);
 
   // On native platforms OR mobile-width web, render mobile layout with header
   // This ensures Chrome DevTools mobile view shows mobile layout

@@ -7,10 +7,13 @@ import {
   TextInput,
   ScrollView,
   Image,
+  Share,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
@@ -71,9 +74,92 @@ export default function DashImageStudioScreen() {
   const [generating, setGenerating] = useState(false);
   const [images, setImages] = useState<DashGeneratedImage[]>([]);
   const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
+  const [sharingImageId, setSharingImageId] = useState<string | null>(null);
+  const [savingImageId, setSavingImageId] = useState<string | null>(null);
 
   const styles = useMemo(() => createStyles(theme, insets.bottom), [theme, insets.bottom]);
   const role = String(profile?.role || 'parent').toLowerCase();
+
+  const getImageFileName = (image: DashGeneratedImage) => {
+    const mime = String(image.mime_type || '').toLowerCase();
+    const extension = mime.includes('png') ? 'png' : 'jpg';
+    return `dash-image-${image.id}.${extension}`;
+  };
+
+  const handleUseInDashChat = (image: DashGeneratedImage) => {
+    const promptForDash = [
+      'Use this generated image in my next activity/worksheet.',
+      `Image URL: ${image.signed_url}`,
+      `Original prompt: ${image.prompt}`,
+    ].join('\n');
+
+    router.push({
+      pathname: '/screens/dash-assistant',
+      params: {
+        initialMessage: promptForDash,
+        source: 'dash_image_studio',
+      },
+    } as any);
+  };
+
+  const handleShareImage = async (image: DashGeneratedImage) => {
+    try {
+      setSharingImageId(image.id);
+      await Share.share({
+        message: `Dash generated image: ${image.prompt}\n${image.signed_url}`,
+        url: image.signed_url,
+      });
+      track('dash.image_generation.share', {
+        role,
+        image_id: image.id,
+      });
+    } catch (error) {
+      showAlert({
+        title: 'Share failed',
+        message: 'Could not open sharing options for this image.',
+        type: 'error',
+      });
+    } finally {
+      setSharingImageId(null);
+    }
+  };
+
+  const handleSaveImage = async (image: DashGeneratedImage) => {
+    try {
+      setSavingImageId(image.id);
+      const canShareFile = await Sharing.isAvailableAsync();
+      if (!canShareFile) {
+        showAlert({
+          title: 'Save not available',
+          message: 'Saving/sharing files is not available on this device.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const fileName = getImageFileName(image);
+      const localUri = `${FileSystem.cacheDirectory}${fileName}`;
+      const downloadResult = await FileSystem.downloadAsync(image.signed_url, localUri);
+
+      await Sharing.shareAsync(downloadResult.uri, {
+        mimeType: image.mime_type || 'image/jpeg',
+        dialogTitle: 'Save or share image',
+      });
+
+      track('dash.image_generation.save', {
+        role,
+        image_id: image.id,
+      });
+    } catch (error) {
+      showAlert({
+        title: 'Save failed',
+        message: 'Could not save this image. Try again before the signed link expires.',
+        type: 'error',
+      });
+    } finally {
+      setSavingImageId(null);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -257,6 +343,39 @@ export default function DashImageStudioScreen() {
                   {image.width}x{image.height} · {String(image.provider || 'openai').toUpperCase()} · {image.model}
                 </Text>
                 <Text style={styles.imageTime}>Expires: {formatTimestamp(image.expires_at)}</Text>
+                <Text style={styles.imageHint}>Signed link expires. Save or share to keep a copy.</Text>
+                <View style={styles.imageActionRow}>
+                  <TouchableOpacity
+                    style={styles.imageActionButton}
+                    onPress={() => handleUseInDashChat(image)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={15} color={theme.primary} />
+                    <Text style={styles.imageActionText}>Use in Dash</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.imageActionButton}
+                    onPress={() => handleShareImage(image)}
+                    activeOpacity={0.75}
+                    disabled={sharingImageId === image.id || savingImageId === image.id}
+                  >
+                    <Ionicons name="share-social-outline" size={15} color={theme.primary} />
+                    <Text style={styles.imageActionText}>
+                      {sharingImageId === image.id ? 'Sharing...' : 'Share'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.imageActionButton}
+                    onPress={() => handleSaveImage(image)}
+                    activeOpacity={0.75}
+                    disabled={sharingImageId === image.id || savingImageId === image.id}
+                  >
+                    <Ionicons name="download-outline" size={15} color={theme.primary} />
+                    <Text style={styles.imageActionText}>
+                      {savingImageId === image.id ? 'Saving...' : 'Save'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
@@ -466,7 +585,36 @@ const createStyles = (theme: any, bottomInset: number) =>
       fontSize: 12,
       color: theme.textSecondary,
       paddingHorizontal: 12,
-      paddingBottom: 10,
+      paddingBottom: 4,
       paddingTop: 2,
+    },
+    imageHint: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+    },
+    imageActionRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingBottom: 10,
+    },
+    imageActionButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingVertical: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 6,
+      backgroundColor: theme.background,
+    },
+    imageActionText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.primary,
     },
   });
