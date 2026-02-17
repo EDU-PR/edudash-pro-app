@@ -81,7 +81,7 @@ export default function DOBCaptureScreen() {
     await completeStep('dob');
 
     // Navigate to next step
-    if (isMinor && !state.guardianInviteSent) {
+    if (isMinor && !state.guardianStepCompleted) {
       router.push('/onboarding/guardian');
     } else {
       router.replace('/onboarding/complete');

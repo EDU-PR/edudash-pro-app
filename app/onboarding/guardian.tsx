@@ -26,7 +26,9 @@ export default function GuardianLinkageScreen() {
   };
 
   const handleSendInvite = async () => {
-    if (!validateEmail(guardianEmail)) {
+    const normalizedGuardianEmail = guardianEmail.trim();
+
+    if (!validateEmail(normalizedGuardianEmail)) {
       Alert.alert('Invalid Email', 'Please enter a valid email address');
       return;
     }
@@ -37,15 +39,16 @@ export default function GuardianLinkageScreen() {
       // TODO: Implement actual guardian invite logic via Supabase Edge Function
       // For now, we'll just save the guardian info
       await updateState({
-        guardianEmail,
-        guardianPhone: guardianPhone || undefined,
-        guardianInviteSent: true,
+        guardianEmail: normalizedGuardianEmail,
+        guardianPhone: guardianPhone.trim() || undefined,
+        guardianInviteSent: false,
+        guardianStepCompleted: true,
       });
       await completeStep('guardian');
 
       Alert.alert(
-        'Guardian Invite Sent',
-        `We've sent an invitation to ${guardianEmail}. They'll need to accept before you can access all features.`,
+        'Guardian Information Saved',
+        `Guardian details for ${normalizedGuardianEmail} were saved. Invitations are not enabled yet, so you can continue for now.`,
         [
           {
             text: 'OK',
@@ -74,7 +77,8 @@ export default function GuardianLinkageScreen() {
           text: 'Skip',
           style: 'destructive',
           onPress: async () => {
-            await updateState({ guardianInviteSent: true });
+            await updateState({ guardianInviteSent: false, guardianStepCompleted: true });
+            await completeStep('guardian');
             router.replace('/onboarding/complete');
           },
         },
