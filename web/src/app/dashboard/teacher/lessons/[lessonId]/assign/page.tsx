@@ -7,7 +7,67 @@ import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useLessonAssignment } from '@/hooks/useLessonAssignment';
-import { Calendar, Users, Clock, AlertCircle, CheckCircle } from 'lucide-react';
+import { Calendar, Users, AlertCircle, CheckCircle, Link2 } from 'lucide-react';
+
+type RoutineBlockOption = {
+  id: string;
+  title: string;
+  startTime: string | null;
+  endTime: string | null;
+};
+
+type LessonRecord = {
+  id: string;
+  title: string;
+  description?: string | null;
+  subject?: string | null;
+  duration_minutes?: number | null;
+  age_group?: string | null;
+};
+
+type ClassRecord = {
+  id: string;
+  name: string;
+  grade_level?: string | null;
+};
+
+type StudentRecord = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  class_id?: string | null;
+  classes?: { name?: string | null } | Array<{ name?: string | null }> | null;
+};
+
+function toDateOnly(value: Date): string {
+  return value.toISOString().split('T')[0];
+}
+
+function getDayOfWeekMondayFirst(value: Date): number {
+  const day = value.getDay();
+  return day === 0 ? 7 : day;
+}
+
+function normalizeTime(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function getProgramStatusScore(status: unknown): number {
+  const s = String(status ?? '').toLowerCase();
+  if (s === 'published') return 50;
+  if (s === 'approved') return 40;
+  if (s === 'submitted') return 30;
+  if (s === 'draft') return 20;
+  return 10;
+}
 
 export default function AssignLessonPage() {
   const router = useRouter();
@@ -16,9 +76,9 @@ export default function AssignLessonPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
-  const [lesson, setLesson] = useState<any>(null);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
+  const [lesson, setLesson] = useState<LessonRecord | null>(null);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [students, setStudents] = useState<StudentRecord[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<'class' | 'student'>('class');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
@@ -28,6 +88,11 @@ export default function AssignLessonPage() {
   const [assigning, setAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [routineBlocks, setRoutineBlocks] = useState<RoutineBlockOption[]>([]);
+  const [routineBlocksLoading, setRoutineBlocksLoading] = useState(false);
+  const [routineBlocksError, setRoutineBlocksError] = useState<string | null>(null);
+  const [selectedRoutineBlockId, setSelectedRoutineBlockId] = useState<string>('');
+  const [routineLinkStatus, setRoutineLinkStatus] = useState<string | null>(null);
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -103,6 +168,126 @@ export default function AssignLessonPage() {
     loadStudents();
   }, [userId, profile?.preschoolId, supabase]);
 
+  useEffect(() => {
+    if (selectedTarget !== 'class') return;
+    if (selectedClassId || classes.length !== 1) return;
+    setSelectedClassId(classes[0].id);
+  }, [selectedTarget, selectedClassId, classes]);
+
+  useEffect(() => {
+    if (!userId || !profile?.preschoolId || selectedTarget !== 'class') {
+      setRoutineBlocks([]);
+      setRoutineBlocksError(null);
+      return;
+    }
+
+    const resolvedClassId = selectedClassId || (classes.length === 1 ? classes[0]?.id : '');
+    if (!resolvedClassId) {
+      setRoutineBlocks([]);
+      setRoutineBlocksError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoutineBlocks = async () => {
+      setRoutineBlocksLoading(true);
+      setRoutineBlocksError(null);
+
+      try {
+        const now = new Date();
+        const today = toDateOnly(now);
+        const dayOfWeek = getDayOfWeekMondayFirst(now);
+
+        const { data: programRows, error: programError } = await supabase
+          .from('weekly_programs')
+          .select('id, class_id, title, status, published_at, updated_at, created_at, week_start_date, week_end_date')
+          .eq('preschool_id', profile.preschoolId)
+          .lte('week_start_date', today)
+          .gte('week_end_date', today)
+          .or(`class_id.eq.${resolvedClassId},class_id.is.null`)
+          .order('published_at', { ascending: false })
+          .order('updated_at', { ascending: false });
+
+        if (programError) {
+          throw new Error(programError.message || 'Failed to load today routine');
+        }
+
+        const candidates = (programRows || []).filter((row: Record<string, unknown>) => {
+          const inWeek =
+            !!row.week_start_date &&
+            !!row.week_end_date &&
+            String(row.week_start_date) <= today &&
+            String(row.week_end_date) >= today;
+          return inWeek;
+        });
+
+        candidates.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+          const aClass = a.class_id ? 5 : 0;
+          const bClass = b.class_id ? 5 : 0;
+          const aScore = getProgramStatusScore(a.status) + aClass;
+          const bScore = getProgramStatusScore(b.status) + bClass;
+          if (aScore !== bScore) return bScore - aScore;
+          const aT = new Date(String(a.updated_at || a.created_at || 0)).getTime();
+          const bT = new Date(String(b.updated_at || b.created_at || 0)).getTime();
+          return bT - aT;
+        });
+
+        const selectedProgram = candidates[0] as Record<string, unknown> | undefined;
+        if (!selectedProgram?.id) {
+          if (!cancelled) {
+            setRoutineBlocks([]);
+            setSelectedRoutineBlockId('');
+          }
+          return;
+        }
+
+        const { data: blockRows, error: blockError } = await supabase
+          .from('daily_program_blocks')
+          .select('id, title, start_time, end_time, block_order')
+          .eq('weekly_program_id', String(selectedProgram.id))
+          .eq('day_of_week', dayOfWeek)
+          .order('block_order', { ascending: true });
+
+        if (blockError) {
+          throw new Error(blockError.message || 'Failed to load routine blocks');
+        }
+
+        const options: RoutineBlockOption[] = (blockRows || []).map((row: Record<string, unknown>) => ({
+          id: String(row.id || ''),
+          title: String(row.title || 'Routine block'),
+          startTime: normalizeTime(row.start_time),
+          endTime: normalizeTime(row.end_time),
+        }));
+
+        if (!cancelled) {
+          setRoutineBlocks(options);
+          setSelectedRoutineBlockId((currentId) =>
+            currentId && options.some((option) => option.id === currentId) ? currentId : ''
+          );
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setRoutineBlocks([]);
+          setSelectedRoutineBlockId('');
+          setRoutineBlocksError(
+            loadError instanceof Error ? loadError.message : 'Failed to load routine blocks'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setRoutineBlocksLoading(false);
+        }
+      }
+    };
+
+    void loadRoutineBlocks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, profile?.preschoolId, selectedTarget, selectedClassId, classes, supabase]);
+
   const handleAssign = async () => {
     if (!lessonId) {
       setError('Lesson ID is required');
@@ -112,6 +297,7 @@ export default function AssignLessonPage() {
     setAssigning(true);
     setError(null);
     setSuccess(false);
+    setRoutineLinkStatus(null);
 
     try {
       if (selectedTarget === 'class') {
@@ -128,10 +314,33 @@ export default function AssignLessonPage() {
         });
         
         if (success) {
+          if (selectedRoutineBlockId) {
+            const linkResponse = await fetch('/api/display/routine-link', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                routineBlockId: selectedRoutineBlockId,
+                lessonId,
+                classId: selectedClassId || null,
+              }),
+            });
+
+            if (!linkResponse.ok) {
+              const payload = await linkResponse.json().catch(() => ({}));
+              setRoutineLinkStatus(
+                payload?.error
+                  ? `Lesson assigned, but routine link failed: ${payload.error}`
+                  : 'Lesson assigned, but routine link failed.'
+              );
+            } else {
+              setRoutineLinkStatus("Lesson assigned and linked to today's routine block for Room Display.");
+            }
+          }
+
           setSuccess(true);
           setTimeout(() => {
             router.push('/dashboard/teacher/lessons');
-          }, 2000);
+          }, 2200);
         } else {
           setError('Failed to assign lesson');
         }
@@ -157,6 +366,7 @@ export default function AssignLessonPage() {
         
         if (allSuccess) {
           setSuccess(true);
+          setRoutineLinkStatus(null);
           setTimeout(() => {
             router.push('/dashboard/teacher/lessons');
           }, 2000);
@@ -164,8 +374,9 @@ export default function AssignLessonPage() {
           setError('Failed to assign lesson to some students');
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to assign lesson');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to assign lesson';
+      setError(message);
     } finally {
       setAssigning(false);
     }
@@ -239,6 +450,28 @@ export default function AssignLessonPage() {
           </div>
         )}
 
+        {routineLinkStatus && (
+          <div className="section">
+            <div
+              className="card"
+              style={{
+                borderLeft: routineLinkStatus.includes('failed') ? '4px solid #f59e0b' : '4px solid #7c3aed',
+                background: routineLinkStatus.includes('failed') ? '#fef3c7' : '#ede9fe',
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  color: routineLinkStatus.includes('failed') ? '#92400e' : '#5b21b6',
+                  fontWeight: 600,
+                }}
+              >
+                {routineLinkStatus}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="section">
           <div className="card">
             <h3 style={{ marginBottom: 16 }}>Assignment Details</h3>
@@ -286,6 +519,43 @@ export default function AssignLessonPage() {
               </div>
             )}
 
+            {selectedTarget === 'class' && (
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 600 }}>
+                  <Link2 className="icon16" />
+                  Link to today&apos;s routine block (optional)
+                </label>
+                <select
+                  className="input"
+                  value={selectedRoutineBlockId}
+                  onChange={(e) => setSelectedRoutineBlockId(e.target.value)}
+                  style={{ width: '100%' }}
+                  disabled={routineBlocksLoading || !selectedClassId}
+                >
+                  <option value="">Do not link now</option>
+                  {routineBlocks.map((block) => (
+                    <option key={block.id} value={block.id}>
+                      {(block.startTime && block.endTime ? `${block.startTime}-${block.endTime} ` : '') + block.title}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ marginTop: 8, color: 'var(--muted)', fontSize: 13 }}>
+                  When selected, this lesson appears inside that routine block on the Room Display.
+                </p>
+                {routineBlocksLoading && (
+                  <p style={{ marginTop: 6, color: 'var(--muted)', fontSize: 13 }}>Loading today&apos;s routine blocks...</p>
+                )}
+                {!routineBlocksLoading && selectedClassId && routineBlocks.length === 0 && !routineBlocksError && (
+                  <p style={{ marginTop: 6, color: 'var(--muted)', fontSize: 13 }}>
+                    No routine blocks found for today in this class yet.
+                  </p>
+                )}
+                {routineBlocksError && (
+                  <p style={{ marginTop: 6, color: '#f59e0b', fontSize: 13 }}>{routineBlocksError}</p>
+                )}
+              </div>
+            )}
+
             {/* Student Selection */}
             {selectedTarget === 'student' && (
               <div style={{ marginBottom: 24 }}>
@@ -293,30 +563,35 @@ export default function AssignLessonPage() {
                   Select Students ({selectedStudentIds.size} selected)
                 </label>
                 <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                  {students.map(student => (
-                    <label
-                      key={student.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: 8,
-                        cursor: 'pointer',
-                        borderRadius: 4,
-                        background: selectedStudentIds.has(student.id) ? 'var(--primary)' + '20' : 'transparent',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedStudentIds.has(student.id)}
-                        onChange={() => toggleStudent(student.id)}
-                      />
-                      <span>
-                        {student.first_name} {student.last_name}
-                        {student.classes && ` - ${student.classes.name}`}
-                      </span>
-                    </label>
-                  ))}
+                  {students.map((student) => {
+                    const className = Array.isArray(student.classes)
+                      ? student.classes[0]?.name
+                      : student.classes?.name;
+                    return (
+                      <label
+                        key={student.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: 8,
+                          cursor: 'pointer',
+                          borderRadius: 4,
+                          background: selectedStudentIds.has(student.id) ? 'var(--primary)' + '20' : 'transparent',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.has(student.id)}
+                          onChange={() => toggleStudent(student.id)}
+                        />
+                        <span>
+                          {student.first_name} {student.last_name}
+                          {className ? ` - ${className}` : ''}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -343,7 +618,9 @@ export default function AssignLessonPage() {
               <select
                 className="input"
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
+                onChange={(e) =>
+                  setPriority(e.target.value as 'low' | 'normal' | 'high' | 'urgent')
+                }
                 style={{ width: '100%' }}
               >
                 <option value="low">Low</option>
