@@ -28,6 +28,8 @@ interface TeacherQuickActionCardProps {
   onPress: () => void;
   subtitle?: string;
   disabled?: boolean;
+  /** When true, card fills its container (e.g. in a two-column grid row) */
+  fillContainer?: boolean;
 }
 
 export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
@@ -36,11 +38,13 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
   color,
   onPress,
   subtitle,
-  disabled
+  disabled,
+  fillContainer = false,
 }) => {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const layout = useMemo(() => getLayoutMetrics(width), [width]);
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
   const styles = useMemo(() => getStyles(theme, layout), [theme, layout]);
 
   const handlePress = async () => {
@@ -57,8 +61,10 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
     <TouchableOpacity
       style={[
         styles.actionCard,
+        fillContainer && styles.actionCardFill,
+        fillContainer && { width: undefined },
         disabled && styles.actionCardDisabled,
-        { borderLeftColor: color, shadowColor: color }
+        { borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : theme.border }
       ]}
       onPress={handlePress}
       activeOpacity={disabled ? 1 : 0.7}
@@ -80,48 +86,60 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
   );
 };
 
-const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => StyleSheet.create({
-  actionCard: {
-    width: layout.cardWidth,
-    backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: layout.cardPadding,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: layout.cardGap / 2,
-    marginBottom: layout.cardGap,
-    minHeight: layout.isTablet ? 120 : layout.isSmallScreen ? 90 : 100,
-    borderLeftWidth: 4,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionCardDisabled: {
-    opacity: 0.5,
-  },
-  actionIcon: {
-    width: layout.isSmallScreen ? 48 : 56,
-    height: layout.isSmallScreen ? 48 : 56,
-    borderRadius: layout.isSmallScreen ? 24 : 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionTitle: {
-    fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 14,
-    fontWeight: '600',
-    color: theme.text,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  actionTitleDisabled: {
-    color: theme.textSecondary,
-  },
-  actionSubtitle: {
-    fontSize: layout.isTablet ? 14 : layout.isSmallScreen ? 10 : 12,
-    color: theme.textSecondary,
-    textAlign: 'center',
-  },
-});
+const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => {
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
+
+  return StyleSheet.create({
+    actionCard: {
+      width: layout.cardWidth,
+      backgroundColor: isNextGenTeacher ? 'rgba(255,255,255,0.05)' : theme.surface,
+      borderRadius: isNextGenTeacher ? 18 : 16,
+      padding: layout.cardPadding,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginHorizontal: layout.cardGap / 2,
+      marginBottom: layout.cardGap,
+      minHeight: layout.isTablet ? 120 : layout.isSmallScreen ? 90 : 100,
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: isNextGenTeacher ? 14 : 2 },
+      shadowOpacity: isNextGenTeacher ? 0.35 : 0.1,
+      shadowRadius: isNextGenTeacher ? 24 : 8,
+      elevation: isNextGenTeacher ? 10 : 4,
+    },
+    actionCardFill: {
+      flex: 1,
+      minWidth: 0,
+      marginHorizontal: 0,
+      marginBottom: 0,
+    },
+    actionCardDisabled: {
+      opacity: 0.5,
+    },
+    actionIcon: {
+      width: layout.isSmallScreen ? 48 : 56,
+      height: layout.isSmallScreen ? 48 : 56,
+      borderRadius: isNextGenTeacher ? 14 : (layout.isSmallScreen ? 24 : 28),
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 8,
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.08)' : 'transparent',
+    },
+    actionTitle: {
+      fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 14,
+      fontWeight: '700',
+      color: isNextGenTeacher ? '#EAF0FF' : theme.text,
+      textAlign: 'center',
+      marginBottom: 4,
+    },
+    actionTitleDisabled: {
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.58)' : theme.textSecondary,
+    },
+    actionSubtitle: {
+      fontSize: layout.isTablet ? 14 : layout.isSmallScreen ? 10 : 12,
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.72)' : theme.textSecondary,
+      textAlign: 'center',
+    },
+  });
+};

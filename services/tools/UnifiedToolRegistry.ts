@@ -56,7 +56,7 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   export_pdf: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
   generate_image: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   generate_worksheet: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
-  generate_chart: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_chart: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   generate_pdf_from_prompt: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   send_email: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'premium' },
   open_document: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
@@ -65,14 +65,35 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   support_check_user_context: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
   support_create_ticket: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
 
-  // Superadmin inventory
+  // Superadmin inventory — user management
   superadmin_list_users: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_suspend_user: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_reactivate_user: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_update_user_role: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Superadmin inventory — system monitoring
   superadmin_get_system_health: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_get_error_logs: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_get_platform_stats: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Superadmin inventory — feature flags & AI usage
+  superadmin_list_feature_flags: { roles: ['super_admin'], minTier: 'enterprise' },
+  superadmin_toggle_feature_flag: { roles: ['super_admin'], minTier: 'enterprise' },
+  superadmin_get_ai_usage_stats: { roles: ['super_admin'], minTier: 'enterprise' },
+  superadmin_update_ai_quota: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Superadmin inventory — announcements
+  superadmin_create_announcement: { roles: ['super_admin'], minTier: 'enterprise' },
+  superadmin_list_announcements: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Superadmin inventory — subscriptions
+  superadmin_list_subscriptions: { roles: ['super_admin'], minTier: 'enterprise' },
+  superadmin_update_subscription_status: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Teacher AI tools
+  generate_teaching_strategy: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_homework: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  batch_grade_submissions: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
 };
 
 const MODULE_CATEGORY_MAP: Record<string, string> = {
@@ -96,6 +117,9 @@ const MODULE_CATEGORY_MAP: Record<string, string> = {
   get_active_tasks: 'navigation',
   support_check_user_context: 'support',
   support_create_ticket: 'support',
+  generate_teaching_strategy: 'teacher',
+  generate_homework: 'teacher',
+  batch_grade_submissions: 'teacher',
 };
 
 function parseToolRole(role?: string | null): { role: ToolRole; known: boolean } {

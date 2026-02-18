@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import { usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,20 +27,15 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
   const pathname = usePathname();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const hapticsEnabledRef = useRef(true);
-  const soundEnabledRef = useRef(true);
 
   useEffect(() => {
     let mounted = true;
 
     const loadPrefs = async () => {
       try {
-        const [hapticsPref, soundPref] = await Promise.all([
-          AsyncStorage.getItem('pref_haptics_enabled'),
-          AsyncStorage.getItem('pref_sound_enabled'),
-        ]);
+        const hapticsPref = await AsyncStorage.getItem('pref_haptics_enabled');
         if (!mounted) return;
         hapticsEnabledRef.current = hapticsPref !== 'false';
-        soundEnabledRef.current = soundPref !== 'false';
       } catch {
         // Keep defaults
       }
@@ -93,35 +87,11 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
 
           if (!isOwnMessage && isForeground && !isViewingThread) {
             try {
-              const senderName = senderProfile
-                ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
-                : 'Someone';
-              const messagePreview = payload.new.content?.length > 50
-                ? `${payload.new.content.substring(0, 47)}...`
-                : payload.new.content || 'New message';
-
-              await Notifications.scheduleNotificationAsync({
-                identifier: `message-${payload.new.id}`,
-                content: {
-                  title: `💬 ${senderName}`,
-                  body: messagePreview,
-                  data: {
-                    type: 'message',
-                    thread_id: threadId,
-                    message_id: payload.new.id,
-                    sender_id: payload.new.sender_id,
-                    sender_name: senderName,
-                  },
-                  sound: soundEnabledRef.current ? 'default' : undefined,
-                },
-                trigger: null,
-              });
-
               if (hapticsEnabledRef.current) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               }
             } catch (notifError) {
-              logger.warn('ParentMessagesRealtime', 'Failed to show banner notification:', notifError);
+              logger.warn('ParentMessagesRealtime', 'Failed to trigger foreground haptics:', notifError);
             }
           }
 
@@ -133,18 +103,48 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
             }
           }
 
-          // Fetch reply_to content if message is a reply
-          let replyTo = null;
+          // Fetch reply_to content if message is a reply (normalize reply_to shape for rendering)
+          let replyTo: Message['reply_to'] = null;
           if (payload.new.reply_to_id) {
             const { data: replyMsg } = await client
               .from('messages')
-              .select('id, content, content_type, sender_id, sender:profiles(first_name, last_name)')
+              .select('id, thread_id, sender_id, content, content_type, created_at, edited_at, deleted_at')
               .eq('id', payload.new.reply_to_id)
               .single();
-            if (replyMsg) replyTo = replyMsg;
+
+            if (replyMsg) {
+              const { data: replySenderProfile } = await client
+                .from('profiles')
+                .select('first_name, last_name, role')
+                .eq('id', replyMsg.sender_id)
+                .single();
+
+              replyTo = {
+                id: replyMsg.id,
+                thread_id: replyMsg.thread_id,
+                content: replyMsg.content,
+                content_type: (replyMsg.content_type || 'text') as Message['content_type'],
+                sender_id: replyMsg.sender_id,
+                created_at: replyMsg.created_at,
+                edited_at: replyMsg.edited_at ?? null,
+                deleted_at: replyMsg.deleted_at ?? null,
+                sender: replySenderProfile
+                  ? {
+                      first_name: replySenderProfile.first_name,
+                      last_name: replySenderProfile.last_name,
+                      role: replySenderProfile.role,
+                    }
+                  : undefined,
+              };
+            }
           }
 
-          const newMessage = { ...payload.new, sender: senderProfile || null, reactions: [], reply_to: replyTo } as Message;
+          const newMessage = {
+            ...payload.new,
+            sender: senderProfile || null,
+            reactions: [],
+            reply_to: replyTo,
+          } as Message;
           queryClient.setQueryData(['messages', threadId], (old: Message[] | undefined) => updateMessageCache(old, newMessage));
           queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
         }

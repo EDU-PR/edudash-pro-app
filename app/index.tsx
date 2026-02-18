@@ -118,9 +118,9 @@ export default function Index() {
           logger.info(TAG, 'Native + authenticated but no role, going to profiles-gate');
           router.replace('/profiles-gate');
         } else {
-          // Not authenticated - go directly to sign-in
-          logger.info(TAG, 'Native + not authenticated, going to sign-in');
-          router.replace('/(auth)/sign-in');
+          // Not authenticated - go to next-gen welcome (Sign In | Sign Up)
+          logger.info(TAG, 'Native + not authenticated, going to welcome');
+          router.replace('/(auth)/welcome');
         }
       })();
       return;

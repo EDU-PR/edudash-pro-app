@@ -12,6 +12,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
 import { ParentThreadItem } from '@/components/messaging/ParentThreadItem';
@@ -23,15 +24,22 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { createParentMessagesStyles } from '@/lib/screen-styles/parent-messages.styles';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { assertSupabase } from '@/lib/supabase';
+import { toast } from '@/components/ui/ToastProvider';
 
 export default function ParentMessagesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { tier } = useSubscription();
   const dashCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const { showAlert, alertProps } = useAlertModal();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
   const styles = useMemo(() => createParentMessagesStyles(theme, insets), [theme, insets]);
 
   const tierLower = String(tier || 'free').toLowerCase();
@@ -48,7 +56,63 @@ export default function ParentMessagesScreen() {
 
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
+  const clearSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedThreadIds([]);
+  }, []);
+
+  const toggleThreadSelection = useCallback((threadId: string) => {
+    setSelectedThreadIds((prev) =>
+      prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
+    );
+  }, []);
+
+  const handleThreadLongPress = useCallback((thread: MessageThread) => {
+    setSelectionMode(true);
+    setSelectedThreadIds((prev) => (prev.includes(thread.id) ? prev : [...prev, thread.id]));
+  }, []);
+
+  const handleBulkDeleteThreads = useCallback(() => {
+    if (!user?.id || selectedThreadIds.length === 0) return;
+    showAlert({
+      title: 'Delete selected chats',
+      message: `Remove ${selectedThreadIds.length} selected chat${selectedThreadIds.length > 1 ? 's' : ''} from your list?`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              const { error } = await client
+                .from('message_participants')
+                .delete()
+                .eq('user_id', user.id)
+                .in('thread_id', selectedThreadIds);
+              if (error) throw error;
+
+              clearSelection();
+              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+              queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+              queryClient.invalidateQueries({ queryKey: ['notifications'] });
+              toast.success('Selected chats deleted');
+            } catch (err: any) {
+              toast.error(err?.message || 'Failed to delete selected chats');
+            }
+          },
+        },
+      ],
+    });
+  }, [clearSelection, queryClient, refetch, selectedThreadIds, showAlert, user?.id]);
+
   const handleThreadPress = useCallback((thread: MessageThread) => {
+    if (selectionMode) {
+      toggleThreadSelection(thread.id);
+      return;
+    }
     const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
     const participantName = otherParticipant?.user_profile
       ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
@@ -57,11 +121,18 @@ export default function ParentMessagesScreen() {
       pathname: '/screens/parent-message-thread',
       params: { threadId: thread.id, title: participantName, teacherId: otherParticipant?.user_id || '', teacherName: participantName },
     });
-  }, []);
+  }, [selectionMode, toggleThreadSelection]);
 
   const handleStartNewMessage = useCallback(() => router.push('/screens/parent-new-message'), []);
   const handleOpenDashAI = useCallback(() => router.push('/screens/dash-assistant'), []);
   const handleMarkAllRead = useCallback(() => { refetch(); }, [refetch]);
+  const handleHeaderSelectionToggle = useCallback(() => {
+    if (selectionMode) {
+      clearSelection();
+      return;
+    }
+    setSelectionMode(true);
+  }, [clearSelection, selectionMode]);
 
   const headerMenuItems = useMemo(() => [
     { icon: 'notifications-outline' as const, label: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }), onPress: () => router.push('/screens/settings') },
@@ -86,7 +157,12 @@ export default function ParentMessagesScreen() {
   if (isLoading && !threads) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         <View style={styles.loadingContainer}>
           {[1, 2, 3, 4].map(i => (
             <View key={i} style={styles.skeletonItem}><SkeletonLoader width="100%" height={90} borderRadius={16} /></View>
@@ -104,7 +180,12 @@ export default function ParentMessagesScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         <View style={styles.errorContainer}>
           <View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={40} color={theme.error} /></View>
           <Text style={styles.errorTitle}>{t('parent.messagesError', { defaultValue: 'Failed to Load Messages' })}</Text>
@@ -124,7 +205,12 @@ export default function ParentMessagesScreen() {
   if (!filteredThreads || filteredThreads.length === 0) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
+          menuItems={headerMenuItems}
+        />
         {!isDashOrbUnlocked && (
           <View style={{ paddingTop: 8 }}>
             <DashAIItem onPress={handleOpenDashAI} title={dashCopy.navLabel}
@@ -151,6 +237,8 @@ export default function ParentMessagesScreen() {
       <MessagesListHeader
         title={t('parent.messages', { defaultValue: 'Messages' })}
         subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
+        rightActionLabel={selectionMode ? 'Done' : 'Select'}
+        onRightActionPress={handleHeaderSelectionToggle}
         menuItems={headerMenuItems}
       />
       <View style={styles.searchContainer}>
@@ -169,11 +257,47 @@ export default function ParentMessagesScreen() {
           )}
         </View>
       </View>
+      {selectionMode && (
+        <View style={[styles.searchContainer, { marginTop: -4, marginBottom: 8, justifyContent: 'space-between' }]}>
+          <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+            {selectedThreadIds.length} selected
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={clearSelection} activeOpacity={0.8}>
+              <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBulkDeleteThreads}
+              disabled={selectedThreadIds.length === 0}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: selectedThreadIds.length > 0 ? theme.error : theme.surfaceVariant,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 10,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="trash-outline" size={14} color={theme.onError || '#fff'} />
+              <Text style={{ color: theme.onError || '#fff', fontSize: 12, fontWeight: '700' }}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       <FlashList
         data={filteredThreads}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ParentThreadItem thread={item} onPress={() => handleThreadPress(item)} typingText={typingMap[item.id]} />
+          <ParentThreadItem
+            thread={item}
+            onPress={() => handleThreadPress(item)}
+            onLongPress={() => handleThreadLongPress(item)}
+            typingText={typingMap[item.id]}
+            selectionMode={selectionMode}
+            isSelected={selectedThreadIds.includes(item.id)}
+          />
         )}
         ListHeaderComponent={
           !isDashOrbUnlocked ? (
@@ -192,6 +316,7 @@ export default function ParentMessagesScreen() {
       <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={handleStartNewMessage} activeOpacity={0.8}>
         <Ionicons name="add" size={28} color={theme.onPrimary} />
       </TouchableOpacity>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

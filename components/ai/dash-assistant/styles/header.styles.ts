@@ -107,6 +107,16 @@ export const headerStyles = StyleSheet.create({
     marginHorizontal: 2,
     borderWidth: 1,
   },
+  orbIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    shadowColor: '#60A5FA',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   iconButtonDanger: {
     borderColor: 'transparent',
   },

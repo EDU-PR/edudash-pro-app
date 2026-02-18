@@ -1,0 +1,254 @@
+
+> web@0.1.0 prebuild
+> node scripts/bump-sw-version.mjs
+
+[bump-sw-version] Set SW_VERSION=v20260213221642
+
+> web@0.1.0 build
+> next build
+
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env.local
+- Experiments (use with caution):
+  · optimizePackageImports
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 37.8s
+  Running TypeScript ...
+  Collecting page data using 5 workers ...
+  Generating static pages using 5 workers (0/195) ...
+  Generating static pages using 5 workers (48/195) 
+  Generating static pages using 5 workers (97/195) 
+  Generating static pages using 5 workers (146/195) 
+✓ Generating static pages using 5 workers (195/195) in 4.3s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/ai-config
+├ ○ /admin/ai-usage
+├ ○ /admin/caps-mapping
+├ ○ /admin/deletion-requests
+├ ○ /admin/promotions
+├ ○ /admin/registrations
+├ ƒ /admin/registrations/[id]
+├ ○ /admin/users
+├ ○ /aftercare
+├ ○ /aftercare/register
+├ ƒ /api/ai-proxy
+├ ƒ /api/auth/sign-up-principal
+├ ƒ /api/custom-plan-quote
+├ ƒ /api/daily/rooms
+├ ƒ /api/daily/token
+├ ƒ /api/early-access-notify
+├ ƒ /api/invites/send
+├ ƒ /api/notifications/deployment
+├ ƒ /api/notifications/send
+├ ƒ /api/notifications/subscribe
+├ ƒ /api/payfast/webhook
+├ ƒ /api/principal/teachers
+├ ƒ /api/registrations/documents
+├ ƒ /api/registrations/pop-upload
+├ ƒ /api/registrations/verify-payment
+├ ƒ /api/students/delete
+├ ○ /apply
+├ ƒ /apply/[job_id]
+├ ○ /auth-callback
+├ ƒ /auth/callback
+├ ƒ /auth/signout
+├ ○ /dashboard
+├ ○ /dashboard/admin
+├ ○ /dashboard/admin-tertiary
+├ ○ /dashboard/admin-tertiary/centers
+├ ○ /dashboard/admin-tertiary/courses
+├ ƒ /dashboard/admin-tertiary/courses/[id]
+├ ○ /dashboard/admin-tertiary/courses/new
+├ ○ /dashboard/admin-tertiary/instructors
+├ ○ /dashboard/admin-tertiary/reports
+├ ○ /dashboard/admin-tertiary/settings
+├ ○ /dashboard/admin-tertiary/students
+├ ○ /dashboard/admin/aftercare
+├ ○ /dashboard/admin/organizations
+├ ○ /dashboard/instructor
+├ ○ /dashboard/instructor/assignments
+├ ○ /dashboard/instructor/courses
+├ ○ /dashboard/instructor/grading
+├ ○ /dashboard/instructor/settings
+├ ○ /dashboard/instructor/students
+├ ○ /dashboard/parent
+├ ○ /dashboard/parent/activities
+├ ○ /dashboard/parent/aftercare
+├ ○ /dashboard/parent/ai-help
+├ ○ /dashboard/parent/announcements
+├ ○ /dashboard/parent/attendance
+├ ○ /dashboard/parent/birthday-chart
+├ ○ /dashboard/parent/birthday-memories
+├ ○ /dashboard/parent/calendar
+├ ○ /dashboard/parent/calls
+├ ○ /dashboard/parent/children
+├ ○ /dashboard/parent/claim-child
+├ ○ /dashboard/parent/class-code
+├ ○ /dashboard/parent/dash-chat
+├ ○ /dashboard/parent/documents
+├ ○ /dashboard/parent/ebooks
+├ ○ /dashboard/parent/exam-prep
+├ ○ /dashboard/parent/generate-exam
+├ ○ /dashboard/parent/generate-resource
+├ ○ /dashboard/parent/homework
+├ ○ /dashboard/parent/homework-history
+├ ƒ /dashboard/parent/homework/[assignmentId]
+├ ○ /dashboard/parent/learning-hub
+├ ○ /dashboard/parent/lessons
+├ ƒ /dashboard/parent/lessons/[assignmentId]/play
+├ ƒ /dashboard/parent/lessons/[assignmentId]/view
+├ ○ /dashboard/parent/menu
+├ ○ /dashboard/parent/messages
+├ ○ /dashboard/parent/my-exams
+├ ○ /dashboard/parent/notifications
+├ ○ /dashboard/parent/payments
+├ ○ /dashboard/parent/payments/flow
+├ ○ /dashboard/parent/payments/pop-history
+├ ○ /dashboard/parent/payments/pop-upload
+├ ○ /dashboard/parent/picture-of-progress
+├ ○ /dashboard/parent/progress
+├ ○ /dashboard/parent/register-child
+├ ○ /dashboard/parent/robotics
+├ ○ /dashboard/parent/robotics/intro-robotics-r-3
+├ ○ /dashboard/parent/robotics/shapes-patterns-r-2
+├ ○ /dashboard/parent/search
+├ ○ /dashboard/parent/settings
+├ ○ /dashboard/parent/settings/ringtones
+├ ○ /dashboard/parent/standalone
+├ ○ /dashboard/parent/subscription
+├ ○ /dashboard/parent/upgrade
+├ ○ /dashboard/parent/upgrade/cancel
+├ ○ /dashboard/parent/upgrade/success
+├ ○ /dashboard/parent/weekly-report
+├ ○ /dashboard/principal
+├ ○ /dashboard/principal/activities
+├ ○ /dashboard/principal/ai-year-planner
+├ ○ /dashboard/principal/analytics
+├ ○ /dashboard/principal/announcements
+├ ○ /dashboard/principal/budget-overview
+├ ○ /dashboard/principal/calendar
+├ ○ /dashboard/principal/campaigns
+├ ○ /dashboard/principal/communications
+├ ○ /dashboard/principal/compliance
+├ ○ /dashboard/principal/curriculum-themes
+├ ○ /dashboard/principal/dash-chat
+├ ○ /dashboard/principal/excursions
+├ ○ /dashboard/principal/financials
+├ ○ /dashboard/principal/join-requests
+├ ○ /dashboard/principal/learner-activity-control
+├ ○ /dashboard/principal/lesson-approvals
+├ ○ /dashboard/principal/lesson-templates
+├ ○ /dashboard/principal/meetings
+├ ○ /dashboard/principal/menu
+├ ○ /dashboard/principal/messages
+├ ○ /dashboard/principal/registrations
+├ ƒ /dashboard/principal/registrations/[id]
+├ ○ /dashboard/principal/reports
+├ ƒ /dashboard/principal/reports/[id]
+├ ○ /dashboard/principal/reports/create
+├ ○ /dashboard/principal/settings
+├ ○ /dashboard/principal/settings/fees
+├ ○ /dashboard/principal/settings/learner-lifecycle
+├ ○ /dashboard/principal/settings/report-card
+├ ○ /dashboard/principal/settings/school-profile
+├ ○ /dashboard/principal/staff-leave
+├ ○ /dashboard/principal/stem-programs
+├ ○ /dashboard/principal/students
+├ ƒ /dashboard/principal/students/[id]
+├ ƒ /dashboard/principal/students/[id]/edit
+├ ○ /dashboard/principal/students/enroll
+├ ○ /dashboard/principal/teacher-payroll
+├ ○ /dashboard/principal/teachers
+├ ○ /dashboard/principal/teachers/invite
+├ ○ /dashboard/principal/timetable
+├ ○ /dashboard/principal/uniforms
+├ ○ /dashboard/principal/waitlist
+├ ○ /dashboard/principal/weekly-plans
+├ ○ /dashboard/principal/year-planner
+├ ○ /dashboard/teacher
+├ ○ /dashboard/teacher/activities
+├ ○ /dashboard/teacher/ai-assistant
+├ ○ /dashboard/teacher/ai-grader
+├ ○ /dashboard/teacher/approval-pending
+├ ○ /dashboard/teacher/assignments
+├ ○ /dashboard/teacher/attendance
+├ ○ /dashboard/teacher/birthdays
+├ ○ /dashboard/teacher/calls
+├ ○ /dashboard/teacher/class-codes
+├ ○ /dashboard/teacher/classes
+├ ƒ /dashboard/teacher/classes/[id]
+├ ○ /dashboard/teacher/classes/create
+├ ○ /dashboard/teacher/dash-chat
+├ ○ /dashboard/teacher/family-review
+├ ○ /dashboard/teacher/groups
+├ ○ /dashboard/teacher/homework
+├ ƒ /dashboard/teacher/homework/[id]
+├ ○ /dashboard/teacher/homework/create
+├ ○ /dashboard/teacher/interactive-activities
+├ ○ /dashboard/teacher/lessons
+├ ƒ /dashboard/teacher/lessons/[lessonId]/assign
+├ ○ /dashboard/teacher/lessons/create
+├ ○ /dashboard/teacher/live-lesson
+├ ○ /dashboard/teacher/menu
+├ ○ /dashboard/teacher/messages
+├ ○ /dashboard/teacher/notifications
+├ ○ /dashboard/teacher/reports
+├ ○ /dashboard/teacher/reports/create
+├ ○ /dashboard/teacher/reputation
+├ ○ /dashboard/teacher/search
+├ ○ /dashboard/teacher/settings
+├ ○ /dashboard/teacher/settings/ringtones
+├ ƒ /dashboard/teacher/students/[id]
+├ ○ /dashboard/teacher/test-call
+├ ○ /dashboard/teacher/tutor-analytics
+├ ○ /dashboard/teacher/weekly-plans
+├ ○ /data-deletion
+├ ○ /ecd/play
+├ ○ /exam-prep
+├ ○ /forgot-password
+├ ○ /invite/executive
+├ ○ /invite/member
+├ ○ /invite/teacher
+├ ƒ /jobs/[job_id]/apply
+├ ○ /landing
+├ ○ /manifest.webmanifest
+├ ○ /popia
+├ ○ /pricing
+├ ○ /privacy
+├ ○ /registration/pop-upload
+├ ○ /reset-password
+├ ○ /sign-in
+├ ○ /sign-up/organization
+├ ○ /sign-up/parent
+├ ○ /sign-up/pending-approval
+├ ○ /sign-up/principal
+├ ƒ /sign-up/teacher
+├ ○ /sign-up/teacher/success
+├ ○ /sign-up/verify-email
+├ ○ /teacher-signup
+├ ○ /terms
+└ ○ /test-payfast
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+> web@0.1.0 postbuild
+> node scripts/notify-deployment.mjs || true
+
+⚠️  DEPLOYMENT_WEBHOOK_SECRET not set - using anonymous mode (may fail on production)
+   To enable authenticated notifications, set DEPLOYMENT_WEBHOOK_SECRET in Vercel env vars
+🚀 Sending deployment notification to: https://edudashpro.org.za/api/notifications/deployment
+📦 Version: 0.1.0
+🌍 Environment: production
+🔖 Release type: ota
+📣 Notify users: false

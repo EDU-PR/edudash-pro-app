@@ -100,6 +100,17 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
           .select('id, content, content_type, sender_id')
           .in('id', replyToIds);
         if (replyMsgs) {
+          // Fetch profiles for reply senders not already in profileMap
+          const missingReplyIds = replyMsgs
+            .map((r: any) => r.sender_id)
+            .filter((id: string) => id && !profileMap.has(id));
+          if (missingReplyIds.length > 0) {
+            const { data: extra } = await client
+              .from('profiles')
+              .select('id, first_name, last_name, role')
+              .in('id', [...new Set(missingReplyIds)]);
+            (extra || []).forEach((p: any) => profileMap.set(p.id, p));
+          }
           replyMsgs.forEach((r: any) => {
             replyMap.set(r.id, {
               ...r,

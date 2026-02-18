@@ -194,9 +194,12 @@ export function determineUserRoute(
   const isSkillsLike = ['skills', 'tertiary', 'org'].includes(String(orgKind).toLowerCase());
 
   // ── Null role guard ────────────────────────
+  // Route to /profiles-gate (not sign-in) to avoid redirect loop:
+  // auth guard sees authenticated user on auth route → redirects to dashboard →
+  // determineRoute sees null role → routes to sign-in → loop.
   if (!role) {
-    console.warn('User role is null, routing to sign-in');
-    return { path: '/(auth)/sign-in' };
+    console.warn('User role is null, routing to profiles-gate');
+    return { path: '/profiles-gate' };
   }
 
   // ── Capability check (permissive) ──────────

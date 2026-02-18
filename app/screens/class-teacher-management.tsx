@@ -69,6 +69,7 @@ export default function ClassTeacherManagementScreen() {
     setActiveTab,
     setClassForm,
     onRefresh,
+    AlertModalComponent,
   } = useClassTeacherManagement({ orgId, userId: user?.id });
 
   const navigateBack = (fallback: string) => {
@@ -286,6 +287,7 @@ export default function ClassTeacherManagementScreen() {
         onAssign={handleAssignTeacher}
         onTeacherChange={(id) => setClassForm((prev) => ({ ...prev, teacher_id: id }))}
       />
+      <AlertModalComponent />
     </SafeAreaView>
   );
 }

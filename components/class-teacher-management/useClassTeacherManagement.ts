@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Alert } from 'react-native';
+import { useAlertModal } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 import { setSchoolStaffRole } from '@/lib/services/schoolRoleService';
@@ -99,7 +99,8 @@ const pushClassIndex = (map: Map<string, ClassInfo[]>, key: string, classInfo: C
 export function useClassTeacherManagement({
   orgId,
   userId,
-}: UseClassTeacherManagementOptions): UseClassTeacherManagementResult {
+}: UseClassTeacherManagementOptions): UseClassTeacherManagementResult & { AlertModalComponent: React.FC } {
+  const { showAlert, AlertModalComponent } = useAlertModal();
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -407,7 +408,7 @@ export function useClassTeacherManagement({
       setTeachers(processedTeachers);
     } catch (error) {
       console.error('[ClassTeacherManagement] Error loading class/teacher data:', error);
-      Alert.alert('Error', 'Failed to load data');
+      showAlert({ title: 'Error', message: 'Failed to load data', type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -429,7 +430,7 @@ export function useClassTeacherManagement({
 
   const handleCreateClass = useCallback(async () => {
     if (!classForm.name.trim() || !classForm.grade_level.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      showAlert({ title: 'Error', message: 'Please fill in all required fields', type: 'error' });
       return;
     }
 
@@ -449,17 +450,17 @@ export function useClassTeacherManagement({
         });
 
       if (error) {
-        Alert.alert('Error', error.message || 'Failed to create class');
+        showAlert({ title: 'Error', message: error.message || 'Failed to create class', type: 'error' });
         return;
       }
 
-      Alert.alert('Success', 'Class created successfully');
+      showAlert({ title: 'Success', message: 'Class created successfully', type: 'success' });
       setShowClassModal(false);
       setClassForm(INITIAL_CLASS_FORM);
       loadData();
     } catch (error) {
       console.error('[ClassTeacherManagement] create class failed:', error);
-      Alert.alert('Error', 'Failed to create class');
+      showAlert({ title: 'Error', message: 'Failed to create class', type: 'error' });
     }
   }, [classForm, orgId, loadData]);
 
@@ -478,49 +479,54 @@ export function useClassTeacherManagement({
           teacherId: classForm.teacher_id,
           error,
         });
-        Alert.alert('Error', error.message || 'Failed to assign teacher');
+        showAlert({ title: 'Error', message: error.message || 'Failed to assign teacher', type: 'error' });
         return;
       }
 
-      Alert.alert('Success', 'Teacher assigned successfully');
+      showAlert({ title: 'Success', message: 'Teacher assigned successfully', type: 'success' });
       setShowTeacherAssignment(false);
       setSelectedClass(null);
       setClassForm((prev) => ({ ...prev, teacher_id: '' }));
       loadData();
     } catch (error) {
       console.error('[ClassTeacherManagement] assign teacher exception:', error);
-      Alert.alert('Error', 'Failed to assign teacher');
+      showAlert({ title: 'Error', message: 'Failed to assign teacher', type: 'error' });
     }
   }, [selectedClass, classForm.teacher_id, loadData]);
 
   const handleRemoveTeacher = useCallback(
     (classInfo: ClassInfo) => {
-      Alert.alert('Remove Teacher', `Remove ${classInfo.teacher_name} from ${classInfo.name}?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await assertSupabase()
-                .from('classes')
-                .update({ teacher_id: null })
-                .eq('id', classInfo.id);
+      showAlert({
+        title: 'Remove Teacher',
+        message: `Remove ${classInfo.teacher_name} from ${classInfo.name}?`,
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const { error } = await assertSupabase()
+                  .from('classes')
+                  .update({ teacher_id: null })
+                  .eq('id', classInfo.id);
 
-              if (error) {
-                Alert.alert('Error', error.message || 'Failed to remove teacher');
-                return;
+                if (error) {
+                  showAlert({ title: 'Error', message: error.message || 'Failed to remove teacher', type: 'error' });
+                  return;
+                }
+
+                showAlert({ title: 'Success', message: 'Teacher removed from class', type: 'success' });
+                loadData();
+              } catch (error) {
+                console.error('[ClassTeacherManagement] remove teacher exception:', error);
+                showAlert({ title: 'Error', message: 'Failed to remove teacher', type: 'error' });
               }
-
-              Alert.alert('Success', 'Teacher removed from class');
-              loadData();
-            } catch (error) {
-              console.error('[ClassTeacherManagement] remove teacher exception:', error);
-              Alert.alert('Error', 'Failed to remove teacher');
-            }
+            },
           },
-        },
-      ]);
+        ],
+      });
     },
     [loadData]
   );
@@ -528,18 +534,19 @@ export function useClassTeacherManagement({
   const handleDeleteTeacher = useCallback(
     (teacher: Teacher) => {
       if (!orgId) {
-        Alert.alert('Error', 'No school found for this account.');
+        showAlert({ title: 'Error', message: 'No school found for this account.', type: 'error' });
         return;
       }
       if (!teacher.id) {
-        Alert.alert('Error', 'Missing teacher identifier.');
+        showAlert({ title: 'Error', message: 'Missing teacher identifier.', type: 'error' });
         return;
       }
 
-      Alert.alert(
-        'Remove Teacher',
-        `Remove ${teacher.full_name} from your school? This will unassign their classes, deactivate the teacher record, and revoke their seat.`,
-        [
+      showAlert({
+        title: 'Remove Teacher',
+        message: `Remove ${teacher.full_name} from your school? This will unassign their classes, deactivate the teacher record, and revoke their seat.`,
+        type: 'warning',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Remove',
@@ -550,16 +557,16 @@ export function useClassTeacherManagement({
                   teacherUserId: teacher.user_id || teacher.id,
                   organizationId: orgId,
                 });
-                Alert.alert('Success', 'Teacher removed from school');
+                showAlert({ title: 'Success', message: 'Teacher removed from school', type: 'success' });
                 loadData();
               } catch (error) {
                 console.error('Error removing teacher:', error);
-                Alert.alert('Error', 'Failed to remove teacher');
+                showAlert({ title: 'Error', message: 'Failed to remove teacher', type: 'error' });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     },
     [loadData, orgId]
   );
@@ -567,11 +574,11 @@ export function useClassTeacherManagement({
   const handleSetTeacherRole = useCallback(
     async (teacher: Teacher, targetRole: 'teacher' | 'admin') => {
       if (!orgId) {
-        Alert.alert('Error', 'No school found for this account.');
+        showAlert({ title: 'Error', message: 'No school found for this account.', type: 'error' });
         return;
       }
       if (!teacher.id) {
-        Alert.alert('Error', 'Missing teacher identifier.');
+        showAlert({ title: 'Error', message: 'Missing teacher identifier.', type: 'error' });
         return;
       }
       if (teacher.role === targetRole) {
@@ -587,17 +594,18 @@ export function useClassTeacherManagement({
           role: targetRole,
         });
 
-        Alert.alert(
-          'Success',
-          targetRole === 'admin'
+        showAlert({
+          title: 'Success',
+          message: targetRole === 'admin'
             ? `${teacher.full_name} is now a school admin.`
-            : `${teacher.full_name} is now assigned as a teacher.`
-        );
+            : `${teacher.full_name} is now assigned as a teacher.`,
+          type: 'success',
+        });
 
         await loadData();
       } catch (error) {
         console.error('[ClassTeacherManagement] role update failed:', error);
-        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update role');
+        showAlert({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to update role', type: 'error' });
       } finally {
         setRoleUpdateTeacherId(null);
       }
@@ -614,14 +622,14 @@ export function useClassTeacherManagement({
           .eq('id', classInfo.id);
 
         if (error) {
-          Alert.alert('Error', error.message || 'Failed to update class status');
+          showAlert({ title: 'Error', message: error.message || 'Failed to update class status', type: 'error' });
           return;
         }
 
         loadData();
       } catch (error) {
         console.error('[ClassTeacherManagement] toggle class status exception:', error);
-        Alert.alert('Error', 'Failed to update class status');
+        showAlert({ title: 'Error', message: 'Failed to update class status', type: 'error' });
       }
     },
     [loadData]
@@ -658,5 +666,6 @@ export function useClassTeacherManagement({
     setActiveTab,
     setClassForm,
     onRefresh,
+    AlertModalComponent,
   };
 }

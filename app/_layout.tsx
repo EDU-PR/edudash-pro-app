@@ -52,7 +52,8 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import DashWakeWordListener from '../components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
 import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
-import { BottomTabBar, ROLES_WITH_CENTER_TAB } from '../components/navigation/BottomTabBar';
+import { BottomTabBar } from '../components/navigation/BottomTabBar';
+import { roleHasCenterDashTab } from '@/lib/navigation/navManifest';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
@@ -79,6 +80,8 @@ import { parseDeepLinkUrl } from '../lib/utils/deepLink';
 import { assertSupabase } from '../lib/supabase';
 import { checkAndRefreshTokenIfNeeded, registerPushDevice } from '../lib/notifications';
 import { resolveExplicitSchoolTypeFromProfile } from '../lib/schoolTypeResolver';
+import { initPerformanceMonitoring } from '../lib/perf';
+import { installThemedNativeAlert } from '@/lib/ui/installThemedNativeAlert';
 
 patchNativeEventEmitterModules();
 
@@ -163,6 +166,10 @@ function LayoutContent() {
   const isReadyForFAB = !authLoading && !profileLoading && !isAuthRoute && !!user;
 
   useEffect(() => {
+    installThemedNativeAlert(isDark);
+  }, [isDark]);
+
+  useEffect(() => {
     if (Platform.OS === 'web') return;
     if (!user?.id) {
       pushRegistrationRef.current = null;
@@ -185,7 +192,7 @@ function LayoutContent() {
   const hasExplicitSchoolType = Boolean(resolveExplicitSchoolTypeFromProfile(profile));
   const hasAdminCenterDashTab = normalizedRole === 'admin' && hasExplicitSchoolType;
   const shouldShowFAB = isReadyForFAB && !shouldHideFAB && powerUserModeEnabled && showDashFAB && !!user;
-  const hasCenterDashTab = ROLES_WITH_CENTER_TAB.includes(normalizedRole) || hasAdminCenterDashTab;
+  const hasCenterDashTab = roleHasCenterDashTab(normalizedRole) || hasAdminCenterDashTab;
   const shouldRenderFAB = shouldShowFAB && (!hasCenterDashTab || isPrincipalRole);
   
   return (
@@ -240,6 +247,10 @@ export default function RootLayout() {
   if (__DEV__) logger.debug(TAG, 'Rendering...');
   
   // Setup PWA meta tags on web
+  useEffect(() => {
+    initPerformanceMonitoring();
+  }, []);
+
   useEffect(() => {
     if (Platform.OS === 'web') {
       setupPWAMetaTags();

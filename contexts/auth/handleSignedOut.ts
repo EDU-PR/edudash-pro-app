@@ -76,10 +76,13 @@ export async function handleSignedOut(
 
   track('edudash.auth.signed_out', {});
 
-  // Toast confirmation
+  // Toast confirmation — skip when user is switching accounts so it doesn't feel like a full sign-out
   try {
-    const { toast } = await import('@/components/ui/ToastProvider');
-    toast.success('You have been signed out');
+    const { isAccountSwitchPending } = await import('@/lib/authActions');
+    if (!isAccountSwitchPending()) {
+      const { toast } = await import('@/components/ui/ToastProvider');
+      toast.success('You have been signed out');
+    }
   } catch { /* noop */ }
 
   logger.debug('handleSignedOut', 'Sign-out cleanup complete — navigation handled by useAuthGuard');

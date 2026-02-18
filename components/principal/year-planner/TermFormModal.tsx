@@ -22,6 +22,11 @@ interface TermFormModalProps {
   onSubmit: () => void;
   onClose: () => void;
   theme: any;
+  /** ECD-aware AI suggestions for term name, description, dates */
+  onAISuggest?: () => void;
+  aiBusy?: boolean;
+  aiError?: string | null;
+  aiTips?: string | null;
 }
 
 export function TermFormModal({
@@ -32,6 +37,10 @@ export function TermFormModal({
   onSubmit,
   onClose,
   theme,
+  onAISuggest,
+  aiBusy = false,
+  aiError = null,
+  aiTips = null,
 }: TermFormModalProps) {
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
@@ -45,10 +54,36 @@ export function TermFormModal({
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {isEditing ? 'Edit Term' : 'Create New Term'}
             </Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={theme.text} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {onAISuggest && (
+                <TouchableOpacity
+                  onPress={onAISuggest}
+                  disabled={aiBusy}
+                  style={[styles.aiButton, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}
+                >
+                  <Ionicons name="sparkles" size={18} color={theme.primary} />
+                  <Text style={[styles.aiButtonText, { color: theme.primary }]}>
+                    {aiBusy ? '…' : 'Suggest with Dash'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {aiError ? (
+            <View style={[styles.aiBanner, { backgroundColor: theme.error + '20', marginHorizontal: 20, marginTop: 8 }]}>
+              <Text style={[styles.aiBannerText, { color: theme.error }]}>{aiError}</Text>
+            </View>
+          ) : null}
+          {aiTips ? (
+            <View style={[styles.aiBanner, styles.aiBannerRow, { backgroundColor: theme.primary + '15', marginHorizontal: 20, marginTop: 8 }]}>
+              <Ionicons name="information-circle" size={18} color={theme.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.aiBannerText, { color: theme.text, flex: 1 }]}>{aiTips}</Text>
+            </View>
+          ) : null}
 
           <ScrollView style={styles.modalBody}>
             <View style={styles.formGroup}>
@@ -223,6 +258,30 @@ const createStyles = (theme: any) =>
       padding: 20,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
+    },
+    aiButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    aiButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    aiBanner: {
+      padding: 12,
+      borderRadius: 8,
+    },
+    aiBannerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    aiBannerText: {
+      fontSize: 13,
     },
     modalTitle: {
       fontSize: 20,

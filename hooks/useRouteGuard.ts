@@ -96,9 +96,9 @@ export const useAuthGuard = () => {
     if (!user) {
       authRouteSeenAt.current = null;
       if (!isAuthRoute && !isOnboarding && !hasNavigated.current) {
-        console.log('[AuthGuard] No user, redirecting to sign-in from:', pathname);
+        console.log('[AuthGuard] No user, redirecting to welcome from:', pathname);
         hasNavigated.current = true;
-        safeReplace('/(auth)/sign-in', 'no_user');
+        safeReplace('/(auth)/welcome', 'no_user');
       }
       return;
     }

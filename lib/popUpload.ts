@@ -10,6 +10,7 @@ import { Platform } from 'react-native';
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 import { decode } from 'base64-arraybuffer';
 import { normalizeMediaUri } from './utils/cameraRecovery';
+import { compressImageForAI } from './dash-ai/imageCompression';
 
 // Upload types
 export type POPUploadType = 'proof_of_payment' | 'picture_of_progress';
@@ -17,14 +18,14 @@ export type POPUploadType = 'proof_of_payment' | 'picture_of_progress';
 // File validation constants
 export const FILE_VALIDATION = {
   maxSizeBytes: 50 * 1024 * 1024, // 50MB
-  maxSizeBytesCompressed: 10 * 1024 * 1024, // 10MB for compressed images
+  maxSizeBytesCompressed: 12 * 1024 * 1024, // 12MB for compressed images
   allowedImageTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
   allowedDocumentTypes: ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'],
   maxImageDimension: 2048, // Max width/height for images
   compressionQuality: 0.8,
 };
 
-const MAX_BASE64_FALLBACK_SIZE_BYTES = 4 * 1024 * 1024; // 4MB guard for fallback path
+const MAX_BASE64_FALLBACK_SIZE_BYTES = 6 * 1024 * 1024; // 6MB guard for fallback path
 
 // Storage buckets - matching existing database buckets
 export const STORAGE_BUCKETS = {
@@ -362,25 +363,58 @@ export const uploadPOPFile = async (
 
     const fileInfo = await FileSystem.getInfoAsync(uploadUri);
     const fallbackFileSize = (fileInfo as any)?.size || finalFileSize;
+    let base64: string;
     if (Platform.OS !== 'web' && fallbackFileSize > MAX_BASE64_FALLBACK_SIZE_BYTES) {
-      console.warn('[upload_oom_guard] Blocking POP base64 fallback due file size', {
-        uploadType,
-        storagePath,
-        fileSize: fallbackFileSize,
-        max: MAX_BASE64_FALLBACK_SIZE_BYTES,
+      if (FILE_VALIDATION.allowedImageTypes.includes(finalFileType)) {
+        try {
+          // Keep large images uploadable even when binary upload path fails.
+          const compressed = await compressImageForAI(
+            uploadUri,
+            Math.floor(MAX_BASE64_FALLBACK_SIZE_BYTES * 0.9)
+          );
+          base64 = compressed.base64;
+          uploadUri = compressed.uri;
+          finalFileType = 'image/jpeg';
+          finalFileSize = Math.floor(base64.length * 0.75);
+          console.log('[upload_fallback_compressed] POP upload compressed for base64 fallback', {
+            uploadType,
+            storagePath,
+            originalSize: fallbackFileSize,
+            compressedBytes: finalFileSize,
+          });
+        } catch (compressionError) {
+          console.warn('[upload_oom_guard] POP fallback compression failed', {
+            uploadType,
+            storagePath,
+            fileSize: fallbackFileSize,
+            max: MAX_BASE64_FALLBACK_SIZE_BYTES,
+            compressionError,
+          });
+          return {
+            success: false,
+            error: `Image is still too large to upload. Try a clearer JPG/PNG under ${Math.round(FILE_VALIDATION.maxSizeBytesCompressed / (1024 * 1024))}MB.`,
+          };
+        }
+      } else {
+        console.warn('[upload_oom_guard] Blocking POP base64 fallback due file size', {
+          uploadType,
+          storagePath,
+          fileSize: fallbackFileSize,
+          max: MAX_BASE64_FALLBACK_SIZE_BYTES,
+        });
+        return {
+          success: false,
+          error: `File is too large to upload right now. Try a smaller file (about ${Math.round(MAX_BASE64_FALLBACK_SIZE_BYTES / (1024 * 1024))}MB or less) or retry on a stable network.`,
+        };
+      }
+    } else {
+      // Read file as base64 for upload
+      // Note: Using 'base64' string literal instead of FileSystem.EncodingType.Base64
+      // to avoid "Cannot read property 'Base64' of undefined" errors in some Expo versions
+      base64 = await FileSystem.readAsStringAsync(uploadUri, {
+        encoding: 'base64',
       });
-      return {
-        success: false,
-        error: 'Image too large for analysis/upload, please retake with lower resolution.',
-      };
     }
-    
-    // Read file as base64 for upload
-    // Note: Using 'base64' string literal instead of FileSystem.EncodingType.Base64
-    // to avoid "Cannot read property 'Base64' of undefined" errors in some Expo versions
-    const base64 = await FileSystem.readAsStringAsync(uploadUri, {
-      encoding: 'base64',
-    });
     
     // Convert base64 to ArrayBuffer using base64-arraybuffer
     // Note: React Native doesn't support new Blob([Uint8Array]), so we upload ArrayBuffer directly

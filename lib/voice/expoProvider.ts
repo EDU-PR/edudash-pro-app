@@ -11,7 +11,7 @@
  * - Supports South African languages (device-dependent)
  */
 
-import { STT_CONTEXTUAL_STRINGS } from '@/lib/voice/sttDictionary';
+import { STT_CONTEXTUAL_STRINGS, applyPartialCorrections } from '@/lib/voice/sttDictionary';
 import {
   ExpoSpeechRecognitionModule,
 } from 'expo-speech-recognition';
@@ -115,7 +115,10 @@ class ExpoSpeechSession implements VoiceSession {
         if (results.length === 0) return;
         
         const result = results[0];
-        const transcript = result.transcript || '';
+        const rawTranscript = result.transcript || '';
+        // Apply domain-specific corrections at the provider level so every
+        // consumer (VoiceOrb, DashOrb, dash-voice) gets corrected text.
+        const transcript = applyPartialCorrections(rawTranscript);
         
         if (result.isFinal) {
           if (__DEV__) console.log('[ExpoProvider] Final:', transcript);

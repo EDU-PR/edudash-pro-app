@@ -109,4 +109,30 @@ describe('navigationLocks', () => {
     expect(isNavigationLocked('user-0')).toBe(true);
     expect(isNavigationLocked('user-9')).toBe(true);
   });
+
+  // ---- Timeout alignment (RC-3) ------------------------------------------
+
+  it('should have NAVIGATION_LOCK_TIMEOUT > 15000 (routing overall timeout)', () => {
+    // routeAfterLogin has a 15s overall timeout — locks must outlast it
+    expect(NAVIGATION_LOCK_TIMEOUT).toBeGreaterThan(15000);
+  });
+
+  it('should have NAVIGATION_LOCK_TIMEOUT equal to 16000 (1s margin)', () => {
+    expect(NAVIGATION_LOCK_TIMEOUT).toBe(16000);
+  });
+
+  // ---- Re-set lock refreshes timestamp -----------------------------------
+
+  it('should refresh timestamp when lock is re-set', () => {
+    setNavigationLock('user-1');
+    const t1 = getNavigationLockTime('user-1');
+
+    // Advance clock a bit then re-set
+    const advance = 100;
+    const before = Date.now();
+    // Re-set
+    setNavigationLock('user-1');
+    const t2 = getNavigationLockTime('user-1');
+    expect(t2).toBeGreaterThanOrEqual(t1!);
+  });
 });

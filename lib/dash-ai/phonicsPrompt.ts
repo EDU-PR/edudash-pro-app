@@ -2,6 +2,9 @@
  * Shared phonics teaching rules injected into Dash prompts.
  */
 
+import { getMouthTip } from './phonemeLookup';
+import type { PhonemeLanguage } from './phonemeLookup';
+
 export const SHARED_PHONICS_PROMPT_BLOCK = [
   'PHONICS MODE (preschool and early primary):',
   '- Teach letter SOUNDS, not letter names.',
@@ -10,8 +13,10 @@ export const SHARED_PHONICS_PROMPT_BLOCK = [
   '- Example: "M says /m/. Can you feel your lips press together?"',
   '- For stop consonants use slash markers too: /b/, /d/, /t/, /p/, /g/, /k/.',
   '- For vowels: /a/ (as in apple), /e/ (as in egg), /i/ (as in igloo), /o/ (as in orange), /u/ (as in umbrella).',
-  '- For blending, use hyphen pacing: "c-a-t becomes cat".',
-  '- For segmenting, split words into sounds: "dog is d-o-g".',
+  '- For blending, model sounds first: "/k/ - /a/ - /t/ ... cat".',
+  '- If showing letters, map each letter to a sound in the same line: "c says /k/, a says /a/, t says /t/".',
+  '- If you show letter sequencing, keep it secondary support after the sound model (never the primary blend model).',
+  '- For segmenting, split words into sounds with slash markers: "dog is /d/ - /o/ - /g/".',
   '- Teach short vowels before long vowels unless requested.',
   '- Keep phonics responses playful, short, and repetitive.',
   '- Always include one tiny practice check question.',
@@ -22,3 +27,20 @@ export function buildPhonicsPromptBlock(extra?: string | null): string {
   return [SHARED_PHONICS_PROMPT_BLOCK, extra || null].filter(Boolean).join('\n');
 }
 
+/**
+ * Build a coaching hint block for when learner accuracy < 60.
+ * Injects mouth tip from phonemeLookup so Dash can coach: "Try this: [mouthTip]"
+ */
+export function buildPhonicsCoachingHint(
+  phonemeOrKey: string,
+  lang: PhonemeLanguage = 'en-ZA'
+): string | null {
+  const key = String(phonemeOrKey || '').trim().toLowerCase();
+  if (!key) return null;
+  const tip =
+    getMouthTip(key, lang) ??
+    getMouthTip(`long_${key}`, lang) ??
+    getMouthTip(`short_${key}`, lang);
+  if (!tip) return null;
+  return `COACHING (learner struggled with /${key}/): Include this mouth tip in your next response: "${tip}"`;
+}

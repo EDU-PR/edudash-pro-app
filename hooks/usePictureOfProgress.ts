@@ -147,7 +147,7 @@ export function usePictureOfProgress(showAlert: ShowAlert, t: (k: string) => str
           uri: selectedFile.uri,
           base64Length: compressedBase64.length,
         });
-        const message = 'Image too large for analysis/upload, please retake with lower resolution.';
+        const message = 'Image is too large for AI analysis. Retake with lower resolution (JPG/PNG under 12MB), or submit without Analyze Photo.';
         setAnalysisError(message);
         showAlert({ title: t('common.error'), message });
         return;

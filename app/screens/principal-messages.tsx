@@ -18,6 +18,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
@@ -25,6 +26,9 @@ import { useParentThreads, useMarkAllDelivered, MessageThread, MessageParticipan
 import { useConversationListTyping } from '@/hooks/useConversationListTyping';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { assertSupabase } from '@/lib/supabase';
+import { toast } from '@/components/ui/ToastProvider';
 
 const formatMessageTime = (timestamp: string): string => {
   const now = new Date();
@@ -46,11 +50,14 @@ const formatMessageTime = (timestamp: string): string => {
 interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
+  onLongPress?: () => void;
   currentUserId?: string | null;
   typingText?: string | null;
+  selectionMode?: boolean;
+  isSelected?: boolean;
 }
 
-const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, currentUserId, typingText }) => {
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, onLongPress, currentUserId, typingText, selectionMode = false, isSelected = false }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -79,6 +86,8 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, cur
       marginBottom: 8,
       borderRadius: 16,
       overflow: 'hidden',
+      borderWidth: isSelected ? 2 : 0,
+      borderColor: isSelected ? theme.primary : 'transparent',
       ...Platform.select({
         ios: {
           shadowColor: theme.shadow,
@@ -171,10 +180,19 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, cur
       color: theme.textSecondary,
       textTransform: 'capitalize',
     },
+    selectedIndicator: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      marginLeft: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+    },
   });
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.container} onPress={onPress} onLongPress={onLongPress} delayLongPress={220} activeOpacity={0.7}>
       <View style={styles.inner}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -204,6 +222,19 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, cur
                 </Text>
               </View>
             )}
+            {selectionMode && (
+              <View
+                style={[
+                  styles.selectedIndicator,
+                  {
+                    borderColor: isSelected ? theme.primary : theme.border,
+                    backgroundColor: isSelected ? theme.primary : 'transparent',
+                  },
+                ]}
+              >
+                {isSelected && <Ionicons name="checkmark" size={14} color={theme.onPrimary} />}
+              </View>
+            )}
           </View>
           {!!participantRole && (
             <View style={styles.roleChip}>
@@ -221,7 +252,11 @@ export default function PrincipalMessagesScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { showAlert, alertProps } = useAlertModal();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
 
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
 
@@ -238,7 +273,62 @@ export default function PrincipalMessagesScreen() {
     }, [refetch])
   );
 
+  const clearSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedThreadIds([]);
+  }, []);
+
+  const toggleThreadSelection = useCallback((threadId: string) => {
+    setSelectedThreadIds((prev) =>
+      prev.includes(threadId) ? prev.filter((id) => id !== threadId) : [...prev, threadId]
+    );
+  }, []);
+
+  const handleThreadLongPress = useCallback((thread: MessageThread) => {
+    setSelectionMode(true);
+    setSelectedThreadIds((prev) => (prev.includes(thread.id) ? prev : [...prev, thread.id]));
+  }, []);
+
+  const handleBulkDeleteThreads = useCallback(() => {
+    if (!user?.id || selectedThreadIds.length === 0) return;
+    showAlert({
+      title: 'Delete selected chats',
+      message: `Remove ${selectedThreadIds.length} selected chat${selectedThreadIds.length > 1 ? 's' : ''} from your list?`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              const { error } = await client
+                .from('message_participants')
+                .delete()
+                .eq('user_id', user.id)
+                .in('thread_id', selectedThreadIds);
+              if (error) throw error;
+
+              clearSelection();
+              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+              queryClient.invalidateQueries({ queryKey: ['notifications'] });
+              toast.success('Selected chats deleted');
+            } catch (err: any) {
+              toast.error(err?.message || 'Failed to delete selected chats');
+            }
+          },
+        },
+      ],
+    });
+  }, [clearSelection, queryClient, refetch, selectedThreadIds, showAlert, user?.id]);
+
   const handleThreadPress = useCallback((thread: MessageThread) => {
+    if (selectionMode) {
+      toggleThreadSelection(thread.id);
+      return;
+    }
     const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== user?.id);
     const participantName = otherParticipant?.user_profile
       ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
@@ -251,7 +341,7 @@ export default function PrincipalMessagesScreen() {
         title: participantName,
       },
     });
-  }, [t, user?.id]);
+  }, [selectionMode, t, toggleThreadSelection, user?.id]);
 
   const handleSettings = useCallback(() => {
     router.push('/screens/settings');
@@ -260,6 +350,14 @@ export default function PrincipalMessagesScreen() {
   const handleMarkAllRead = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  const handleHeaderSelectionToggle = useCallback(() => {
+    if (selectionMode) {
+      clearSelection();
+      return;
+    }
+    setSelectionMode(true);
+  }, [clearSelection, selectionMode]);
 
   // Dropdown menu items for the header
   const headerMenuItems = useMemo(() => [
@@ -483,6 +581,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.loadingContainer}>
@@ -509,6 +609,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.errorContainer}>
@@ -531,6 +633,8 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.emptyContainer}>
@@ -554,6 +658,8 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+          rightActionLabel={selectionMode ? 'Done' : 'Select'}
+          onRightActionPress={handleHeaderSelectionToggle}
           menuItems={headerMenuItems}
         />
         <View style={styles.searchContainer}>
@@ -598,7 +704,11 @@ export default function PrincipalMessagesScreen() {
     <View style={styles.container}>
       <MessagesListHeader
         title={t('principal.messages', { defaultValue: 'Messages' })}
-        subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+        subtitle={selectionMode
+          ? `${selectedThreadIds.length} selected`
+          : `${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+        rightActionLabel={selectionMode ? 'Done' : 'Select'}
+        onRightActionPress={handleHeaderSelectionToggle}
         menuItems={headerMenuItems}
       />
       <View style={styles.searchContainer}>
@@ -626,6 +736,49 @@ export default function PrincipalMessagesScreen() {
           <Text style={styles.quickActionText}>Create Groups</Text>
         </TouchableOpacity>
       </View>
+      {selectionMode && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+            {selectedThreadIds.length} selected
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={clearSelection} activeOpacity={0.8}>
+              <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBulkDeleteThreads}
+              disabled={selectedThreadIds.length === 0}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: selectedThreadIds.length > 0 ? theme.error : theme.elevated,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 10,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="trash-outline" size={14} color={theme.onError || '#fff'} />
+              <Text style={{ color: theme.onError || '#fff', fontSize: 12, fontWeight: '700' }}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       <FlashList
         data={filteredThreads}
         keyExtractor={(item) => item.id}
@@ -633,8 +786,11 @@ export default function PrincipalMessagesScreen() {
           <ThreadItem
             thread={item}
             onPress={() => handleThreadPress(item)}
+            onLongPress={() => handleThreadLongPress(item)}
             currentUserId={user?.id}
             typingText={typingMap[item.id]}
+            selectionMode={selectionMode}
+            isSelected={selectedThreadIds.includes(item.id)}
           />
         )}
         contentContainerStyle={styles.listContent}
@@ -664,6 +820,7 @@ export default function PrincipalMessagesScreen() {
       >
         <Ionicons name="add" size={28} color={theme.onPrimary} />
       </TouchableOpacity>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

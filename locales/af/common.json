@@ -50,6 +50,10 @@
     "notAvailable": "Nie beskikbaar nie",
     "required": "Vereis",
     "optional": "Opsioneel",
+    "ai_model_in_use": "Gebruik",
+    "ai_model_label": "AI-model",
+    "ai_drop_files_or_tap": "Laat val lêers of tik om op te laai",
+    "ai_drop_files_subtext": "Beelde en dokumente",
     "tryAgain": "Probeer weer",
     "authenticate": "Verifieer",
     "later": "Later",
@@ -204,6 +208,11 @@
       "sign_in_to_account": "Sign in to your account",
       "verification_email_sent": "A new verification email has been sent to your inbox. Please check your email and click the verification link.",
       "welcome_back": "Welcome Back"
+    },
+    "welcome": {
+      "title": "Welkom",
+      "subtitle": "Meld aan by jou rekening of skep 'n nuwe een.",
+      "quick_access": "Vinnige toegang met Gesig ID / Vingerafdruk"
     },
     "biometric": {
       "prompt": "Teken in na EduDash Pro",
@@ -2184,9 +2193,12 @@
     "security": "Security",
     "session_expired": "Session Expired",
     "session_expired_message": "Please sign in again to continue.",
+    "session_expired_switch_message": "Daardie rekening se sessie het verstryk. Meld aan met e-pos en wagwoord om dit weer te gebruik, of verwyder dit uit die lys.",
     "sign_in_manually": "Sign in",
     "switch_account": "Switch Account",
     "switch_account_desc": "Quick switch with biometric authentication",
+    "switch_account_desc_no_biometric": "Tik om vinnige skakel te probeer, of gebruik wagwoord om by 'n rekening aan te meld.",
+    "use_password_to_switch": "Gebruik wagwoord",
     "switch_error": "Failed to switch account. Please try again.",
     "switch_failed": "Switch Failed"
   },

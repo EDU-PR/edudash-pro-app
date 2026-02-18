@@ -23,6 +23,7 @@ import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
+import { useBottomInset } from '@/hooks/useBottomInset';
 import { 
   prewarmCallSystem, 
   getPrewarmedCallObject, 
@@ -77,13 +78,14 @@ export function VideoCallInterface({
   callId,
   meetingUrl,
   onCallStateChange,
-  role = 'teacher', // Default to teacher for backward compatibility
+  role = 'teacher',
 }: VideoCallInterfaceProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const bottomInset = useBottomInset();
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
@@ -498,6 +500,12 @@ export function VideoCallInterface({
             }).then(res => res.json()).then(result => {
               if (result.success) {
                 console.log('[VideoCall] ✅ FCM wake-on-call message sent');
+              } else if (result?.fallback_to_expo) {
+                console.log('[VideoCall] ℹ️ FCM fallback active', {
+                  attempted: result?.attempted_tokens,
+                  successful: result?.successful_tokens,
+                  errorCodes: result?.error_codes,
+                });
               } else {
                 console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
               }
@@ -1022,7 +1030,7 @@ export function VideoCallInterface({
       )}
 
       {/* Controls */}
-      <View style={styles.controlsContainer}>
+      <View style={[styles.controlsContainer, { paddingBottom: bottomInset + 16 }]}>
         {/* Secondary Row - Role-based features */}
         <View style={styles.secondaryControls}>
           <TouchableOpacity style={styles.secondaryButton} onPress={toggleSpeaker}>

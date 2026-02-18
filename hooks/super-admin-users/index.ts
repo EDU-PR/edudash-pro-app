@@ -25,7 +25,7 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
   const [creatingTempPassword, setCreatingTempPassword] = useState(false);
   const [updatingTier, setUpdatingTier] = useState(false);
   const [filters, setFilters] = useState<UserFilters>({
-    role: 'all', status: 'all', school: '', search: '',
+    role: 'all', status: 'all', school: '', schoolId: '', search: '',
   });
 
   // ─── Fetch all users ────────────────────────────────────────────────────
@@ -114,6 +114,9 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
         u.school_name?.toLowerCase().includes(filters.school.toLowerCase()),
       );
     }
+    if (filters.schoolId) {
+      filtered = filtered.filter(u => u.school_id === filters.schoolId);
+    }
     if (filters.search) {
       const s = filters.search.toLowerCase();
       filtered = filtered.filter(u =>
@@ -165,6 +168,7 @@ export function useSuperAdminUsers(showAlert: ShowAlertFn): UseSuperAdminUsersRe
     suspendUser: (user) => actions.suspendUser(user, deps),
     updateUserRole: (user, role) => actions.updateUserRole(user, role, deps),
     requestUserDeletion: (user) => actions.requestUserDeletion(user, deps),
+    deleteUserNow: (user) => actions.deleteUserNow(user, deps),
     resetUserPassword: (user) => actions.resetUserPassword(user, deps),
     createTempPassword: (user) => actions.createTempPassword(user, deps),
     openTierPicker: (user) => actions.openTierPicker(user, deps),

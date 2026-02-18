@@ -6,6 +6,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomInset } from '@/hooks/useBottomInset';
 import * as ImagePicker from "expo-image-picker";
 import { Stack, router } from 'expo-router';
 import {
@@ -43,6 +44,7 @@ export default function AccountScreen() {
   const { refreshProfile } = useAuth();
   const { t } = useTranslation();
   const { showAlert, alertProps } = useAlertModal();
+  const bottomInset = useBottomInset();
   const [refreshing, setRefreshing] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -78,20 +80,26 @@ export default function AccountScreen() {
     showAlert({ title, message, buttons });
   }, [showAlert]);
 
+  // Tab bar is typically ~56–64px; account screen is often shown with bottom nav visible.
+  // Exclude bottom from safe area so we don't double-count and clip content; add padding so Sign Out scrolls above tab bar.
+  const TAB_BAR_HEIGHT = 64;
+  const scrollBottomPadding = TAB_BAR_HEIGHT + bottomInset + 24;
+
   const styles = useThemedStyles((theme) => ({
     container: { flex: 1, backgroundColor: theme.background },
     scrollView: { flex: 1 },
-    scrollContent: { paddingBottom: 40 },
+    scrollContent: { paddingBottom: scrollBottomPadding },
     settingsButton: { padding: 8 },
     profileHeader: {
       alignItems: "center" as const,
-      paddingVertical: 32,
+      paddingTop: 18,
+      paddingBottom: 14,
       paddingHorizontal: 20,
       backgroundColor: theme.surface,
       borderBottomWidth: 1,
       borderBottomColor: theme.divider,
     },
-    avatarContainer: { position: "relative" as const, marginBottom: 16 },
+    avatarContainer: { position: "relative" as const, marginBottom: 10 },
     avatar: { width: 100, height: 100, borderRadius: 50 },
     avatarPlaceholder: {
       width: 100, height: 100, borderRadius: 50,
@@ -108,8 +116,8 @@ export default function AccountScreen() {
     },
     loadingIcon: { width: 32, height: 32, justifyContent: "center" as const, alignItems: "center" as const },
     loadingText: { fontSize: 16, color: theme.onSecondary },
-    displayName: { fontSize: 24, fontWeight: "600" as const, color: theme.text, marginBottom: 4 },
-    email: { fontSize: 16, color: theme.textSecondary, marginBottom: 12 },
+    displayName: { fontSize: 24, fontWeight: "600" as const, color: theme.text, marginBottom: 2 },
+    email: { fontSize: 16, color: theme.textSecondary, marginBottom: 8 },
     roleBadge: { backgroundColor: theme.primaryLight, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
     roleText: { fontSize: 12, fontWeight: "600" as const, color: theme.onPrimary },
     infoSection: { padding: 20 },
@@ -131,7 +139,7 @@ export default function AccountScreen() {
     modalOverlay: { flex: 1, backgroundColor: theme.modalOverlay, justifyContent: "flex-end" as const },
     modalContent: {
       backgroundColor: theme.modalBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-      paddingTop: 20, paddingBottom: 40, maxHeight: "80%" as const,
+      paddingTop: 20, paddingBottom: bottomInset + 20, maxHeight: "80%" as const,
     },
     modalHeader: {
       flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const,
@@ -485,14 +493,10 @@ export default function AccountScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Stack.Screen 
         options={{ 
-          headerShown: true,
-          title: t('navigation.account', { defaultValue: 'Account' }),
-          headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.text,
-          headerTitleStyle: { color: theme.text, fontWeight: '600' },
+          headerShown: false,
         }} 
       />
 

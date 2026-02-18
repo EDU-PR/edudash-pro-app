@@ -490,6 +490,7 @@ export default function ProgressReportCreator() {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+      <actions.AlertModalComponent />
     </SafeAreaView>
   );
 }

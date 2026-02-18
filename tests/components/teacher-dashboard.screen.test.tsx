@@ -19,6 +19,7 @@ jest.mock('@/contexts/AuthContext', () => ({
 }));
 
 jest.mock('@/contexts/ThemeContext', () => ({
+  ThemeOverrideProvider: ({ children }: any) => children,
   useTheme: () => ({
     theme: {
       background: '#ffffff',

@@ -61,6 +61,7 @@ export interface UseSuperAdminUsersReturn {
   suspendUser: (user: UserRecord) => Promise<void>;
   updateUserRole: (user: UserRecord, newRole: string) => Promise<void>;
   requestUserDeletion: (user: UserRecord) => Promise<void>;
+  deleteUserNow: (user: UserRecord) => Promise<void>;
   resetUserPassword: (user: UserRecord) => Promise<void>;
   createTempPassword: (user: UserRecord) => Promise<void>;
   openTierPicker: (user: UserRecord) => void;

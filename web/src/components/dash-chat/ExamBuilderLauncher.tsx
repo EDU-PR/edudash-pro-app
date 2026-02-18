@@ -99,7 +99,7 @@ export function ExamBuilderLauncher({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>
               <Sparkles className="icon20" style={{ display: 'inline', marginRight: '8px', color: 'var(--primary)' }} />
-              Create CAPS Exam
+              Build Full Exam (Printable)
             </h2>
             <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
               <X size={24} color="var(--muted)" />
@@ -241,7 +241,7 @@ export function ExamBuilderLauncher({
             }}
           >
             <Sparkles className="icon16" style={{ marginRight: '8px' }} />
-            Start Building Exam
+            Generate Formal Test Paper
           </button>
         </div>
       </div>
@@ -278,7 +278,7 @@ export function ExamBuilderLauncher({
       }}
     >
       <FileText size={16} />
-      Create Exam
+      Build Full Exam (Printable)
     </button>
   );
 }

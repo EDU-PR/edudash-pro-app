@@ -114,6 +114,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'secondary',
     category: 'classroom',
   },
+  daily_program: {
+    path: '/screens/teacher-daily-program-planner' as Href,
+    title: 'Daily Program',
+    titleKey: 'teacher.daily_program',
+    icon: 'time',
+    color: '#14B8A6',
+    category: 'classroom',
+  },
   
   // === COMMUNICATION ===
   messages: {
@@ -298,6 +306,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'assign_lesson',
   'assign_homework',
   'my_class',
+  'daily_program',
   'birthday_chart',
   'messages',
   'manage_groups',
@@ -307,6 +316,9 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'reputation',
   'generate_image',
   'ai_assistant',
+  'homework_grader',
+  'homework_helper',
+  'progress_analysis',
   'call_parent',
 ];
 

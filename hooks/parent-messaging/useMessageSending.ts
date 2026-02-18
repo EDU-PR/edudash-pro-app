@@ -2,9 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendMessagePushNotification } from '@/lib/messaging/pushNotifications';
+import type { Message } from '@/lib/messaging/types';
 
 /**
- * Hook to send a message
+ * Hook to send a message with optimistic updates for instant bubble display
  */
 export const useSendMessage = () => {
   const queryClient = useQueryClient();
@@ -44,10 +45,78 @@ export const useSendMessage = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: async (data, { threadId }) => {
-      queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
-      queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+    // Optimistic update — show bubble instantly before server responds
+    onMutate: async (variables) => {
+      const { threadId, content, voiceUrl, voiceDuration, replyToId } = variables;
 
+      // Cancel outgoing refetches so they don't overwrite optimistic update
+      await queryClient.cancelQueries({ queryKey: ['messages', threadId] });
+
+      // Snapshot previous messages for rollback
+      const previousMessages = queryClient.getQueryData<Message[]>(['messages', threadId]);
+
+      // Create optimistic message with temp ID
+      const optimisticMessage: Message = {
+        id: `temp-${Date.now()}`,
+        thread_id: threadId,
+        sender_id: user?.id || '',
+        content: content.trim(),
+        content_type: voiceUrl ? 'voice' : 'text',
+        voice_url: voiceUrl || null,
+        voice_duration: voiceDuration || null,
+        reply_to_id: replyToId || null,
+        created_at: new Date().toISOString(),
+        edited_at: null,
+        deleted_at: null,
+        delivered_at: null,
+        read_by: [],
+        reactions: [],
+        sender: null,
+        reply_to: null,
+      } as any;
+
+      // Immediately add to cache
+      queryClient.setQueryData<Message[]>(
+        ['messages', threadId],
+        (old) => old ? [...old, optimisticMessage] : [optimisticMessage],
+      );
+
+      return { previousMessages, threadId };
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback to previous messages on error
+      if (context?.previousMessages !== undefined) {
+        queryClient.setQueryData(
+          ['messages', context.threadId],
+          context.previousMessages,
+        );
+      }
+    },
+    onSuccess: async (data, { threadId }) => {
+      // Replace optimistic message with real server data
+      queryClient.setQueryData<Message[]>(
+        ['messages', threadId],
+        (old) => {
+          if (!old) return [data];
+          return old.map((msg) =>
+            (msg.id.startsWith('temp-') && msg.content === data.content && msg.sender_id === data.sender_id)
+              ? { ...msg, ...data }
+              : msg,
+          );
+        },
+      );
+
+      // Update thread ordering timestamp (fire-and-forget)
+      const supabase = assertSupabase();
+      supabase.from('message_threads')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', threadId)
+        .then(() => {}, () => {});
+
+      queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+
+      // Send push notification (fire-and-forget)
       const client = assertSupabase();
       const { data: participants } = await client
         .from('message_participants')
@@ -66,14 +135,14 @@ export const useSendMessage = () => {
         ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
         : 'Someone';
 
-      await sendMessagePushNotification({
+      sendMessagePushNotification({
         threadId,
         messageId: data.id,
         senderId: user?.id || '',
         senderName,
         messageContent: data.content,
         recipientIds,
-      });
+      }).catch(() => {}); // Don't block on notification failures
     },
   });
 };

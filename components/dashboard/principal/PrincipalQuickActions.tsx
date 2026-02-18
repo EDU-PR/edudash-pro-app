@@ -32,6 +32,7 @@ const ROUTE_MAP: Record<string, string> = {
   'learner-activity-control': '/screens/principal-learner-activity-control',
   'uniform-orders': '/screens/principal-uniforms',
   'dash-advisor': '/screens/dash-voice?mode=advisor',
+  'dash-tutor': '/screens/dash-tutor',
   teachers: '/screens/teacher-management',
   classes: '/screens/class-teacher-management',
   'parent-links': '/screens/principal-parent-requests',
@@ -51,6 +52,7 @@ const ROUTE_MAP: Record<string, string> = {
   'weekly-menu': '/screens/principal-menu',
   'year-planner': '/screens/principal-year-planner',
   'ai-year-planner': '/screens/principal-ai-year-planner',
+  'daily-program-ai': '/screens/principal-daily-program-planner',
   'live-lessons': '/screens/start-live-lesson',
   announcements: '/screens/principal-announcement',
   'dash-studio': '/screens/dash-studio',
@@ -160,6 +162,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'budget', title: t('dashboard.budget_management', { defaultValue: 'Budget' }), icon: 'pie-chart', color: '#3B82F6' },
       ],
       learning: [
+        { id: 'dash-tutor', title: t('teacher.start_tutor_session', { defaultValue: 'Start Tutor Session' }), icon: 'school', color: '#7C3AED' },
         { id: 'browse-lessons', title: t('dashboard.browse_lessons', { defaultValue: 'Browse Lessons' }), icon: 'book', color: '#F59E0B' },
         { id: 'create-lesson', title: t('dashboard.create_lesson', { defaultValue: 'Create Lesson' }), icon: 'add-circle', color: '#10B981' },
         { id: 'assign-lessons', title: t('dashboard.assign_lessons', { defaultValue: 'Assign Lessons' }), icon: 'paper-plane', color: '#8B5CF6' },
@@ -170,6 +173,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'weekly-menu', title: t('dashboard.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant', color: '#F97316' },
         { id: 'year-planner', title: t('dashboard.year_planner', { defaultValue: 'Year Planner' }), icon: 'calendar', color: '#3B82F6' },
         { id: 'ai-year-planner', title: t('dashboard.ai_year_planner', { defaultValue: 'AI Year Planner' }), icon: 'sparkles', color: '#8B5CF6' },
+        { id: 'daily-program-ai', title: t('dashboard.daily_program_ai', { defaultValue: 'AI Daily Routine' }), icon: 'time', color: '#0891B2' },
         ...(canLiveLessons ? [{ id: 'live-lessons', title: t('dashboard.live_lessons', { defaultValue: 'Live Lessons' }), icon: 'videocam', color: '#EC4899' }] : []),
         { id: 'timetable', title: t('dashboard.timetable', { defaultValue: 'Timetable' }), icon: 'grid', color: '#6366F1' },
       ],
@@ -223,13 +227,21 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       sectionId="quick-actions"
       icon="⚡"
       hint={t('dashboard.hints.principal_quick_actions', { defaultValue: 'Approve, message, and jump to key workflows.' })}
+      visualStyle="glass"
       defaultCollapsed={collapsedSections.has('quick-actions')}
       onToggle={onToggleSection}
     >
       <View style={styles.coreGrid}>
         {coreShortcuts.map((action) => (
           <View key={action.id} style={styles.gridItem}>
-            <QuickActionCard title={action.title} icon={action.icon} color={action.color} badgeCount={action.badge} onPress={() => handleActionPress(action.id)} />
+            <QuickActionCard
+              title={action.title}
+              icon={action.icon}
+              color={action.color}
+              badgeCount={action.badge}
+              onPress={() => handleActionPress(action.id)}
+              variant="glass"
+            />
           </View>
         ))}
       </View>
@@ -255,7 +267,14 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       <View style={styles.actionsGrid}>
         {(actionsByGroup[activeGroup] || []).map((action) => (
           <View key={action.id} style={styles.gridItem}>
-            <QuickActionCard title={action.title} icon={action.icon} color={action.color} badgeCount={action.badge} onPress={() => handleActionPress(action.id)} />
+            <QuickActionCard
+              title={action.title}
+              icon={action.icon}
+              color={action.color}
+              badgeCount={action.badge}
+              onPress={() => handleActionPress(action.id)}
+              variant="glass"
+            />
           </View>
         ))}
       </View>

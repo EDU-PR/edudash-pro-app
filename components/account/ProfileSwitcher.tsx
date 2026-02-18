@@ -4,7 +4,7 @@
  * Allows users to switch between stored biometric accounts without signing out.
  * Uses EnhancedBiometricAuth for multi-account storage and session restoration.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -13,16 +13,17 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
-import { fetchEnhancedUserProfile } from '@/lib/rbac';
-import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
-import { signOutAndRedirect } from '@/lib/authActions';
-import { setAccountSwitchPending } from '@/lib/authActions';
+import { clearAllNavigationLocks } from '@/lib/routeAfterLogin';
+import { routeAfterLogin } from '@/lib/routeAfterLogin';
+import { signOutAndRedirect, setAccountSwitchInProgress, setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
 import { registerPushDevice } from '@/lib/notifications';
+import { MAX_BIOMETRIC_ACCOUNTS } from '@/services/biometricStorage';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { fetchEnhancedUserProfile } from '@/lib/rbac';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface StoredAccount {
@@ -54,21 +55,72 @@ export function ProfileSwitcher({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
+  const pathname = usePathname();
   const { showAlert, alertProps } = useAlertModal();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const pathnameRef = useRef(pathname);
+  const routeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
+    return () => {
+      if (routeFallbackTimerRef.current) {
+        clearTimeout(routeFallbackTimerRef.current);
+        routeFallbackTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Load stored biometric accounts
   const loadAccounts = useCallback(async () => {
+    let capabilitiesResolved = false;
     try {
       setLoading(true);
-      
-      // Check biometric availability
-      const capabilities = await BiometricAuthService.checkCapabilities();
-      setBiometricAvailable(capabilities.isAvailable && capabilities.isEnrolled);
+
+      // Ensure currently signed-in account is present in quick-switch storage.
+      if (user?.id && user?.email) {
+        try {
+          const { getCurrentSession } = await import('@/lib/sessionManager');
+          const currentSession = await getCurrentSession();
+          await EnhancedBiometricAuth.storeBiometricSession(
+            user.id,
+            user.email,
+            profile || undefined,
+            currentSession?.refresh_token,
+          );
+        } catch (storeErr) {
+          if (__DEV__) {
+            console.warn(
+              '[ProfileSwitcher] Failed to persist active account before loading list:',
+              storeErr,
+            );
+          }
+        }
+      }
+
+      // Check biometric availability (non-blocking for account list rendering).
+      try {
+        const capabilities = await BiometricAuthService.checkCapabilities();
+        setBiometricAvailable(capabilities.isAvailable && capabilities.isEnrolled);
+        capabilitiesResolved = true;
+      } catch (capErr) {
+        if (__DEV__) {
+          console.warn('[ProfileSwitcher] Biometric capability check failed:', capErr);
+        }
+      }
 
       // Get stored accounts
       const storedAccounts = await EnhancedBiometricAuth.getBiometricAccounts();
@@ -78,6 +130,17 @@ export function ProfileSwitcher({
         ...acc,
         isActive: acc.userId === user?.id,
       }));
+
+      // Absolute fallback: always show currently signed-in account in switcher.
+      if (user?.id && !accountsWithActive.some((acc) => acc.userId === user.id)) {
+        accountsWithActive.unshift({
+          userId: user.id,
+          email: user.email || 'Current account',
+          lastUsed: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          isActive: true,
+        });
+      }
 
       // Sort: active first, then by last used
       accountsWithActive.sort((a, b) => {
@@ -91,9 +154,12 @@ export function ProfileSwitcher({
       console.error('Failed to load accounts:', error);
       setAccounts([]);
     } finally {
+      if (!capabilitiesResolved) {
+        setBiometricAvailable(false);
+      }
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [profile, user?.email, user?.id]);
 
   useEffect(() => {
     if (visible) {
@@ -108,44 +174,42 @@ export function ProfileSwitcher({
       return;
     }
 
-    if (!biometricAvailable) {
-      showAlert({
-        title: t('account.biometric_unavailable_title', { defaultValue: 'Biometrics Unavailable' }),
-        message: t('account.biometric_unavailable_message', {
-          defaultValue: 'This device does not have biometrics enabled. To switch accounts, please sign in manually.',
-        }),
-        type: 'warning',
-        buttons: [
-          { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-          {
-            text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
-            style: 'default',
-            onPress: () => {
-              onClose();
-              signOutAndRedirect({
-                clearBiometrics: false,
-                resetApp: false,
-                redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
-              });
-            },
-          },
-        ],
-      });
-      return;
-    }
-
     try {
       setSwitching(account.userId);
       
       track('account.switch_attempt', {
         from_user_id: user?.id,
         to_user_id: account.userId,
+        method: biometricAvailable ? 'biometric' : 'token',
       });
+      if (__DEV__) {
+        console.log('[AccountSwitch] Start', {
+          from: user?.id,
+          to: account.userId,
+          method: biometricAvailable ? 'biometric' : 'token',
+          path: pathnameRef.current,
+        });
+      }
 
-      // Authenticate with biometrics and restore session
-      const result = await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId);
+      // Use biometric auth when available, otherwise restore via stored refresh token.
+      // Token-based restore is safe — the user is already authenticated on this device.
+      // Flag so AuthContext skips SIGNED_OUT cleanup when Supabase emits it during session replace.
+      setAccountSwitchInProgress(true);
+      const result = biometricAvailable
+        ? await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId)
+        : await EnhancedBiometricAuth.restoreSessionForUser(account.userId);
 
+      if (__DEV__) {
+        console.log('[AccountSwitch] Result', {
+          success: result.success,
+          sessionRestored: result.sessionRestored,
+          to: account.userId,
+          error: result.error ?? null,
+          path: pathnameRef.current,
+        });
+      }
       if (!result.success) {
+        setAccountSwitchInProgress(false);
         showAlert({
           title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
           message: result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
@@ -174,12 +238,20 @@ export function ProfileSwitcher({
         to_user_id: account.userId,
         session_restored: result.sessionRestored,
       });
+      if (__DEV__) {
+        console.log('[AccountSwitch] Success', {
+          to: account.userId,
+          sessionRestored: result.sessionRestored,
+          path: pathnameRef.current,
+        });
+      }
 
       onClose();
       onAccountSwitched?.(account);
 
       // Refresh profile to update UI
       if (result.sessionRestored) {
+        const routeBeforeSwitch = pathnameRef.current;
         await refreshProfile();
         clearAllNavigationLocks();
 
@@ -192,47 +264,127 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
-        const { data } = await assertSupabase().auth.getUser();
-        const authUser = data?.user || ({ id: account.userId, email: account.email } as any);
-
-        if (!authUser?.id) {
-          router.replace('/(auth)/sign-in');
-          return;
+<<<<<<< HEAD
+        // Route handoff:
+        // Prefer auth pipeline, but when user remains on account/auth screens immediately
+        // after successful restore, proactively resolve dashboard route.
+        const currentPath = pathnameRef.current || '';
+        const shouldForceRoute =
+          currentPath.includes('/screens/account') ||
+          currentPath.includes('/(auth)/sign-in') ||
+          currentPath.includes('/sign-in');
+        if (__DEV__) {
+          console.log('[AccountSwitch] Route handoff decision', {
+            currentPath,
+            shouldForceRoute,
+            expectedUserId: account.userId,
+          });
         }
-
-        let enhancedProfile = null;
-        try {
-          enhancedProfile = await fetchEnhancedUserProfile(authUser.id || account.userId, authUser ? { user: authUser as any } : undefined);
-        } catch (profileError) {
-          console.warn('[ProfileSwitcher] Failed to fetch enhanced profile:', profileError);
-        }
-
-        try {
-          await routeAfterLogin(authUser, enhancedProfile);
-        } catch (routeError) {
-          console.error('[ProfileSwitcher] routeAfterLogin failed:', routeError);
-          if (Platform.OS === 'web') {
-            (globalThis as any)?.location?.replace?.('/profiles-gate');
-          } else {
-            router.replace('/profiles-gate');
+        if (shouldForceRoute) {
+          try {
+            const supabase = assertSupabase();
+            const { data: activeUserData } = await supabase.auth.getUser();
+            const activeUser = activeUserData?.user || null;
+            if (activeUser?.id === account.userId) {
+              const nextProfile = await fetchEnhancedUserProfile(activeUser.id).catch(() => null);
+              await routeAfterLogin(activeUser, nextProfile);
+              if (__DEV__) {
+                console.log('[AccountSwitch] Route handoff applied', {
+                  userId: activeUser.id,
+                  currentPath,
+                });
+              }
+            }
+          } catch (routeErr) {
+            console.warn('[AccountSwitch] Immediate route handoff failed:', routeErr);
           }
         }
+
+        // Fallback router handoff:
+        // In some account-switch races the auth event updates session/profile but route
+        // does not advance. If user is still on account/auth screens after a short delay,
+        // force route resolution once.
+        if (routeFallbackTimerRef.current) {
+          clearTimeout(routeFallbackTimerRef.current);
+        }
+        routeFallbackTimerRef.current = setTimeout(async () => {
+          try {
+            const supabase = assertSupabase();
+            const { data: activeUserData } = await supabase.auth.getUser();
+            const activeUser = activeUserData?.user || null;
+            const currentPath = pathnameRef.current || '';
+            const stuckPath =
+              currentPath.includes('/screens/account') ||
+              currentPath.includes('/(auth)/sign-in') ||
+              currentPath.includes('/sign-in');
+
+            if (__DEV__) {
+              console.log('[AccountSwitch] Route fallback check', {
+                expectedUserId: account.userId,
+                activeUserId: activeUser?.id || null,
+                currentPath,
+                stuckPath,
+              });
+            }
+
+            if (!activeUser?.id || activeUser.id !== account.userId || !stuckPath) {
+              return;
+            }
+
+            const nextProfile = await fetchEnhancedUserProfile(activeUser.id).catch(() => null);
+            await routeAfterLogin(activeUser, nextProfile);
+            if (__DEV__) {
+              console.log('[AccountSwitch] Route fallback invoked', {
+                userId: activeUser.id,
+                pathBefore: currentPath,
+              });
+            }
+          } catch (routeErr) {
+            console.warn('[AccountSwitch] Route fallback failed:', routeErr);
+          } finally {
+            routeFallbackTimerRef.current = null;
+          }
+        }, 1200);
+=======
+        // Primary routing should come from auth pipeline (SIGNED_IN/TOKEN_REFRESHED).
+        // Fallback: if route did not change after switch, force route resolution.
+        setTimeout(async () => {
+          try {
+            const currentPath = pathnameRef.current;
+            const { data: { user: activeUser } } = await assertSupabase().auth.getUser();
+            if (activeUser?.id === account.userId && currentPath === routeBeforeSwitch) {
+              console.warn('[ProfileSwitcher] Route unchanged after account switch; forcing route resolution');
+              clearAllNavigationLocks();
+              const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
+              await routeAfterLogin(activeUser, null);
+            }
+          } catch (routeErr) {
+            console.warn('[ProfileSwitcher] Account switch fallback routing failed (non-fatal):', routeErr);
+          } finally {
+            setAccountSwitchInProgress(false);
+          }
+        }, 1500);
+>>>>>>> 872fc5c00e2f3af94e5a01c0d83e580f25ce2b4d
       } else {
-        // Session couldn't be restored - need to sign in again
+        setAccountSwitchInProgress(false);
+        // That account's session expired; current user is unchanged — don't sign out
         showAlert({
           title: t('account.session_expired', { defaultValue: 'Session Expired' }),
-          message: t('account.session_expired_message', { defaultValue: 'Please sign in again to continue.' }),
+          message: t('account.session_expired_switch_message', {
+            defaultValue: 'That account\'s session has expired. Sign in with email and password to use it again, or remove it from the list.',
+          }),
           type: 'warning',
           buttons: [
+            { text: t('common.ok', { defaultValue: 'OK' }), style: 'default', onPress: () => onClose() },
             {
-              text: t('common.ok', { defaultValue: 'OK' }),
+              text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
               style: 'default',
               onPress: () => {
                 onClose();
                 signOutAndRedirect({
                   clearBiometrics: false,
                   resetApp: false,
-                  redirectTo: '/(auth)/sign-in?switch=1',
+                  redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
                 });
               },
             },
@@ -240,6 +392,7 @@ export function ProfileSwitcher({
         });
       }
     } catch (error) {
+      setAccountSwitchInProgress(false);
       console.error('Account switch error:', error);
       showAlert({
         title: t('common.error', { defaultValue: 'Error' }),
@@ -316,9 +469,9 @@ export function ProfileSwitcher({
     // won't redirect us back to the dashboard before the URL
     // search params propagate.
     setAccountSwitchPending();
-    // Navigate directly — DO NOT sign out. This keeps the current user's
-    // refresh token valid so biometric switching back works.
-    router.push('/(auth)/sign-in?switch=1&addAccount=1');
+    // Navigate with replace — removes old dashboard from back stack so
+    // users can't press back into a stale/wrong-user dashboard.
+    router.replace('/(auth)/sign-in?switch=1&addAccount=1' as any);
   }, [onClose, user?.id, user?.email, profile]);
 
   // Format last used date
@@ -346,50 +499,67 @@ export function ProfileSwitcher({
     return email.substring(0, 2).toUpperCase();
   };
 
+  const handleSwitchWithPassword = useCallback((account: StoredAccount) => {
+    onClose();
+    setAccountSwitchPending();
+    router.replace(`/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}` as any);
+  }, [onClose]);
+
   const renderAccountItem = ({ item }: { item: StoredAccount }) => {
     const isSwitching = switching === item.userId;
     
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.accountItem,
           { backgroundColor: theme.surface },
           item.isActive && { borderColor: theme.primary, borderWidth: 2 },
         ]}
-        onPress={() => handleSwitchAccount(item)}
-        onLongPress={() => handleRemoveAccount(item)}
-        disabled={isSwitching}
-        activeOpacity={0.7}
       >
-        {/* Avatar */}
-        <View style={[styles.accountAvatar, { backgroundColor: theme.primary + '30' }]}>
-          <Text style={[styles.avatarText, { color: theme.primary }]}>
-            {getInitials(item.email)}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.accountItemMain}
+          onPress={() => handleSwitchAccount(item)}
+          onLongPress={() => handleRemoveAccount(item)}
+          disabled={isSwitching}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.accountAvatar, { backgroundColor: theme.primary + '30' }]}>
+            <Text style={[styles.avatarText, { color: theme.primary }]}>
+              {getInitials(item.email)}
+            </Text>
+          </View>
+          <View style={styles.accountInfo}>
+            <Text style={[styles.accountEmail, { color: theme.text }]} numberOfLines={1}>
+              {item.email}
+            </Text>
+            <Text style={[styles.accountMeta, { color: theme.textSecondary }]}>
+              {item.isActive 
+                ? t('account.active_now', { defaultValue: 'Active now' })
+                : formatLastUsed(item.lastUsed)
+              }
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-        {/* Account Info */}
-        <View style={styles.accountInfo}>
-          <Text style={[styles.accountEmail, { color: theme.text }]} numberOfLines={1}>
-            {item.email}
-          </Text>
-          <Text style={[styles.accountMeta, { color: theme.textSecondary }]}>
-            {item.isActive 
-              ? t('account.active_now', { defaultValue: 'Active now' })
-              : formatLastUsed(item.lastUsed)
-            }
-          </Text>
-        </View>
-
-        {/* Status indicator */}
+        {/* Status or actions - separate so "Use password" is tappable */}
         {isSwitching ? (
           <EduDashSpinner size="small" color={theme.primary} />
         ) : item.isActive ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.primary} />
+        ) : !biometricAvailable ? (
+          <TouchableOpacity
+            style={[styles.usePasswordButton, { backgroundColor: theme.surfaceVariant }]}
+            onPress={() => handleSwitchWithPassword(item)}
+          >
+            <Ionicons name="lock-open-outline" size={18} color={theme.primary} />
+            <Text style={[styles.usePasswordText, { color: theme.primary }]}>
+              {t('account.use_password_to_switch', { defaultValue: 'Use password' })}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -400,10 +570,7 @@ export function ProfileSwitcher({
         {t('account.no_accounts', { defaultValue: 'No Saved Accounts' })}
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-        {biometricAvailable
-          ? t('account.enable_biometric_hint', { defaultValue: 'Enable biometric login to quickly switch between accounts' })
-          : t('account.biometric_not_available', { defaultValue: 'Set up biometrics on your device to use quick account switching' })
-        }
+        {t('account.no_accounts_hint', { defaultValue: 'Sign in with another account to enable quick switching' })}
       </Text>
     </View>
   );
@@ -425,30 +592,42 @@ export function ProfileSwitcher({
               {t('account.switch_account', { defaultValue: 'Switch Account' })}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {t('account.switch_account_desc', { defaultValue: 'Quick switch with biometric authentication' })}
+              {biometricAvailable
+                ? t('account.switch_account_desc', {
+                    defaultValue: `Tap an account to switch instantly (up to ${MAX_BIOMETRIC_ACCOUNTS} saved accounts).`,
+                  })
+                : t('account.switch_account_desc_no_biometric', {
+                    defaultValue: 'Tap to try quick switch, or use password to sign in to an account.',
+                  })}
+            </Text>
+            <Text style={[styles.debugText, { color: theme.textSecondary }]}>
+              Saved accounts: {accounts.length}/{MAX_BIOMETRIC_ACCOUNTS}
+              {user?.email ? ` • Active: ${user.email}` : ''}
             </Text>
           </View>
 
-          {/* Account list */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <EduDashSpinner size="large" color={theme.primary} />
-            </View>
-          ) : accounts.length === 0 ? (
-            renderEmptyState()
-          ) : (
-            <FlatList
-              data={accounts}
-              renderItem={renderAccountItem}
-              keyExtractor={item => item.userId}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
+          {/* Account list - wrapped in flex container so FlatList gets height */}
+          <View style={styles.listWrapper}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <EduDashSpinner size="large" color={theme.primary} />
+              </View>
+            ) : accounts.length === 0 ? (
+              renderEmptyState()
+            ) : (
+              <FlatList
+                data={accounts}
+                renderItem={renderAccountItem}
+                keyExtractor={item => item.userId}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+          </View>
 
-          {/* Add account button */}
-          {showAddAccount && (
+          {/* Add account button - hidden when at max (3) */}
+          {showAddAccount && accounts.length < MAX_BIOMETRIC_ACCOUNTS && (
             <TouchableOpacity
               style={[styles.addAccountButton, { backgroundColor: theme.surface }]}
               onPress={handleAddAccount}
@@ -496,6 +675,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '75%',
+    height: '75%',
+  },
+  listWrapper: {
+    flex: 1,
+    minHeight: 180,
   },
   handleContainer: {
     alignItems: 'center',
@@ -518,6 +702,10 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
   },
+  debugText: {
+    fontSize: 11,
+    marginTop: 6,
+  },
   loadingContainer: {
     paddingVertical: 40,
     alignItems: 'center',
@@ -534,6 +722,11 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
+  },
+  accountItemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   accountAvatar: {
     width: 44,
@@ -557,6 +750,18 @@ const styles = StyleSheet.create({
   },
   accountMeta: {
     fontSize: 12,
+  },
+  usePasswordButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  usePasswordText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',

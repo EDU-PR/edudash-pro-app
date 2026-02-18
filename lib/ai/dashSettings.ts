@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { voiceService } from '@/lib/voice/client';
 import type { SupportedLanguage, VoicePreference } from '@/lib/voice/types';
+import { getVoiceIdForLanguage } from '@/lib/voice/voiceMapping';
 
 const CACHE_KEY = '@dash_ai_cache.voice_preferences';
 const VOICE_CHAT_PREFS_KEY = '@dash_voice_prefs';
@@ -77,23 +78,10 @@ export function normalizeLanguageCode(input?: string): SupportedLanguage {
   return 'en';
 }
 
-// Choose a reasonable provider voice per language and gender
+// Choose a reasonable provider voice per language and gender.
+// Delegates to canonical voiceMapping (single source of truth).
 export function resolveDefaultVoiceId(lang: SupportedLanguage, gender: 'male' | 'female' = 'female'): string {
-  switch (lang) {
-    case 'en':
-      return gender === 'male' ? 'en-ZA-LukeNeural' : 'en-ZA-LeahNeural';
-    case 'af':
-      return gender === 'male' ? 'af-ZA-WillemNeural' : 'af-ZA-AdriNeural';
-    case 'zu':
-      return gender === 'male' ? 'zu-ZA-ThembaNeural' : 'zu-ZA-ThandoNeural';
-    case 'xh':
-      // Placeholder online voice IDs where premium not available
-      return 'xh-ZA-Online';
-    case 'nso':
-      return 'nso-ZA-Online';
-    default:
-      return 'en-ZA-LeahNeural';
-  }
+  return getVoiceIdForLanguage(lang, gender);
 }
 
 export async function getVoicePrefs(): Promise<VoicePreference | null> {

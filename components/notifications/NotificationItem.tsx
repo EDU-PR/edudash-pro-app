@@ -1,12 +1,14 @@
 /**
  * NotificationItem Component
  * 
- * Renders a single notification item with icon, title, body, and read status.
+ * Renders a single notification item with icon, title, body, read status,
+ * and quick action buttons (Reply, Mark as Read, Mute) for relevant types.
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Notification, NotificationType } from './types';
 
@@ -14,6 +16,8 @@ interface NotificationItemProps {
   notification: Notification;
   onPress: () => void;
   onMarkRead: () => void;
+  onReply?: (notification: Notification) => void;
+  onMute?: (notification: Notification) => void;
 }
 
 /**
@@ -64,16 +68,62 @@ const getIconConfig = (type: NotificationType, theme: ReturnType<typeof useTheme
   }
 };
 
+/**
+ * Determine which quick actions are relevant for this notification type
+ */
+const getQuickActions = (type: NotificationType): Array<'reply' | 'markRead' | 'mute'> => {
+  switch (type) {
+    case 'message':
+      return ['reply', 'markRead', 'mute'];
+    case 'call':
+      return ['reply', 'markRead'];
+    case 'announcement':
+      return ['markRead', 'mute'];
+    case 'homework':
+    case 'grade':
+    case 'attendance':
+      return ['markRead'];
+    default:
+      return ['markRead'];
+  }
+};
+
 export const NotificationItem: React.FC<NotificationItemProps> = ({
   notification,
   onPress,
   onMarkRead,
+  onReply,
+  onMute,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
   const iconConfig = getIconConfig(notification.type, theme);
   
   const isUnread = !notification.read;
   const containerBg = isUnread ? theme.primary + '12' : theme.surface;
+  const quickActions = getQuickActions(notification.type);
+
+  const handleLongPress = useCallback(() => {
+    if (isUnread) {
+      setExpanded(prev => !prev);
+    }
+  }, [isUnread]);
+
+  const handleReply = useCallback(() => {
+    setExpanded(false);
+    onReply?.(notification);
+  }, [onReply, notification]);
+
+  const handleMarkRead = useCallback(() => {
+    setExpanded(false);
+    onMarkRead();
+  }, [onMarkRead]);
+
+  const handleMute = useCallback(() => {
+    setExpanded(false);
+    onMute?.(notification);
+  }, [onMute, notification]);
   
   return (
     <TouchableOpacity 
@@ -87,6 +137,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         }
       ]}
       onPress={onPress}
+      onLongPress={handleLongPress}
       activeOpacity={0.7}
     >
       {/* Unread indicator */}
@@ -145,6 +196,50 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         >
           {notification.body}
         </Text>
+
+        {/* Quick action buttons — visible on long-press for unread notifications */}
+        {expanded && isUnread && (
+          <View style={styles.actionsRow}>
+            {quickActions.includes('reply') && onReply && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.primary + '18' }]}
+                onPress={handleReply}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-undo-outline" size={14} color={theme.primary} />
+                <Text style={[styles.actionLabel, { color: theme.primary }]}>
+                  {t('notifications.actions.reply', 'Reply')}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {quickActions.includes('markRead') && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.success + '18' }]}
+                onPress={handleMarkRead}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="checkmark-done-outline" size={14} color={theme.success || '#22C55E'} />
+                <Text style={[styles.actionLabel, { color: theme.success || '#22C55E' }]}>
+                  {t('notifications.actions.mark_read', 'Mark Read')}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {quickActions.includes('mute') && onMute && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.warning + '18' }]}
+                onPress={handleMute}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="notifications-off-outline" size={14} color={theme.warning || '#F59E0B'} />
+                <Text style={[styles.actionLabel, { color: theme.warning || '#F59E0B' }]}>
+                  {t('notifications.actions.mute', 'Mute')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
       
       {/* Unread dot */}
@@ -211,6 +306,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 4,
     elevation: 3,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  actionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

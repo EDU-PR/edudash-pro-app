@@ -25,8 +25,8 @@ export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverE
   const isExpanded = !collapsed || hovered;
 
   return (
-    <aside 
-      className="sidenav sticky" 
+    <aside
+      className="sidenav sticky teacher-sidenav"
       aria-label="Sidebar"
       onMouseEnter={onHoverStart}
       onMouseLeave={onHoverEnd}
@@ -34,10 +34,15 @@ export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverE
         width: isExpanded ? '240px' : '64px',
         transition: 'width 0.3s ease',
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',
+        maxHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',
       }}
     >
-      <div className="sidenavCol">
-        <nav className="nav">
+      <div className="sidenavCol" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+        <div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+          <nav className="nav">
           {nav.map((it) => {
             const Icon = it.icon as any;
             const active = pathname === it.href || pathname?.startsWith(it.href + '/');
@@ -72,8 +77,9 @@ export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverE
               </Link>
             );
           })}
-        </nav>
-        <div className="sidenavFooter">
+          </nav>
+        </div>
+        <div className="sidenavFooter" style={{ flexShrink: 0 }}>
           <button
             className="navItem"
             onClick={async () => {

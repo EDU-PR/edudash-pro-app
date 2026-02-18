@@ -8,7 +8,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSchoolAnalytics } from '@/hooks/useSchoolAnalytics';
-import { Brain, Cpu, Laptop } from 'lucide-react';
+import { Ionicons } from '@expo/vector-icons';
 
 interface STEMAnalyticsProps {
   preschoolId: string;
@@ -34,21 +34,21 @@ export function STEMAnalytics({ preschoolId }: STEMAnalyticsProps) {
     {
       id: 'ai',
       name: 'AI Program',
-      icon: Brain,
+      icon: 'sparkles' as const,
       color: '#8b5cf6',
       data: analytics.stemEngagement.ai,
     },
     {
       id: 'robotics',
       name: 'Robotics Program',
-      icon: Cpu,
+      icon: 'hardware-chip-outline' as const,
       color: '#f59e0b',
       data: analytics.stemEngagement.robotics,
     },
     {
-    id: 'computer_literacy',
+      id: 'computer_literacy',
       name: 'Computer Literacy',
-      icon: Laptop,
+      icon: 'laptop-outline' as const,
       color: '#06b6d4',
       data: analytics.stemEngagement.computer_literacy,
     },
@@ -59,11 +59,10 @@ export function STEMAnalytics({ preschoolId }: STEMAnalyticsProps) {
       <Text style={[styles.title, { color: theme.text }]}>STEM Engagement</Text>
       <View style={styles.grid}>
         {programs.map((program) => {
-          const Icon = program.icon;
           return (
             <View key={program.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={[styles.iconContainer, { backgroundColor: `${program.color}20` }]}>
-                <Icon size={24} color={program.color} />
+                <Ionicons name={program.icon} size={24} color={program.color} />
               </View>
               <Text style={[styles.cardTitle, { color: theme.text }]}>{program.name}</Text>
               <View style={styles.metrics}>

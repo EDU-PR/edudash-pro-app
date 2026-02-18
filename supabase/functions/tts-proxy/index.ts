@@ -55,6 +55,11 @@ const LANG_TO_BCP47: Record<string, string> = {
   zu: 'zu-ZA',
   xh: 'xh-ZA',
   nso: 'nso-ZA',
+  st: 'st-ZA',
+  fr: 'fr-FR',
+  pt: 'pt-BR',
+  es: 'es-ES',
+  de: 'de-DE',
 };
 
 const DEFAULT_VOICES: Record<string, string> = {
@@ -63,20 +68,46 @@ const DEFAULT_VOICES: Record<string, string> = {
   'zu-ZA': 'zu-ZA-ThandoNeural',
   'xh-ZA': 'xh-ZA-NomalungaNeural',
   'nso-ZA': 'nso-ZA-DidiNeural',
+  'st-ZA': 'en-ZA-LukeNeural', // Sesotho not available in Azure — fallback to en-ZA
+  'fr-FR': 'fr-FR-HenriNeural',
+  'pt-BR': 'pt-BR-AntonioNeural',
+  'es-ES': 'es-ES-AlvaroNeural',
+  'de-DE': 'de-DE-ConradNeural',
 };
 
 /** Dash's primary voice */
 const DASH_VOICE = 'en-ZA-LukeNeural';
-const DASH_FALLBACK_VOICE = 'en-ZA-LeahNeural';
-const GLOBAL_EN_FALLBACK_VOICE = 'en-US-JennyNeural';
+const DASH_FALLBACK_VOICE = 'en-GB-RyanNeural';
+const GLOBAL_EN_FALLBACK_VOICE = 'en-US-GuyNeural';
+
+const EN_MALE_FALLBACK_VOICES = ['en-GB-RyanNeural', 'en-US-GuyNeural'];
+const EN_FEMALE_FALLBACK_VOICES = ['en-ZA-LeahNeural', 'en-US-JennyNeural'];
 
 const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
-  'en-ZA': [DASH_FALLBACK_VOICE, GLOBAL_EN_FALLBACK_VOICE],
+  'en-ZA': EN_MALE_FALLBACK_VOICES,
   'af-ZA': ['af-ZA-AdriNeural', DASH_FALLBACK_VOICE],
   'zu-ZA': ['zu-ZA-ThandoNeural', DASH_FALLBACK_VOICE],
   'xh-ZA': ['xh-ZA-NomalungaNeural', DASH_FALLBACK_VOICE],
   'nso-ZA': ['nso-ZA-DidiNeural', DASH_FALLBACK_VOICE],
+  'st-ZA': [DASH_VOICE, DASH_FALLBACK_VOICE], // Sesotho — no native Azure voice
+  'fr-FR': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
+  'pt-BR': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
+  'es-ES': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
+  'de-DE': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
 };
+
+/**
+ * Phonics pacing policy:
+ * - Do NOT slow entire sentences in phonics mode (keep natural pace).
+ * - Only slow/hold the phoneme segments (slash markers) for clarity.
+ */
+// ── Phonics pacing — values MUST match lib/dash-ai/ttsConstants.ts (SSOT) ──
+const DEFAULT_PHONICS_SPEAKING_RATE = 0;     // AZURE_RATE_PHONICS
+const PHONICS_PHONEME_RATE = -18;            // AZURE_RATE_PHONEME
+const PHONICS_MARKER_BREAK_MS = 220;
+const PHONICS_BLEND_SEGMENT_BREAK_MS = 250;
+const PHONICS_BLEND_FINAL_BREAK_MS = 320;
+const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;
 
 /** Audio format for pronunciation assessment & streaming */
 const STREAMING_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
@@ -124,32 +155,32 @@ const MOUTH_TIPS: Record<string, Record<string, string>> = {
 
 // ---- Shared IPA letter map (canonical source: lib/dash-ai/phonics.ts) ----
 const LETTER_IPA: Record<string, { ipa: string; sound: string }> = {
-  a: { ipa: 'æ', sound: 'ahhh' },
-  b: { ipa: 'b', sound: 'buhh' },
-  c: { ipa: 'k', sound: 'kuhh' },
-  d: { ipa: 'd', sound: 'duhh' },
-  e: { ipa: 'ɛ', sound: 'ehhh' },
-  f: { ipa: 'f', sound: 'fffff' },
-  g: { ipa: 'g', sound: 'guhh' },
-  h: { ipa: 'h', sound: 'hhhhh' },
-  i: { ipa: 'ɪ', sound: 'ihhh' },
-  j: { ipa: 'dʒ', sound: 'juhh' },
-  k: { ipa: 'k', sound: 'kuhh' },
-  l: { ipa: 'l', sound: 'lllll' },
-  m: { ipa: 'm', sound: 'mmmmm' },
-  n: { ipa: 'n', sound: 'nnnnn' },
-  o: { ipa: 'ɒ', sound: 'awww' },
-  p: { ipa: 'p', sound: 'puhh' },
-  q: { ipa: 'k', sound: 'kuhh' },
-  r: { ipa: 'ɹ', sound: 'rrrrr' },
-  s: { ipa: 's', sound: 'sssss' },
-  t: { ipa: 't', sound: 'tuhh' },
-  u: { ipa: 'ʌ', sound: 'uhhh' },
-  v: { ipa: 'v', sound: 'vvvvv' },
-  w: { ipa: 'w', sound: 'wuhh' },
-  x: { ipa: 'ks', sound: 'ksss' },
-  y: { ipa: 'j', sound: 'yuhh' },
-  z: { ipa: 'z', sound: 'zzzzz' },
+  a: { ipa: 'æ', sound: 'ah' },
+  b: { ipa: 'b', sound: 'buh' },
+  c: { ipa: 'k', sound: 'kuh' },
+  d: { ipa: 'd', sound: 'duh' },
+  e: { ipa: 'ɛ', sound: 'eh' },
+  f: { ipa: 'f', sound: 'fff' },
+  g: { ipa: 'g', sound: 'guh' },
+  h: { ipa: 'h', sound: 'hhh' },
+  i: { ipa: 'ɪ', sound: 'ih' },
+  j: { ipa: 'dʒ', sound: 'juh' },
+  k: { ipa: 'k', sound: 'kuh' },
+  l: { ipa: 'l', sound: 'lll' },
+  m: { ipa: 'm', sound: 'mmm' },
+  n: { ipa: 'n', sound: 'nnn' },
+  o: { ipa: 'ɒ', sound: 'aw' },
+  p: { ipa: 'p', sound: 'puh' },
+  q: { ipa: 'k', sound: 'kuh' },
+  r: { ipa: 'ɹ', sound: 'rrr' },
+  s: { ipa: 's', sound: 'sss' },
+  t: { ipa: 't', sound: 'tuh' },
+  u: { ipa: 'ʌ', sound: 'uh' },
+  v: { ipa: 'v', sound: 'vvv' },
+  w: { ipa: 'w', sound: 'wuh' },
+  x: { ipa: 'ks', sound: 'ks' },
+  y: { ipa: 'j', sound: 'yuh' },
+  z: { ipa: 'z', sound: 'zzz' },
 };
 
 // ---- Pronunciation Dictionary (mirrors lib/dash-ai/pronunciationDictionary.ts) ----
@@ -216,7 +247,55 @@ function phonemeTag(letter: string): string {
   const key = String(letter || '').toLowerCase();
   const entry = LETTER_IPA[key];
   if (!entry) return escapeXml(letter);
-  return `<phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme>`;
+  // Slightly stretch each phoneme so it is clear for early readers.
+  return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme></prosody>`;
+}
+
+const SUSTAIN_CONSONANTS = new Set([
+  'm', 'n', 's', 'f', 'v', 'z', 'l', 'r', 'th', 'sh', 'ch',
+]);
+
+const DIGRAPH_IPA: Record<string, string> = {
+  th: 'θ',
+  sh: 'ʃ',
+  ch: 'tʃ',
+};
+
+const SUSTAINED_PHONEME_TEXT: Record<string, string> = {
+  s: 'ssssss',
+  m: 'mmmmmm',
+  f: 'ffffff',
+  z: 'zzzzzz',
+  n: 'nnnnnn',
+  l: 'llllll',
+  r: 'rrrrrr',
+  v: 'vvvvvv',
+  h: 'hhhhhh',
+  sh: 'shhhhh',
+  th: 'thhhhh',
+  ng: 'nggggg',
+};
+
+function phonemeTagSustained(tokenRaw: string): string {
+  const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!token) return '';
+
+  let ipa = '';
+  let sound = token;
+
+  if (token.length === 1) {
+    const entry = LETTER_IPA[token];
+    if (!entry) return escapeXml(tokenRaw);
+    ipa = `${entry.ipa}ː`;
+    sound = SUSTAINED_PHONEME_TEXT[token] || entry.sound || token;
+  } else {
+    const digraphIpa = DIGRAPH_IPA[token];
+    if (!digraphIpa) return phonemeTag(token);
+    ipa = `${digraphIpa}ː`;
+    sound = SUSTAINED_PHONEME_TEXT[token] || token;
+  }
+
+  return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(ipa)}">${escapeXml(sound)}</phoneme></prosody>`;
 }
 
 function buildBlendSSML(blend: string): string {
@@ -231,10 +310,10 @@ function buildBlendSSML(blend: string): string {
   }
 
   const segmented = letters
-    .map((letter) => `${phonemeTag(letter)}<break time="520ms"/>`)
+    .map((letter) => `${phonemeTag(letter)}<break time="${PHONICS_BLEND_SEGMENT_BREAK_MS}ms"/>`)
     .join(' ');
 
-  return `${segmented}<break time="650ms"/>${escapeXml(letters.join(''))}`;
+  return `${segmented}<break time="${PHONICS_BLEND_FINAL_BREAK_MS}ms"/>${escapeXml(letters.join(''))}`;
 }
 
 /** Bare sustained-sound text → letter key for phonemeTag fallback */
@@ -261,45 +340,99 @@ const SUSTAINED_SOUND_PATTERN = new RegExp(
   `\\b(${Object.keys(SUSTAINED_SOUND_TO_LETTER).join('|')})\\b`,
   'gi'
 );
+const REPEATED_LETTER_PATTERN = /\b([a-z])\1{2,11}\b/gi;
+const SPACED_REPEATED_LETTER_PATTERN = /\b([a-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi;
+const SPACED_REPEATED_DIGRAPH_PATTERN = /\b(sh|ch|th|ph|ng)(?:[\s,;:/\\|._-]+\1){1,6}\b/gi;
+
+function normalizeChoiceLabelsForSpeech(input: string): string {
+  let next = String(input || '');
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\(([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\[([A-H])\]\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  return next.replace(/\bOption ([A-H])\.(?=\S)/g, (_m, label: string) => `Option ${label}. `);
+}
 
 function convertPhonicsMarkersToSSML(rawText: string): string {
-  let text = escapeXml(rawText || '');
+  let text = escapeXml(normalizeChoiceLabelsForSpeech(rawText || ''));
 
   const markerTokenToSSML = (tokenRaw: string): string => {
     const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
     if (!token) return '';
-    if (token.length === 1) return phonemeTag(token);
+    if (token.length === 1) {
+      return SUSTAIN_CONSONANTS.has(token)
+        ? phonemeTagSustained(token)
+        : phonemeTag(token);
+    }
 
     const sustainedLetter = SUSTAINED_SOUND_TO_LETTER[token];
-    if (sustainedLetter) return phonemeTag(sustainedLetter);
+    if (sustainedLetter) return phonemeTagSustained(sustainedLetter);
 
     const digraphLetter = DIGRAPH_FALLBACK_TO_LETTER[token];
-    if (digraphLetter) return phonemeTag(digraphLetter);
+    if (digraphLetter) {
+      return SUSTAIN_CONSONANTS.has(token)
+        ? phonemeTagSustained(token)
+        : phonemeTag(digraphLetter);
+    }
 
     // Unknown marker token: spell each letter as a safe fallback.
     if (token.length <= 8) {
-      return token.split('').map((letter) => phonemeTag(letter)).join('<break time="220ms"/>');
+      return token
+        .split('')
+        .map((letter) => phonemeTag(letter))
+        .join(`<break time="${PHONICS_FALLBACK_LETTER_BREAK_MS}ms"/>`);
     }
 
     return escapeXml(token);
   };
 
-  // /b/ markers → <phoneme> tags + pause for children to absorb each sound
-  text = text.replace(/\/\s*([a-z]{1,8})\s*\//gi, (_, token: string) => markerTokenToSSML(token) + '<break time="400ms"/>');
+  // /b/ markers -> <phoneme> tags + short pause
+  text = text.replace(
+    /\/\s*([a-z]{1,8})\s*\//gi,
+    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+  );
   // [b] markers → <phoneme> tags + pause
-  text = text.replace(/\[\s*([a-z]{1,8})\s*\]/gi, (_, token: string) => markerTokenToSSML(token) + '<break time="400ms"/>');
+  text = text.replace(
+    /\[\s*([a-z]{1,8})\s*\]/gi,
+    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+  );
   // c-a-t markers → blending SSML
   text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
+
+  // Convert repeated digraph cues like "sh sh sh" into sustained phoneme tags.
+  text = text.replace(SPACED_REPEATED_DIGRAPH_PATTERN, (_match, token: string) => {
+    return `${phonemeTagSustained(token)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+  });
+
+  // Convert repeated single-letter cues like "s s s s" into sustained phoneme tags.
+  text = text.replace(SPACED_REPEATED_LETTER_PATTERN, (_match, letter: string) => {
+    return `${phonemeTagSustained(letter)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+  });
 
   // Fallback: catch bare sustained-sound text that slipped past the prompt
   // e.g. "sss" → <phoneme ipa="s">sss</phoneme>, "buh" → <phoneme ipa="b">buh</phoneme>
   text = text.replace(SUSTAINED_SOUND_PATTERN, (match) => {
     const letter = SUSTAINED_SOUND_TO_LETTER[match.toLowerCase()];
-    return letter ? phonemeTag(letter) : match;
+    return letter ? phonemeTagSustained(letter) : match;
   });
 
-  // Ensure no raw slash marker characters leak to Azure speech output.
-  text = text.replace(/\//g, ' ');
+  // Also catch continuous repeated letters that are not in the fixed map (e.g. "ssss", "mmmm").
+  text = text.replace(REPEATED_LETTER_PATTERN, (_match, letter: string) => {
+    return phonemeTagSustained(letter);
+  });
+
+  // Remove only orphaned phonics-style slashes (e.g. a stray /s that was not
+  // closed). Legitimate slashes in non-phonics text (fractions, URLs) are kept.
+  text = text.replace(/\/(?=[a-z]{1,3}(?:\s|$))/gi, ' ')
+             .replace(/(?<=\s|^)([a-z]{1,3})\/(?=\s|[.,!?;:]|$)/gi, '$1 ');
 
   return text;
 }
@@ -413,6 +546,8 @@ interface AzureTTSAttemptResult {
   status: number;
   audio?: Uint8Array;
   details?: string;
+  /** The candidate name that succeeded after fallback (only set when recovery happened) */
+  recoveredWith?: string;
 }
 
 interface AzureTTSCandidate {
@@ -457,13 +592,74 @@ function compactAzureDetails(details: string): string {
     .slice(0, 260);
 }
 
+function classifyAzureFailure(params: { upstreamStatus?: number; details?: string }) {
+  const upstreamStatus = Number(params.upstreamStatus || 0) || undefined;
+  const details = String(params.details || '').toLowerCase();
+
+  if (upstreamStatus === 401 || upstreamStatus === 403) {
+    return { status: upstreamStatus, errorCode: 'AZURE_AUTH_ERROR' };
+  }
+
+  const throttled =
+    upstreamStatus === 429 ||
+    details.includes('throttle') ||
+    details.includes('too many requests') ||
+    details.includes('toomanyrequests');
+  if (throttled) {
+    return { status: 429, errorCode: 'AZURE_TTS_THROTTLED' };
+  }
+
+  const transient =
+    upstreamStatus === 408 ||
+    upstreamStatus === 425 ||
+    upstreamStatus === 502 ||
+    upstreamStatus === 503 ||
+    upstreamStatus === 504 ||
+    (typeof upstreamStatus === 'number' && upstreamStatus >= 500);
+
+  if (transient) {
+    return { status: 503, errorCode: 'AZURE_TTS_UPSTREAM_UNAVAILABLE' };
+  }
+
+  return { status: 503, errorCode: 'AZURE_TTS_UPSTREAM_ERROR' };
+}
+
+function azureFailureResponse(params: {
+  message: string;
+  upstreamStatus?: number;
+  details?: string;
+}) {
+  const details = compactAzureDetails(params.details || '');
+  const { status, errorCode } = classifyAzureFailure({
+    upstreamStatus: params.upstreamStatus,
+    details,
+  });
+
+  return jsonResponse(status, {
+    error: params.message,
+    error_code: errorCode,
+    upstream_status: params.upstreamStatus || null,
+    details,
+    provider: 'azure',
+  });
+}
+
 function buildVoiceFallbackList(primaryVoice: string, bcp47: string): string[] {
+  const primaryLower = String(primaryVoice || '').toLowerCase();
+  const isPrimaryLikelyFemale =
+    /(leah|jenny|adri|thando|nomalunga|didi|female)/.test(primaryLower);
+  const languageFallbacks =
+    bcp47 === 'en-ZA'
+      ? (isPrimaryLikelyFemale ? EN_FEMALE_FALLBACK_VOICES : EN_MALE_FALLBACK_VOICES)
+      : (FALLBACK_VOICES_BY_LANG[bcp47] || []);
+
   const voices = [
     primaryVoice,
     DEFAULT_VOICES[bcp47],
-    ...(FALLBACK_VOICES_BY_LANG[bcp47] || []),
+    ...languageFallbacks,
     DASH_VOICE,
     DASH_FALLBACK_VOICE,
+    GLOBAL_EN_FALLBACK_VOICE,
   ];
 
   const seen = new Set<string>();
@@ -514,7 +710,7 @@ async function azureSynthesizeWithCandidates(params: {
           failedAttempts: failures.length,
         });
       }
-      return result;
+      return { ...result, recoveredWith: failures.length > 0 ? candidate.name : undefined };
     }
 
     lastStatus = result.status || lastStatus;
@@ -568,6 +764,16 @@ async function azureSynthesizeWithStyleFallback(params: {
   if (noStyleCandidate) {
     pushCandidate(`primary_nostyle:${params.primaryVoice}`, noStyleCandidate);
   }
+  if (plainInnerNoStyle) {
+    pushCandidate(
+      `primary_plain:${params.primaryVoice}`,
+      buildSsmlDoc({
+        bcp47: params.bcp47,
+        voiceName: params.primaryVoice,
+        inner: plainInnerNoStyle,
+      })
+    );
+  }
 
   // Broaden retries: voice fallback + plain SSML when rich SSML is rejected.
   for (const voice of fallbackVoices) {
@@ -589,16 +795,6 @@ async function azureSynthesizeWithStyleFallback(params: {
         })
       );
     }
-  }
-  if (plainInnerNoStyle) {
-    pushCandidate(
-      `primary_plain:${params.primaryVoice}`,
-      buildSsmlDoc({
-        bcp47: params.bcp47,
-        voiceName: params.primaryVoice,
-        inner: plainInnerNoStyle,
-      })
-    );
   }
 
   return azureSynthesizeWithCandidates({
@@ -802,6 +998,8 @@ Deno.serve(async (req) => {
     if (!speechKey || !speechRegion) {
       return jsonResponse(503, {
         error: 'Azure Speech not configured',
+        error_code: 'AZURE_NOT_CONFIGURED',
+        provider: 'azure',
         fallback: 'device',
       });
     }
@@ -819,6 +1017,29 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user) {
       return jsonResponse(401, { error: 'Invalid token' });
+    }
+
+    // Quota check — prevent free-tier abuse of TTS/STT credits
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: userData.user.id,
+        p_request_type: 'tts',
+      });
+
+      if (!quota.error) {
+        const quotaData = quota.data as Record<string, unknown> | null;
+        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+          return jsonResponse(429, {
+            error: 'quota_exceeded',
+            message: 'Text-to-speech usage quota exceeded for this billing period',
+            details: quotaData,
+          });
+        }
+      }
     }
 
     const body = await req.json().catch(() => null) as Record<string, unknown> | null;
@@ -892,8 +1113,9 @@ Deno.serve(async (req) => {
       });
 
       if (!coachTTS.ok || !coachTTS.audio) {
-        return jsonResponse(502, {
-          error: 'Azure TTS coaching synthesis failed',
+        return azureFailureResponse({
+          message: 'Azure TTS coaching synthesis failed',
+          upstreamStatus: coachTTS.status,
           details: coachTTS.details || '',
         });
       }
@@ -1050,16 +1272,22 @@ Deno.serve(async (req) => {
       const languageRaw = String(body.language || body.lang || 'en');
       const { bcp47: streamBcp47 } = normalizeLanguage(languageRaw);
       const streamVoice = String(body.voice_id || '').trim() || DASH_VOICE;
-      const streamRate = clampNumber(Number(body.rate ?? body.speaking_rate ?? 0), -50, 50);
+      const isPhonics = body.phonics_mode === true;
+      const streamRate = clampNumber(
+        Number(body.rate ?? body.speaking_rate ?? (isPhonics ? DEFAULT_PHONICS_SPEAKING_RATE : 0)),
+        -50,
+        50
+      );
       const streamPitch = clampNumber(Number(body.pitch ?? 0), -50, 50);
       const streamStyle = typeof body.style === 'string' ? body.style.trim() : 'friendly';
 
-      const isPhonics = body.phonics_mode === true;
-      const streamSSMLText = isPhonics ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
+      const streamSSMLText = isPhonics
+        ? convertPhonicsMarkersToSSML(text)
+        : escapeXml(normalizeChoiceLabelsForSpeech(text));
       const streamPronunciation = applyPronunciationToSSML(streamSSMLText);
       const streamLang = applyInlineLangSwitching(streamPronunciation);
       const streamProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${streamLang}</prosody>`;
-      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(text)}</prosody>`;
+      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
       const streamInner = streamStyle
         ? `<mstts:express-as style="${escapeXml(streamStyle)}">${streamProsody}</mstts:express-as>`
         : streamProsody;
@@ -1088,7 +1316,27 @@ Deno.serve(async (req) => {
       });
 
       if (!streamTTS.ok || !streamTTS.audio) {
-        return jsonResponse(502, { error: 'Azure TTS stream failed', details: streamTTS.details || '' });
+        return azureFailureResponse({
+          message: 'Azure TTS stream failed',
+          upstreamStatus: streamTTS.status,
+          details: streamTTS.details || '',
+        });
+      }
+
+      // Record usage (non-fatal)
+      try {
+        await supabase.rpc('record_ai_usage', {
+          p_user_id: userData.user.id,
+          p_feature_used: 'tts',
+          p_model_used: `azure-${streamVoice}`,
+          p_tokens_used: 0,
+          p_request_tokens: 0,
+          p_response_tokens: 0,
+          p_success: true,
+          p_metadata: { scope: 'tts_stream', voice_id: streamVoice },
+        });
+      } catch (usageErr) {
+        console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
       }
 
       // Return audio response directly.
@@ -1125,7 +1373,7 @@ Deno.serve(async (req) => {
     const phonicsMode = body.phonics_mode === true;
 
     const hasExplicitRate = typeof body.speaking_rate === 'number' || typeof body.rate === 'number';
-    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? -15 : 0));
+    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? DEFAULT_PHONICS_SPEAKING_RATE : 0));
     const pitchRaw = Number(body.pitch ?? 0);
     const speakingRate = clampNumber(speakingRateRaw, -50, 50);
     const pitch = clampNumber(pitchRaw, -50, 50);
@@ -1138,12 +1386,14 @@ Deno.serve(async (req) => {
     const styleOverride = typeof body.style === 'string' ? body.style.trim() : '';
     const style = styleOverride || (phonicsMode ? 'friendly' : '');
 
-    const ssmlText = phonicsMode ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
+    const ssmlText = phonicsMode
+      ? convertPhonicsMarkersToSSML(text)
+      : escapeXml(normalizeChoiceLabelsForSpeech(text));
     // Apply pronunciation dictionary (brand names, SA languages, <lang> switching)
     const ssmlWithPronunciation = applyPronunciationToSSML(ssmlText);
     const ssmlWithLang = applyInlineLangSwitching(ssmlWithPronunciation);
     const prosody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${ssmlWithLang}</prosody>`;
-    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(text)}</prosody>`;
+    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
     const inner = style
       ? `<mstts:express-as style="${escapeXml(style)}">${prosody}</mstts:express-as>`
       : prosody;
@@ -1170,12 +1420,23 @@ Deno.serve(async (req) => {
     });
 
     if (!azureResp.ok) {
-      return jsonResponse(502, {
-        error: 'Azure TTS request failed',
-        provider: 'azure',
+      return azureFailureResponse({
+        message: 'Azure TTS request failed',
+        upstreamStatus: azureResp.status,
         details: azureResp.details || '',
       });
     }
+
+    // Detect if voice/language fallback occurred
+    const recoveredVoice = azureResp.recoveredWith || undefined;
+    // Extract voice name from candidate label like "voice_plain:en-GB-RyanNeural"
+    const actualVoiceName = recoveredVoice
+      ? (recoveredVoice.split(':').pop() || voiceId)
+      : voiceId;
+    // Detect language fallback: primary voice locale prefix differs from actual voice locale prefix
+    const requestedLangPrefix = voiceId.split('-').slice(0, 2).join('-');
+    const actualLangPrefix = actualVoiceName.split('-').slice(0, 2).join('-');
+    const languageFallback = recoveredVoice ? (requestedLangPrefix !== actualLangPrefix) : false;
 
     const contentHash = await sha256(
       `${text}|${language}|${voiceId}|${hasExplicitRate ? speakingRate : speakingRateRaw}|${pitch}|${outputFormat}|${phonicsMode ? 'phonics' : 'normal'}`
@@ -1206,8 +1467,10 @@ Deno.serve(async (req) => {
     const audioBuffer = azureResp.audio || new Uint8Array();
     
     if (!audioBuffer || audioBuffer.length === 0) {
-      return jsonResponse(502, {
+      return jsonResponse(503, {
         error: 'Azure returned empty audio buffer',
+        error_code: 'AZURE_EMPTY_AUDIO',
+        upstream_status: azureResp.status || null,
         provider: 'azure',
       });
     }
@@ -1232,6 +1495,22 @@ Deno.serve(async (req) => {
 
     const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
 
+    // Record usage (non-fatal)
+    try {
+      await supabase.rpc('record_ai_usage', {
+        p_user_id: userData.user.id,
+        p_feature_used: 'tts',
+        p_model_used: `azure-${voiceId}`,
+        p_tokens_used: 0,
+        p_request_tokens: 0,
+        p_response_tokens: 0,
+        p_success: true,
+        p_metadata: { scope: 'tts_synthesize', voice_id: voiceId, language, text_length: text.length, cache_hit: false },
+      });
+    } catch (usageErr) {
+      console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
+    }
+
     return jsonResponse(200, {
       provider: 'azure',
       audio_url: publicUrl,
@@ -1240,10 +1519,14 @@ Deno.serve(async (req) => {
       language,
       voice_id: voiceId,
       size_bytes: audioBuffer.length,
+      language_fallback: languageFallback,
+      actual_voice: actualVoiceName,
     });
   } catch (error) {
     return jsonResponse(500, {
       error: 'Unexpected error',
+      error_code: 'TTS_PROXY_INTERNAL_ERROR',
+      provider: 'tts-proxy',
       details: error instanceof Error ? error.message : String(error),
     });
   }

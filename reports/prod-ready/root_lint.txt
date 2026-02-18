@@ -1,0 +1,18 @@
+
+> edudash-pro@1.0.26 lint
+> npm run check:expo-filesystem && eslint . --ext .ts,.tsx --max-warnings 200
+
+
+> edudash-pro@1.0.26 check:expo-filesystem
+> node scripts/check-expo-filesystem-usage.js
+
+[check-expo-filesystem-usage] OK
+
+/home/king/Desktop/dashpro/app/screens/teacher-post-activity.styles.ts
+  7:30  warning  'theme' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/king/Desktop/dashpro/hooks/useDashAssistant.ts
+  2274:1  warning  File has too many lines (2052). Maximum allowed is 2000  max-lines
+
+✖ 2 problems (0 errors, 2 warnings)
+

@@ -4,9 +4,9 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const COMPOSER_OVERLAY_HEIGHT = 84;
-export const COMPOSER_FLOAT_MARGIN = 10;
-export const COMPOSER_FLOAT_GAP = 8;
+export const COMPOSER_OVERLAY_HEIGHT = 56;
+export const COMPOSER_FLOAT_MARGIN = 6;
+export const COMPOSER_FLOAT_GAP = 2;
 
 export const WALLPAPER_ACCENTS: Record<string, string> = {
   'purple-glow': '#a78bfa',
@@ -58,10 +58,9 @@ export const messageThreadStyles = StyleSheet.create({
   btnText: { fontSize: 15, fontWeight: '600' },
   composerArea: {
     position: 'absolute', left: COMPOSER_FLOAT_MARGIN, right: COMPOSER_FLOAT_MARGIN,
-    bottom: COMPOSER_FLOAT_GAP, zIndex: 100, elevation: 0, borderRadius: 28, overflow: 'hidden',
-    shadowColor: '#00000000', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0,
+    bottom: COMPOSER_FLOAT_GAP, zIndex: 100, elevation: 0,
   },
-  composerGlass: { ...StyleSheet.absoluteFillObject, borderRadius: 28, borderWidth: StyleSheet.hairlineWidth },
+  composerGlass: { display: 'none' },
   scrollToBottomFab: {
     position: 'absolute', right: 16, width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(30, 41, 59, 0.92)', alignItems: 'center', justifyContent: 'center',

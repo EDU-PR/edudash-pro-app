@@ -14,6 +14,7 @@ import {
   storeSession,
   storeProfile,
   getStoredSession,
+  getStoredProfile,
   clearStoredData,
   clearAppSessionKeys,
   resetPasswordRecoveryFlag,
@@ -97,7 +98,21 @@ export async function signInWithSession(
       );
       const existingEmail = existing?.session?.user?.email?.toLowerCase();
       if (existing?.session && existingEmail && existingEmail !== wantedEmailLower) {
-        if (__DEV__) console.log('[SessionManager] Existing session detected for different user, signing out first...');
+        if (__DEV__) console.log('[SessionManager] Existing session detected for different user, saving account and signing out first...');
+        const { setAccountSwitchPending } = await import('@/lib/authActions');
+        setAccountSwitchPending();
+        // Persist current user to saved accounts so they can switch back without re-entering password
+        try {
+          const curSession = await getStoredSession();
+          const curProfile = await getStoredProfile();
+          const curUserId = existing.session.user.id;
+          const curEmail = existing.session.user.email ?? '';
+          const refreshToken = existing.session.refresh_token ?? curSession?.refresh_token;
+          const { EnhancedBiometricAuth } = await import('@/services/EnhancedBiometricAuth');
+          await EnhancedBiometricAuth.storeBiometricSession(curUserId, curEmail, curProfile ?? undefined, refreshToken ?? undefined);
+        } catch (storeErr) {
+          if (__DEV__) console.warn('[SessionManager] Could not store current account for switching (non-fatal):', storeErr);
+        }
         await withTimeout(
           assertSupabase().auth.signOut({ scope: 'local' } as any),
           1500,

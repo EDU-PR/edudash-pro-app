@@ -6,13 +6,18 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { Sparkles, BookOpen, Clock, Users, Target, Lightbulb, Save, Wand2 } from 'lucide-react';
+import { Sparkles, BookOpen, Clock, Target, Lightbulb, Save, Wand2 } from 'lucide-react';
+import { LessonPlanRenderer } from '@/components/dashboard/teacher/LessonPlanRenderer';
 import {
   buildQuickLessonThemeHint,
   loadQuickLessonThemeContext,
   summarizeQuickLessonContext,
   type QuickLessonThemeContext,
 } from '@/lib/lesson-planning/quickLessonThemeContext';
+import {
+  buildPreschoolSpecialistBlock,
+  buildPreschoolOutputFormat,
+} from '@/lib/lesson-planning/preschoolLessonPrompt';
 
 function CreateLessonPageInner() {
   const router = useRouter();
@@ -105,16 +110,41 @@ function CreateLessonPageInner() {
 
     setGenerating(true);
     try {
-      // Call AI Edge Function to generate lesson plan
-      const audienceLabel = isPreschool ? 'preschool/early childhood' : 'school';
-      const quickHint = isQuickMode
-        ? 'This is a QUICK, low-prep lesson. Use minimal materials, high engagement, and clear step-by-step guidance.'
-        : '';
-      const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
-      const { data, error } = await supabase.functions.invoke('ai-proxy', {
-        body: {
-          prompt: `Generate a ${isQuickMode ? 'quick, engaging' : 'comprehensive'} lesson plan for ${audienceLabel}:
-          
+      const durationNum = parseInt(duration, 10) || 30;
+      let prompt: string;
+
+      if (isPreschool) {
+        // Preschool specialist: ECD-aligned, play-based, SA context
+        const ageRange =
+          gradeLevel === 'Toddlers'
+            ? '1-2'
+            : gradeLevel === 'Preschool'
+              ? '3-4'
+              : gradeLevel === 'Pre-K'
+                ? '4-5'
+                : '5-6';
+        const specialistBlock = buildPreschoolSpecialistBlock({
+          ageGroup: gradeLevel,
+          ageRange,
+          durationMinutes: durationNum,
+          language: 'en',
+          quickMode: isQuickMode,
+          themeContext: quickLessonContext ?? undefined,
+          subjectHint: subject || undefined,
+        });
+        const formatBlock = buildPreschoolOutputFormat({
+          durationMinutes: durationNum,
+          includeTakeHome: true,
+          includeTeacherNotes: true,
+        });
+        prompt = `${specialistBlock}\n\n**TOPIC:** ${topic}\n${objectives ? `**ADDITIONAL OBJECTIVES (weave in):** ${objectives}\n` : ''}\n${formatBlock}`;
+      } else {
+        const quickHint = isQuickMode
+          ? 'This is a QUICK, low-prep lesson. Use minimal materials, high engagement, and clear step-by-step guidance.'
+          : '';
+        const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
+        prompt = `Generate a ${isQuickMode ? 'quick, engaging' : 'comprehensive'} lesson plan for school:
+
 Subject: ${subject || 'General'}
 Topic: ${topic}
 Grade Level: ${gradeLevel}
@@ -123,21 +153,20 @@ Learning Objectives: ${objectives || 'Age-appropriate learning goals'}
 ${quickHint ? `\nQuick Lesson Guidance: ${quickHint}\n` : ''}
 ${planningHint ? `\nPlanning Alignment Context:\n${planningHint}\n` : ''}
 
-Please provide:
-1. Lesson Title
-2. Learning Objectives (3-5 specific goals)
-3. Materials Needed
-4. Introduction/Warm-up Activity (5 mins)
-5. Main Activity (detailed steps)
-6. Practice Activity
-7. Cool-down/Conclusion
-8. Assessment Ideas
-9. Extension Activities
-10. Notes for Teachers
+Provide clear sections: Lesson Title; Learning Objectives (3-5); Materials Needed; Introduction/Warm-up (5 mins); Main Activity (detailed steps); Practice Activity; Cool-down/Conclusion; Assessment Ideas; Extension Activities; Notes for Teachers. Use ## for main headings.`;
+      }
 
-Format the response in clear sections with practical, age-appropriate activities.`,
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 2000,
+      const { data, error } = await supabase.functions.invoke('ai-proxy', {
+        body: {
+          scope: 'teacher',
+          service_type: 'chat_message',
+          payload: {
+            prompt,
+            model: 'claude-3-5-sonnet-20241022',
+          },
+          stream: false,
+          enable_tools: false,
+          metadata: { source: 'teacher_lesson_generator', is_preschool: isPreschool },
         },
       });
 
@@ -149,7 +178,7 @@ Format the response in clear sections with practical, age-appropriate activities
         subject,
         topic,
         gradeLevel,
-        duration: parseInt(duration),
+        duration: durationNum,
         objectives,
         generatedAt: new Date().toISOString(),
       });
@@ -396,46 +425,16 @@ Format the response in clear sections with practical, age-appropriate activities
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-4 bg-green-900/20 border border-green-700/30 rounded-lg">
-                    <h3 className="font-bold text-white text-lg mb-2">{generatedLesson.title}</h3>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="px-2 py-1 bg-green-800/30 rounded-md text-green-400">
-                        {generatedLesson.gradeLevel}
-                      </span>
-                      <span className="px-2 py-1 bg-blue-800/30 rounded-md text-blue-400">
-                        {generatedLesson.duration} mins
-                      </span>
-                      {generatedLesson.subject && (
-                        <span className="px-2 py-1 bg-purple-800/30 rounded-md text-purple-400">
-                          {generatedLesson.subject}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="max-h-96 overflow-y-auto">
-                    <div className="markdown-content prose prose-invert prose-sm max-w-none">
-                      {generatedLesson.content.split('\n').map((line: string, index: number) => {
-                        // Render markdown-style headers and content with proper styling
-                        if (line.startsWith('# ')) {
-                          return <h1 key={index} className="text-xl font-bold text-cyan-400 mt-4 mb-2">{line.substring(2)}</h1>;
-                        } else if (line.startsWith('## ')) {
-                          return <h2 key={index} className="text-lg font-bold text-indigo-400 mt-4 mb-2">{line.substring(3)}</h2>;
-                        } else if (line.startsWith('### ')) {
-                          return <h3 key={index} className="text-base font-semibold text-purple-400 mt-3 mb-1">{line.substring(4)}</h3>;
-                        } else if (line.startsWith('**') && line.endsWith('**')) {
-                          return <p key={index} className="font-bold text-yellow-400 my-1">{line.replace(/\*\*/g, '')}</p>;
-                        } else if (line.startsWith('- ') || line.startsWith('• ')) {
-                          return <li key={index} className="text-gray-300 ml-4 my-0.5 list-disc">{line.substring(2)}</li>;
-                        } else if (line.match(/^\d+\./)) {
-                          return <li key={index} className="text-gray-300 ml-4 my-0.5 list-decimal">{line.replace(/^\d+\./, '').trim()}</li>;
-                        } else if (line.trim() === '') {
-                          return <div key={index} className="h-2"></div>;
-                        } else {
-                          return <p key={index} className="text-gray-300 my-1 leading-relaxed">{line}</p>;
-                        }
-                      })}
-                    </div>
+                  <div className="max-h-[28rem] overflow-y-auto pr-1">
+                    <LessonPlanRenderer
+                      title={generatedLesson.title}
+                      content={typeof generatedLesson.content === 'string' ? generatedLesson.content : ''}
+                      meta={{
+                        gradeLevel: generatedLesson.gradeLevel,
+                        duration: generatedLesson.duration,
+                        subject: generatedLesson.subject,
+                      }}
+                    />
                   </div>
 
                   <div className="flex gap-2 pt-4 border-t border-gray-700">
@@ -476,12 +475,17 @@ Format the response in clear sections with practical, age-appropriate activities
               <Lightbulb className="w-5 h-5 text-yellow-400" />
               Tips for Better Results
             </h3>
+            {isPreschool && (
+              <p className="text-sm text-emerald-200/90 mb-3 rounded-lg bg-emerald-900/20 px-3 py-2 border border-emerald-700/30">
+                <strong>Preschool mode:</strong> Lessons are ECD-aligned, play-based, and include differentiation, teacher notes, and take-home activities. They follow developmentally appropriate practice and South African context.
+              </p>
+            )}
             <ul className="space-y-2 text-sm text-gray-300">
-              <li>• Be specific with your topic (e.g., "Counting to 10 with animals" instead of just "Numbers")</li>
+              <li>• Be specific with your topic (e.g., &quot;Counting to 10 with animals&quot; instead of just &quot;Numbers&quot;)</li>
               <li>• Specify any particular teaching methods or materials you prefer in objectives</li>
-              <li>• Consider your students' attention span when setting duration</li>
-              <li>• Generated lessons are starting points - feel free to customize and adapt them</li>
-              <li>• Try different variations to find what works best for your class</li>
+              <li>• Consider your students&apos; attention span when setting duration</li>
+              <li>• Generated lessons are starting points — feel free to customize and adapt them</li>
+              <li>• Use <strong>Print lesson</strong> for a clean, printable plan</li>
             </ul>
           </div>
         </div>

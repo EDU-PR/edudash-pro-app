@@ -215,6 +215,8 @@ export function MessageHeader({
 interface MessagesListHeaderProps {
   title: string;
   subtitle?: string;
+  rightActionLabel?: string;
+  onRightActionPress?: () => void;
   /** Dropdown menu items */
   menuItems?: Array<{
     icon: keyof typeof Ionicons.glyphMap;
@@ -233,6 +235,8 @@ interface MessagesListHeaderProps {
 export function MessagesListHeader({
   title,
   subtitle,
+  rightActionLabel,
+  onRightActionPress,
   menuItems,
   showBackButton = true,
   onBackPress,
@@ -304,6 +308,21 @@ export function MessagesListHeader({
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.elevated,
+    },
+    rightActionButton: {
+      minWidth: 52,
+      height: 34,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+      backgroundColor: theme.elevated,
+      marginRight: resolvedMenu.length > 0 ? 8 : 0,
+    },
+    rightActionText: {
+      color: theme.primary,
+      fontSize: 13,
+      fontWeight: '700',
     },
     // Dropdown menu
     menuOverlay: {
@@ -384,6 +403,16 @@ export function MessagesListHeader({
             )}
           </View>
           
+          {!!rightActionLabel && onRightActionPress && (
+            <TouchableOpacity
+              style={styles.rightActionButton}
+              onPress={onRightActionPress}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.rightActionText}>{rightActionLabel}</Text>
+            </TouchableOpacity>
+          )}
+
           {resolvedMenu.length > 0 && (
             <TouchableOpacity 
               style={styles.menuButton}

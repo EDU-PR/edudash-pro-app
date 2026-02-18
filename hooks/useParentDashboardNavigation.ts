@@ -49,6 +49,9 @@ export function useParentDashboardNavigation({ activeChild, children, showAlert 
       case 'messages':
         router.push('/screens/parent-messages');
         break;
+      case 'announcements':
+        router.push('/screens/parent-announcements');
+        break;
       case 'events':
         router.push('/screens/calendar');
         break;

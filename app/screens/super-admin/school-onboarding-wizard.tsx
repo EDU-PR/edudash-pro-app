@@ -8,6 +8,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { track } from '@/lib/analytics';
 import { isSuperAdmin } from '@/lib/roleUtils';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Form data interfaces
@@ -60,6 +61,7 @@ const GRADE_LEVELS = {
 
 export default function SuperAdminSchoolOnboardingWizard() {
   const { user, profile } = useAuth();
+  const bottomInset = useBottomInset();
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -688,7 +690,7 @@ export default function SuperAdminSchoolOnboardingWizard() {
             {renderStepContent()}
           </ScrollView>
           
-          <View style={styles.navigationContainer}>
+          <View style={[styles.navigationContainer, { paddingBottom: bottomInset + 16 }]}>
             {currentStep > 1 && (
               <TouchableOpacity style={styles.backButton} onPress={prevStep}>
                 <Text style={styles.backButtonText}>Back</Text>

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { toast } from '@/components/ui/ToastProvider';
 import { useCallSafe } from '@/components/calls/CallProvider';
+import type { CallEventContent } from '@/lib/utils/messageContent';
 import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import { useMessageActions } from '@/hooks/useMessageActions';
 import { useThreadOptions } from '@/hooks/useThreadOptions';
@@ -30,7 +31,7 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { useParentMessageThread, type ChatRow } from '@/hooks/useParentMessageThread';
 import {
   messageThreadStyles as styles, defaultTheme,
-  COMPOSER_FLOAT_GAP, COMPOSER_OVERLAY_HEIGHT, WALLPAPER_ACCENTS, hexToRgba,
+  COMPOSER_FLOAT_GAP, COMPOSER_OVERLAY_HEIGHT,
 } from '@/lib/screen-styles/parent-message-thread.styles';
 
 // Safe component imports
@@ -48,31 +49,35 @@ try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
 
 export default function ParentMessageThreadScreen() {
-  const params = useLocalSearchParams<{ threadId?: string; title?: string; teacherName?: string }>();
+  const params = useLocalSearchParams<{ threadId?: string; title?: string; teacherName?: string; parentName?: string; parentId?: string; recipientId?: string }>();
   const threadId = params.threadId || '';
-  const teacherName = params.teacherName || params.title || '';
+  const contactName = params.teacherName || params.parentName || params.title || '';
   const theme = useTheme().theme || defaultTheme;
   const user: any = useAuth().user;
 
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { showAlert, alertProps } = useAlertModal();
+  const showThreadAlert = useCallback((title: string, message: string, buttons?: AlertButton[]) => {
+    showAlert({ title, message, buttons, type: 'warning' });
+  }, [showAlert]);
   const h = useParentMessageThread(threadId, user?.id, user?.email);
 
   const displayName = useMemo(() => {
-    try { return teacherName ? decodeURIComponent(teacherName) : t('parent.teacher', { defaultValue: 'Teacher' }); }
-    catch { return teacherName || 'Teacher'; }
-  }, [teacherName, t]);
+    try { return contactName ? decodeURIComponent(contactName) : t('parent.teacher', { defaultValue: 'Contact' }); }
+    catch { return contactName || 'Contact'; }
+  }, [contactName, t]);
 
   // Message actions hook
   const actions = useMessageActions({
     selectedMessage: h.selectedMessage, user, refetch: h.refetch,
     setSelectedMessage: h.setSelectedMessage, setShowMessageActions: h.setShowMessageActions,
     setReplyingTo: h.setReplyingTo, setOptimisticMsgs: h.setOptimisticMsgs,
+    showAlert: ({ title, message, buttons }) => showThreadAlert(title, message, buttons),
   });
 
   // Thread options hook
-  const recipientId = h.otherParticipant?.sender_id;
+  const recipientId = h.otherParticipant?.sender_id || params.recipientId || params.parentId;
   const recipientName = h.otherParticipant?.sender?.first_name || displayName;
   const recipientRole = h.otherParticipant?.sender?.role || null;
 
@@ -90,14 +95,32 @@ export default function ParentMessageThreadScreen() {
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available.', 'Voice Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Voice Call'); return; }
-    callContext.startVoiceCall(recipientId, recipientName);
-  }, [callContext, recipientId, recipientName]);
+    callContext.startVoiceCall(recipientId, recipientName, { threadId });
+  }, [callContext, recipientId, recipientName, threadId]);
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) { toast.warn('Video calling is not available.', 'Video Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Video Call'); return; }
-    callContext.startVideoCall(recipientId, recipientName);
-  }, [callContext, recipientId, recipientName]);
+    callContext.startVideoCall(recipientId, recipientName, { threadId });
+  }, [callContext, recipientId, recipientName, threadId]);
+
+  const handleCallEventPress = useCallback((event: CallEventContent) => {
+    if (!callContext) {
+      toast.warn('Calling is not available right now.', 'Call');
+      return;
+    }
+    if (!event.callerId) {
+      toast.warn('Caller details are unavailable for this event.', 'Call');
+      return;
+    }
+
+    if (event.callType === 'video') {
+      callContext.startVideoCall(event.callerId, event.callerName || 'Contact', { threadId });
+      return;
+    }
+
+    callContext.startVoiceCall(event.callerId, event.callerName || 'Contact', { threadId });
+  }, [callContext, threadId]);
 
   // Scroll to a quoted message when tapped
   const handleScrollToMessage = useCallback((messageId: string) => {
@@ -118,6 +141,7 @@ export default function ParentMessageThreadScreen() {
       <SwipeableMessageRow onSwipeReply={() => h.setReplyingTo(msg)}>
         <MessageBubble
           msg={msg} isOwn={msg.sender_id === user?.id}
+          showSenderName={h.showSenderNames}
           onLongPress={() => h.handleMessageLongPress(msg)}
           onPlaybackFinished={msg.voice_url ? () => { if (hasNextVoice) h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]); else h.setCurrentlyPlayingVoiceId(null); } : undefined}
           onPlayNext={hasNextVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
@@ -126,24 +150,22 @@ export default function ParentMessageThreadScreen() {
           autoPlayVoice={!!msg.voice_url && h.currentlyPlayingVoiceId === msg.id}
           onReactionPress={actions.handleReactionPress}
           onReplyPress={handleScrollToMessage}
+          onCallEventPress={handleCallEventPress}
           isFirstInGroup={item.isFirstInGroup}
           isLastInGroup={item.isLastInGroup}
         />
       </SwipeableMessageRow>
     );
-  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, user?.id]);
+  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, handleCallEventPress, user?.id]);
 
   // Layout calculations
   const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
+  const keyboardUp = h.keyboardHeight > 0;
   const safeComposerHeight = Math.max(h.composerHeight, COMPOSER_OVERLAY_HEIGHT);
-  const messageViewportInset = h.keyboardHeight + composerBottomInset + safeComposerHeight + COMPOSER_FLOAT_GAP;
-  const wallpaperAccent = h.currentWallpaper?.type === 'preset' ? (WALLPAPER_ACCENTS[h.currentWallpaper.value] || '#93c5fd') : '#93c5fd';
-  const composerSurfaceColor = h.currentWallpaper?.type === 'url' ? 'rgba(15, 23, 42, 0.62)' : h.currentWallpaper?.type === 'preset' ? hexToRgba(wallpaperAccent, 0.2, 'rgba(15, 23, 42, 0.66)') : 'rgba(15, 23, 42, 0.68)';
-  const composerBorderColor = h.currentWallpaper?.type === 'preset' ? hexToRgba(wallpaperAccent, 0.32, 'rgba(148, 163, 184, 0.18)') : 'rgba(148, 163, 184, 0.16)';
-
-  const showThreadAlert = useCallback((title: string, message: string, buttons?: AlertButton[]) => {
-    showAlert({ title, message, buttons, type: 'warning' });
-  }, [showAlert]);
+  // When keyboard is up: move safe-area from padding → bottom offset (clears nav bar).
+  // safeComposerHeight (from onLayout) already includes paddingBottom, so don't add composerBottomInset again.
+  const composerExtraBottom = keyboardUp ? composerBottomInset : 0;
+  const messageViewportInset = h.keyboardHeight + COMPOSER_FLOAT_GAP + composerExtraBottom + safeComposerHeight;
 
   if (!threadId) {
     return (
@@ -180,8 +202,8 @@ export default function ParentMessageThreadScreen() {
           )}
         </View>
 
-        {/* Messages */}
-        <View style={styles.messagesClip}>
+        {/* Messages — clipped above composer so bubbles don't scroll behind it */}
+        <View style={[styles.messagesClip, { marginBottom: messageViewportInset }]}>
           {h.loading ? (
             <View style={styles.center}><EduDashSpinner size="large" color={theme.primary} /><Text style={styles.loadingText}>Loading messages...</Text></View>
           ) : h.error ? (
@@ -206,13 +228,13 @@ export default function ParentMessageThreadScreen() {
                 isOtherTyping: h.isOtherTyping,
                 keyboardHeight: h.keyboardHeight,
               }}
-              contentContainerStyle={[styles.messagesContent, { paddingBottom: messageViewportInset + 24 }]} />
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: 2 }]} />
           )}
         </View>
 
         {/* Scroll FAB */}
         {h.showScrollFab && (
-          <TouchableOpacity style={[styles.scrollToBottomFab, { bottom: messageViewportInset + 8 }]} onPress={h.scrollToBottom} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.scrollToBottomFab, { bottom: messageViewportInset + 12 }]} onPress={h.scrollToBottom} activeOpacity={0.8}>
             <Ionicons name="chevron-down" size={22} color="#e2e8f0" />
           </TouchableOpacity>
         )}
@@ -227,8 +249,7 @@ export default function ParentMessageThreadScreen() {
         )}
 
         {/* Composer */}
-        <View style={[styles.composerArea, { bottom: h.keyboardHeight + COMPOSER_FLOAT_GAP, paddingBottom: composerBottomInset + 2 }]} onLayout={h.handleComposerLayout}>
-          <View style={[styles.composerGlass, { backgroundColor: composerSurfaceColor, borderColor: composerBorderColor }]} />
+        <View style={[styles.composerArea, { bottom: h.keyboardHeight + COMPOSER_FLOAT_GAP + composerExtraBottom, paddingBottom: keyboardUp ? 0 : composerBottomInset }]} onLayout={h.handleComposerLayout}>
           <MessageComposer
             onSend={actions.editingMessage ? actions.confirmEdit : h.handleSend}
             onVoiceRecording={h.handleVoiceRecording} onImageAttach={h.handleImageAttach}

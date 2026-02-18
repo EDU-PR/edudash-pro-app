@@ -4,9 +4,9 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const COMPOSER_OVERLAY_HEIGHT = 84;
-export const COMPOSER_FLOAT_MARGIN = 10;
-export const COMPOSER_FLOAT_GAP = 8;
+export const COMPOSER_OVERLAY_HEIGHT = 56;
+export const COMPOSER_FLOAT_MARGIN = 6;
+export const COMPOSER_FLOAT_GAP = 2;
 
 export const WALLPAPER_ACCENTS: Record<string, string> = {
   'purple-glow': '#a78bfa',
@@ -152,13 +152,5 @@ export const styles = StyleSheet.create({
   composerArea: {
     paddingHorizontal: 0,
     paddingTop: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(148, 163, 184, 0.18)',
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#020617',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
   },
 });

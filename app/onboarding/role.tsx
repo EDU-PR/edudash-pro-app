@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useOnboarding } from '@/contexts/OnboardingContext';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 interface RoleOption {
   role: string;
@@ -59,6 +60,7 @@ const ROLE_OPTIONS: RoleOption[] = [
 export default function RoleSelectionScreen() {
   const router = useRouter();
   const { state, updateState, completeStep } = useOnboarding();
+  const bottomInset = useBottomInset();
   const [selectedRole, setSelectedRole] = useState<string | null>(
     state.role || null
   );
@@ -78,7 +80,7 @@ export default function RoleSelectionScreen() {
     // Navigate to next step
     if (!state.dateOfBirth) {
       router.push('/onboarding/dob');
-    } else if (state.isMinor && !state.guardianInviteSent) {
+    } else if (state.isMinor && !state.guardianStepCompleted) {
       router.push('/onboarding/guardian');
     } else {
       router.replace('/onboarding/complete');
@@ -131,7 +133,7 @@ export default function RoleSelectionScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: bottomInset + 20 }]}>
         <TouchableOpacity
           style={[
             styles.continueButton,

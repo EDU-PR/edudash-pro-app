@@ -6,9 +6,14 @@ import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-// Get project ID from EAS config (matches extra.eas.projectId in app.json)
-// This ensures push tokens are registered for the correct Expo project
-const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc'
+// Resolve project ID from the active EAS runtime config first.
+// Fallbacks exist for older runtime/config variants, but we intentionally avoid
+// hardcoded legacy project IDs to prevent cross-project token registration.
+const EXPO_PROJECT_ID =
+  Constants.easConfig?.projectId ||
+  Constants.expoConfig?.extra?.eas?.projectId ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  null
 
 // Token version - increment this to force all users to re-register tokens
 // This is useful when the project ID changes or token format updates
@@ -53,6 +58,114 @@ export type PushRegistrationResult = {
   token?: string
   reason?: string
   message?: string
+}
+
+type PushDeviceRPCInput = {
+  expoPushToken?: string | null
+  fcmToken?: string | null
+  platform: 'ios' | 'android' | 'web'
+  deviceInstallationId: string
+  deviceId?: string | null
+  language?: string | null
+  timezone?: string | null
+  deviceMetadata?: Record<string, unknown>
+}
+
+const isMissingUpsertPushDeviceRPCError = (error: any): boolean => {
+  const message = String(error?.message || '')
+  const code = String(error?.code || '')
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    message.includes('Could not find the function public.upsert_push_device') ||
+    message.toLowerCase().includes('schema cache')
+  )
+}
+
+const upsertPushDeviceViaTableFallback = async (
+  supabase: any,
+  input: PushDeviceRPCInput,
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: sessionData, error: sessionError } = await supabase?.auth?.getSession?.()
+    const sessionUserId = sessionData?.session?.user?.id
+    if (sessionError || !sessionUserId) {
+      return { success: false, error: 'no_active_session_for_fallback' }
+    }
+    if (!input.expoPushToken) {
+      return { success: false, error: 'expo_push_token_required_for_fallback' }
+    }
+
+    const payload = {
+      user_id: sessionUserId,
+      expo_push_token: input.expoPushToken,
+      fcm_token: input.fcmToken ?? null,
+      platform: input.platform,
+      is_active: true,
+      device_id: input.deviceId ?? input.deviceInstallationId,
+      device_installation_id: input.deviceInstallationId,
+      device_metadata: input.deviceMetadata ?? {},
+      language: input.language ?? 'en',
+      timezone: input.timezone ?? 'UTC',
+      last_seen_at: new Date().toISOString(),
+      revoked_at: null,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase
+      .from('push_devices')
+      .upsert(payload, {
+        onConflict: 'user_id,device_installation_id',
+      })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error?.message || String(error) }
+  }
+}
+
+export async function upsertPushDeviceViaRPC(
+  supabase: any,
+  input: PushDeviceRPCInput,
+): Promise<{ success: boolean; error?: string; usedFallback?: boolean }> {
+  try {
+    const { error } = await supabase.rpc('upsert_push_device', {
+      p_expo_push_token: input.expoPushToken ?? null,
+      p_fcm_token: input.fcmToken ?? null,
+      p_platform: input.platform,
+      p_device_installation_id: input.deviceInstallationId,
+      p_device_id: input.deviceId ?? input.deviceInstallationId,
+      p_language: input.language ?? null,
+      p_timezone: input.timezone ?? null,
+      p_device_metadata: input.deviceMetadata ?? {},
+    })
+
+    if (error) {
+      if (isMissingUpsertPushDeviceRPCError(error)) {
+        const fallbackResult = await upsertPushDeviceViaTableFallback(supabase, input)
+        if (fallbackResult.success) {
+          return { success: true, usedFallback: true }
+        }
+        return { success: false, error: fallbackResult.error || 'legacy_fallback_failed' }
+      }
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    if (isMissingUpsertPushDeviceRPCError(error)) {
+      const fallbackResult = await upsertPushDeviceViaTableFallback(supabase, input)
+      if (fallbackResult.success) {
+        return { success: true, usedFallback: true }
+      }
+      return { success: false, error: fallbackResult.error || 'legacy_fallback_failed' }
+    }
+    return { success: false, error: error?.message || String(error) }
+  }
 }
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
@@ -139,6 +252,11 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   if (status !== 'granted') return null
 
   try {
+    if (!EXPO_PROJECT_ID) {
+      console.warn('[Push Registration] Missing Expo project ID - skipping token registration')
+      return null
+    }
+
     // Bind token to this Expo project to ensure it works in internal/dev builds
     const token = await Notifications.getExpoPushTokenAsync({ projectId: EXPO_PROJECT_ID })
     return token.data ?? null
@@ -218,56 +336,30 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
     }
     if (__DEV__) console.log('[Push Registration] Got push token')
 
-    // Upsert to database - use stable device ID for both device_id and device_installation_id
-    // to prevent conflicts between different registration paths
+    // Upsert via SECURITY DEFINER RPC to avoid RLS race errors when sign-out happens mid-flight.
     console.log('[Push Registration] Saving to database...')
-    
-    const deviceData = {
-      user_id: user.id,
-      expo_push_token: token,
+
+    const rpcResult = await upsertPushDeviceViaRPC(supabase, {
+      expoPushToken: token,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
-      is_active: true,
-      device_id: stableDeviceId,
-      device_installation_id: stableDeviceId,
-      device_metadata: {
+      deviceId: stableDeviceId,
+      deviceInstallationId: stableDeviceId,
+      language: normalizedLanguage,
+      timezone: deviceMetadata.timezone,
+      deviceMetadata: {
         ...deviceMetadata,
-        // Store token version and project ID for refresh detection
         token_version: TOKEN_VERSION,
         expo_project_id: EXPO_PROJECT_ID,
       },
-      language: normalizedLanguage,
-      timezone: deviceMetadata.timezone,
-      last_seen_at: new Date().toISOString(),
-    };
+    })
 
-    let { error } = await supabase
-      .from('push_devices')
-      .upsert(deviceData, {
-        onConflict: 'user_id,device_installation_id'
-      })
-
-    // Handle 409 conflict - try delete + insert as fallback
-    if (error && (error.code === '23505' || error.message?.includes('409') || error.message?.includes('conflict'))) {
-      console.log('[Push Registration] Conflict detected, trying delete + insert fallback...');
-      
-      // Delete existing record for this user+device
-      await supabase
-        .from('push_devices')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('device_installation_id', stableDeviceId);
-      
-      // Insert fresh record
-      const insertResult = await supabase
-        .from('push_devices')
-        .insert(deviceData);
-      
-      error = insertResult.error;
+    if (rpcResult.usedFallback) {
+      console.log('[Push Registration] Using legacy push_devices fallback path (upsert_push_device RPC not yet deployed)')
     }
 
-    if (error) {
-      console.error('[Push Registration] Database error:', error)
-      return { status: 'error', reason: 'database_error', message: error.message }
+    if (!rpcResult.success) {
+      console.error('[Push Registration] Database error:', rpcResult.error)
+      return { status: 'error', reason: 'database_error', message: rpcResult.error || 'Unknown database error' }
     }
 
     console.log('[Push Registration] Successfully registered device')
@@ -337,33 +429,29 @@ export async function forceRefreshPushToken(supabase: any, user: any): Promise<b
     // Use stable device ID for consistency
     const stableDeviceId = await getStableDeviceId()
     
-    // Force update the token in database
-    const { error } = await supabase
-      .from('push_devices')
-      .upsert({
-        user_id: user.id,
-        expo_push_token: newToken,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        is_active: true,
-        device_id: stableDeviceId,
-        device_installation_id: stableDeviceId,
-        device_metadata: {
-          platform: Platform.OS,
-          brand: Device.brand,
-          model: Device.modelName,
-          osVersion: Device.osVersion,
-          appVersion: Constants.expoConfig?.version,
-          token_version: TOKEN_VERSION,
-          expo_project_id: EXPO_PROJECT_ID,
-          force_refreshed_at: new Date().toISOString(),
-        },
-        last_seen_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,device_installation_id'
-      })
+    const rpcResult = await upsertPushDeviceViaRPC(supabase, {
+      expoPushToken: newToken,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      deviceId: stableDeviceId,
+      deviceInstallationId: stableDeviceId,
+      deviceMetadata: {
+        platform: Platform.OS,
+        brand: Device.brand,
+        model: Device.modelName,
+        osVersion: Device.osVersion,
+        appVersion: Constants.expoConfig?.version,
+        token_version: TOKEN_VERSION,
+        expo_project_id: EXPO_PROJECT_ID,
+        force_refreshed_at: new Date().toISOString(),
+      },
+    })
 
-    if (error) {
-      console.error('[Push Refresh] Database error:', error)
+    if (rpcResult.usedFallback) {
+      console.log('[Push Refresh] Using legacy push_devices fallback path (upsert_push_device RPC not yet deployed)')
+    }
+
+    if (!rpcResult.success) {
+      console.error('[Push Refresh] Database error:', rpcResult.error)
       return false
     }
 
@@ -411,7 +499,7 @@ export async function checkAndRefreshTokenIfNeeded(supabase: any, user: any): Pr
     // Check if refresh is needed
     const needsRefresh = 
       storedVersion < TOKEN_VERSION || // Token version outdated
-      (storedProjectId && storedProjectId !== EXPO_PROJECT_ID) // Project ID changed
+      Boolean(EXPO_PROJECT_ID && storedProjectId && storedProjectId !== EXPO_PROJECT_ID) // Project ID changed
 
     if (needsRefresh) {
       console.log('[Push Check] Token refresh needed:', {

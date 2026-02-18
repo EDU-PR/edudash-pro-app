@@ -10,6 +10,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } f
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
@@ -223,6 +224,7 @@ const DEFAULT_SETTINGS: SchoolSettings = {
 
 export default function SchoolSettingsScreen() {
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SETTINGS);
@@ -266,18 +268,18 @@ export default function SchoolSettingsScreen() {
         // Persist to backend
         await updateMutation.mutateAsync(settings);
       }
-      Alert.alert(
-        'Settings Saved', 
-        'Your school settings have been updated successfully.\n\nChanges will take effect immediately.',
-        [{ text: 'OK', style: 'default' }]
-      );
+      showAlert({
+        title: 'Settings Saved',
+        message: 'Your school settings have been updated successfully.\n\nChanges will take effect immediately.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('Failed to save settings:', error);
-      Alert.alert(
-        'Save Failed', 
-        'There was an error saving your settings. Please check your connection and try again.',
-        [{ text: 'OK', style: 'default' }]
-      );
+      showAlert({
+        title: 'Save Failed',
+        message: 'There was an error saving your settings. Please check your connection and try again.',
+        type: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -364,10 +366,10 @@ export default function SchoolSettingsScreen() {
             });
           })}
           {renderSettingRow(t('school_settings.label.currency', { defaultValue: 'Currency' }), settings.currency, () => {
-            Alert.alert(t('school_settings.alert.currency_title', { defaultValue: 'Currency' }), t('school_settings.alert.currency_change', { defaultValue: 'Change currency?' }));
+            showAlert({ title: t('school_settings.alert.currency_title', { defaultValue: 'Currency' }), message: t('school_settings.alert.currency_change', { defaultValue: 'Change currency?' }), type: 'info' });
           })}
           {renderSettingRow(t('school_settings.label.timezone', { defaultValue: 'Timezone' }), settings.timezone, () => {
-            Alert.alert(t('school_settings.alert.timezone_title', { defaultValue: 'Timezone' }), t('school_settings.alert.timezone_change', { defaultValue: 'Change timezone?' }));
+            showAlert({ title: t('school_settings.alert.timezone_title', { defaultValue: 'Timezone' }), message: t('school_settings.alert.timezone_change', { defaultValue: 'Change timezone?' }), type: 'info' });
           })}
         </View>
 
@@ -375,13 +377,13 @@ export default function SchoolSettingsScreen() {
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('school_settings.section.display_language', { defaultValue: 'Display & Language' })}</Text>
           {renderSettingRow(t('school_settings.label.language', { defaultValue: 'Language' }), settings.display.defaultLanguage.toUpperCase(), () => {
-            Alert.alert(t('school_settings.alert.language_title', { defaultValue: 'Language' }), t('school_settings.alert.language_change', { defaultValue: 'Change language?' }));
+            showAlert({ title: t('school_settings.alert.language_title', { defaultValue: 'Language' }), message: t('school_settings.alert.language_change', { defaultValue: 'Change language?' }), type: 'info' });
           })}
           {renderSettingRow(t('school_settings.label.date_format', { defaultValue: 'Date Format' }), settings.display.dateFormat, () => {
-            Alert.alert(t('school_settings.alert.date_format_title', { defaultValue: 'Date Format' }), t('school_settings.alert.date_format_change', { defaultValue: 'Change date format?' }));
+            showAlert({ title: t('school_settings.alert.date_format_title', { defaultValue: 'Date Format' }), message: t('school_settings.alert.date_format_change', { defaultValue: 'Change date format?' }), type: 'info' });
           })}
           {renderSettingRow(t('school_settings.label.time_format', { defaultValue: 'Time Format' }), settings.display.timeFormat, () => {
-            Alert.alert(t('school_settings.alert.time_format_title', { defaultValue: 'Time Format' }), t('school_settings.alert.time_format_change', { defaultValue: 'Change time format?' }));
+            showAlert({ title: t('school_settings.alert.time_format_title', { defaultValue: 'Time Format' }), message: t('school_settings.alert.time_format_change', { defaultValue: 'Change time format?' }), type: 'info' });
           })}
         </View>
 
@@ -415,13 +417,18 @@ export default function SchoolSettingsScreen() {
             updateNestedSetting(['permissions', 'allowParentMessaging'], !settings.permissions.allowParentMessaging);
           })}
           {renderSettingRow(t('school_settings.label.session_timeout', { defaultValue: 'Session Timeout' }), `${settings.permissions.sessionTimeout} min`, () => {
-            Alert.alert(t('school_settings.alert.session_timeout_title', { defaultValue: 'Session Timeout' }), t('school_settings.alert.session_timeout_choose', { defaultValue: 'Choose timeout duration:' }), [
-              { text: t('school_settings.option.minutes_15', { defaultValue: '15 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 15) },
-              { text: t('school_settings.option.minutes_30', { defaultValue: '30 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 30) },
-              { text: t('school_settings.option.minutes_60', { defaultValue: '60 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 60) },
-              { text: t('school_settings.option.minutes_120', { defaultValue: '120 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 120) },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.session_timeout_title', { defaultValue: 'Session Timeout' }),
+              message: t('school_settings.alert.session_timeout_choose', { defaultValue: 'Choose timeout duration:' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.minutes_15', { defaultValue: '15 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 15) },
+                { text: t('school_settings.option.minutes_30', { defaultValue: '30 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 30) },
+                { text: t('school_settings.option.minutes_60', { defaultValue: '60 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 60) },
+                { text: t('school_settings.option.minutes_120', { defaultValue: '120 min' }), onPress: () => updateNestedSetting(['permissions', 'sessionTimeout'], 120) },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
         </View>
 
@@ -452,21 +459,31 @@ export default function SchoolSettingsScreen() {
             updateNestedSetting(['backup', 'autoBackupEnabled'], !settings.backup.autoBackupEnabled);
           })}
           {renderSettingRow(t('school_settings.label.backup_frequency', { defaultValue: 'Backup Frequency' }), settings.backup.backupFrequency, () => {
-            Alert.alert(t('school_settings.alert.backup_frequency_title', { defaultValue: 'Backup Frequency' }), t('school_settings.alert.choose_frequency', { defaultValue: 'Choose frequency' }), [
-              { text: t('school_settings.option.daily', { defaultValue: 'Daily' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'daily') },
-              { text: t('school_settings.option.weekly', { defaultValue: 'Weekly' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'weekly') },
-              { text: t('school_settings.option.monthly', { defaultValue: 'Monthly' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'monthly') },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.backup_frequency_title', { defaultValue: 'Backup Frequency' }),
+              message: t('school_settings.alert.choose_frequency', { defaultValue: 'Choose frequency' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.daily', { defaultValue: 'Daily' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'daily') },
+                { text: t('school_settings.option.weekly', { defaultValue: 'Weekly' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'weekly') },
+                { text: t('school_settings.option.monthly', { defaultValue: 'Monthly' }), onPress: () => updateNestedSetting(['backup', 'backupFrequency'], 'monthly') },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
           {renderSettingRow(t('school_settings.label.data_retention', { defaultValue: 'Data Retention' }), `${settings.backup.dataRetentionMonths} months`, () => {
-            Alert.alert(t('school_settings.alert.data_retention_title', { defaultValue: 'Data Retention' }), t('school_settings.alert.data_retention_choose', { defaultValue: 'Choose retention period:' }), [
-              { text: t('school_settings.option.months_6', { defaultValue: '6 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 6) },
-              { text: t('school_settings.option.months_12', { defaultValue: '12 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 12) },
-              { text: t('school_settings.option.months_24', { defaultValue: '24 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 24) },
-              { text: t('school_settings.option.months_36', { defaultValue: '36 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 36) },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.data_retention_title', { defaultValue: 'Data Retention' }),
+              message: t('school_settings.alert.data_retention_choose', { defaultValue: 'Choose retention period:' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.months_6', { defaultValue: '6 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 6) },
+                { text: t('school_settings.option.months_12', { defaultValue: '12 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 12) },
+                { text: t('school_settings.option.months_24', { defaultValue: '24 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 24) },
+                { text: t('school_settings.option.months_36', { defaultValue: '36 months' }), onPress: () => updateNestedSetting(['backup', 'dataRetentionMonths'], 36) },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
         </View>
 
@@ -509,11 +526,16 @@ export default function SchoolSettingsScreen() {
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('school_settings.section.advanced_settings', { defaultValue: 'Advanced Settings' })}</Text>
           {renderSettingRow(t('school_settings.label.dashboard_layout', { defaultValue: 'Dashboard Layout' }), settings.display.dashboardLayout, () => {
-            Alert.alert(t('school_settings.alert.dashboard_layout_title', { defaultValue: 'Dashboard Layout' }), t('school_settings.alert.choose_layout', { defaultValue: 'Choose layout' }), [
-              { text: t('school_settings.option.grid', { defaultValue: 'Grid' }), onPress: () => updateNestedSetting(['display', 'dashboardLayout'], 'grid') },
-              { text: t('school_settings.option.list', { defaultValue: 'List' }), onPress: () => updateNestedSetting(['display', 'dashboardLayout'], 'list') },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.dashboard_layout_title', { defaultValue: 'Dashboard Layout' }),
+              message: t('school_settings.alert.choose_layout', { defaultValue: 'Choose layout' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.grid', { defaultValue: 'Grid' }), onPress: () => updateNestedSetting(['display', 'dashboardLayout'], 'grid') },
+                { text: t('school_settings.option.list', { defaultValue: 'List' }), onPress: () => updateNestedSetting(['display', 'dashboardLayout'], 'list') },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
           {renderSettingRow(t('school_settings.label.weather_widget', { defaultValue: 'Weather Widget' }), settings.display.showWeatherWidget, () => {
             updateNestedSetting(['display', 'showWeatherWidget'], !settings.display.showWeatherWidget);
@@ -522,22 +544,32 @@ export default function SchoolSettingsScreen() {
             updateNestedSetting(['display', 'showCalendarWidget'], !settings.display.showCalendarWidget);
           })}
           {renderSettingRow(t('school_settings.label.financial_reports_limit', { defaultValue: 'Financial Reports Limit' }), `${settings.features.financialReports.requireApprovalLimit}`, () => {
-            Alert.alert(t('school_settings.alert.approval_limit_title', { defaultValue: 'Approval Limit' }), t('school_settings.alert.approval_limit_choose', { defaultValue: 'Choose amount requiring approval:' }), [
-              { text: t('school_settings.option.r500', { defaultValue: 'R500' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 500) },
-              { text: t('school_settings.option.r1000', { defaultValue: 'R1000' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 1000) },
-              { text: t('school_settings.option.r2500', { defaultValue: 'R2500' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 2500) },
-              { text: t('school_settings.option.r5000', { defaultValue: 'R5000' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 5000) },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.approval_limit_title', { defaultValue: 'Approval Limit' }),
+              message: t('school_settings.alert.approval_limit_choose', { defaultValue: 'Choose amount requiring approval:' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.r500', { defaultValue: 'R500' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 500) },
+                { text: t('school_settings.option.r1000', { defaultValue: 'R1000' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 1000) },
+                { text: t('school_settings.option.r2500', { defaultValue: 'R2500' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 2500) },
+                { text: t('school_settings.option.r5000', { defaultValue: 'R5000' }), onPress: () => updateNestedSetting(['features', 'financialReports', 'requireApprovalLimit'], 5000) },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
           {renderSettingRow(t('school_settings.label.petty_cash_daily_limit', { defaultValue: 'Petty Cash Daily Limit' }), `${settings.features.pettyCash.dailyLimit}`, () => {
-            Alert.alert(t('school_settings.alert.daily_limit_title', { defaultValue: 'Daily Limit' }), t('school_settings.alert.daily_limit_choose', { defaultValue: 'Choose daily petty cash limit:' }), [
-              { text: t('school_settings.option.r200', { defaultValue: 'R200' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 200) },
-              { text: t('school_settings.option.r500', { defaultValue: 'R500' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 500) },
-              { text: t('school_settings.option.r1000', { defaultValue: 'R1000' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 1000) },
-              { text: t('school_settings.option.r2000', { defaultValue: 'R2000' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 2000) },
-              { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' }
-            ]);
+            showAlert({
+              title: t('school_settings.alert.daily_limit_title', { defaultValue: 'Daily Limit' }),
+              message: t('school_settings.alert.daily_limit_choose', { defaultValue: 'Choose daily petty cash limit:' }),
+              type: 'info',
+              buttons: [
+                { text: t('school_settings.option.r200', { defaultValue: 'R200' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 200) },
+                { text: t('school_settings.option.r500', { defaultValue: 'R500' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 500) },
+                { text: t('school_settings.option.r1000', { defaultValue: 'R1000' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 1000) },
+                { text: t('school_settings.option.r2000', { defaultValue: 'R2000' }), onPress: () => updateNestedSetting(['features', 'pettyCash', 'dailyLimit'], 2000) },
+                { text: t('navigation.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              ],
+            });
           })}
         </View>
       </ScrollView>
@@ -552,6 +584,7 @@ export default function SchoolSettingsScreen() {
           <Text style={[styles.bottomBtnText, { color: theme.onPrimary }]}>{t('school_settings.save_changes', { defaultValue: 'Save changes' })}</Text>
         </TouchableOpacity>
       </View>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

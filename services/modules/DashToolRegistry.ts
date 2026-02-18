@@ -13,6 +13,7 @@ import {
   registerNavigationTools,
   registerSuperAdminTools,
   registerSupportTools,
+  registerTeacherTools,
 } from './tools/index';
 
 export interface AgentTool {
@@ -89,6 +90,7 @@ export class DashToolRegistry {
     registerNavigationTools(registerFn);
     registerSuperAdminTools(registerFn);
     registerSupportTools(registerFn);
+    registerTeacherTools(registerFn);
     
     logger.info(`[DashToolRegistry] Registered ${this.tools.size} tools`);
   }

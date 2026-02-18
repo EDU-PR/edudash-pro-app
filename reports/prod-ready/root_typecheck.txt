@@ -1,0 +1,6 @@
+
+> edudash-pro@1.0.26 typecheck
+> NODE_OPTIONS=--max-old-space-size=8192 tsc --noEmit
+
+components/ai/DashAssistant.tsx(373,13): error TS2322: Type '{ inputRef: RefObject<any>; inputText: string; setInputText: (text: string) => void; enterToSend: boolean; selectedAttachments: DashAttachment[]; attachmentProgress: Map<...>; ... 15 more ...; hideQuickChips: boolean; }' is not assignable to type 'IntrinsicAttributes & DashInputBarProps'.
+  Property 'hideQuickChips' does not exist on type 'IntrinsicAttributes & DashInputBarProps'.

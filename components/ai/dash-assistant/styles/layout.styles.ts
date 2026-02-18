@@ -40,6 +40,19 @@ export const layoutStyles = StyleSheet.create({
     flex: 1,
     zIndex: 1,
   },
+  messagesClip: {
+    flex: 1,
+    overflow: 'hidden',
+    zIndex: 1,
+  },
+  composerArea: {
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    bottom: 2,
+    zIndex: 100,
+    elevation: 0,
+  },
   topDeck: {
     paddingHorizontal: 14,
     paddingTop: 6,

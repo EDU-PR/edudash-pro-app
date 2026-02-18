@@ -33,7 +33,7 @@ serve(async (req) => {
     scope: payload.scope || 'parent',
     service_type: serviceType,
     payload: {
-      prompt: payload.prompt || payload.userInput || '',
+      prompt: payload.prompt || payload.userInput || payload.submission || '',
       messages: payload.messages || undefined,
       context: payload.context || undefined,
       model: payload.model || undefined,

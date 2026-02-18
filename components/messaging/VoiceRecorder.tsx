@@ -7,7 +7,11 @@
  * - Slide up to lock (keeps recording, shows stop/send buttons)
  * - Real-time waveform + duration
  *
- * Props interface unchanged — drop-in replacement.
+ * CRITICAL: PanResponder wraps the ENTIRE component across all states.
+ * Previous bug: PanResponder was only on the idle mic button, so when
+ * recording started and the component re-rendered to the recording bar,
+ * the PanResponder was lost and gestures froze.
+ *
  * Uses expo-audio (useAudioRecorder + useAudioRecorderState).
  */
 
@@ -20,11 +24,11 @@ import {
   Vibration,
   Platform,
   PanResponder,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import {
   CYAN_PRIMARY,
   PURPLE_PRIMARY,
@@ -35,6 +39,9 @@ import {
 // Dynamic import for expo-audio
 let useAudioRecorder: any;
 let useAudioRecorderState: any;
+let useAudioPlayer: any;
+let useAudioPlayerStatus: any;
+let createAudioPlayer: any;
 let RecordingPresets: any;
 let setAudioModeAsync: any;
 let requestRecordingPermissionsAsync: any;
@@ -45,6 +52,9 @@ try {
   const expoAudio = require('expo-audio');
   useAudioRecorder = expoAudio.useAudioRecorder;
   useAudioRecorderState = expoAudio.useAudioRecorderState;
+  useAudioPlayer = expoAudio.useAudioPlayer;
+  useAudioPlayerStatus = expoAudio.useAudioPlayerStatus;
+  createAudioPlayer = expoAudio.createAudioPlayer;
   RecordingPresets = expoAudio.RecordingPresets;
   setAudioModeAsync = expoAudio.setAudioModeAsync;
   requestRecordingPermissionsAsync = expoAudio.requestRecordingPermissionsAsync;
@@ -58,6 +68,7 @@ const MIN_RECORDING_DURATION = 500;
 const WAVEFORM_BAR_COUNT = 28;
 const CANCEL_SLIDE_X = -100; // slide left 100px to cancel
 const LOCK_SLIDE_Y = -80; // slide up 80px to lock
+const FLING_CANCEL_VELOCITY = -0.8; // fast fling left cancels
 
 interface VoiceRecorderProps {
   onRecordingComplete: (uri: string, duration: number) => void;
@@ -65,6 +76,9 @@ interface VoiceRecorderProps {
   disabled?: boolean;
   onRecordingStateChange?: (isRecording: boolean) => void;
 }
+
+// Preview state: recording done, user can play back before sending
+type RecorderPhase = 'idle' | 'recording' | 'locked' | 'preview';
 
 // Fallback when expo-audio is unavailable
 const VoiceRecorderFallback: React.FC = () => (
@@ -81,23 +95,37 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   disabled = false,
   onRecordingStateChange,
 }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
+  const [phase, setPhase] = useState<RecorderPhase>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [inCancelZone, setInCancelZone] = useState(false);
   const [inLockZone, setInLockZone] = useState(false);
   const [waveformData, setWaveformData] = useState<number[]>(
     new Array(WAVEFORM_BAR_COUNT).fill(0.2),
   );
+  // Preview state: stored URI + duration after recording stops in locked mode
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewDuration, setPreviewDuration] = useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 100);
 
   const isRecordingRef = useRef(false);
+  const isLockedRef = useRef(false);
+  const phaseRef = useRef<RecorderPhase>('idle');
   const hasPermissionsRef = useRef(false);
   const recordingStartTime = useRef(0);
-  const initialX = useRef(0);
-  const initialY = useRef(0);
+  const latestDurationRef = useRef(0);
+  // Preview audio player ref
+  const previewPlayerRef = useRef<any>(null);
+
+  // Haptic zone tracking refs (prevent repeated haptics)
+  const wasCancelZone = useRef(false);
+  const wasLockZone = useRef(false);
+
+  // Derived booleans for backward compat
+  const isRecording = phase === 'recording' || phase === 'locked';
+  const isLocked = phase === 'locked';
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -109,15 +137,21 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
     [],
   );
 
-  // Notify parent of recording state
+  // Sync phase to refs for PanResponder (reads synchronously)
   useEffect(() => {
-    onRecordingStateChange?.(isRecording);
-  }, [isRecording, onRecordingStateChange]);
+    phaseRef.current = phase;
+    isLockedRef.current = phase === 'locked';
+  }, [phase]);
+
+  // Notify parent of recording state (active during recording + locked + preview)
+  useEffect(() => {
+    onRecordingStateChange?.(phase !== 'idle');
+  }, [phase, onRecordingStateChange]);
 
   // Pulse animation when recording
   useEffect(() => {
     let pulse: Animated.CompositeAnimation | null = null;
-    if (isRecording) {
+    if (phase === 'recording' || phase === 'locked') {
       pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
@@ -129,12 +163,14 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
       pulseAnim.setValue(1);
     }
     return () => { pulse?.stop(); };
-  }, [isRecording, pulseAnim]);
+  }, [phase, pulseAnim]);
 
   // Update duration + waveform from recorder state
   useEffect(() => {
     if (recorderState?.isRecording) {
-      setRecordingDuration(recorderState.durationMillis || 0);
+      const dur = recorderState.durationMillis || 0;
+      setRecordingDuration(dur);
+      latestDurationRef.current = dur;
       if (recorderState.metering !== undefined) {
         const normalized = Math.max(0, Math.min(1, (recorderState.metering + 60) / 60));
         const value = 0.2 + normalized * 0.6;
@@ -147,17 +183,27 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
     }
   }, [recorderState, waveformAnims]);
 
-  // Request permissions on mount
+  // Request permissions on mount (do NOT set allowsRecording — blocks playback)
   useEffect(() => {
     (async () => {
       try {
         const { granted } = await getRecordingPermissionsAsync();
         if (granted) {
           hasPermissionsRef.current = true;
-          await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
         }
       } catch {}
     })();
+  }, []);
+
+  // Cleanup preview player on unmount
+  useEffect(() => {
+    return () => {
+      if (previewPlayerRef.current) {
+        try { previewPlayerRef.current.pause(); } catch {}
+        try { previewPlayerRef.current.remove(); } catch {}
+        previewPlayerRef.current = null;
+      }
+    };
   }, []);
 
   const formatDuration = (ms: number): string => {
@@ -174,219 +220,361 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
         if (!granted) { isRecordingRef.current = false; return; }
         hasPermissionsRef.current = true;
       }
+      // Only enable recording mode when actually starting to record
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
       recordingStartTime.current = Date.now();
-      setIsRecording(true);
+      setPhase('recording');
       setRecordingDuration(0);
       setWaveformData(new Array(WAVEFORM_BAR_COUNT).fill(0.2));
-      Vibration.vibrate(50);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     } catch {
       isRecordingRef.current = false;
-      setIsRecording(false);
+      setPhase('idle');
       onRecordingCancel?.();
     }
   }, [disabled, recorder, onRecordingCancel]);
 
-  const stopRecording = useCallback(async (shouldSend: boolean) => {
+  /** Stop recording. If toPreview=true, enters preview mode instead of sending/cancelling. */
+  const stopRecording = useCallback(async (shouldSend: boolean, toPreview = false) => {
     if (!isRecordingRef.current) return;
     isRecordingRef.current = false;
-    const duration = recorderState?.durationMillis || (Date.now() - recordingStartTime.current);
+    const duration = latestDurationRef.current || (Date.now() - recordingStartTime.current);
     try {
       await recorder.stop();
       const uri = recorder.uri;
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
 
-      if (!uri || duration < MIN_RECORDING_DURATION || !shouldSend) {
-        Vibration.vibrate(shouldSend ? 30 : [0, 50, 100]);
+      if (!uri || duration < MIN_RECORDING_DURATION) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        onRecordingCancel?.();
+        resetState();
+        return;
+      }
+
+      if (toPreview) {
+        // Enter preview mode — user can play back before deciding
+        setPreviewUri(uri);
+        setPreviewDuration(duration);
+        setPhase('preview');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        return;
+      }
+
+      if (!shouldSend) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
         onRecordingCancel?.();
       } else {
-        Vibration.vibrate([0, 30, 50, 30]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         onRecordingComplete(uri, duration);
       }
     } catch {
       onRecordingCancel?.();
     }
     resetState();
-  }, [recorder, recorderState, onRecordingComplete, onRecordingCancel]);
+  }, [recorder, onRecordingComplete, onRecordingCancel]);
+
+  /** Send from preview mode */
+  const sendPreview = useCallback(() => {
+    if (!previewUri) return;
+    // Stop preview playback
+    if (previewPlayerRef.current) {
+      try { previewPlayerRef.current.pause(); } catch {}
+      try { previewPlayerRef.current.remove(); } catch {}
+      previewPlayerRef.current = null;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    onRecordingComplete(previewUri, previewDuration);
+    resetState();
+  }, [previewUri, previewDuration, onRecordingComplete]);
+
+  /** Discard from preview mode */
+  const discardPreview = useCallback(() => {
+    if (previewPlayerRef.current) {
+      try { previewPlayerRef.current.pause(); } catch {}
+      try { previewPlayerRef.current.remove(); } catch {}
+      previewPlayerRef.current = null;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    onRecordingCancel?.();
+    resetState();
+  }, [onRecordingCancel]);
+
+  /** Toggle preview playback */
+  const togglePreviewPlay = useCallback(async () => {
+    if (!previewUri || !createAudioPlayer) return;
+    try {
+      if (previewPlayerRef.current) {
+        if (isPreviewPlaying) {
+          previewPlayerRef.current.pause();
+          setIsPreviewPlaying(false);
+        } else {
+          previewPlayerRef.current.seekTo(0);
+          previewPlayerRef.current.play();
+          setIsPreviewPlaying(true);
+        }
+        return;
+      }
+      // Create new player
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      const player = createAudioPlayer({ uri: previewUri });
+      player.volume = 1.0;
+      previewPlayerRef.current = player;
+      player.play();
+      setIsPreviewPlaying(true);
+      // Auto-stop when finished (check periodically)
+      const checkInterval = setInterval(() => {
+        if (!previewPlayerRef.current?.playing && isPreviewPlaying) {
+          setIsPreviewPlaying(false);
+          clearInterval(checkInterval);
+        }
+      }, 200);
+      // Cleanup interval after max duration + buffer
+      setTimeout(() => clearInterval(checkInterval), previewDuration + 2000);
+    } catch (err) {
+      console.warn('[VoiceRecorder] Preview playback error:', err);
+      setIsPreviewPlaying(false);
+    }
+  }, [previewUri, previewDuration, isPreviewPlaying]);
 
   const resetState = () => {
-    setIsRecording(false);
-    setIsLocked(false);
+    setPhase('idle');
+    isLockedRef.current = false;
+    phaseRef.current = 'idle';
     setInCancelZone(false);
     setInLockZone(false);
     setRecordingDuration(0);
+    setPreviewUri(null);
+    setPreviewDuration(0);
+    setIsPreviewPlaying(false);
+    wasCancelZone.current = false;
+    wasLockZone.current = false;
     slideX.setValue(0);
     lockSlideY.setValue(0);
     waveformAnims.forEach((a) => a.setValue(0.2));
+    if (previewPlayerRef.current) {
+      try { previewPlayerRef.current.pause(); } catch {}
+      try { previewPlayerRef.current.remove(); } catch {}
+      previewPlayerRef.current = null;
+    }
   };
 
-  // PanResponder for hold-to-record gesture
+  // PanResponder wraps ENTIRE component — critical for gesture continuity.
+  // When locked/preview, PanResponder yields so TouchableOpacity buttons work.
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => isRecordingRef.current,
-        onPanResponderGrant: (_e: GestureResponderEvent, _gs: PanResponderGestureState) => {
-          initialX.current = 0;
-          initialY.current = 0;
+        onStartShouldSetPanResponder: () =>
+          !disabled && phaseRef.current !== 'locked' && phaseRef.current !== 'preview',
+        onMoveShouldSetPanResponder: () =>
+          isRecordingRef.current && phaseRef.current === 'recording',
+        onPanResponderGrant: () => {
+          if (phaseRef.current !== 'idle') return;
           startRecording();
         },
-        onPanResponderMove: (_e: GestureResponderEvent, gs: PanResponderGestureState) => {
-          if (!isRecordingRef.current) return;
+        onPanResponderMove: (_e, gs) => {
+          if (!isRecordingRef.current || phaseRef.current !== 'recording') return;
           // Slide left → cancel
           const dx = Math.min(0, gs.dx);
           slideX.setValue(dx);
-          setInCancelZone(dx < CANCEL_SLIDE_X);
+          const nowInCancel = dx < CANCEL_SLIDE_X;
+          if (nowInCancel && !wasCancelZone.current) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+          } else if (!nowInCancel && wasCancelZone.current) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          }
+          wasCancelZone.current = nowInCancel;
+          setInCancelZone(nowInCancel);
           // Slide up → lock
           const dy = Math.min(0, gs.dy);
           lockSlideY.setValue(dy);
-          setInLockZone(dy < LOCK_SLIDE_Y);
+          const nowInLock = dy < LOCK_SLIDE_Y;
+          if (nowInLock && !wasLockZone.current) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+          } else if (!nowInLock && wasLockZone.current) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          }
+          wasLockZone.current = nowInLock;
+          setInLockZone(nowInLock);
         },
-        onPanResponderRelease: (_e: GestureResponderEvent, gs: PanResponderGestureState) => {
-          if (!isRecordingRef.current) return;
-          if (gs.dx < CANCEL_SLIDE_X) {
-            // Cancelled
+        onPanResponderRelease: (_e, gs) => {
+          if (!isRecordingRef.current || phaseRef.current !== 'recording') return;
+          // Fast fling left cancels regardless of position
+          if (gs.dx < CANCEL_SLIDE_X || gs.vx < FLING_CANCEL_VELOCITY) {
             stopRecording(false);
           } else if (gs.dy < LOCK_SLIDE_Y) {
-            // Locked — keep recording, show stop/send buttons
-            setIsLocked(true);
+            setPhase('locked');
+            isLockedRef.current = true;
             slideX.setValue(0);
             lockSlideY.setValue(0);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           } else {
-            // Release → send
             stopRecording(true);
           }
         },
         onPanResponderTerminate: () => {
-          if (isRecordingRef.current) stopRecording(false);
+          if (isRecordingRef.current && phaseRef.current === 'recording') {
+            stopRecording(false);
+          }
         },
       }),
     [disabled, startRecording, stopRecording, slideX, lockSlideY],
   );
 
-  // ─── IDLE STATE ───
-  if (!isRecording && !isLocked) {
-    return (
-      <View style={styles.container}>
-        <Animated.View {...panResponder.panHandlers}>
-          <LinearGradient
-            colors={GRADIENT_PURPLE_INDIGO as [string, string]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.micButton}
-          >
-            <Ionicons name="mic" size={20} color="#ffffff" />
-          </LinearGradient>
-        </Animated.View>
-      </View>
-    );
-  }
+  // ─── Waveform bars (shared across recording + locked states) ───
+  const waveformBars = waveformAnims.map((anim, i) => (
+    <Animated.View
+      key={i}
+      style={[
+        styles.waveBar,
+        { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
+      ]}
+    />
+  ));
 
-  // ─── LOCKED STATE (recording continues, user sees stop/send) ───
-  if (isLocked) {
-    return (
-      <View style={styles.recordingBar}>
-        {/* Red pulse dot */}
-        <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
-        {/* Waveform */}
-        <View style={styles.waveformContainer}>
-          {waveformAnims.map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.waveBar,
-                { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
-              ]}
-            />
-          ))}
-        </View>
-        {/* Duration */}
-        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-        {/* Cancel */}
-        <Animated.View style={styles.lockAction}>
-          <Ionicons
-            name="trash-outline"
-            size={22}
-            color={ERROR_RED}
-            onPress={() => stopRecording(false)}
-          />
-        </Animated.View>
-        {/* Send */}
-        <Animated.View style={styles.lockAction}>
-          <LinearGradient
-            colors={GRADIENT_PURPLE_INDIGO as [string, string]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.sendCircle}
-          >
-            <Ionicons
-              name="send"
-              size={18}
-              color="#ffffff"
-              onPress={() => stopRecording(true)}
-            />
-          </LinearGradient>
-        </Animated.View>
-      </View>
-    );
-  }
+  // Determine root style
+  const isActive = phase !== 'idle';
 
-  // ─── RECORDING STATE (hold gesture active) ───
   return (
-    <View style={styles.recordingBar}>
-      <Animated.View
-        style={[
-          styles.recordingSlider,
-          { transform: [{ translateX: slideX }] },
-        ]}
-      >
-        {/* Red pulse dot */}
-        <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
-        {/* Waveform */}
-        <View style={styles.waveformContainer}>
-          {waveformAnims.map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.waveBar,
-                { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
-              ]}
+    <View
+      style={isActive ? styles.recordingBar : styles.container}
+      {...panResponder.panHandlers}
+      collapsable={false}
+    >
+      {/* ─── IDLE: mic button ─── */}
+      {phase === 'idle' && (
+        <LinearGradient
+          colors={GRADIENT_PURPLE_INDIGO as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.micButton}
+        >
+          <Ionicons name="mic" size={20} color="#ffffff" />
+        </LinearGradient>
+      )}
+
+      {/* ─── LOCKED: recording bar with Stop (→ preview) / Trash ─── */}
+      {phase === 'locked' && (
+        <>
+          <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
+          <View style={styles.waveformContainer}>{waveformBars}</View>
+          <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={() => stopRecording(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.trashCircle}>
+              <Ionicons name="trash-outline" size={20} color={ERROR_RED} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={() => stopRecording(false, true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.stopCircle}>
+              <Ionicons name="stop" size={16} color="#ffffff" />
+            </View>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* ─── PREVIEW: play back before sending ─── */}
+      {phase === 'preview' && (
+        <>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={togglePreviewPlay}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.playCircle}>
+              <Ionicons
+                name={isPreviewPlaying ? 'pause' : 'play'}
+                size={18}
+                color="#ffffff"
+              />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.previewWaveform}>
+            {waveformData.map((v, i) => (
+              <View
+                key={i}
+                style={[styles.waveBar, { height: v * 24, backgroundColor: CYAN_PRIMARY, opacity: 0.7 }]}
+              />
+            ))}
+          </View>
+          <Text style={styles.durationText}>{formatDuration(previewDuration)}</Text>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={discardPreview}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.trashCircle}>
+              <Ionicons name="trash-outline" size={20} color={ERROR_RED} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={sendPreview}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <LinearGradient
+              colors={GRADIENT_PURPLE_INDIGO as [string, string]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.sendCircle}
+            >
+              <Ionicons name="send" size={16} color="#ffffff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* ─── RECORDING: hold gesture active ─── */}
+      {phase === 'recording' && (
+        <>
+          <Animated.View
+            style={[
+              styles.recordingSlider,
+              { transform: [{ translateX: slideX }] },
+            ]}
+          >
+            <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
+            <View style={styles.waveformContainer}>{waveformBars}</View>
+            <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+          </Animated.View>
+
+          {/* Cancel hint */}
+          <View style={styles.cancelHint}>
+            <Ionicons
+              name="chevron-back"
+              size={14}
+              color={inCancelZone ? ERROR_RED : '#64748b'}
             />
-          ))}
-        </View>
-        {/* Duration */}
-        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-      </Animated.View>
+            <Text style={[styles.cancelText, inCancelZone && { color: ERROR_RED }]}>
+              {inCancelZone ? 'Release to cancel' : 'Slide to cancel'}
+            </Text>
+          </View>
 
-      {/* Cancel hint */}
-      <View style={styles.cancelHint}>
-        <Ionicons
-          name="chevron-back"
-          size={14}
-          color={inCancelZone ? ERROR_RED : '#64748b'}
-        />
-        <Text style={[styles.cancelText, inCancelZone && { color: ERROR_RED }]}>
-          {inCancelZone ? 'Release to cancel' : 'Slide to cancel'}
-        </Text>
-      </View>
-
-      {/* Lock hint */}
-      <Animated.View
-        style={[
-          styles.lockHintContainer,
-          { transform: [{ translateY: lockSlideY }] },
-        ]}
-      >
-        <View style={[styles.lockHint, inLockZone && styles.lockHintActive]}>
-          <Ionicons
-            name={inLockZone ? 'lock-closed' : 'lock-open-outline'}
-            size={16}
-            color={inLockZone ? '#ffffff' : '#94a3b8'}
-          />
-        </View>
-      </Animated.View>
+          {/* Lock hint */}
+          <Animated.View
+            style={[
+              styles.lockHintContainer,
+              { transform: [{ translateY: lockSlideY }] },
+            ]}
+          >
+            <View style={[styles.lockHint, inLockZone && styles.lockHintActive]}>
+              <Ionicons
+                name={inLockZone ? 'lock-closed' : 'lock-open-outline'}
+                size={16}
+                color={inLockZone ? '#ffffff' : '#94a3b8'}
+              />
+            </View>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 };
@@ -485,10 +673,45 @@ const styles = StyleSheet.create({
     borderColor: PURPLE_PRIMARY,
   },
   lockAction: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  trashCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  stopCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(148, 163, 184, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.4)',
+  },
+  playCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: CYAN_PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewWaveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    height: 28,
+    gap: 2,
   },
   sendCircle: {
     width: 36,

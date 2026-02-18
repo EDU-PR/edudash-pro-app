@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { toast } from '@/components/ui/ToastProvider';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { useCallSafe } from '@/components/calls/CallProvider';
 import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
 import { CYAN_GLOW } from './theme';
@@ -117,6 +118,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   const [pendingImage, setPendingImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [sendingImage, setSendingImage] = useState(false);
   
+  // Presence activity tracking — keeps user status 'online' while chatting
+  const callCtx = useCallSafe();
+  
   // Mic glow animation
   const micGlowAnim = useRef(new Animated.Value(0.1)).current;
   
@@ -174,12 +178,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     if (!isEditing) {
       onCancelReply?.();
     }
-
+    callCtx?.recordActivity();
     await onSend(content);
   };
 
   const handleVoiceComplete = async (uri: string, duration: number) => {
     setIsRecording(false);
+    callCtx?.recordActivity();
     if (onVoiceRecording) {
       await onVoiceRecording(uri, duration);
     }
@@ -302,11 +307,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         />
       )}
       
-      {/* Reply Preview */}
-      {replyingTo && !isEditing && (
-        <ReplyPreview message={replyingTo} onClose={() => onCancelReply?.()} />
-      )}
-      
       {/* Edit Mode Banner */}
       {isEditing && (
         <View style={styles.editBanner}>
@@ -328,54 +328,66 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         {!isRecording && (
           <>
             <View style={styles.inputWrapper}>
-              {/* Emoji toggle inside the input field */}
-              <TouchableOpacity
-                style={styles.inlineBtnLeft}
-                onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-                accessibilityLabel={showEmojiPicker ? 'Close emoji picker' : 'Open emoji picker'}
-              >
-                <Ionicons
-                  name={showEmojiPicker ? 'close-outline' : 'happy-outline'}
-                  size={22}
-                  color="rgba(255,255,255,0.65)"
-                />
-              </TouchableOpacity>
+              {/* Reply Preview — WhatsApp-style inside the input bubble */}
+              {replyingTo && !isEditing && (
+                <View style={styles.replyInsideInput}>
+                  <ReplyPreview message={replyingTo} onClose={() => onCancelReply?.()} />
+                </View>
+              )}
 
-              <TextInput
-                style={styles.textInput}
-                placeholder={placeholder}
-                placeholderTextColor="rgba(255,255,255,0.55)"
-                value={text}
-                onChangeText={(newText) => {
-                  setText(newText);
-                  // Notify parent about typing activity
-                  if (newText.trim() && onTyping) {
-                    onTyping();
-                  }
-                }}
-                multiline
-                maxLength={1000}
-                editable={!sending && !disabled}
-                onFocus={() => setShowEmojiPicker(false)}
-              />
-              
-              {/* Camera button (hide when typing) */}
-              {!text.trim() && (
+              {/* Input row: emoji + text + camera + attach */}
+              <View style={styles.inputRow}>
+                {/* Emoji toggle inside the input field */}
+                <TouchableOpacity
+                  style={styles.inlineBtnLeft}
+                  onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+                  accessibilityLabel={showEmojiPicker ? 'Close emoji picker' : 'Open emoji picker'}
+                >
+                  <Ionicons
+                    name={showEmojiPicker ? 'close-outline' : 'happy-outline'}
+                    size={22}
+                    color="rgba(255,255,255,0.65)"
+                  />
+                </TouchableOpacity>
+
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={placeholder}
+                  placeholderTextColor="rgba(255,255,255,0.55)"
+                  value={text}
+                  onChangeText={(newText) => {
+                    setText(newText);
+                    // Notify parent about typing activity
+                    if (newText.trim() && onTyping) {
+                      onTyping();
+                    }
+                    // Keep presence online while typing
+                    callCtx?.recordActivity();
+                  }}
+                  multiline
+                  maxLength={1000}
+                  editable={!sending && !disabled}
+                  onFocus={() => setShowEmojiPicker(false)}
+                />
+                
+                {/* Camera button (hide when typing) */}
+                {!text.trim() && (
+                  <TouchableOpacity 
+                    style={styles.inlineBtn}
+                    onPress={handleCamera}
+                  >
+                    <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
+                  </TouchableOpacity>
+                )}
+                
+                {/* Attachment button */}
                 <TouchableOpacity 
                   style={styles.inlineBtn}
-                  onPress={handleCamera}
+                  onPress={handleAttachment}
                 >
-                  <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
+                  <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
-              )}
-              
-              {/* Attachment button */}
-              <TouchableOpacity 
-                style={styles.inlineBtn}
-                onPress={handleAttachment}
-              >
-                <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
-              </TouchableOpacity>
+              </View>
             </View>
             
             {/* Send Button - only when there's text */}
@@ -437,9 +449,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   composerRow: {
     flexDirection: 'row',
@@ -448,16 +460,29 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flex: 1,
+    flexDirection: 'column',
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    paddingLeft: 0,
+    paddingRight: 0,
+    paddingVertical: 0,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    overflow: 'hidden',
+  },
+  replyInsideInput: {
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.46)',
-    borderRadius: 24,
     paddingLeft: 8,
     paddingRight: 6,
-    paddingVertical: 6,
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.24)',
+    paddingVertical: 4,
+    minHeight: 46,
   },
   textInput: {
     flex: 1,

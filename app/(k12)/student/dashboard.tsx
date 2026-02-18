@@ -16,11 +16,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { logger } from '@/lib/logger';
 import { track } from '@/lib/analytics';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { GlassCard } from '@/components/nextgen/GlassCard';
+import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
+import { Pill } from '@/components/nextgen/Pill';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
@@ -32,29 +34,20 @@ const quickActions = [
   { id: 'grades', icon: 'ribbon', label: 'Grades', route: '/(k12)/student/grades', color: '#F59E0B' },
   { id: 'schedule', icon: 'calendar', label: 'Schedule', route: '/(k12)/student/schedule', color: '#8B5CF6' },
   { id: 'library', icon: 'library', label: 'Library', route: '/(k12)/library', color: '#3B82F6' },
-  { id: 'ai', icon: 'sparkles', label: 'Study AI', route: '/(k12)/ai-tutor', color: '#EC4899' },
+  { id: 'ai', icon: 'sparkles', label: 'Study AI', route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic', color: '#EC4899' },
 ];
 
-// Mock data for upcoming assignments - TODO: Replace with real data from Supabase
-const mockUpcomingAssignments = [
-  { id: '1', title: 'Math Homework - Chapter 5', subject: 'Mathematics', dueDate: 'Tomorrow', status: 'pending' },
-  { id: '2', title: 'Essay: Climate Change', subject: 'English', dueDate: 'Mar 15', status: 'pending' },
-  { id: '3', title: 'Science Lab Report', subject: 'Physics', dueDate: 'Mar 18', status: 'in_progress' },
-];
+// Placeholder data — screens fetch real data via hooks, dashboard shows summary cards  
+// TODO: Wire real assignment count + class schedule from Supabase queries
+const EMPTY_ASSIGNMENTS: { id: string; title: string; subject: string; dueDate: string; status: string }[] = [];
+const EMPTY_CLASSES: { id: string; name: string; time: string; room: string; teacher: string; current: boolean }[] = [];
 
-// Mock data for today's classes - TODO: Replace with real data from Supabase
-const mockTodaysClasses = [
-  { id: '1', name: 'Mathematics', time: '08:00 - 09:00', room: 'Room 201', teacher: 'Mr. Johnson', current: false },
-  { id: '2', name: 'English Literature', time: '09:15 - 10:15', room: 'Room 105', teacher: 'Ms. Williams', current: true },
-  { id: '3', name: 'Physics', time: '11:00 - 12:00', room: 'Lab 3', teacher: 'Dr. Smith', current: false },
-];
-
-// Mock metrics - TODO: Replace with real data from Supabase
-const mockMetrics = {
-  avgGrade: 'A-',
-  attendance: 98,
-  pendingTasks: 5,
-  completedToday: 2,
+// Default metrics shown until real aggregation is wired
+const defaultMetrics = {
+  avgGrade: '--',
+  attendance: 0,
+  pendingTasks: 0,
+  completedToday: 0,
 };
 
 interface QuickStatProps {
@@ -66,29 +59,31 @@ interface QuickStatProps {
 }
 
 const QuickStat: React.FC<QuickStatProps> = ({ icon, label, value, color, colors }) => (
-  <View style={[styles.quickStat, { backgroundColor: colors.surface }]}>
-    <View style={[styles.quickStatIcon, { backgroundColor: color + '20' }]}>
-      <Ionicons name={icon as any} size={20} color={color} />
+  <GlassCard style={styles.quickStat} padding={12}>
+    <View style={styles.quickStatRow}>
+      <View style={[styles.quickStatIcon, { backgroundColor: color + '20' }]}>
+        <Ionicons name={icon as any} size={20} color={color} />
+      </View>
+      <View>
+        <Text style={[styles.quickStatValue, { color: colors.text }]}>{value}</Text>
+        <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>{label}</Text>
+      </View>
     </View>
-    <View>
-      <Text style={[styles.quickStatValue, { color: colors.text }]}>{value}</Text>
-      <Text style={[styles.quickStatLabel, { color: colors.textSecondary }]}>{label}</Text>
-    </View>
-  </View>
+  </GlassCard>
 );
 
 export default function K12StudentDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { profile, user, loading: authLoading, profileLoading } = useAuth();
   const permissions = usePermissions();
-  const { theme } = useTheme();
+  const { theme } = useNextGenTheme();
   const { tier } = useSubscription();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [todaysClasses, setTodaysClasses] = useState(mockTodaysClasses);
-  const [upcomingAssignments, setUpcomingAssignments] = useState(mockUpcomingAssignments);
-  const [metrics, setMetrics] = useState(mockMetrics);
+  const [todaysClasses, setTodaysClasses] = useState(EMPTY_CLASSES);
+  const [upcomingAssignments, setUpcomingAssignments] = useState(EMPTY_ASSIGNMENTS);
+  const [metrics, setMetrics] = useState(defaultMetrics);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile
@@ -96,10 +91,31 @@ export default function K12StudentDashboardScreen() {
   const userName = profile?.full_name || profile?.email?.split('@')[0] || 'Student';
   const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
   const grade = 'Grade 10'; // TODO: Get from profile/student record
+  const gradeMatch = grade.match(/\d+/);
+  const gradeNumber = gradeMatch ? Number(gradeMatch[0]) : 0;
+  const canBuildFormalExam = gradeNumber >= 4;
 
   // RBAC checks - students use 'student' role
   const canView = permissions?.hasRole ? permissions.hasRole('student') : false;
   const hasAccess = permissions?.can ? permissions.can('access_mobile_app') : false;
+
+  const openTutorSession = useCallback(() => {
+    track('k12.student.tutor_mode_open', { user_id: user?.id, grade });
+    router.push({
+      pathname: '/screens/dash-assistant',
+      params: {
+        source: 'k12_student',
+        mode: 'tutor',
+        tutorMode: 'diagnostic',
+        grade,
+      },
+    } as any);
+  }, [grade, user?.id]);
+
+  const openExamBuilder = useCallback(() => {
+    track('k12.student.exam_builder_open', { user_id: user?.id, grade });
+    router.push('/screens/exam-prep' as any);
+  }, [grade, user?.id]);
 
   // Track dashboard view
   useEffect(() => {
@@ -140,9 +156,11 @@ export default function K12StudentDashboardScreen() {
 
   const handleQuickAction = (route: string, actionId: string) => {
     track('k12.student.quick_action_tap', { action: actionId, user_id: user?.id });
-    // TODO: Enable navigation when routes exist
-    // router.push(route as any);
-    logger.debug('K12Student', 'Quick action:', actionId, route);
+    if (actionId === 'ai') {
+      openTutorSession();
+      return;
+    }
+    router.push(route as any);
   };
 
   const getGreeting = () => {
@@ -295,12 +313,53 @@ export default function K12StudentDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Dash Learning Hub</Text>
+          </View>
+          <View style={styles.learningHubGrid}>
+            <GradientActionCard
+              tone="green"
+              icon="school-outline"
+              badgeLabel="Tutor Mode"
+              title="Interactive Tutor Session"
+              description="Live step-by-step help. Diagnose → Teach → Practice."
+              cta="Start Tutor Session"
+              onPress={openTutorSession}
+            />
+            <GradientActionCard
+              tone="purple"
+              icon="document-text-outline"
+              badgeLabel="Exam Builder"
+              title="Build Full Exam (Printable)"
+              description="Generate a CAPS-aligned formal test paper."
+              cta="Generate Formal Test Paper"
+              onPress={openExamBuilder}
+              disabled={!canBuildFormalExam}
+            />
+            <View style={styles.learningHubHintRow}>
+              <Pill label="Tutor Session Active" tone="success" />
+              <Text style={[styles.learningHubHintText, { color: theme.colors.textSecondary }]}>
+                Mode: Diagnose → Teach → Practice
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Quick Actions</Text>
           <View style={styles.quickActionsGrid}>
             {quickActions.map((action) => (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickActionCard, { backgroundColor: theme.colors.surface }]}
+                style={[
+                  styles.quickActionCard,
+                  {
+                    backgroundColor: theme.surfaceVariant,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                  },
+                ]}
                 onPress={() => handleQuickAction(action.route, action.id)}
                 activeOpacity={0.7}
               >
@@ -387,35 +446,6 @@ export default function K12StudentDashboardScreen() {
           ))}
         </View>
 
-        {/* AI Study Assistant Card */}
-        <TouchableOpacity 
-          style={styles.aiCard} 
-          activeOpacity={0.8}
-          onPress={() => {
-            track('k12.student.ai_study_buddy_tap', { user_id: user?.id });
-            // TODO: Navigate to AI tutor
-          }}
-        >
-          <LinearGradient
-            colors={['#8B5CF6', '#EC4899']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.aiCardGradient}
-          >
-            <View style={styles.aiCardContent}>
-              <View style={styles.aiCardIcon}>
-                <Ionicons name="sparkles" size={28} color="#FFFFFF" />
-              </View>
-              <View style={styles.aiCardText}>
-                <Text style={styles.aiCardTitle}>AI Study Buddy</Text>
-                <Text style={styles.aiCardSubtitle}>
-                  Get help with homework, practice problems, and exam prep
-                </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Mobile Navigation Drawer */}
@@ -429,7 +459,7 @@ export default function K12StudentDashboardScreen() {
           { id: 'grades', label: 'Grades', icon: 'ribbon', route: '/(k12)/student/grades' },
           { id: 'schedule', label: 'Schedule', icon: 'calendar', route: '/(k12)/student/schedule' },
           { id: 'library', label: 'Library', icon: 'library', route: '/(k12)/library' },
-          { id: 'ai', label: 'AI Study Buddy', icon: 'sparkles', route: '/(k12)/ai-tutor' },
+          { id: 'ai', label: 'AI Study Buddy', icon: 'sparkles', route: '/screens/dash-assistant?mode=tutor&source=k12_student&tutorMode=diagnostic' },
           { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/(k12)/student/messages' },
           { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
           { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
@@ -534,10 +564,12 @@ const styles = StyleSheet.create({
   },
   quickStat: {
     flex: 1,
+    minHeight: 62,
+    justifyContent: 'center',
+  },
+  quickStatRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    padding: 12,
     gap: 10,
   },
   quickStatIcon: {
@@ -621,6 +653,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
+  learningHubGrid: {
+    gap: 10,
+  },
+  learningHubHintRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  learningHubHintText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   quickActionCard: {
     width: (width - 56) / 3,
     borderRadius: 16,
@@ -696,42 +742,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   scheduleDetails: {
-    fontSize: 13,
-  },
-  aiCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  aiCardGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-  },
-  aiCardContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  aiCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  aiCardText: {
-    flex: 1,
-  },
-  aiCardTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  aiCardSubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 13,
   },
 });

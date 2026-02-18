@@ -17,7 +17,7 @@ import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker'
 import { DashAIAvatar, DashAILoading } from '@/components/dash/DashAIAvatar';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
-import { getMessageDisplayText } from '@/lib/messaging/messageContent';
+import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image, Plus, Sparkles } from 'lucide-react';
 import { 
   type MessageThread, 
@@ -569,13 +569,13 @@ function ParentMessagesContent() {
           thread_id,
           sender_id,
           content,
+          content_type,
           created_at,
           delivered_at,
           read_by,
           deleted_at,
           reply_to_id,
-          forwarded_from_id,
-          sender:profiles(first_name, last_name, role)
+          forwarded_from_id
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -584,6 +584,20 @@ function ParentMessagesContent() {
       if (error) throw error;
       
       let messagesWithDetails = data || [];
+
+      if (messagesWithDetails.length > 0) {
+        const senderIds = [...new Set(messagesWithDetails.map((message: any) => message.sender_id))];
+        const { data: senderProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, role')
+          .in('id', senderIds);
+
+        const profileMap = new Map((senderProfiles || []).map((profile: any) => [profile.id, profile]));
+        messagesWithDetails = messagesWithDetails.map((message: any) => ({
+          ...message,
+          sender: profileMap.get(message.sender_id) || null,
+        }));
+      }
       
       // Fetch reply_to message content for messages that are replies
       const replyIds = messagesWithDetails
@@ -607,7 +621,7 @@ function ParentMessagesContent() {
         const replyMap = new Map((replyMessages || [])
           .map((r: any) => [r.id, {
             ...r,
-            sender: replySenderMap.get(r.sender_id),
+            sender: replySenderMap.get(r.sender_id) || null,
           }]));
         
         messagesWithDetails = messagesWithDetails.map((msg: any) => ({
@@ -1268,6 +1282,16 @@ function ParentMessagesContent() {
     }
   };
 
+  const handleCallEventPress = (event: CallEventContent) => {
+    if (!event.callerId) return;
+    const callOptions = selectedThreadId ? { threadId: selectedThreadId } : undefined;
+    if (event.callType === 'video') {
+      startVideoCall(event.callerId, event.callerName || 'Contact', callOptions);
+      return;
+    }
+    startVoiceCall(event.callerId, event.callerName || 'Contact', callOptions);
+  };
+
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
   
   // Check if we're in the Dash AI thread
@@ -1288,6 +1312,7 @@ function ParentMessagesContent() {
 
   // Get the messages to display (Dash AI or regular)
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
+  const isGroupThread = !isDashAISelected && (currentThread?.is_group || ((currentThread?.message_participants?.length || 0) > 2));
 
   const handleSelectThread = (threadId: string) => {
     if (threadId === DASH_AI_THREAD_ID) {
@@ -1669,7 +1694,7 @@ function ParentMessagesContent() {
                       {!isDashAISelected && (
                         <>
                           <button
-                            onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
+                            onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                             title="Voice call"
                             style={{
                               width: 36,
@@ -1690,7 +1715,7 @@ function ParentMessagesContent() {
                             <Phone size={16} color="white" />
                           </button>
                           <button
-                            onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
+                            onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                             title="Video call"
                             style={{
                               width: 36,
@@ -1866,11 +1891,11 @@ function ParentMessagesContent() {
                     {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const isDashAIMessage = message.sender_id === DASH_AI_USER_ID;
-                      const senderName = isDashAIMessage 
+                      const senderName = isDashAIMessage
                         ? 'Dash AI'
                         : (message.sender
-                          ? `${message.sender.first_name} ${message.sender.last_name}`
-                          : 'Unknown');
+                          ? `${message.sender.first_name || ''} ${message.sender.last_name || ''}`.trim()
+                          : '');
 
                       // Get other participant IDs (excluding current user) for read status
                       const otherParticipantIds = (currentThread?.message_participants || [])
@@ -1894,12 +1919,14 @@ function ParentMessagesContent() {
                               isOwn={isOwn}
                               isDesktop={isDesktop}
                               formattedTime={formatMessageTime(message.created_at)}
-                              senderName={!isOwn ? senderName : undefined}
+                              senderName={!isOwn && senderName ? senderName : undefined}
+                              showSenderName={isGroupThread}
                               otherParticipantIds={otherParticipantIds}
                               hideAvatars={!isDesktop}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                               isDashAI={isDashAIMessage}
                               onReplyClick={scrollToMessage}
+                              onCallEventPress={handleCallEventPress}
                             />
                           </div>
                         </div>

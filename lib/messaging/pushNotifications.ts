@@ -57,6 +57,9 @@ export async function sendMessagePushNotification(params: PushNotificationParams
         thread_id: threadId,
         message_id: messageId,
         send_immediately: true,
+        custom_payload: {
+          dedupe_by_user: true,
+        },
         template_override: {
           title: `💬 ${senderName}`,
           body: truncatedBody,

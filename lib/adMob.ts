@@ -114,8 +114,8 @@ function resolveAdUnitId(
 }
 
 /**
- * Initialize AdMob - Simplified stub for development
- * TODO: Implement full AdMob integration when ready for production
+ * Initialize AdMob - Calls the SDK's mobileAds().initialize()
+ * Only activates on Android (Android-only mode).
  */
 export async function initializeAdMob(): Promise<boolean> {
   if (isInitialized) return true;
@@ -128,10 +128,25 @@ export async function initializeAdMob(): Promise<boolean> {
       log('AdMob initialization skipped: Android-only mode active');
       return false;
     }
+
+    // Skip on web
+    if (Platform.OS === 'web') {
+      log('AdMob initialization skipped: web platform');
+      return false;
+    }
     
     const useProductionAds = shouldUseProductionIds();
     
-    // Stub implementation - no actual AdMob calls yet
+    // Initialize the SDK
+    try {
+      const { default: mobileAds } = require('react-native-google-mobile-ads');
+      await mobileAds().initialize();
+      log('AdMob SDK initialized successfully');
+    } catch (sdkErr) {
+      // SDK not available (e.g., dev build without native module)
+      warn('AdMob SDK not available, running in stub mode:', sdkErr);
+    }
+
     isInitialized = true;
     
     track('edudash.ads.initialized', {
@@ -139,7 +154,6 @@ export async function initializeAdMob(): Promise<boolean> {
       test_mode: !useProductionAds,
       production_mode: useProductionAds,
       android_only: flags.android_only_mode,
-      stub_implementation: true,
     });
     
     log(`AdMob initialized - ${useProductionAds ? 'PRODUCTION' : 'TEST'} mode`);

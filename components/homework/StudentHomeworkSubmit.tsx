@@ -13,6 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { assertSupabase } from '../../lib/supabase';
 import { ensureImageLibraryPermission } from '../../lib/utils/mediaLibrary';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ====================================================================
@@ -58,6 +59,7 @@ export function StudentHomeworkSubmit({
 }: StudentHomeworkSubmitProps) {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const bottomInset = useBottomInset();
   
   const [mediaFiles, setMediaFiles] = useState<UploadedMedia[]>([]);
   const [notes, setNotes] = useState('');
@@ -263,7 +265,7 @@ export function StudentHomeworkSubmit({
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomInset + 24 }]}
     >
       {/* Assignment Info */}
       <View style={[styles.assignmentCard, { backgroundColor: colors.cardBackground }]}>

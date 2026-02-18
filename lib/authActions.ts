@@ -23,7 +23,7 @@ const STALE_SIGNOUT_THRESHOLD = 35000; // Consider sign-out stale after 35 secon
 // URL search params have propagated.
 let _accountSwitchPending = false;
 let _accountSwitchTimestamp = 0;
-const ACCOUNT_SWITCH_STALE_MS = 15_000; // auto-expire after 15s
+const ACCOUNT_SWITCH_STALE_MS = 30_000; // auto-expire after 30s (slow networks need more time)
 
 /** Mark that an add-account navigation is about to happen. */
 export function setAccountSwitchPending(): void {
@@ -46,6 +46,18 @@ export function isAccountSwitchPending(): boolean {
     return false;
   }
   return true;
+}
+
+// ── Account switch in progress (biometric restore) ─────────────────────────
+// When true, SIGNED_OUT is ignored (no clear, no redirect) so the next SIGNED_IN can complete the switch.
+let _accountSwitchInProgress = false;
+
+export function setAccountSwitchInProgress(value: boolean): void {
+  _accountSwitchInProgress = value;
+}
+
+export function isAccountSwitchInProgress(): boolean {
+  return _accountSwitchInProgress;
 }
 
 // Timeout constants for sign-out operations
@@ -152,7 +164,8 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'clearBiometrics') ||
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'redirectTo') ||
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'exitApp') ||
-    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'resetApp')
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'resetApp') ||
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'preserveOtherSessions')
   )) ? (optionsOrEvent as SignOutOptions) : undefined;
 
   const targetRoute = options?.redirectTo ?? '/(auth)/sign-in';
@@ -163,9 +176,7 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
   const shouldExitApp = Platform.OS === 'android' && options?.exitApp === true;
   const shouldResetApp = options?.resetApp !== false;
   const preserveOtherSessions =
-    options?.preserveOtherSessions === true ||
-    options?.clearBiometrics === false ||
-    targetRouteWithFresh.includes('switch=1');
+    options?.preserveOtherSessions !== false; // default: true (local sign-out preserves biometric sessions)
   
   // Overall timeout to prevent infinite hang - force navigation after 15 seconds
   const overallTimeoutId = setTimeout(() => {
@@ -280,39 +291,27 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
         router.replace(targetRouteWithFresh);
       }
     } else {
-      // Mobile: Use dismissAll first to clear the entire navigation stack
-      // This prevents back button from going to authenticated screens
-      try {
-        // Only call dismissAll if there are screens to dismiss
-        // This prevents "POP_TO_TOP was not handled" warning when already at root
-        if (router.canDismiss && router.canDismiss()) {
-          console.log('[authActions] Clearing navigation stack...');
-          router.dismissAll();
-        } else {
-          console.debug('[authActions] No screens to dismiss, skipping dismissAll');
-        }
-      } catch (dismissErr) {
-        console.debug('[authActions] dismissAll not available:', dismissErr);
-      }
-      
-      // Then navigate to sign-in with a small delay to ensure stack is cleared
-      setTimeout(() => {
-        try {
-          if (activeSignOutId !== opId) {
-            return;
-          }
-          router.replace(targetRouteWithFresh as any);
-          console.log('[authActions] Mobile navigation executed');
-        } catch (navErr) {
-          console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
-          // Fallback: try direct sign-in route
+      // Mobile: Navigate to auth screen without dismissAll to avoid "POP_TO_TOP was not handled"
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
           try {
-            router.replace('/(auth)/sign-in?fresh=1' as any);
-          } catch (fallbackErr) {
-            console.error('[authActions] Fallback navigation also failed:', fallbackErr);
+            if (activeSignOutId !== opId) {
+              resolve();
+              return;
+            }
+            router.replace(targetRouteWithFresh as any);
+            console.log('[authActions] Mobile navigation executed');
+          } catch (navErr) {
+            console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
+            try {
+              router.replace('/(auth)/sign-in?fresh=1' as any);
+            } catch (fallbackErr) {
+              console.error('[authActions] Fallback navigation also failed:', fallbackErr);
+            }
           }
-        }
-      }, 100);
+          resolve();
+        }, 100);
+      });
     }
   } catch (error) {
     clearTimeout(overallTimeoutId);
@@ -338,21 +337,28 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     }
   } finally {
     clearTimeout(overallTimeoutId);
-    if (shouldExitApp) {
-      // Delay reset to avoid auth guard flicker before app exits
-      setTimeout(() => {
-        isSigningOut = false;
-        signOutStartTime = 0;
-        activeSignOutId = 0;
-        console.log('[authActions] Sign-out flag reset after exit delay');
-      }, 2500);
-      return;
+    // Only reset flags if THIS sign-out still owns them.
+    // Prevents sign-out A's finally from stomping sign-out B's state.
+    if (activeSignOutId === opId) {
+      if (shouldExitApp) {
+        // Delay reset to avoid auth guard flicker before app exits
+        setTimeout(() => {
+          if (activeSignOutId === opId) {
+            isSigningOut = false;
+            signOutStartTime = 0;
+            activeSignOutId = 0;
+            console.log('[authActions] Sign-out flag reset after exit delay');
+          }
+        }, 2500);
+        return;
+      }
+      // Reset flag immediately — allows immediate sign-in after sign-out
+      isSigningOut = false;
+      signOutStartTime = 0;
+      activeSignOutId = 0;
+      console.log('[authActions] Sign-out flag reset, ready for new sign-in');
+    } else {
+      console.log('[authActions] Sign-out superseded (opId', opId, 'vs active', activeSignOutId, '), skipping flag reset');
     }
-    // Reset flag immediately - no delay needed since we use timestamp tracking
-    // This allows immediate sign-in after sign-out completes
-    isSigningOut = false;
-    signOutStartTime = 0;
-    activeSignOutId = 0;
-    console.log('[authActions] Sign-out flag reset, ready for new sign-in');
   }
 }

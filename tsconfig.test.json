@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "tests/**/*",
+    "lib/**/*",
+    "services/**/*",
+    "contexts/**/*",
+    "hooks/**/*",
+    "components/**/*",
+    "jest.setup.js"
+  ],
+  "exclude": []
+}

@@ -85,24 +85,17 @@ export function useVoiceCallAudio({
   const speakerAppliedOnConnectRef = useRef(false);
 
   /**
-   * Play ringback tone using expo-audio with retry logic
+   * Play ringback tone for the caller while waiting for callee to answer.
    * 
-   * CRITICAL: This uses expo-audio instead of InCallManager.startRingback() because:
-   * 1. InCallManager.startRingback('_DEFAULT_') ignores earpiece setting on Android
-   * 2. It always routes to speaker regardless of setForceSpeakerphoneOn(false)
-   * 3. expo-audio respects the audio mode set by setAudioModeAsync()
+   * PRIORITY ORDER — uses device default first for familiar "krring-krring":
+   * 1. InCallManager.startRingback('_DEFAULT_') — system/carrier ringback tone
+   * 2. expo-audio with bundled ringback.mp3 — fallback if InCallManager unavailable
    * 
-   * The audio mode MUST be set to route through earpiece BEFORE playing:
-   * - shouldRouteThroughEarpiece: true  <-- THIS is the key setting for Android
-   * 
-   * ROBUSTNESS: Includes retry logic (up to 3 attempts) with exponential backoff
-   * 
-   * UPDATE: InCallManager.startRingback() is COMPLETELY SKIPPED now because
-   * it routes to speaker on most Android devices even when earpiece is requested.
-   * expo-audio is the PRIMARY and ONLY method for ringback playback.
+   * Previous implementation used expo-audio exclusively for earpiece routing,
+   * but the user expectation is the standard phone ring sound. InCallManager
+   * handles routing correctly when setForceSpeakerphoneOn(false) is called first.
    */
   const playCustomRingback = useCallback(async (retryAttempt = 0) => {
-    // Allow retry if player exists but isn't actually playing
     if (ringbackStartedRef.current && ringbackPlayerRef.current?.playing) {
       console.log('[VoiceCallAudio] Ringback already playing, skipping');
       return;
@@ -110,18 +103,12 @@ export function useVoiceCallAudio({
     
     console.log('[VoiceCallAudio] 🔊 playCustomRingback called', {
       attempt: retryAttempt + 1,
-      hasAsset: !!RINGBACK_SOUND,
-      assetType: typeof RINGBACK_SOUND,
-      loadError: RINGBACK_LOAD_ERROR,
       hasInCallManager: !!InCallManager,
+      hasAsset: !!RINGBACK_SOUND,
       isSpeakerEnabled,
     });
     
-    const MAX_RETRIES = 3;
-    const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000);
-    
-    // CRITICAL: Enforce earpiece setting BEFORE playing any audio
-    // This must be done regardless of playback method
+    // Enforce earpiece BEFORE playing any audio
     if (InCallManager && !isSpeakerEnabled) {
       try {
         InCallManager.setForceSpeakerphoneOn(false);
@@ -131,20 +118,31 @@ export function useVoiceCallAudio({
       }
     }
     
-    // NOTE: InCallManager.startRingback() is INTENTIONALLY NOT USED
-    // It ignores earpiece settings on most Android devices and always
-    // routes to speaker. Using expo-audio exclusively for ringback.
+    // STRATEGY 1: Use InCallManager system ringback (device default "krring-krring")
+    if (InCallManager) {
+      try {
+        InCallManager.startRingback('_DEFAULT_');
+        ringbackStartedRef.current = true;
+        console.log('[VoiceCallAudio] ✅ Device default ringback started via InCallManager');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        return;
+      } catch (e) {
+        console.warn('[VoiceCallAudio] InCallManager ringback failed, falling back to expo-audio:', e);
+      }
+    }
     
-    // Use expo-audio player (respects earpiece routing)
+    // STRATEGY 2: Fallback to expo-audio with bundled sound
     if (!RINGBACK_SOUND) {
       console.error('[VoiceCallAudio] ❌ No ringback sound available');
       return;
     }
     
+    const MAX_RETRIES = 3;
+    const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000);
+    
     try {
       console.log(`[VoiceCallAudio] 🔊 Starting expo-audio ringback (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
       
-      // Set audio mode - CRITICAL: shouldRouteThroughEarpiece controls speaker/earpiece
       await setAudioModeAsync({
         playsInSilentMode: true,
         interruptionMode: 'duckOthers',
@@ -152,10 +150,8 @@ export function useVoiceCallAudio({
         shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: !isSpeakerEnabled,
       });
-      console.log('[VoiceCallAudio] ✅ Audio mode set, creating player...');
       
       const player = createAudioPlayer(RINGBACK_SOUND);
-      console.log('[VoiceCallAudio] ✅ Player created, configuring...');
       
       player.loop = true;
       player.volume = 1.0;

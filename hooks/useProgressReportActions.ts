@@ -1,10 +1,11 @@
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import emailTemplateService, { ProgressReport } from '@/services/EmailTemplateService';
 import * as Sharing from 'expo-sharing';
 import { getAgeSuggestions } from '@/lib/progress-report-helpers';
 import { notifyReportSubmittedForReview } from '@/services/notification-service';
+import { useAlertModal } from '@/components/ui/AlertModal';
 
 export interface UseProgressReportActionsProps {
   formState: any;
@@ -13,6 +14,7 @@ export interface UseProgressReportActionsProps {
 }
 
 export const useProgressReportActions = ({ formState, profile, studentId }: UseProgressReportActionsProps) => {
+  const { showAlert, AlertModalComponent } = useAlertModal();
   // Open suggestions modal
   const openSuggestions = (field: 'strengths' | 'improvements' | 'recommendations' | 'comments') => {
     formState.setCurrentField(field);
@@ -88,7 +90,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -150,7 +152,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
       formState.setPreviewHtml(mobileOptimizedHtml);
       formState.setShowPreviewModal(true);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -161,7 +163,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -193,7 +195,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Error', 'Sharing is not available on this device');
+        showAlert({ title: 'Error', message: 'Sharing is not available on this device', type: 'error' });
         return;
       }
 
@@ -202,11 +204,14 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
         dialogTitle: 'Share Progress Report',
       });
 
-      Alert.alert('Success', 'PDF generated successfully!', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showAlert({
+        title: 'Success',
+        message: 'PDF generated successfully!',
+        type: 'success',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -217,7 +222,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -252,7 +257,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
       const canOpen = await Linking.canOpenURL(whatsappUrl);
       if (!canOpen) {
-        Alert.alert('WhatsApp Not Installed', 'Please install WhatsApp to share via WhatsApp');
+        showAlert({ title: 'WhatsApp Not Installed', message: 'Please install WhatsApp to share via WhatsApp', type: 'warning' });
         return;
       }
 
@@ -263,11 +268,14 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
         dialogTitle: 'Share via WhatsApp',
       });
 
-      Alert.alert('Success', 'Opening WhatsApp...', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showAlert({
+        title: 'Success',
+        message: 'Opening WhatsApp...',
+        type: 'success',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -278,7 +286,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -308,9 +316,9 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
         dialogTitle: 'Export Progress Report Data',
       });
 
-      Alert.alert('Success', 'CSV exported successfully!');
+      showAlert({ title: 'Success', message: 'CSV exported successfully!', type: 'success' });
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -320,13 +328,13 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
     if (!formState.student || !profile) return;
 
     if (!formState.student.parent_email) {
-      Alert.alert('Error', 'No parent email found for this student');
+      showAlert({ title: 'Error', message: 'No parent email found for this student', type: 'error' });
       return;
     }
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -377,16 +385,17 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
       if (result.success) {
         await formState.clearDraft();
-        Alert.alert(
-          'Report Submitted', 
-          'Progress report has been submitted for principal review. You will be notified once it is approved.',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        showAlert({
+          title: 'Report Submitted',
+          message: 'Progress report has been submitted for principal review. You will be notified once it is approved.',
+          type: 'success',
+          buttons: [{ text: 'OK', onPress: () => router.back() }],
+        });
       } else {
-        Alert.alert('Error', result.error || 'Failed to submit progress report');
+        showAlert({ title: 'Error', message: result.error || 'Failed to submit progress report', type: 'error' });
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -397,7 +406,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
 
     const preschoolId = profile.preschool_id || profile.organization_id;
     if (!preschoolId) {
-      Alert.alert('Error', 'No organization/preschool associated with your account');
+      showAlert({ title: 'Error', message: 'No organization/preschool associated with your account', type: 'error' });
       return;
     }
 
@@ -443,7 +452,7 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
       // Show success modal
       formState.setShowSuccessModal(true);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      showAlert({ title: 'Error', message: error.message, type: 'error' });
     } finally {
       formState.setSending(false);
     }
@@ -460,5 +469,6 @@ export const useProgressReportActions = ({ formState, profile, studentId }: UseP
     handleSend,
     handleSubmitForReview,
     confirmSubmitForReview,
+    AlertModalComponent,
   };
 };

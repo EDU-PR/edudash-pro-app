@@ -179,7 +179,7 @@ export function TertiaryShell({
             className="mobile-nav-overlay"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div 
+          <div
             style={{
               position: 'fixed',
               top: 0,
@@ -189,33 +189,27 @@ export function TertiaryShell({
               maxWidth: 320,
               background: 'var(--surface-1)',
               zIndex: 9999,
-              overflowY: 'auto',
-              padding: 'var(--space-4)',
               display: 'none',
               animation: 'slideInLeft 0.3s ease-out',
+              flexDirection: 'column',
+              overflow: 'hidden',
             }}
-            className="mobile-nav-drawer"
+            className="mobile-nav-drawer mobile-nav-drawer-flex"
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-4)', flexShrink: 0 }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
-              <button 
-                onClick={() => setMobileNavOpen(false)}
-                className="iconBtn"
-                aria-label="Close"
-              >
+              <button onClick={() => setMobileNavOpen(false)} className="iconBtn" aria-label="Close">
                 <X className="icon20" />
               </button>
             </div>
-            
-            {/* Navigation Links */}
-            <nav className="nav" style={{ display: 'grid', gap: 6 }}>
+            <nav className="nav mobile-nav-drawer-nav" style={{ display: 'grid', gap: 6, padding: '0 var(--space-4)' }}>
               {nav.map((it) => {
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <Link 
-                    key={it.href} 
-                    href={it.href} 
+                  <Link
+                    key={it.href}
+                    href={it.href}
                     className={`navItem ${active ? 'navItemActive' : ''}`}
                     onClick={() => setMobileNavOpen(false)}
                   >
@@ -225,9 +219,7 @@ export function TertiaryShell({
                 );
               })}
             </nav>
-            
-            {/* Footer */}
-            <div style={{ marginTop: 'auto', paddingTop: 'var(--space-4)' }}>
+            <div style={{ flexShrink: 0, padding: 'var(--space-4)', paddingTop: 'var(--space-2)' }}>
               <button
                 className="navItem"
                 style={{ width: '100%' }}
@@ -274,6 +266,9 @@ export function TertiaryShell({
           .mobile-nav-overlay,
           .mobile-nav-drawer {
             display: block !important;
+          }
+          .mobile-nav-drawer-flex {
+            display: flex !important;
           }
         }
         @keyframes slideInLeft {

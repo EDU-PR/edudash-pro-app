@@ -13,6 +13,7 @@ import {
 } from '../../types/auth-enhanced';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useBottomInset } from '@/hooks/useBottomInset';
 interface InvitationManagerProps {
   userRole: 'principal' | 'teacher';
   organizationId: string;
@@ -70,6 +71,7 @@ export const InvitationManager: React.FC<InvitationManagerProps> = ({
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const bottomInset = useBottomInset();
   
   // State management
   const [activeTab, setActiveTab] = React.useState<'individual' | 'bulk'>('individual');
@@ -755,7 +757,7 @@ export const InvitationManager: React.FC<InvitationManagerProps> = ({
       
       {/* Send Button */}
       {invitations.length > 0 && (
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: bottomInset + 20 }]}>
           <TouchableOpacity
             style={[
               styles.sendButton,

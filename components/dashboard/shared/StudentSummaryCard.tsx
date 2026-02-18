@@ -47,22 +47,27 @@ export const StudentSummaryCard: React.FC<StudentSummaryCardProps> = ({
   );
 };
 
-const createStyles = (theme: any) =>
-  StyleSheet.create({
+const createStyles = (theme: any) => {
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
+
+  return StyleSheet.create({
     card: {
       flexDirection: 'row',
       alignItems: 'center',
       padding: 12,
-      borderRadius: 12,
-      backgroundColor: theme.surface,
+      borderRadius: isNextGenTeacher ? 18 : 12,
+      backgroundColor: isNextGenTeacher ? 'rgba(255,255,255,0.05)' : theme.surface,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : theme.border,
       marginBottom: 10,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 4,
-      elevation: 1,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: isNextGenTeacher ? 14 : 2,
+      },
+      shadowOpacity: isNextGenTeacher ? 0.35 : 0.05,
+      shadowRadius: isNextGenTeacher ? 24 : 4,
+      elevation: isNextGenTeacher ? 10 : 1,
     },
     avatar: {
       width: 44,
@@ -94,9 +99,10 @@ const createStyles = (theme: any) =>
       marginBottom: 2,
     },
     subtitle: {
-      color: theme.textSecondary,
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.72)' : theme.textSecondary,
       fontSize: 12,
     },
   });
+};
 
 export default StudentSummaryCard;

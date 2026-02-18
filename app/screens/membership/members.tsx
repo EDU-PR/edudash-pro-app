@@ -4,7 +4,8 @@
  * Connected to Supabase organization_members table
  */
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, RefreshControl, Image } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -250,7 +251,7 @@ export default function MembersListScreen() {
 
       {/* Members List */}
       {!loading && !error && (
-        <FlatList
+        <FlashList
           data={displayMembers}
           renderItem={renderMemberItem}
           keyExtractor={(item) => item.id}
@@ -270,6 +271,7 @@ export default function MembersListScreen() {
               </Text>
             </View>
           }
+          estimatedItemSize={72}
         />
       )}
 

@@ -10,7 +10,7 @@ import {
   generateUUID, 
   getCryptoInfo, 
   isSecureCryptoAvailable 
-} from './crypto';
+} from '@/utils/crypto';
 
 export async function testCryptoFunctionality() {
   console.log('🔐 Testing Crypto Functionality');

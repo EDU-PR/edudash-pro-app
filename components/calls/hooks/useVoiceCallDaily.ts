@@ -91,6 +91,7 @@ export interface VoiceCallDailyOptions {
   calleeId?: string;
   /** Initial call ID (for callee answering an existing call) */
   initialCallId?: string | null;
+  threadId?: string;
   isSpeakerEnabled: boolean;
   dailyRef: React.MutableRefObject<any>;
   callIdRef: React.MutableRefObject<string | null>;
@@ -118,6 +119,7 @@ export function useVoiceCallDaily({
   isOwner,
   calleeId,
   initialCallId,
+  threadId,
   isSpeakerEnabled,
   dailyRef,
   callIdRef,
@@ -373,6 +375,7 @@ export function useVoiceCallDaily({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
+              thread_id: threadId || null,
               call_type: 'voice',
               status: 'ringing',
               caller_name: callerName,
@@ -400,10 +403,17 @@ export function useVoiceCallDaily({
                 caller_name: callerName,
                 call_type: 'voice',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => res.json()).then(result => {
               if (result.success) {
                 console.log('[VoiceCallDaily] ✅ FCM wake-on-call message sent');
+              } else if (result?.fallback_to_expo) {
+                console.log('[VoiceCallDaily] ℹ️ FCM fallback active', {
+                  attempted: result?.attempted_tokens,
+                  successful: result?.successful_tokens,
+                  errorCodes: result?.error_codes,
+                });
               } else {
                 console.warn('[VoiceCallDaily] FCM failed, falling back to Expo push:', result.error);
               }
@@ -427,6 +437,7 @@ export function useVoiceCallDaily({
                 caller_name: callerName,
                 call_type: 'voice',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => {
               if (res.ok) {
@@ -453,6 +464,7 @@ export function useVoiceCallDaily({
                 meeting_url: roomUrl,
                 call_type: 'voice',
                 caller_name: callerName,
+                thread_id: threadId,
               },
             });
 
@@ -882,7 +894,7 @@ export function useVoiceCallDaily({
       isCleanedUp = true;
       cleanupCall();
     };
-  }, [isOpen, meetingUrl, userName, isOwner, calleeId]);
+  }, [isOpen, meetingUrl, userName, isOwner, calleeId, threadId]);
 
   // Toggle microphone - use setLocalAudio for reliable mute/unmute
   const toggleAudio = useCallback(async () => {
