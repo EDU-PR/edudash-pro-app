@@ -1,7 +1,6 @@
 'use client';
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
-import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -44,22 +43,6 @@ const sectionCardStyle: CSSProperties = {
   background: 'linear-gradient(150deg, color-mix(in srgb, var(--surface-1) 88%, black) 0%, color-mix(in srgb, var(--surface-2) 96%, var(--primary-subtle)) 100%)',
   boxShadow: '0 0 0 1px rgba(255,255,255,0.02), 0 20px 60px -28px rgba(0,0,0,0.8), 0 0 72px -42px rgba(var(--primary-rgb),0.5)',
 };
-
-
-function EmptySectionNotice({ message }: { message: string }) {
-  return (
-    <div
-      className="rounded-2xl border px-4 py-5 text-base"
-      style={{
-        borderColor: 'color-mix(in srgb, var(--border) 70%, transparent)',
-        background: 'rgba(0, 0, 0, 0.2)',
-        color: 'var(--text-secondary)',
-      }}
-    >
-      {message}
-    </div>
-  );
-}
 
 function SectionRoutine({ data }: { data: NonNullable<DisplayData> }) {
   const { routine, themeLabel } = data;
@@ -593,27 +576,6 @@ function DisplayPageClient() {
                 Auto-refresh every 10 min
               </span>
             )}
-          </div>
-
-          <div className="mt-4 grid w-full max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
-            {quickStats.map((stat) => (
-              <div key={stat.label} className="rounded-xl border px-3 py-2" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.22)' }}>
-                <p className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>{stat.label}</p>
-                <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{stat.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.18)' }}>
-          <MonitorPlay className="h-5 w-5" style={{ color: 'var(--cyan)' }} />
-          <div className="text-right">
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>Now</p>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{nowLabel}</p>
-          </div>
-          <div className="h-8 w-px" style={{ background: 'var(--border)' }} />
-          <div className="text-right">
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>Section</p>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{SECTION_LABELS[activeSection]}</p>
           </div>
         </div>
 
