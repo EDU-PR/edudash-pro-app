@@ -82,7 +82,7 @@ export default function AssignLessonPage() {
   const [selectedTarget, setSelectedTarget] = useState<'class' | 'student'>('class');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
-  const [dueDate, setDueDate] = useState<string>('');
+  const [dueDate, setDueDate] = useState<string>(() => toDateOnly(new Date()));
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
   const [notes, setNotes] = useState<string>('');
   const [assigning, setAssigning] = useState(false);
