@@ -13,16 +13,19 @@ import type { NavItem } from './types';
 
 interface TeacherSideNavProps {
   nav: NavItem[];
+  hidden?: boolean;
   collapsed: boolean;
   hovered: boolean;
   onHoverStart: () => void;
   onHoverEnd: () => void;
 }
 
-export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverEnd }: TeacherSideNavProps) {
+export function TeacherSideNav({ nav, hidden = false, collapsed, hovered, onHoverStart, onHoverEnd }: TeacherSideNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const isExpanded = !collapsed || hovered;
+
+  if (hidden) return null;
 
   return (
     <aside
@@ -34,7 +37,6 @@ export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverE
         width: isExpanded ? '240px' : '64px',
         transition: 'width 0.3s ease',
         overflow: 'hidden',
-        display: 'flex',
         flexDirection: 'column',
         minHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',
         maxHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',

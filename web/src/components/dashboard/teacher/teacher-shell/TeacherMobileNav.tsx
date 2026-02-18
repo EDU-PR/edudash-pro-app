@@ -3,12 +3,16 @@
 /**
  * Teacher Mobile Navigation Component
  * Extracted from TeacherShell.tsx
+ * Only shows overlay/drawer on compact viewports (< 1200px).
  */
 
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { X, LogOut } from 'lucide-react';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import type { NavItem } from './types';
+
+const COMPACT_BREAKPOINT = 1200;
 
 interface TeacherMobileNavProps {
   isOpen: boolean;
@@ -19,8 +23,42 @@ interface TeacherMobileNavProps {
 export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const lastPathnameRef = useRef(pathname);
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < COMPACT_BREAKPOINT
+  );
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    const check = () => setIsMobileViewport(window.innerWidth < COMPACT_BREAKPOINT);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // If route changes while drawer is open, force-close to avoid stuck overlay state.
+  useEffect(() => {
+    const hasPathChanged = lastPathnameRef.current !== pathname;
+    if (isOpen && hasPathChanged) {
+      onClose();
+    }
+    lastPathnameRef.current = pathname;
+  }, [pathname, isOpen, onClose]);
+
+  // Lock body scroll when drawer is open to prevent double scrollbar (drawer + background)
+  useEffect(() => {
+    if (!isOpen || !isMobileViewport) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevPaddingRight = document.body.style.paddingRight;
+    document.body.style.overflow = 'hidden';
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPaddingRight;
+    };
+  }, [isOpen, isMobileViewport]);
+
+  // Don't render overlay/drawer on desktop/tablet so the dashboard is never blocked
+  if (!isOpen || !isMobileViewport) return null;
 
   const handleNavClick = (href: string) => {
     onClose(); // Close drawer first
@@ -58,6 +96,7 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          minHeight: 0,
         }}
         className="mobile-nav-drawer mobile-nav-drawer-flex"
       >

@@ -18,10 +18,12 @@ import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { CreateGroupModal } from '@/components/messaging/CreateGroupModal';
+import { GroupChatAvatarModal } from '@/components/messaging/GroupChatAvatarModal';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
 import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
+import { resolveReactionProfiles } from '@/lib/messaging/reactionProfiles';
 import { 
   type MessageThread,
   DASH_AI_THREAD_ID, 
@@ -372,6 +374,7 @@ function TeacherMessagesPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showQuickCallModal, setShowQuickCallModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [groupAvatarModalUser, setGroupAvatarModalUser] = useState<{ userId: string; userName: string } | null>(null);
 
   // Dash AI state
   const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
@@ -602,6 +605,14 @@ function TeacherMessagesPage() {
           emojiData.count++;
           emojiData.users.push(r.user_id);
         });
+
+        // Resolve reactor user ids to profiles so we can show who reacted
+        const reactorUserIds: string[] = Array.from(new Set(
+          (reactions || [])
+            .map((r: any) => (typeof r.user_id === 'string' ? r.user_id : String(r.user_id || '')))
+            .filter(Boolean),
+        ));
+        const reactorProfileMap = await resolveReactionProfiles(supabase, reactorUserIds);
         
         messagesWithDetails = messagesWithDetails.map((msg: any) => {
           const msgReactions = reactionMap.get(msg.id);
@@ -611,6 +622,8 @@ function TeacherMessagesPage() {
             emoji,
             count: data.count,
             hasReacted: data.users.includes(userId || ''),
+            reactedByUserIds: data.users,
+            reactedBy: data.users.map((uid: string) => reactorProfileMap.get(uid)).filter(Boolean).map((p: any) => ({ id: p.id, first_name: p.first_name, last_name: p.last_name })),
           }));
           
           return { ...msg, reactions: reactionsArray };
@@ -1326,6 +1339,22 @@ function TeacherMessagesPage() {
     alert('Report issue functionality coming soon!');
   };
 
+  // Find existing 1:1 thread with a user (for "Message" from group-chat avatar modal)
+  const findOrSelectDmThread = useCallback((targetUserId: string) => {
+    const participants = (t: MessageThread) => t.message_participants || t.participants || [];
+    const dmThread = threads.find((t) => {
+      const p = participants(t);
+      if (p.length !== 2) return false;
+      const ids = new Set(p.map((x: { user_id: string }) => x.user_id));
+      return ids.has(userId ?? '') && ids.has(targetUserId);
+    });
+    if (dmThread) {
+      setSelectedThreadId(dmThread.id);
+      return true;
+    }
+    return false;
+  }, [threads, userId]);
+
   // Message action handlers
   const handleMessageContextMenu = (e: React.MouseEvent | React.TouchEvent, messageId: string) => {
     const x = 'clientX' in e ? e.clientX : e.touches?.[0]?.clientX || 0;
@@ -2025,7 +2054,9 @@ function TeacherMessagesPage() {
                               senderName={!isOwn && senderName ? senderName : undefined}
                               showSenderName={isGroupSelected}
                               otherParticipantIds={otherParticipantIds}
-                              hideAvatars={!isDesktop}
+                              hideAvatars={!isDesktop && !isGroupSelected}
+                              isGroupChat={isGroupSelected}
+                              onAvatarClick={isGroupSelected ? (senderId, name) => setGroupAvatarModalUser({ userId: senderId, userName: name }) : undefined}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                               onReplyClick={scrollToMessage}
                               onCallEventPress={handleCallEventPress}
@@ -2510,12 +2541,61 @@ function TeacherMessagesPage() {
         <QuickCallModal
           isOpen={showQuickCallModal}
           onClose={() => setShowQuickCallModal(false)}
-          onVoiceCall={(userId, userName) => startVoiceCall(userId, userName)}
-          onVideoCall={(userId, userName) => startVideoCall(userId, userName)}
+          onVoiceCall={(uid, userName) => startVoiceCall(uid, userName)}
+          onVideoCall={(uid, userName) => startVideoCall(uid, userName)}
           currentUserId={userId}
           preschoolId={profile?.preschoolId}
         />
+
+        {/* Group chat: avatar click opens Message / Voice / Video options */}
+        <GroupChatAvatarModal
+          isOpen={!!groupAvatarModalUser}
+          onClose={() => setGroupAvatarModalUser(null)}
+          userName={groupAvatarModalUser?.userName ?? ''}
+          userId={groupAvatarModalUser?.userId ?? ''}
+          onMessage={(uid, _name) => {
+            if (findOrSelectDmThread(uid)) {
+              setGroupAvatarModalUser(null);
+            } else {
+              alert('No existing conversation with this contact. Start a new chat from the sidebar.');
+            }
+          }}
+          onVoiceCall={(uid, name) => startVoiceCall(uid, name)}
+          onVideoCall={(uid, name) => startVideoCall(uid, name)}
+        />
         
+        {/* Create Group FAB - Always visible for class/parent groups */}
+        <button
+          onClick={() => setShowCreateGroupModal(true)}
+          style={{
+            position: 'fixed',
+            bottom: !selectedThread && isDesktop
+              ? 24 + 52 + 12
+              : !selectedThread
+                ? 'calc(150px + 52 + 12 + env(safe-area-inset-bottom))'
+                : isDesktop
+                  ? 24
+                  : 'calc(150px + env(safe-area-inset-bottom))',
+            right: isDesktop ? 24 : 16,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(59, 130, 246, 0.4), 0 0 24px rgba(99, 102, 241, 0.2)',
+            zIndex: 998,
+            transition: 'transform 0.2s ease',
+          }}
+          className="active:scale-95 hover:scale-105"
+          title="Create Group"
+        >
+          <Users size={22} color="white" />
+        </button>
+
         {/* Quick Call FAB - Shows when no conversation is selected */}
         {!selectedThread && (
           <button

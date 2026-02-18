@@ -6,7 +6,7 @@
  * Original: 487 lines → Refactored: ~120 lines
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useBackButton } from '@/hooks/useBackButton';
@@ -16,6 +16,8 @@ import { TeacherMobileNav } from './TeacherMobileNav';
 import { TeacherMobileWidgets } from './TeacherMobileWidgets';
 import { getTeacherNavItems } from './navigationConfig';
 import type { TeacherShellProps } from './types';
+
+const COMPACT_BREAKPOINT = 1200;
 
 export function TeacherShell({ 
   userEmail, 
@@ -36,8 +38,27 @@ export function TeacherShell({
   const [notificationCount, setNotificationCount] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < COMPACT_BREAKPOINT
+  );
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   useBackButton({ fallbackRoute: '/dashboard/teacher', protectedRoutes: ['/dashboard/teacher'] });
+
+  // Close mobile nav when viewport is desktop so the menu doesn't block the dashboard
+  useEffect(() => {
+    const syncViewportState = () => {
+      if (typeof window === 'undefined') return;
+      const compact = window.innerWidth < COMPACT_BREAKPOINT;
+      setIsCompactViewport(compact);
+      if (!compact) {
+        setMobileNavOpen(false);
+      }
+    };
+    syncViewportState();
+    window.addEventListener('resize', syncViewportState);
+    return () => window.removeEventListener('resize', syncViewportState);
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -58,7 +79,7 @@ export function TeacherShell({
   const nav = getTeacherNavItems(unreadCount);
 
   return (
-    <div className="app">
+    <div className={`app${mobileNavOpen ? ' mobile-nav-open' : ''}`}>
       {!hideHeader && (
         <TeacherTopBar
           preschoolName={preschoolName}
@@ -66,14 +87,16 @@ export function TeacherShell({
           notificationCount={notificationCount}
           activityCount={activityCount}
           hasRightSidebar={!!rightSidebar}
-          onMenuClick={() => setMobileNavOpen(true)}
+          showMenuButton={isCompactViewport}
+          onMenuClick={() => setMobileNavOpen((prev) => !prev)}
           onWidgetsClick={() => setMobileWidgetsOpen(true)}
         />
       )}
 
-      <div className="frame">
+      <div className={`frame${isCompactViewport ? ' frame-no-sidebar' : ''}`}>
         <TeacherSideNav
           nav={nav}
+          hidden={isCompactViewport}
           collapsed={sidebarCollapsed}
           hovered={sidebarHovered}
           onHoverStart={() => setSidebarHovered(true)}
@@ -83,7 +106,7 @@ export function TeacherShell({
         {rightSidebar && <aside className="right sticky" aria-label="Activity">{rightSidebar}</aside>}
       </div>
 
-      <TeacherMobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} nav={nav} />
+      <TeacherMobileNav isOpen={mobileNavOpen} onClose={closeMobileNav} nav={nav} />
       {rightSidebar && (
         <TeacherMobileWidgets isOpen={mobileWidgetsOpen} onClose={() => setMobileWidgetsOpen(false)}>
           {rightSidebar}
@@ -97,12 +120,19 @@ export function TeacherShell({
         @media (min-width: 1024px) {
           .teacher-sidenav { align-self: stretch !important; }
         }
-        @media (max-width: 1023px) {
+        .frame-no-sidebar { grid-template-columns: 1fr !important; }
+        @media (max-width: 1199px) {
           .mobile-nav-btn { display: grid !important; }
           .desktop-back-btn { display: none !important; }
           .mobile-nav-overlay, .mobile-widgets-overlay { display: block !important; }
           .mobile-nav-drawer { display: flex !important; flex-direction: column; overflow: hidden; }
           .mobile-widgets-drawer { display: flex !important; }
+          /* Single scrollbar: when hamburger menu is open, only the drawer nav scrolls */
+          .app.mobile-nav-open .frame { overflow: hidden !important; }
+          .mobile-nav-drawer-nav { scrollbar-width: thin; }
+          .mobile-nav-drawer-nav::-webkit-scrollbar { width: 6px; }
+          .mobile-nav-drawer-nav::-webkit-scrollbar-track { background: transparent; }
+          .mobile-nav-drawer-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         }
         @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
