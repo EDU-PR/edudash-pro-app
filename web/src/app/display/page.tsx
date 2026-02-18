@@ -12,6 +12,9 @@ import {
   Megaphone,
   Lightbulb,
   Clock,
+  MonitorPlay,
+  CalendarDays,
+  Sparkles,
 } from 'lucide-react';
 
 const SECTION_ROTATION_SEC = 45;
@@ -43,7 +46,19 @@ const sectionCardStyle: CSSProperties = {
 
 function SectionRoutine({ data }: { data: NonNullable<DisplayData> }) {
   const { routine, themeLabel } = data;
-  if (!routine && !themeLabel) return null;
+  if (!routine && !themeLabel) {
+    return (
+      <section className={sectionCardClass} style={sectionCardStyle}>
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(0, 245, 255, 0.15)' }}>
+            <Clock className="h-6 w-6" style={{ color: 'var(--cyan, #00f5ff)' }} />
+          </span>
+          <span style={{ color: 'var(--text-primary)' }}>Today&apos;s routine</span>
+        </h2>
+        <EmptySectionNotice message="No routine or theme available yet. Add blocks in planning to show them on room display." />
+      </section>
+    );
+  }
   return (
     <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
@@ -75,7 +90,19 @@ function SectionRoutine({ data }: { data: NonNullable<DisplayData> }) {
 
 function SectionLessons({ data }: { data: NonNullable<DisplayData> }) {
   const { lessons } = data;
-  if (!lessons?.length) return null;
+  if (!lessons?.length) {
+    return (
+      <section className={sectionCardClass} style={sectionCardStyle}>
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)' }}>
+            <BookOpen className="h-6 w-6 text-amber-400" />
+          </span>
+          <span style={{ color: 'var(--text-primary)' }}>Lessons of the day</span>
+        </h2>
+        <EmptySectionNotice message="No lessons scheduled yet. Publish today&apos;s lesson plan to populate this section." />
+      </section>
+    );
+  }
   return (
     <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
@@ -131,7 +158,19 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
     menuToday.breakfast?.length ||
     menuToday.lunch?.length ||
     menuToday.snack?.length;
-  if (!hasAny) return null;
+  if (!hasAny) {
+    return (
+      <section className={sectionCardClass} style={sectionCardStyle}>
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)' }}>
+            <UtensilsCrossed className="h-6 w-6 text-emerald-400" />
+          </span>
+          <span style={{ color: 'var(--text-primary)' }}>Today&apos;s menu</span>
+        </h2>
+        <EmptySectionNotice message="No menu items for today. Add breakfast, lunch or snack items in weekly menu." />
+      </section>
+    );
+  }
   return (
     <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
@@ -178,7 +217,19 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
 
 function SectionAnnouncements({ data }: { data: NonNullable<DisplayData> }) {
   const { announcements } = data;
-  if (!announcements?.length) return null;
+  if (!announcements?.length) {
+    return (
+      <section className={sectionCardClass} style={sectionCardStyle}>
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(251, 113, 133, 0.2)' }}>
+            <Megaphone className="h-6 w-6 text-rose-400" />
+          </span>
+          <span style={{ color: 'var(--text-primary)' }}>Announcements</span>
+        </h2>
+        <EmptySectionNotice message="No announcements published for today." />
+      </section>
+    );
+  }
   return (
     <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
@@ -201,7 +252,19 @@ function SectionAnnouncements({ data }: { data: NonNullable<DisplayData> }) {
 
 function SectionInsights({ data }: { data: NonNullable<DisplayData> }) {
   const { insights } = data;
-  if (!insights?.bullets?.length) return null;
+  if (!insights?.bullets?.length) {
+    return (
+      <section className={sectionCardClass} style={sectionCardStyle}>
+        <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(250, 204, 21, 0.2)' }}>
+            <Lightbulb className="h-6 w-6 text-yellow-400" />
+          </span>
+          <span style={{ color: 'var(--text-primary)' }}>Insights</span>
+        </h2>
+        <EmptySectionNotice message="No AI insights yet. Insights appear once enough routine and lesson activity is available." />
+      </section>
+    );
+  }
   return (
     <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
@@ -219,7 +282,7 @@ function SectionInsights({ data }: { data: NonNullable<DisplayData> }) {
   );
 }
 
-export default function DisplayPage() {
+function DisplayPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orgParam = searchParams.get('org');
@@ -325,6 +388,14 @@ export default function DisplayPage() {
   }, [supabase]);
 
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [nowLabel, setNowLabel] = useState(() => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+  useEffect(() => {
+    const tick = () => setNowLabel(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const t = setInterval(tick, 30000);
+    return () => clearInterval(t);
+  }, []);
+
   const visibleSections = useMemo(() => {
     if (!data) return SECTIONS;
     const out: (typeof SECTIONS)[number][] = [];
@@ -346,6 +417,15 @@ export default function DisplayPage() {
 
   const showRotation = visibleSections.length > 1;
   const currentSection = visibleSections[currentSectionIndex] ?? visibleSections[0];
+  const activeSection = currentSection ?? 'routine';
+  const rotationProgressPct = showRotation ? ((currentSectionIndex + 1) / visibleSections.length) * 100 : 100;
+
+  const quickStats = [
+    { label: 'Routine blocks', value: data?.routine?.blocks?.length ?? 0 },
+    { label: 'Lessons', value: data?.lessons?.length ?? 0 },
+    { label: 'Menu items', value: (data?.menuToday?.breakfast?.length ?? 0) + (data?.menuToday?.lunch?.length ?? 0) + (data?.menuToday?.snack?.length ?? 0) },
+    { label: 'Announcements', value: data?.announcements?.length ?? 0 },
+  ];
 
   if (!useTvFlow && !orgId && !userId) {
     return (
@@ -498,6 +578,7 @@ export default function DisplayPage() {
             )}
           </div>
         </div>
+
         {userId && !useTvFlow && (
           <div className="flex flex-col items-end gap-2">
             <button
@@ -552,12 +633,12 @@ export default function DisplayPage() {
                 type="button"
                 onClick={() => setCurrentSectionIndex(i)}
                 className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-                  currentSection === s
+                  activeSection === s
                     ? 'text-white shadow-md'
                     : 'hover:opacity-90'
                 }`}
                 style={
-                  currentSection === s
+                  activeSection === s
                     ? { background: 'var(--primary)' }
                     : { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
                 }
@@ -569,14 +650,24 @@ export default function DisplayPage() {
         )}
       </header>
 
+      <div className="mx-auto mb-8 max-w-5xl">
+        <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {data.dayName}</span>
+          <span>{showRotation ? `${currentSectionIndex + 1}/${visibleSections.length} sections` : 'Single section'}</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${rotationProgressPct}%`, background: 'linear-gradient(90deg, var(--primary), var(--cyan))' }} />
+        </div>
+      </div>
+
       <div className="mx-auto max-w-5xl space-y-8">
         {showRotation ? (
           <>
-            {currentSection === 'routine' && <SectionRoutine data={data} />}
-            {currentSection === 'lessons' && <SectionLessons data={data} />}
-            {currentSection === 'menu' && <SectionMenu data={data} />}
-            {currentSection === 'announcements' && <SectionAnnouncements data={data} />}
-            {currentSection === 'insights' && <SectionInsights data={data} />}
+            {activeSection === 'routine' && <SectionRoutine data={data} />}
+            {activeSection === 'lessons' && <SectionLessons data={data} />}
+            {activeSection === 'menu' && <SectionMenu data={data} />}
+            {activeSection === 'announcements' && <SectionAnnouncements data={data} />}
+            {activeSection === 'insights' && <SectionInsights data={data} />}
           </>
         ) : (
           <>
@@ -590,8 +681,25 @@ export default function DisplayPage() {
       </div>
 
       <footer className="mt-12 text-center text-sm" style={{ color: 'var(--muted)' }}>
-        {useTvFlow ? 'Data refreshes every 10 minutes. ' : ''}Use fullscreen (F11) for TV.
+        <p className="inline-flex items-center gap-2 rounded-full border px-4 py-2" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--primary)' }} />
+          {useTvFlow ? 'Auto refresh: every 10 minutes.' : 'Preview mode on signed-in device.'} Use fullscreen (F11) for TV.
+        </p>
       </footer>
     </div>
+  );
+}
+
+export default function DisplayPage() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-xl" style={{ color: 'var(--muted)' }}>Loading display…</p>
+        </div>
+      )}
+    >
+      <DisplayPageClient />
+    </Suspense>
   );
 }

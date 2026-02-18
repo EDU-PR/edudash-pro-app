@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { normalizeForTTS } from '../../../lib/dash-ai/ttsNormalize';
-import { getVoiceIdForLanguage } from '../../../lib/voice/voiceMapping';
 
 interface TTSOptions {
   rate?: number; // -50 to +50
@@ -34,6 +32,42 @@ const TTS_LIMITS: Record<string, number> = {
   basic: 50,
   premium: 200,
   school: 1000,
+};
+
+const VOICES_BY_LANG: Record<'en' | 'af' | 'zu' | 'xh' | 'nso', { male: string; female: string }> = {
+  en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
+  af: { male: 'af-ZA-WillemNeural', female: 'af-ZA-AdriNeural' },
+  zu: { male: 'zu-ZA-ThembaNeural', female: 'zu-ZA-ThandoNeural' },
+  xh: { male: 'xh-ZA-NomalungaNeural', female: 'xh-ZA-NomalungaNeural' },
+  nso: { male: 'nso-ZA-DidiNeural', female: 'nso-ZA-DidiNeural' },
+};
+
+const normalizeForTTS = (input: string): string => {
+  return String(input || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`]+`/g, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const getVoiceIdForLanguage = (lang: string, gender: 'male' | 'female' = 'female'): string => {
+  const raw = String(lang || 'en').toLowerCase();
+  const short: 'en' | 'af' | 'zu' | 'xh' | 'nso' =
+    raw.startsWith('af')
+      ? 'af'
+      : raw.startsWith('zu')
+        ? 'zu'
+        : raw.startsWith('xh')
+          ? 'xh'
+          : raw.startsWith('nso') || raw.startsWith('st') || raw.includes('sotho')
+            ? 'nso'
+            : 'en';
+  const voices = VOICES_BY_LANG[short] || VOICES_BY_LANG.en;
+  return gender === 'male' ? voices.male : voices.female;
 };
 
 const resolveVoiceId = (language: string, voice: 'male' | 'female') => {
