@@ -614,6 +614,7 @@ function DisplayPageClient() {
   const [thresholdOverlay, setThresholdOverlay] = useState<{ threshold: number; title: string } | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [exportingUsbPack, setExportingUsbPack] = useState(false);
+  const [bootTimeoutReached, setBootTimeoutReached] = useState(false);
 
   const firedReminderKeysRef = useRef<Set<string>>(new Set());
   const pairingAttemptedRef = useRef(false);
@@ -848,14 +849,29 @@ function DisplayPageClient() {
       return;
     }
     const init = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user?.id) setUserId(session.user.id);
-      setAuthResolved(true);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) setUserId(session.user.id);
+      } catch {
+        // If auth bootstrap fails on TV/browser, continue to join-code view instead of hanging.
+      } finally {
+        setAuthResolved(true);
+      }
     };
     void init();
   }, [supabase, useTvFlow]);
+
+  useEffect(() => {
+    if (useTvFlow) {
+      setBootTimeoutReached(false);
+      return;
+    }
+    setBootTimeoutReached(false);
+    const timeout = window.setTimeout(() => setBootTimeoutReached(true), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [useTvFlow]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 30_000);
@@ -1073,7 +1089,7 @@ function DisplayPageClient() {
     );
   }
 
-  if (!useTvFlow && (!authResolved || (userId && profileLoading)) && !orgId) {
+  if (!useTvFlow && !bootTimeoutReached && (!authResolved || (userId && profileLoading)) && !orgId) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-xl" style={{ color: 'var(--muted)' }}>Preparing display…</p>
