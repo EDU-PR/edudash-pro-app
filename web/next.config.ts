@@ -3,15 +3,26 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
+const envAllowedDevOrigins =
+  process.env.NEXT_PUBLIC_ALLOWED_DEV_ORIGINS ||
+  process.env.ALLOWED_DEV_ORIGINS ||
+  '';
+const allowedDevOrigins = Array.from(
+  new Set(
+    ['http://localhost:3000', 'http://127.0.0.1:3000', ...envAllowedDevOrigins.split(',')]
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ),
+);
 
 const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
 
-  // Allow LAN testing in dev without cross-origin warnings
-  // When opening the app via LAN IP (e.g. 192.168.0.31:3000), run `npm run dev:lan` so HMR
-  // WebSocket connects and the page does not keep refreshing.
-  allowedDevOrigins: ['http://localhost:3000', 'http://192.168.0.31:3000'],
+  // Allow LAN testing in dev without cross-origin warnings.
+  // Add comma-separated origins via NEXT_PUBLIC_ALLOWED_DEV_ORIGINS / ALLOWED_DEV_ORIGINS.
+  // HMR websocket warnings can still appear in dev when browser host and dev-server host do not match.
+  allowedDevOrigins,
   
   // Turbopack configuration (Next.js 16+ default bundler)
   // Using empty config to acknowledge Turbopack while webpack config exists for fallback

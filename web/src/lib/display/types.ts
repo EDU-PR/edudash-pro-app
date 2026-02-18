@@ -9,10 +9,13 @@ export interface DisplayRoutineBlock {
   blockType: string;
   startTime: string | null;
   endTime: string | null;
+  linkedLesson?: DisplayLessonWithDetails | null;
+  lessonLinkSource?: 'manual' | 'auto' | null;
 }
 
 export interface DisplayTodayRoutine {
   weeklyProgramId: string;
+  classId?: string | null;
   title: string | null;
   summary: string | null;
   dayOfWeek: number;

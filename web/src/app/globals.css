@@ -1091,6 +1091,337 @@ html {
 .iconBtn:hover { border-color: var(--primary); background: var(--surface); }
 .badgeNumber { min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 6px; border-radius: 999px; background: rgba(var(--primaryRgb), .18); color: #c7a6ff; border: 1px solid rgba(var(--primaryRgb), .35); font-size: 11px; }
 
+/* Room Display (/display) – same design system as Dashboard, gradient page background and frame-like padding */
+.display-root {
+  --display-accent: #8b5cf6;
+  --display-accent-2: #ec4899;
+  --display-card-radius: 1rem;
+  --display-card-gap: clamp(0.85rem, 1.8vw, 1.4rem);
+  --display-frame-pad-x: clamp(0.65rem, 2.2vw, 1.6rem);
+  --display-frame-pad-y: clamp(0.85rem, 2.4vw, 1.7rem);
+  padding: var(--display-frame-pad-y) var(--display-frame-pad-x) clamp(2.1rem, 4.8vw, 3.2rem);
+  background:
+    radial-gradient(980px 460px at 50% -40%, rgba(139, 92, 246, 0.26), transparent 60%),
+    radial-gradient(860px 520px at 8% 96%, rgba(14, 165, 233, 0.13), transparent 70%),
+    linear-gradient(180deg, #090f1f 0%, #070c19 52%, #060914 100%);
+  color: var(--text-primary, #f9fafb);
+}
+@media (min-width: 640px) {
+  .display-root {
+    --display-frame-pad-x: clamp(0.9rem, 2.5vw, 1.8rem);
+  }
+}
+@media (min-width: 1024px) {
+  .display-root {
+    --display-frame-pad-x: clamp(1.2rem, 2.6vw, 2.2rem);
+  }
+}
+@media (max-width: 430px) {
+  .display-root {
+    --display-card-gap: 0.62rem;
+  }
+}
+
+/* Single container for /display: centers content and caps width. Same layout on desktop and TV. */
+.display-container {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1680px;
+  width: 100%;
+}
+
+/* Next-Gen theme: glassmorphism for display header, cards, and routine blocks */
+.display-glass {
+  background:
+    linear-gradient(140deg, rgba(30, 41, 59, 0.52), rgba(15, 23, 42, 0.6)),
+    radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 58%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 20px 48px -26px rgba(2, 6, 23, 0.9),
+    0 0 0 1px rgba(148, 163, 184, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.display-glass-header {
+  background:
+    linear-gradient(125deg, rgba(8, 14, 30, 0.84), rgba(11, 18, 36, 0.68)),
+    radial-gradient(circle at 86% -25%, rgba(124, 58, 237, 0.3), transparent 58%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow:
+    0 28px 60px -34px rgba(15, 23, 42, 0.92),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.display-glass-tile {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.68), rgba(17, 24, 39, 0.62));
+  backdrop-filter: blur(13px);
+  -webkit-backdrop-filter: blur(13px);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow:
+    0 14px 30px -24px rgba(2, 6, 23, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.display-glass-routine-block {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.38), rgba(15, 23, 42, 0.46));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.display-glass-routine-block-active {
+  background:
+    linear-gradient(130deg, rgba(67, 56, 202, 0.42), rgba(124, 58, 237, 0.28)),
+    radial-gradient(circle at left, rgba(236, 72, 153, 0.18), transparent 58%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(167, 139, 250, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.2),
+    0 16px 34px -28px rgba(139, 92, 246, 0.88),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11);
+}
+
+.display-header-shell {
+  padding: clamp(0.95rem, 2.35vw, 1.65rem);
+  row-gap: clamp(0.82rem, 1.8vw, 1.3rem);
+}
+
+.display-header-brand {
+  max-width: min(100%, 760px);
+}
+
+.display-title {
+  font-size: clamp(1.6rem, 3.4vw, 2.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.display-date {
+  font-size: clamp(1.01rem, 1.9vw, 1.3rem);
+  line-height: 1.3;
+}
+
+.display-meta {
+  font-size: clamp(0.62rem, 1.2vw, 0.76rem);
+}
+
+.display-header-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.display-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.28rem 0.58rem;
+  font-size: clamp(0.63rem, 1.05vw, 0.74rem);
+  font-weight: 600;
+  line-height: 1.15;
+  color: #cbd5e1;
+}
+
+.display-meta-pill-accent {
+  border-color: rgba(167, 139, 250, 0.38);
+  background: rgba(124, 58, 237, 0.2);
+  color: #ddd6fe;
+}
+
+.display-header-right {
+  gap: clamp(0.45rem, 1.2vw, 0.9rem);
+}
+
+.display-reminder-card {
+  padding: clamp(0.65rem, 1.4vw, 0.95rem) clamp(0.72rem, 1.8vw, 1.02rem);
+}
+
+.display-section-heading {
+  margin-bottom: clamp(0.45rem, 1.4vw, 0.75rem);
+  font-size: clamp(1.08rem, 2.1vw, 1.35rem);
+  letter-spacing: 0.01em;
+}
+
+.display-stats-grid {
+  gap: var(--display-card-gap);
+}
+
+.display-overview-section .tile {
+  min-height: clamp(108px, 19vw, 168px);
+  padding: clamp(0.72rem, 1.8vw, 1.15rem);
+}
+
+.display-routine-toggle {
+  padding-top: clamp(0.2rem, 0.55vw, 0.32rem);
+  padding-bottom: clamp(0.26rem, 0.66vw, 0.44rem);
+}
+
+.display-routine-count {
+  margin-top: 0.18rem;
+  font-size: clamp(0.68rem, 1.15vw, 0.76rem);
+  font-weight: 600;
+  line-height: 1.2;
+  color: #94a3b8;
+}
+
+.display-routine-theme {
+  margin-top: clamp(0.16rem, 0.5vw, 0.4rem);
+  margin-bottom: clamp(0.52rem, 1.2vw, 0.88rem);
+  font-size: clamp(0.76rem, 1.22vw, 0.86rem);
+}
+
+.display-routine-list {
+  margin-top: clamp(0.7rem, 1.55vw, 1rem);
+  display: grid;
+  gap: clamp(0.55rem, 1.3vw, 0.9rem);
+}
+
+.display-routine-item {
+  border-radius: clamp(0.8rem, 1.8vw, 1rem);
+}
+
+.display-routine-row {
+  font-size: clamp(0.95rem, 1.95vw, 1.14rem);
+  line-height: 1.48;
+  padding-top: clamp(0.62rem, 1.45vw, 0.94rem);
+  padding-bottom: clamp(0.62rem, 1.45vw, 0.94rem);
+  padding-left: clamp(0.82rem, 2.2vw, 1.24rem);
+  padding-right: clamp(0.8rem, 2.15vw, 1.2rem);
+}
+
+.display-routine-time {
+  font-size: clamp(0.75rem, 1.35vw, 0.86rem);
+}
+
+.display-routine-title {
+  font-size: clamp(0.97rem, 1.95vw, 1.14rem);
+  line-height: 1.45;
+}
+
+.display-routine-detail {
+  font-size: clamp(0.86rem, 1.6vw, 0.99rem);
+  line-height: 1.62;
+  padding-top: clamp(0.68rem, 1.7vw, 1rem);
+  padding-bottom: clamp(0.7rem, 1.7vw, 1rem);
+  padding-left: clamp(0.84rem, 2.2vw, 1.24rem);
+  padding-right: clamp(0.84rem, 2.2vw, 1.24rem);
+}
+
+@media (max-width: 840px) {
+  .display-root .section {
+    margin-top: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .display-root .dashboardSections {
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .display-root .display-stats-grid {
+    gap: 0.55rem;
+  }
+  .display-root .display-stat-number {
+    font-size: clamp(1.25rem, 7.1vw, 1.72rem);
+  }
+  .display-root .display-routine-time {
+    min-width: 4.35rem;
+  }
+  .display-root .display-header-shell {
+    border-radius: 1rem;
+  }
+  .display-root .sectionTitle {
+    font-size: clamp(1.05rem, 4.7vw, 1.28rem);
+  }
+  .display-root .display-header-meta-row {
+    gap: 0.36rem;
+  }
+  .display-root .display-meta-pill {
+    padding: 0.26rem 0.5rem;
+  }
+  .display-root .display-routine-list {
+    gap: 0.66rem;
+  }
+}
+
+/* TV mode: larger typography and spacing for 10-foot viewing */
+.display-root.tv-mode .display-section-title {
+  font-size: 1.875rem;
+}
+.display-root.tv-mode .display-section-icon {
+  padding: 0.75rem;
+}
+.display-root.tv-mode .display-section-icon svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.display-root.tv-mode .display-section-body {
+  font-size: 1.125rem;
+  line-height: 1.625;
+}
+.display-root.tv-mode .display-stat-number {
+  font-size: 1.875rem;
+}
+.display-root.tv-mode .display-stats-grid {
+  gap: var(--display-card-gap);
+}
+.display-root.tv-mode .display-container {
+  max-width: 1880px;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+@media (min-width: 768px) {
+  .display-root.tv-mode .display-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+@media (min-width: 1024px) {
+  .display-root.tv-mode .display-container {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
+
+/* Threshold overlay: short scale + opacity entrance */
+.threshold-overlay-backdrop {
+  animation: threshold-backdrop-in 0.25s ease-out;
+}
+.threshold-overlay-content {
+  animation: threshold-content-in 0.35s ease-out;
+}
+@keyframes threshold-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes threshold-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Subtle pulse and left accent on hero card when a block is live */
+.current-block-live {
+  border-left: 3px solid rgba(124, 58, 237, 0.6);
+}
+.current-block-live .current-block-progress {
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.35);
+  animation: current-block-glow 2.5s ease-in-out infinite;
+}
+@keyframes current-block-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 12px rgba(124, 58, 237, 0.35); }
+  50% { opacity: 1; box-shadow: 0 0 20px rgba(124, 58, 237, 0.5); }
+}
+
 .h1 { font-size: 20px; font-weight: 700; margin: var(--space-2) 0 var(--space-3); }
 .h2 { font-size: 18px; font-weight: 700; margin: 0; }
 .h3 { font-size: 16px; font-weight: 700; margin: 0; }
