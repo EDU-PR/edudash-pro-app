@@ -43,6 +43,20 @@ const toStringArray = (value: unknown): string[] => {
   return [];
 };
 
+const toObjectiveList = (value: unknown): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[\\n,;|]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const normalizeThemeRow = (row: any) => {
   if (!row) return null;
   return {
@@ -118,8 +132,52 @@ export async function loadQuickLessonThemeContext(input: {
       return normalizeThemeRow(themeQuery.data);
     };
 
+    const fetchWeeklyProgramFallback = async () => {
+      const programQuery = await supabase
+        .from('weekly_programs')
+        .select('id, title, summary, week_start_date, week_end_date, status, updated_at, created_at')
+        .eq('preschool_id', preschoolId)
+        .lte('week_start_date', today)
+        .gte('week_end_date', today)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+
+      if (programQuery.error && !isMissingTableError(programQuery.error)) {
+        throw programQuery.error;
+      }
+
+      const programRows: any[] = Array.isArray(programQuery.data) ? programQuery.data : [];
+      if (!programRows.length) return null;
+
+      const sortedPrograms = programRows.sort((a, b) => {
+        const statusDiff = (STATUS_RANK[b?.status || ''] || 0) - (STATUS_RANK[a?.status || ''] || 0);
+        if (statusDiff !== 0) return statusDiff;
+        const bTime = new Date(b?.updated_at || b?.created_at || 0).getTime();
+        const aTime = new Date(a?.updated_at || a?.created_at || 0).getTime();
+        return bTime - aTime;
+      });
+
+      return sortedPrograms[0] || null;
+    };
+
     if (!selectedPlan) {
+      const programFallback = await fetchWeeklyProgramFallback();
       const themeOnly = await fetchLatestPublishedTheme();
+
+      if (programFallback) {
+        return {
+          source: themeOnly ? 'weekly_plan_with_theme' : 'weekly_plan_only',
+          weekStartDate: programFallback.week_start_date,
+          weekEndDate: programFallback.week_end_date,
+          weeklyFocus: programFallback.title || null,
+          weeklyObjectives: toObjectiveList(programFallback.summary),
+          weeklyPlanStatus: programFallback.status || null,
+          themeTitle: themeOnly?.title,
+          themeDescription: themeOnly?.description,
+          themeObjectives: themeOnly?.objectives || [],
+        };
+      }
+
       if (!themeOnly) return null;
       return {
         source: 'theme_only',

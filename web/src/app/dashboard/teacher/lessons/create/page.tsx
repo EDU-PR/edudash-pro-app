@@ -80,7 +80,7 @@ function CreateLessonPageInner() {
   }, [isQuickMode, stemParam, profileLoading, subject, objectives]);
 
   useEffect(() => {
-    if (!isQuickMode || !schoolId || !userId) return;
+    if (!schoolId || !userId) return;
     let cancelled = false;
 
     const loadContext = async () => {
@@ -100,7 +100,7 @@ function CreateLessonPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [isQuickMode, schoolId, supabase, userId]);
+  }, [schoolId, supabase, userId]);
 
   const handleGenerateWithAI = async () => {
     if (!topic || !gradeLevel) {
@@ -142,7 +142,7 @@ function CreateLessonPageInner() {
         const quickHint = isQuickMode
           ? 'This is a QUICK, low-prep lesson. Use minimal materials, high engagement, and clear step-by-step guidance.'
           : '';
-        const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
+        const planningHint = buildQuickLessonThemeHint(quickLessonContext);
         prompt = `Generate a ${isQuickMode ? 'quick, engaging' : 'comprehensive'} lesson plan for school:
 
 Subject: ${subject || 'General'}

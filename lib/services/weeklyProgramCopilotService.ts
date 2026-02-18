@@ -11,6 +11,7 @@ export interface GenerateWeeklyProgramFromTermInput {
   createdBy: string;
   weekStartDate: string;
   theme: string;
+  schoolName?: string;
   ageGroup: string;
   weeklyObjectives?: string[];
   constraints?: WeeklyProgramGenerationConstraints;
@@ -98,17 +99,177 @@ const toBlockType = (value: unknown): DailyProgramBlockType => {
   return 'learning';
 };
 
-const WEEKLY_PROGRAM_CONTAINER_KEYS = ['weekly_program', 'program', 'data', 'result', 'response', 'content'] as const;
+const WEEKLY_PROGRAM_CONTAINER_KEYS = [
+  'weekly_program',
+  'weeklyProgram',
+  'program',
+  'data',
+  'result',
+  'response',
+  'content',
+  'payload',
+  'output',
+  'json',
+] as const;
+const WEEKLY_PROGRAM_BLOCK_KEYS = [
+  'blocks',
+  'activities',
+  'routine',
+  'schedule',
+  'sessions',
+  'items',
+  'timeline',
+  'daily_blocks',
+  'dailyBlocks',
+  'program_blocks',
+  'programBlocks',
+  'routine_blocks',
+  'routineBlocks',
+] as const;
+const WEEKLY_PROGRAM_DAY_CONTAINER_KEYS = [
+  'days',
+  'week',
+  'weekdays',
+  'weekly_schedule',
+  'weeklySchedule',
+  'schedule_by_day',
+  'scheduleByDay',
+] as const;
+const DAY_LOOKUP: Record<string, 1 | 2 | 3 | 4 | 5 | 6 | 7> = {
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  tues: 2,
+  wednesday: 3,
+  wed: 3,
+  thursday: 4,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  friday: 5,
+  fri: 5,
+  saturday: 6,
+  sat: 6,
+  sunday: 7,
+  sun: 7,
+};
+
+const pickField = (record: Record<string, unknown>, keys: readonly string[]): unknown => {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+};
+
+const parseDayOfWeek = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampDayOfWeek(value);
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const asNumber = Number(raw);
+  if (Number.isFinite(asNumber)) {
+    return clampDayOfWeek(asNumber);
+  }
+
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalized in DAY_LOOKUP) {
+    return DAY_LOOKUP[normalized];
+  }
+
+  const dayWithNumber = normalized.match(/(?:day|weekday)([1-7])/);
+  if (dayWithNumber) {
+    return clampDayOfWeek(Number(dayWithNumber[1]));
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00.000Z`);
+    if (!Number.isNaN(date.getTime())) {
+      return clampDayOfWeek(date.getUTCDay() === 0 ? 7 : date.getUTCDay());
+    }
+  }
+
+  return null;
+};
+
+const extractBlocksArrayFromRecord = (record: Record<string, unknown>): unknown[] | null => {
+  for (const key of WEEKLY_PROGRAM_BLOCK_KEYS) {
+    const value = record[key];
+    if (Array.isArray(value)) return value;
+  }
+  return null;
+};
+
+const normalizeDayEntriesFromWeekMap = (
+  value: unknown,
+): WeeklyProgramAIResponse['days'] | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+
+  const days: NonNullable<WeeklyProgramAIResponse['days']> = [];
+
+  for (const [key, entry] of Object.entries(record)) {
+    const parsedDay = parseDayOfWeek(key);
+    if (parsedDay == null) continue;
+
+    let blocks: unknown[] | null = null;
+    if (Array.isArray(entry)) {
+      blocks = entry;
+    } else if (entry && typeof entry === 'object') {
+      blocks = extractBlocksArrayFromRecord(entry as Record<string, unknown>);
+    }
+
+    if (!blocks || blocks.length === 0) continue;
+    days.push({
+      day_of_week: parsedDay,
+      blocks,
+    });
+  }
+
+  if (days.length === 0) return null;
+  return days.sort((a, b) => Number(a.day_of_week || 0) - Number(b.day_of_week || 0));
+};
+
+const normalizeWeeklyProgramRecord = (
+  record: Record<string, unknown>,
+): WeeklyProgramAIResponse | null => {
+  const topLevelBlocks = extractBlocksArrayFromRecord(record);
+  if (topLevelBlocks && topLevelBlocks.length > 0) {
+    return {
+      title: typeof record.title === 'string' ? record.title : undefined,
+      summary: typeof record.summary === 'string' ? record.summary : undefined,
+      blocks: topLevelBlocks,
+    };
+  }
+
+  if (Array.isArray(record.days)) {
+    return {
+      title: typeof record.title === 'string' ? record.title : undefined,
+      summary: typeof record.summary === 'string' ? record.summary : undefined,
+      days: record.days as WeeklyProgramAIResponse['days'],
+    };
+  }
+
+  const dayContainers: unknown[] = [record, ...WEEKLY_PROGRAM_DAY_CONTAINER_KEYS.map((key) => record[key])];
+  for (const container of dayContainers) {
+    const normalizedDays = normalizeDayEntriesFromWeekMap(container);
+    if (!normalizedDays || normalizedDays.length === 0) continue;
+    return {
+      title: typeof record.title === 'string' ? record.title : undefined,
+      summary: typeof record.summary === 'string' ? record.summary : undefined,
+      days: normalizedDays,
+    };
+  }
+
+  return null;
+};
 
 const looksLikeWeeklyProgramResponse = (value: unknown): value is WeeklyProgramAIResponse => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    Array.isArray(record.days) ||
-    Array.isArray(record.blocks) ||
-    typeof record.title === 'string' ||
-    typeof record.summary === 'string'
-  );
+  return normalizeWeeklyProgramRecord(value as Record<string, unknown>) !== null;
 };
 
 const sanitizeJsonCandidate = (value: string): string =>
@@ -183,11 +344,15 @@ const findBalancedJsonObjects = (value: string, limit = 8): string[] => {
   return matches;
 };
 
-const parseWeeklyProgramFromUnknown = (value: unknown, depth = 0): WeeklyProgramAIResponse | null => {
-  if (depth > 4 || value == null) return null;
+const parseWeeklyProgramFromUnknown = (
+  value: unknown,
+  depth = 0,
+  seen = new Set<unknown>(),
+): WeeklyProgramAIResponse | null => {
+  if (depth > 5 || value == null) return null;
 
-  if (looksLikeWeeklyProgramResponse(value)) {
-    return value;
+  if (typeof value === 'string') {
+    return parseWeeklyProgramFromText(value, depth + 1);
   }
 
   if (Array.isArray(value)) {
@@ -195,20 +360,30 @@ const parseWeeklyProgramFromUnknown = (value: unknown, depth = 0): WeeklyProgram
     if (looksLikeDays) {
       return { days: value as WeeklyProgramAIResponse['days'] };
     }
+    for (const item of value) {
+      const parsed = parseWeeklyProgramFromUnknown(item, depth + 1, seen);
+      if (parsed) return parsed;
+    }
     return null;
   }
 
-  if (typeof value === 'string') {
-    return parseWeeklyProgramFromText(value, depth + 1);
+  if (!value || typeof value !== 'object') return null;
+  if (seen.has(value)) return null;
+  seen.add(value);
+
+  const record = value as Record<string, unknown>;
+  const normalized = normalizeWeeklyProgramRecord(record);
+  if (normalized) return normalized;
+
+  for (const key of WEEKLY_PROGRAM_CONTAINER_KEYS) {
+    if (!(key in record)) continue;
+    const parsed = parseWeeklyProgramFromUnknown(record[key], depth + 1, seen);
+    if (parsed) return parsed;
   }
 
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    for (const key of WEEKLY_PROGRAM_CONTAINER_KEYS) {
-      if (!(key in record)) continue;
-      const parsed = parseWeeklyProgramFromUnknown(record[key], depth + 1);
-      if (parsed) return parsed;
-    }
+  for (const nested of Object.values(record)) {
+    const parsed = parseWeeklyProgramFromUnknown(nested, depth + 1, seen);
+    if (parsed) return parsed;
   }
 
   return null;
@@ -328,16 +503,29 @@ const extractAIContent = (data: unknown): string => {
   return JSON.stringify(data || {});
 };
 
+const buildRepairSourceExcerpt = (sourceText: string): string => {
+  const source = String(sourceText || '').trim();
+  if (!source) return '';
+  if (source.length <= 12000) return source;
+
+  const head = source.slice(0, 8500);
+  const tail = source.slice(-3000);
+  const omitted = Math.max(0, source.length - head.length - tail.length);
+  return `${head}\n\n[TRUNCATED ${omitted} CHARS]\n\n${tail}`;
+};
+
 const repairWeeklyProgramJson = async (
   supabase: SupabaseFunctionsClient,
   sourceText: string,
 ): Promise<WeeklyProgramAIResponse | null> => {
-  const source = String(sourceText || '').trim();
+  const source = buildRepairSourceExcerpt(sourceText);
   if (!source) return null;
 
   const repairPrompt = [
     'You are a JSON normalizer.',
     'Convert the SOURCE into STRICT JSON only (no markdown fences, no extra text).',
+    'SOURCE may be partially truncated. If so, infer missing structure conservatively.',
+    'Return COMPACT JSON (single-line/minified) to avoid token truncation.',
     'Schema:',
     '{',
     '  "title": "string",',
@@ -355,23 +543,24 @@ const repairWeeklyProgramJson = async (
     '          "objectives": ["string"],',
     '          "materials": ["string"],',
     '          "transition_cue": "string|null",',
-    '          "notes": "string|null",',
-    '          "parent_tip": "string|null"',
+    '          "notes": "string|null"',
     '        }',
     '      ]',
     '    }',
     '  ]',
     '}',
     'Rules: map weekday names to day_of_week 1..7; preserve details; use null when unknown.',
+    'Rules: keep Monday-Friday (1..5) and max 6 blocks/day.',
+    'Rules: do not include parent tips or home activity advice.',
     '',
     'SOURCE:',
-    source.slice(0, 12000),
+    source,
   ].join('\n');
 
   try {
     const { data, error } = await supabase.functions.invoke('ai-proxy', {
       body: {
-        service_type: 'chat_message',
+        service_type: 'lesson_generation',
         payload: { prompt: repairPrompt },
         stream: false,
         enable_tools: false,
@@ -385,24 +574,68 @@ const repairWeeklyProgramJson = async (
   }
 };
 
+const toBlockRecord = (
+  raw: Record<string, unknown>,
+  index: number,
+  fallbackDayOfWeek: number,
+): DailyProgramBlock => {
+  const day = clampDayOfWeek(
+    parseDayOfWeek(
+      pickField(raw, [
+        'day_of_week',
+        'day',
+        'weekday',
+        'day_name',
+        'dayName',
+        'day_index',
+        'dayIndex',
+        'day_number',
+        'dayNumber',
+        'date',
+      ]),
+    ) ?? fallbackDayOfWeek,
+  );
+
+  return {
+    day_of_week: day,
+    block_order: Math.max(
+      1,
+      Number(pickField(raw, ['block_order', 'order', 'sequence', 'position', 'index'])) || index + 1,
+    ),
+    block_type: toBlockType(pickField(raw, ['block_type', 'type', 'activity_type', 'category'])),
+    title:
+      String(pickField(raw, ['title', 'name', 'activity', 'label']) || '').trim() ||
+      `Learning Block ${index + 1}`,
+    start_time:
+      typeof pickField(raw, ['start_time', 'start', 'startTime', 'time_start']) === 'string'
+        ? String(pickField(raw, ['start_time', 'start', 'startTime', 'time_start']))
+        : null,
+    end_time:
+      typeof pickField(raw, ['end_time', 'end', 'endTime', 'time_end']) === 'string'
+        ? String(pickField(raw, ['end_time', 'end', 'endTime', 'time_end']))
+        : null,
+    objectives: toStringArray(pickField(raw, ['objectives', 'goals', 'outcomes', 'learning_objectives'])),
+    materials: toStringArray(pickField(raw, ['materials', 'resources', 'supplies'])),
+    transition_cue:
+      typeof pickField(raw, ['transition_cue', 'transitionCue', 'transition']) === 'string'
+        ? String(pickField(raw, ['transition_cue', 'transitionCue', 'transition']))
+        : null,
+    notes:
+      typeof pickField(raw, ['notes', 'note', 'description']) === 'string'
+        ? String(pickField(raw, ['notes', 'note', 'description']))
+        : null,
+    parent_tip:
+      typeof pickField(raw, ['parent_tip', 'parentTip', 'home_tip', 'parent_note']) === 'string'
+        ? String(pickField(raw, ['parent_tip', 'parentTip', 'home_tip', 'parent_note']))
+        : null,
+  } as DailyProgramBlock;
+};
+
 const toBlocksFromFlat = (blocks: unknown[]): DailyProgramBlock[] =>
   blocks
     .map((item, index) => {
       const raw = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
-      const day = clampDayOfWeek(Number(raw.day_of_week || raw.day || 1));
-      return {
-        day_of_week: day,
-        block_order: Math.max(1, Number(raw.block_order) || index + 1),
-        block_type: toBlockType(raw.block_type || raw.type),
-        title: String(raw.title || raw.name || '').trim() || `Learning Block ${index + 1}`,
-        start_time: typeof raw.start_time === 'string' ? raw.start_time : null,
-        end_time: typeof raw.end_time === 'string' ? raw.end_time : null,
-        objectives: toStringArray(raw.objectives),
-        materials: toStringArray(raw.materials),
-        transition_cue: typeof raw.transition_cue === 'string' ? raw.transition_cue : null,
-        notes: typeof raw.notes === 'string' ? raw.notes : null,
-        parent_tip: typeof raw.parent_tip === 'string' ? raw.parent_tip : null,
-      } as DailyProgramBlock;
+      return toBlockRecord(raw, index, 1);
     })
     .sort((a, b) => (a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week));
 
@@ -411,27 +644,128 @@ const toBlocksFromDays = (days: WeeklyProgramAIResponse['days']): DailyProgramBl
 
   const blocks: DailyProgramBlock[] = [];
   for (const dayEntry of days) {
-    const day = clampDayOfWeek(Number(dayEntry?.day_of_week || 1));
-    const dayBlocks = Array.isArray(dayEntry?.blocks) ? dayEntry.blocks : [];
+    const dayRecord = (dayEntry && typeof dayEntry === 'object' ? dayEntry : {}) as Record<string, unknown>;
+    const day = clampDayOfWeek(
+      parseDayOfWeek(
+        pickField(dayRecord, [
+          'day_of_week',
+          'day',
+          'weekday',
+          'day_name',
+          'dayName',
+          'day_index',
+          'dayIndex',
+          'day_number',
+          'dayNumber',
+          'date',
+        ]),
+      ) ?? 1,
+    );
+    const dayBlocks =
+      extractBlocksArrayFromRecord(dayRecord) ||
+      (Array.isArray(dayRecord.blocks) ? dayRecord.blocks : []);
     dayBlocks.forEach((item, index) => {
       const raw = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
-      blocks.push({
-        day_of_week: day,
-        block_order: Math.max(1, Number(raw.block_order) || index + 1),
-        block_type: toBlockType(raw.block_type || raw.type),
-        title: String(raw.title || raw.name || '').trim() || `Learning Block ${index + 1}`,
-        start_time: typeof raw.start_time === 'string' ? raw.start_time : null,
-        end_time: typeof raw.end_time === 'string' ? raw.end_time : null,
-        objectives: toStringArray(raw.objectives),
-        materials: toStringArray(raw.materials),
-        transition_cue: typeof raw.transition_cue === 'string' ? raw.transition_cue : null,
-        notes: typeof raw.notes === 'string' ? raw.notes : null,
-        parent_tip: typeof raw.parent_tip === 'string' ? raw.parent_tip : null,
-      });
+      blocks.push(toBlockRecord(raw, index, day));
     });
   }
 
   return blocks.sort((a, b) => (a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week));
+};
+
+const WEATHER_KEYWORDS = [
+  'weather',
+  'forecast',
+  'season',
+  'temperature',
+  'climate',
+  'sunny',
+  'rain',
+  'cloud',
+];
+
+const hasWeatherSignal = (block: DailyProgramBlock): boolean => {
+  const haystack = [
+    block.block_type,
+    block.title,
+    block.notes,
+    block.transition_cue,
+  ]
+    .map((value) => String(value || '').toLowerCase())
+    .join(' ');
+  return WEATHER_KEYWORDS.some((keyword) => haystack.includes(keyword));
+};
+
+const ensureDailyWeatherRepetition = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
+  const grouped = new Map<number, DailyProgramBlock[]>();
+  for (const day of [1, 2, 3, 4, 5]) grouped.set(day, []);
+
+  blocks.forEach((block) => {
+    const day = clampDayOfWeek(block.day_of_week);
+    if (!grouped.has(day)) grouped.set(day, []);
+    grouped.get(day)?.push({ ...block, day_of_week: day });
+  });
+
+  for (const day of [1, 2, 3, 4, 5]) {
+    const dayBlocks = (grouped.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order);
+    if (dayBlocks.length === 0) continue;
+    if (dayBlocks.some(hasWeatherSignal)) {
+      grouped.set(day, dayBlocks);
+      continue;
+    }
+
+    if (dayBlocks.length >= 6) {
+      const anchorIndex = dayBlocks.findIndex((block) => String(block.block_type || '').toLowerCase() === 'circle_time');
+      const idx = anchorIndex >= 0 ? anchorIndex : 0;
+      const anchor = dayBlocks[idx];
+      dayBlocks[idx] = {
+        ...anchor,
+        title: `Weather Check-In: ${anchor.title || 'Morning Circle'}`.trim(),
+        transition_cue:
+          anchor.transition_cue || 'Observe and discuss weather, then transition into the next activity.',
+        objectives: Array.from(new Set(['Daily weather observation', ...(anchor.objectives || [])])).slice(0, 3),
+      };
+      grouped.set(day, dayBlocks);
+      continue;
+    }
+
+    const nextOrder =
+      dayBlocks.length > 0 ? Math.max(...dayBlocks.map((block) => Number(block.block_order) || 0)) + 1 : 1;
+
+    dayBlocks.push({
+      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      block_order: nextOrder,
+      block_type: 'circle_time',
+      title: 'Weather Circle & Calendar Talk',
+      start_time: null,
+      end_time: null,
+      objectives: ['Daily weather observation', 'Season vocabulary'],
+      materials: ['Weather chart', 'Date cards'],
+      transition_cue: 'Review weather and date, then transition to the next activity.',
+      notes: 'Use repetition daily for routine confidence.',
+      parent_tip: null,
+    });
+    grouped.set(day, dayBlocks);
+  }
+
+  const normalized: DailyProgramBlock[] = [];
+  for (const day of [1, 2, 3, 4, 5]) {
+    const dayBlocks = (grouped.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order)
+      .map((block, index) => ({
+        ...block,
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: index + 1,
+      }));
+    normalized.push(...dayBlocks);
+  }
+
+  return normalized.sort((a, b) =>
+    a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week,
+  );
 };
 
 const normalizeAIResponse = (
@@ -448,6 +782,8 @@ const normalizeAIResponse = (
     throw new Error('AI response did not include any daily program blocks');
   }
 
+  const normalizedBlocks = ensureDailyWeatherRepetition(blocks);
+
   return {
     preschool_id: input.preschoolId,
     created_by: input.createdBy,
@@ -459,7 +795,7 @@ const normalizeAIResponse = (
     generated_by_ai: true,
     source: 'ai',
     status: 'draft',
-    blocks,
+    blocks: normalizedBlocks,
   };
 };
 
@@ -491,7 +827,8 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
   }
 
   return [
-    'Generate a preschool weekly program from term context.',
+    'Generate a CAPS-aligned preschool weekly school routine from term context.',
+    ...(input.schoolName ? [`School name: ${input.schoolName}`] : []),
     `Theme: ${input.theme}`,
     `Age group: ${input.ageGroup}`,
     `Week start: ${startOfWeekMonday(input.weekStartDate)}`,
@@ -500,6 +837,18 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     ...(routineRequirements.length > 0
       ? [`Routine essentials to enforce: ${routineRequirements.join(' ')}`]
       : []),
+    'This routine is for in-school use only.',
+    'Do not include parent tips, home activities, or parent communication advice.',
+    'Ensure activities align to CAPS/ECD outcomes for South African preschool classrooms.',
+    ...(input.schoolName
+      ? ['If naming the school anywhere, use the exact provided school name only and do not invent alternatives.']
+      : []),
+    'Include a daily weather check-in or weather-circle block for every weekday (Monday-Friday) to reinforce repetition routines.',
+    'Keep output compact and token-safe:',
+    '- Monday-Friday only (day_of_week 1..5).',
+    '- 4-6 blocks per day.',
+    '- Keep objectives/materials concise (max 3 short items each).',
+    '- Keep notes brief and classroom-focused.',
     'Do not include markdown fences, comments, or any text before/after the JSON object.',
     'Return STRICT JSON only with shape:',
     '{',
@@ -518,14 +867,13 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     '          "objectives": ["string"],',
     '          "materials": ["string"],',
     '          "transition_cue": "string",',
-    '          "notes": "string",',
-    '          "parent_tip": "string"',
+    '          "notes": "string"',
     '        }',
     '      ]',
     '    }',
     '  ]',
     '}',
-    'Cover Monday-Friday with practical preschool activities and smooth transitions.',
+    'Cover Monday-Friday with practical preschool activities, smooth transitions, and a healthy school-day rhythm.',
   ].join('\n');
 };
 

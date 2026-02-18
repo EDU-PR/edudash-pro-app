@@ -265,7 +265,7 @@ export default function PreschoolLessonGeneratorScreen() {
   }, [isQuickMode, selectedAgeGroup, selectedSubject]);
 
   useEffect(() => {
-    if (!isQuickMode || !schoolId || !user?.id) return;
+    if (!schoolId || !user?.id) return;
     let cancelled = false;
 
     const loadContext = async () => {
@@ -285,7 +285,7 @@ export default function PreschoolLessonGeneratorScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isQuickMode, schoolId, user?.id]);
+  }, [schoolId, user?.id]);
 
   const buildPrompt = useCallback(() => {
     const durationNum = parseInt(duration, 10) || 30;
@@ -297,7 +297,7 @@ export default function PreschoolLessonGeneratorScreen() {
     const quickModeNote = isQuickMode
       ? '\n\n**QUICK LESSON MODE:** Create a low-prep, high-engagement lesson that fits within the time limit. Use minimal materials, clear transitions, and simple instructions.'
       : '';
-    const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
+    const planningHint = buildQuickLessonThemeHint(quickLessonContext);
     
     let prompt = `You are a highly experienced early childhood educator and curriculum specialist creating an engaging, developmentally appropriate preschool lesson plan. Your expertise spans child development, educational psychology, and hands-on learning methodologies.${quickModeNote}
 
