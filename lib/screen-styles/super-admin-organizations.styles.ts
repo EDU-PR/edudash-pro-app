@@ -12,6 +12,8 @@ export interface Organization {
   id: string;
   name: string;
   type: OrganizationType;
+  /** Raw source type value (e.g. combined, community_school, skills_development) */
+  organization_type_raw?: string | null;
   status: OrganizationStatus;
   contact_email: string;
   contact_phone?: string;
@@ -21,6 +23,8 @@ export interface Organization {
   country?: string;
   student_count: number;
   teacher_count: number;
+  active_student_count?: number;
+  active_teacher_count?: number;
   subscription_tier?: string;
   subscription_status?: string;
   created_at: string;
@@ -387,6 +391,97 @@ export function createStyles(t: typeof theme) {
       maxWidth: '60%',
       textAlign: 'right',
     },
+    modalValueCompact: {
+      fontSize: 13,
+      color: t.text,
+      fontWeight: '500',
+      textAlign: 'right',
+      flexShrink: 1,
+    },
+    modalInlineActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      maxWidth: '70%',
+    },
+    modalLinkButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.primary + '55',
+      backgroundColor: t.primary + '1f',
+    },
+    modalLinkText: {
+      color: t.primaryLight,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    editLabel: {
+      color: t.textSecondary,
+      fontSize: 13,
+      marginBottom: 6,
+    },
+    editInput: {
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.background,
+      borderRadius: 12,
+      color: t.text,
+      fontSize: 15,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      marginBottom: 12,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border + '35',
+    },
+    editFooter: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: t.border + '40',
+      backgroundColor: t.card,
+    },
+    editCancelBtn: {
+      flex: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      backgroundColor: t.background,
+    },
+    editCancelText: {
+      color: t.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    editSaveBtn: {
+      flex: 1,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      backgroundColor: t.primary,
+    },
+    editSaveBtnDisabled: {
+      opacity: 0.65,
+    },
+    editSaveText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+    },
     modalActions: {
       flexDirection: 'row',
       gap: 12,
@@ -425,6 +520,98 @@ export function createStyles(t: typeof theme) {
       padding: 20,
       width: '100%',
       maxWidth: 340,
+    },
+    memberModalContent: {
+      backgroundColor: t.card,
+      borderRadius: 20,
+      padding: 20,
+      width: '100%',
+      maxWidth: 420,
+      maxHeight: '86%',
+    },
+    memberModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    membersLoading: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 32,
+      gap: 8,
+    },
+    membersList: {
+      maxHeight: 360,
+    },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border + '35',
+      gap: 10,
+    },
+    memberTextWrap: {
+      flex: 1,
+    },
+    memberName: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    memberSecondary: {
+      color: t.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    memberStatusPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    memberStatusText: {
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'capitalize',
+    },
+    emptyMembers: {
+      paddingVertical: 24,
+      alignItems: 'center',
+    },
+    memberActions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 14,
+    },
+    memberSecondaryBtn: {
+      flex: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.background,
+    },
+    memberSecondaryBtnText: {
+      color: t.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    memberPrimaryBtn: {
+      flex: 1,
+      borderRadius: 12,
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.primary,
+    },
+    memberPrimaryBtnText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '700',
     },
     actionsTitle: {
       fontSize: 18,

@@ -13,6 +13,7 @@ import { ReplyBubbleQuote } from './ReplyBubbleQuote';
 import { LinkedText } from './LinkedText';
 import { formatTime, isVoiceNote, getVoiceNoteDuration, getSenderName } from './utils';
 import { toast } from '@/components/ui/ToastProvider';
+import { parseCallEventContent, type CallEventContent } from '@/lib/utils/messageContent';
 import type { Message, MessageStatus } from './types';
 
 // Try to import VoiceMessageBubble
@@ -24,6 +25,7 @@ try {
 interface MessageBubbleProps {
   msg: Message;
   isOwn: boolean;
+  showSenderName?: boolean;
   onLongPress: () => void;
   onPlaybackFinished?: () => void;
   onPlayNext?: () => void;
@@ -34,6 +36,7 @@ interface MessageBubbleProps {
   otherParticipantIds?: string[];
   onReactionPress?: (messageId: string, emoji: string) => void;
   onReplyPress?: (messageId: string) => void;
+  onCallEventPress?: (event: CallEventContent) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
 }
@@ -41,6 +44,7 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
   msg, 
   isOwn, 
+  showSenderName = true,
   onLongPress,
   onPlaybackFinished,
   onPlayNext,
@@ -51,10 +55,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   otherParticipantIds = [],
   onReactionPress,
   onReplyPress,
+  onCallEventPress,
   isFirstInGroup = true,
   isLastInGroup = true,
 }) => {
   const name = getSenderName(msg.sender);
+  const callEvent = parseCallEventContent(msg.content);
 
   // Determine message status for ticks
   const getMessageStatus = (): MessageStatus => {
@@ -100,7 +106,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               }
               isOwnMessage={isOwn}
               timestamp={formatTime(msg.created_at)}
-              senderName={!isOwn ? name : undefined}
+              senderName={!isOwn && showSenderName && name ? name : undefined}
               isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
               onLongPress={onLongPress}
               onPlaybackFinished={onPlaybackFinished}
@@ -129,7 +135,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
       isOwn ? styles.own : styles.other,
       !isFirstInGroup && styles.groupedMessage,
     ]}>
-      {!isOwn && isFirstInGroup && (
+      {!isOwn && showSenderName && isFirstInGroup && !!name && (
         <Text style={styles.name}>{name}</Text>
       )}
       {msg.forwarded_from_id && (
@@ -163,7 +169,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                 onPress={msg.reply_to_id ? () => onReplyPress?.(msg.reply_to_id!) : undefined}
               />
             )}
-            {isVoice ? (
+            {callEvent ? (
+              <View style={styles.callCard}>
+                <View style={styles.callCardRow}>
+                  <Ionicons
+                    name={callEvent.callType === 'video' ? 'videocam-outline' : 'call-outline'}
+                    size={18}
+                    color={isOwn ? '#ffffff' : '#cbd5e1'}
+                  />
+                  <Text style={[styles.callCardTitle, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
+                    {callEvent.callType === 'video' ? 'Missed video call' : 'Missed call'}
+                  </Text>
+                </View>
+                {!!callEvent.callerName && (
+                  <Text style={[styles.callCardSubtitle, { color: isOwn ? 'rgba(255,255,255,0.75)' : '#94a3b8' }]}>
+                    {callEvent.callerName}
+                  </Text>
+                )}
+                {!!callEvent.callerId && !!onCallEventPress && (
+                  <TouchableOpacity
+                    style={[styles.callBackBtn, { backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(59,130,246,0.2)' }]}
+                    onPress={() => onCallEventPress(callEvent)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="call" size={13} color={isOwn ? '#ffffff' : '#93c5fd'} />
+                    <Text style={[styles.callBackText, { color: isOwn ? '#ffffff' : '#93c5fd' }]}>Call back</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : isVoice ? (
               <View style={styles.voiceContainer}>
                 <View style={styles.voiceRow}>
                   <TouchableOpacity 
@@ -269,12 +303,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 }, (prevProps, nextProps) => {
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
+         prevProps.showSenderName === nextProps.showSenderName &&
          prevProps.msg.content === nextProps.msg.content &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
          prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
          prevProps.msg.forwarded_from_id === nextProps.msg.forwarded_from_id &&
          prevProps.msg.edited_at === nextProps.msg.edited_at &&
          prevProps.msg.reply_to_id === nextProps.msg.reply_to_id &&
+         (prevProps.msg.reply_to?.id ?? null) === (nextProps.msg.reply_to?.id ?? null) &&
+         (prevProps.msg.reply_to?.content ?? null) === (nextProps.msg.reply_to?.content ?? null) &&
+         (prevProps.msg.reply_to?.sender?.first_name ?? null) === (nextProps.msg.reply_to?.sender?.first_name ?? null) &&
+         (prevProps.msg.reply_to?.sender?.last_name ?? null) === (nextProps.msg.reply_to?.sender?.last_name ?? null) &&
          prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
          prevProps.isLastInGroup === nextProps.isLastInGroup &&
          JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
@@ -336,6 +375,7 @@ const styles = StyleSheet.create({
     borderRadius: 18, 
     paddingHorizontal: 14, 
     paddingVertical: 10,
+    minWidth: 96,
     borderWidth: 1,
   },
   bubbleOwn: {
@@ -362,6 +402,38 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     paddingRight: 14,
+  },
+  callCard: {
+    minWidth: 220,
+  },
+  callCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  callCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  callCardSubtitle: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  callBackBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.22)',
+  },
+  callBackText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   voiceContainer: {
     marginBottom: 2,

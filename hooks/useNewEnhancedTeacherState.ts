@@ -33,19 +33,61 @@ export const useNewEnhancedTeacherState = () => {
   const { tier } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
 
+  // Derive the teacher's display name once
+  const normalizedName = normalizePersonName({
+    first: profile?.first_name || user?.user_metadata?.first_name,
+    last: profile?.last_name || user?.user_metadata?.last_name,
+    full: profile?.full_name || user?.user_metadata?.full_name,
+  });
+  const teacherName = normalizedName.shortName || 'Teacher';
+
   // Get personalized greeting based on time of day
   const getGreeting = (): string => {
     const hour = new Date().getHours();
-    const normalizedName = normalizePersonName({
-      first: profile?.first_name || user?.user_metadata?.first_name,
-      last: profile?.last_name || user?.user_metadata?.last_name,
-      full: profile?.full_name || user?.user_metadata?.full_name,
-    });
-    const teacherName = normalizedName.shortName || 'Teacher';
-    
     if (hour < 12) return t('dashboard.good_morning') + ', ' + teacherName;
     if (hour < 18) return t('dashboard.good_afternoon') + ', ' + teacherName;
     return t('dashboard.good_evening') + ', ' + teacherName;
+  };
+
+  /**
+   * Contextual subtitle — surfaces the most relevant "what's next" info.
+   * Falls back to a generic motivational line when no data is available.
+   */
+  const getContextualSubtitle = (dashboardData: any): string => {
+    const pending = dashboardData?.pendingGrading ?? 0;
+    const upcoming = dashboardData?.upcomingLessons ?? 0;
+    const students = dashboardData?.totalStudents ?? 0;
+
+    // Priority 1: pending grading demands attention
+    if (pending > 0) {
+      return pending === 1
+        ? t('teacher.subtitle_pending_one', { defaultValue: 'You have 1 assignment to grade today' })
+        : t('teacher.subtitle_pending', {
+            defaultValue: 'You have {{count}} assignments to grade',
+            count: pending,
+          });
+    }
+
+    // Priority 2: upcoming lessons today
+    if (upcoming > 0) {
+      return upcoming === 1
+        ? t('teacher.subtitle_upcoming_one', { defaultValue: 'You have 1 lesson coming up today' })
+        : t('teacher.subtitle_upcoming', {
+            defaultValue: '{{count}} lessons planned for today',
+            count: upcoming,
+          });
+    }
+
+    // Priority 3: all caught up — celebrate
+    if (students > 0) {
+      return t('teacher.subtitle_caught_up', {
+        defaultValue: 'All caught up! {{count}} students are learning with you',
+        count: students,
+      });
+    }
+
+    // Fallback
+    return t('teacher.dashboard_subtitle');
   };
 
   // Handle dashboard refresh with haptic feedback
@@ -189,6 +231,7 @@ export const useNewEnhancedTeacherState = () => {
     isPreschool,
     resolvedSchoolType,
     getGreeting,
+    getContextualSubtitle,
     handleRefresh,
     handleQuickAction,
     buildMetrics,

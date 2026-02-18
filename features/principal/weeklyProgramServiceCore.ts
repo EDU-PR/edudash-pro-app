@@ -1,0 +1,588 @@
+import { Platform } from 'react-native';
+import { assertSupabase } from '@/lib/supabase';
+import type { DailyProgramBlock, WeeklyProgramDraft } from '@/types/ecd-planning';
+
+export interface ProgramTimeRules {
+  arrivalStartTime: string;
+  arrivalCutoffTime: string;
+  pickupStartTime: string;
+  pickupCutoffTime: string;
+}
+
+export interface ShareWeeklyProgramInput {
+  weeklyProgramId: string;
+  preschoolId: string;
+  sharedBy: string;
+  rules: ProgramTimeRules;
+}
+
+export interface SaveWeeklyProgramInput {
+  weeklyProgram: WeeklyProgramDraft;
+}
+
+const DAY_LABELS: Record<number, string> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+  7: 'Sunday',
+};
+
+function toDateOnly(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function startOfWeekMonday(value: string): string {
+  const date = new Date(`${String(value || '').slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('Invalid week start date');
+  }
+
+  const day = date.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + offset);
+  return toDateOnly(date);
+}
+
+function addDays(dateLike: string, days: number): string {
+  const date = new Date(`${dateLike}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateOnly(date);
+}
+
+function normalizeTime(value: string): string | null {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function toMinutes(value: string): number | null {
+  const normalized = normalizeTime(value);
+  if (!normalized) return null;
+  const [hours, minutes] = normalized.split(':').map((part) => Number(part));
+  return hours * 60 + minutes;
+}
+
+function formatDateRange(weekStartDate: string): string {
+  const start = new Date(`${weekStartDate}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 4);
+  const startLabel = start.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+  const endLabel = end.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+  return `${startLabel} - ${endLabel}`;
+}
+
+function normalizeBlocks(blocks: DailyProgramBlock[]): DailyProgramBlock[] {
+  return (blocks || [])
+    .map((block, index) => {
+      const day = Math.min(7, Math.max(1, Number(block.day_of_week) || 1)) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+      const order = Math.max(1, Number(block.block_order) || index + 1);
+
+      return {
+        day_of_week: day,
+        block_order: order,
+        block_type: block.block_type || 'learning',
+        title: String(block.title || '').trim() || `Program Block ${order}`,
+        start_time: normalizeTime(String(block.start_time || '')),
+        end_time: normalizeTime(String(block.end_time || '')),
+        objectives: Array.isArray(block.objectives) ? block.objectives : [],
+        materials: Array.isArray(block.materials) ? block.materials : [],
+        transition_cue: block.transition_cue || null,
+        notes: block.notes || null,
+        parent_tip: block.parent_tip || null,
+      };
+    })
+    .sort((a, b) => (a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week));
+}
+
+function validateRules(rules: ProgramTimeRules): { normalized: ProgramTimeRules; issues: string[] } {
+  const normalized = {
+    arrivalStartTime: normalizeTime(rules.arrivalStartTime) || '',
+    arrivalCutoffTime: normalizeTime(rules.arrivalCutoffTime) || '',
+    pickupStartTime: normalizeTime(rules.pickupStartTime) || '',
+    pickupCutoffTime: normalizeTime(rules.pickupCutoffTime) || '',
+  };
+
+  const issues: string[] = [];
+
+  if (!normalized.arrivalStartTime) issues.push('Arrival start time must be in HH:MM format.');
+  if (!normalized.arrivalCutoffTime) issues.push('Arrival cutoff time must be in HH:MM format.');
+  if (!normalized.pickupStartTime) issues.push('Pickup start time must be in HH:MM format.');
+  if (!normalized.pickupCutoffTime) issues.push('Pickup cutoff time must be in HH:MM format.');
+
+  const arrivalStart = toMinutes(normalized.arrivalStartTime);
+  const arrivalCutoff = toMinutes(normalized.arrivalCutoffTime);
+  const pickupStart = toMinutes(normalized.pickupStartTime);
+  const pickupCutoff = toMinutes(normalized.pickupCutoffTime);
+
+  if (arrivalStart !== null && arrivalCutoff !== null && arrivalStart >= arrivalCutoff) {
+    issues.push('Arrival start time must be earlier than arrival cutoff time.');
+  }
+
+  if (pickupStart !== null && pickupCutoff !== null && pickupStart >= pickupCutoff) {
+    issues.push('Pickup start time must be earlier than pickup cutoff time.');
+  }
+
+  if (arrivalCutoff !== null && pickupStart !== null && arrivalCutoff >= pickupStart) {
+    issues.push('Pickup window must begin after arrival cutoff.');
+  }
+
+  return { normalized, issues };
+}
+
+function validateBlocksAgainstRules(blocks: DailyProgramBlock[], rules: ProgramTimeRules): string[] {
+  const issues: string[] = [];
+
+  const arrivalStart = toMinutes(rules.arrivalStartTime);
+  const arrivalCutoff = toMinutes(rules.arrivalCutoffTime);
+  const pickupCutoff = toMinutes(rules.pickupCutoffTime);
+
+  if (arrivalStart === null || arrivalCutoff === null || pickupCutoff === null) {
+    return ['Time rules are incomplete and could not be validated.'];
+  }
+
+  const starts: number[] = [];
+  const ends: number[] = [];
+
+  for (const block of blocks) {
+    const start = block.start_time ? toMinutes(String(block.start_time)) : null;
+    const end = block.end_time ? toMinutes(String(block.end_time)) : null;
+
+    if (start !== null) starts.push(start);
+    if (end !== null) ends.push(end);
+
+    if (start !== null && end !== null && start >= end) {
+      issues.push(`${DAY_LABELS[block.day_of_week]} block \"${block.title}\" has an invalid time range.`);
+    }
+
+    if (start !== null && start < arrivalStart) {
+      issues.push(`${DAY_LABELS[block.day_of_week]} block \"${block.title}\" starts before arrival window.`);
+    }
+
+    if (end !== null && end > pickupCutoff) {
+      issues.push(`${DAY_LABELS[block.day_of_week]} block \"${block.title}\" ends after pickup cutoff.`);
+    }
+  }
+
+  if (starts.length > 0) {
+    const earliest = Math.min(...starts);
+    if (earliest > arrivalCutoff) {
+      issues.push('First program activity starts after the arrival cutoff.');
+    }
+  }
+
+  if (ends.length > 0) {
+    const latest = Math.max(...ends);
+    if (latest > pickupCutoff) {
+      issues.push('Latest program activity ends after the pickup cutoff.');
+    }
+  }
+
+  return issues;
+}
+
+function renderParentSummary(params: {
+  program: any;
+  blocks: DailyProgramBlock[];
+  rules: ProgramTimeRules;
+}): string {
+  const { program, blocks, rules } = params;
+  const lines: string[] = [];
+
+  lines.push(`Daily Routine Program (${formatDateRange(program.week_start_date)})`);
+  lines.push('');
+  lines.push(`Strict arrival window: ${rules.arrivalStartTime} - ${rules.arrivalCutoffTime}`);
+  lines.push(`Strict pickup window: ${rules.pickupStartTime} - ${rules.pickupCutoffTime}`);
+  lines.push('Learners arriving after cutoff require front-office check-in.');
+  lines.push('Pickup after cutoff requires prior written approval.');
+  lines.push('');
+
+  for (let day = 1; day <= 5; day += 1) {
+    const dayBlocks = blocks.filter((block) => block.day_of_week === day);
+    if (dayBlocks.length === 0) continue;
+
+    lines.push(DAY_LABELS[day]);
+
+    for (const block of dayBlocks) {
+      const timeLabel = block.start_time && block.end_time
+        ? `${block.start_time} - ${block.end_time}`
+        : block.start_time
+          ? `${block.start_time}`
+          : 'Time TBD';
+
+      lines.push(`- ${timeLabel}: ${block.title}`);
+      if (block.parent_tip) {
+        lines.push(`  Parent tip: ${block.parent_tip}`);
+      }
+    }
+
+    lines.push('');
+  }
+
+  lines.push('Please follow the arrival and pickup windows strictly to protect class flow and safety.');
+  return lines.join('\n');
+}
+
+export class WeeklyProgramService {
+  static startOfWeekMonday = startOfWeekMonday;
+
+  static validateProgramTimeRules(rules: ProgramTimeRules): { normalized: ProgramTimeRules; issues: string[] } {
+    return validateRules(rules);
+  }
+
+  static async listWeeklyPrograms(params: {
+    preschoolId: string;
+    limit?: number;
+  }): Promise<WeeklyProgramDraft[]> {
+    const supabase = assertSupabase();
+    const limit = Math.max(1, Math.min(100, Number(params.limit) || 20));
+
+    const { data: programRows, error: programsError } = await supabase
+      .from('weekly_programs')
+      .select('*')
+      .eq('preschool_id', params.preschoolId)
+      .order('week_start_date', { ascending: false })
+      .limit(limit);
+
+    if (programsError) {
+      throw new Error(programsError.message || 'Failed to load weekly programs');
+    }
+
+    const programs = (programRows || []) as any[];
+    if (programs.length === 0) return [];
+
+    const programIds = programs.map((program) => program.id);
+
+    const { data: blockRows, error: blocksError } = await supabase
+      .from('daily_program_blocks')
+      .select('*')
+      .in('weekly_program_id', programIds)
+      .order('day_of_week', { ascending: true })
+      .order('block_order', { ascending: true });
+
+    if (blocksError) {
+      throw new Error(blocksError.message || 'Failed to load daily program blocks');
+    }
+
+    const groupedBlocks = new Map<string, DailyProgramBlock[]>();
+
+    for (const row of (blockRows || []) as any[]) {
+      const programId = String(row.weekly_program_id || '');
+      if (!programId) continue;
+      const list = groupedBlocks.get(programId) || [];
+      list.push({
+        id: row.id,
+        weekly_program_id: row.weekly_program_id,
+        preschool_id: row.preschool_id,
+        class_id: row.class_id,
+        created_by: row.created_by,
+        day_of_week: Number(row.day_of_week) as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: Number(row.block_order) || 1,
+        block_type: row.block_type,
+        title: row.title,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        objectives: Array.isArray(row.objectives) ? row.objectives : [],
+        materials: Array.isArray(row.materials) ? row.materials : [],
+        transition_cue: row.transition_cue,
+        notes: row.notes,
+        parent_tip: row.parent_tip,
+      });
+      groupedBlocks.set(programId, list);
+    }
+
+    return programs.map((program) => ({
+      id: program.id,
+      preschool_id: program.preschool_id,
+      class_id: program.class_id,
+      term_id: program.term_id,
+      theme_id: program.theme_id,
+      created_by: program.created_by,
+      week_start_date: program.week_start_date,
+      week_end_date: program.week_end_date,
+      age_group: program.age_group,
+      title: program.title,
+      summary: program.summary,
+      generated_by_ai: !!program.generated_by_ai,
+      source: program.source || 'manual',
+      status: program.status || 'draft',
+      published_by: program.published_by,
+      published_at: program.published_at,
+      blocks: groupedBlocks.get(program.id) || [],
+    }));
+  }
+
+  static async saveWeeklyProgram(input: SaveWeeklyProgramInput): Promise<WeeklyProgramDraft> {
+    const supabase = assertSupabase();
+    const weeklyProgram = input.weeklyProgram;
+
+    const weekStartDate = startOfWeekMonday(weeklyProgram.week_start_date);
+    const weekEndDate = addDays(weekStartDate, 4);
+    const blocks = normalizeBlocks(Array.isArray(weeklyProgram.blocks) ? weeklyProgram.blocks : []);
+
+    const basePayload = {
+      preschool_id: weeklyProgram.preschool_id,
+      class_id: weeklyProgram.class_id || null,
+      term_id: weeklyProgram.term_id || null,
+      theme_id: weeklyProgram.theme_id || null,
+      created_by: weeklyProgram.created_by,
+      week_start_date: weekStartDate,
+      week_end_date: weekEndDate,
+      age_group: weeklyProgram.age_group || '3-6',
+      title: weeklyProgram.title || 'Weekly Program',
+      summary: weeklyProgram.summary || null,
+      generated_by_ai: !!weeklyProgram.generated_by_ai,
+      source: weeklyProgram.source || 'manual',
+      status: weeklyProgram.status || 'draft',
+    };
+
+    let savedProgram: any = null;
+
+    if (weeklyProgram.id) {
+      const { data, error } = await supabase
+        .from('weekly_programs')
+        .update(basePayload)
+        .eq('id', weeklyProgram.id)
+        .select('*')
+        .single();
+
+      if (error || !data) {
+        throw new Error(error?.message || 'Failed to update weekly program');
+      }
+      savedProgram = data;
+    } else {
+      const inserted = await supabase
+        .from('weekly_programs')
+        .insert(basePayload)
+        .select('*')
+        .single();
+
+      if (inserted.error) {
+        const isConflict = inserted.error.code === '23505';
+
+        if (!isConflict) {
+          throw new Error(inserted.error.message || 'Failed to create weekly program');
+        }
+
+        let existingQuery = supabase
+          .from('weekly_programs')
+          .select('*')
+          .eq('preschool_id', weeklyProgram.preschool_id)
+          .eq('week_start_date', weekStartDate)
+          .limit(1);
+
+        if (weeklyProgram.class_id) {
+          existingQuery = existingQuery.eq('class_id', weeklyProgram.class_id);
+        } else {
+          existingQuery = existingQuery.is('class_id', null);
+        }
+
+        const { data: existingRows, error: existingError } = await existingQuery;
+        const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+
+        if (existingError || !existing?.id) {
+          throw new Error(existingError?.message || inserted.error.message || 'Failed to resolve existing weekly program');
+        }
+
+        const { data: updatedExisting, error: updateError } = await supabase
+          .from('weekly_programs')
+          .update(basePayload)
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+
+        if (updateError || !updatedExisting) {
+          throw new Error(updateError?.message || 'Failed to update existing weekly program');
+        }
+
+        savedProgram = updatedExisting;
+      } else {
+        savedProgram = inserted.data;
+      }
+    }
+
+    if (!savedProgram?.id) {
+      throw new Error('Weekly program save failed unexpectedly');
+    }
+
+    await supabase.from('daily_program_blocks').delete().eq('weekly_program_id', savedProgram.id);
+
+    if (blocks.length > 0) {
+      const blockRows = blocks.map((block) => ({
+        weekly_program_id: savedProgram.id,
+        preschool_id: weeklyProgram.preschool_id,
+        class_id: weeklyProgram.class_id || null,
+        created_by: weeklyProgram.created_by,
+        day_of_week: block.day_of_week,
+        block_order: block.block_order,
+        block_type: block.block_type,
+        title: block.title,
+        start_time: block.start_time,
+        end_time: block.end_time,
+        objectives: block.objectives || [],
+        materials: block.materials || [],
+        transition_cue: block.transition_cue,
+        notes: block.notes,
+        parent_tip: block.parent_tip,
+      }));
+
+      const { error: blockError } = await supabase.from('daily_program_blocks').insert(blockRows);
+      if (blockError) {
+        throw new Error(blockError.message || 'Failed to save daily program blocks');
+      }
+    }
+
+    return {
+      id: savedProgram.id,
+      preschool_id: savedProgram.preschool_id,
+      class_id: savedProgram.class_id,
+      term_id: savedProgram.term_id,
+      theme_id: savedProgram.theme_id,
+      created_by: savedProgram.created_by,
+      week_start_date: savedProgram.week_start_date,
+      week_end_date: savedProgram.week_end_date,
+      age_group: savedProgram.age_group,
+      title: savedProgram.title,
+      summary: savedProgram.summary,
+      generated_by_ai: !!savedProgram.generated_by_ai,
+      source: savedProgram.source || 'manual',
+      status: savedProgram.status || 'draft',
+      published_by: savedProgram.published_by,
+      published_at: savedProgram.published_at,
+      blocks,
+    };
+  }
+
+  static async shareWeeklyProgramWithParents(input: ShareWeeklyProgramInput): Promise<{ announcementId: string }> {
+    const supabase = assertSupabase();
+
+    const { normalized, issues: ruleIssues } = validateRules(input.rules);
+    if (ruleIssues.length > 0) {
+      throw new Error(ruleIssues.join('\n'));
+    }
+
+    const { data: programRow, error: programError } = await supabase
+      .from('weekly_programs')
+      .select('*')
+      .eq('id', input.weeklyProgramId)
+      .eq('preschool_id', input.preschoolId)
+      .single();
+
+    if (programError || !programRow) {
+      throw new Error(programError?.message || 'Weekly program not found');
+    }
+
+    const { data: blockRows, error: blockError } = await supabase
+      .from('daily_program_blocks')
+      .select('*')
+      .eq('weekly_program_id', input.weeklyProgramId)
+      .order('day_of_week', { ascending: true })
+      .order('block_order', { ascending: true });
+
+    if (blockError) {
+      throw new Error(blockError.message || 'Failed to load program blocks');
+    }
+
+    const blocks = normalizeBlocks((blockRows || []) as DailyProgramBlock[]);
+    if (blocks.length === 0) {
+      throw new Error('No daily program blocks found. Please generate or add routine blocks first.');
+    }
+
+    const blockIssues = validateBlocksAgainstRules(blocks, normalized);
+    if (blockIssues.length > 0) {
+      throw new Error(blockIssues.join('\n'));
+    }
+
+    const weekStartDate = String(programRow.week_start_date || '').slice(0, 10);
+    const dateRange = formatDateRange(weekStartDate);
+    const title = `Daily Routine • ${dateRange}`;
+
+    const summary = renderParentSummary({
+      program: programRow,
+      blocks,
+      rules: normalized,
+    });
+
+    const attachments = [
+      {
+        kind: 'daily_program_structured',
+        version: 1,
+        weekly_program_id: input.weeklyProgramId,
+        week_start_date: weekStartDate,
+        week_end_date: String(programRow.week_end_date || '').slice(0, 10),
+        age_group: programRow.age_group || null,
+        title: programRow.title || null,
+        summary: programRow.summary || null,
+        strict_time_rules: normalized,
+        days: blocks,
+      },
+    ];
+
+    const { data: announcementRow, error: announcementError } = await supabase
+      .from('announcements')
+      .insert({
+        preschool_id: input.preschoolId,
+        author_id: input.sharedBy,
+        title,
+        content: summary,
+        target_audience: 'parents',
+        priority: 'medium',
+        is_published: true,
+        published_at: new Date().toISOString(),
+        attachments,
+      })
+      .select('id')
+      .single();
+
+    if (announcementError || !announcementRow?.id) {
+      throw new Error(announcementError?.message || 'Failed to share routine with parents');
+    }
+
+    await supabase
+      .from('weekly_programs')
+      .update({
+        status: 'published',
+        published_by: input.sharedBy,
+        published_at: new Date().toISOString(),
+      })
+      .eq('id', input.weeklyProgramId);
+
+    try {
+      await supabase.functions.invoke('notifications-dispatcher', {
+        body: {
+          event_type: 'new_announcement',
+          preschool_id: input.preschoolId,
+          announcement_id: announcementRow.id,
+          title,
+          body: 'New daily routine program shared with strict arrival and pickup windows.',
+          target_audience: 'parents',
+          priority: 'medium',
+          send_immediately: true,
+          metadata: {
+            feature: 'daily_program_share',
+            weekly_program_id: input.weeklyProgramId,
+            week_start_date: weekStartDate,
+            platform: Platform.OS,
+          },
+        },
+      });
+    } catch {
+      // Non-blocking notification dispatch.
+    }
+
+    return {
+      announcementId: announcementRow.id,
+    };
+  }
+}

@@ -21,6 +21,9 @@ import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 import type { SupportedLanguage } from '@/lib/voice/types';
 import { resolveEffectiveTier } from '@/lib/tiers/resolveEffectiveTier';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { AZURE_RATE_PHONICS } from '@/lib/dash-ai/ttsConstants';
 
 // Declare global window for web platform type safety
 declare const window: any;
@@ -80,6 +83,11 @@ export class DashVoiceService {
   private recordingObject: any = null;
   private soundObject: any = null;
   private voiceController: any = null; // Optional Phase 4 architecture
+  private ttsAccessCache: { userId: string | null; allowed: boolean; checkedAt: number } | null = null;
+  private voicePrefsCache: { value: { language?: string; voice_id?: string } | null; checkedAt: number } | null = null;
+
+  private static readonly TTS_ACCESS_CACHE_TTL_MS = 5 * 60 * 1000;
+  private static readonly VOICE_PREFS_CACHE_TTL_MS = 60 * 1000;
 
   constructor(config: VoiceRecordingConfig) {
     this.config = config;
@@ -596,6 +604,129 @@ export class DashVoiceService {
     'enterprise',
   ]);
 
+  private isCacheFresh(checkedAt: number, ttlMs: number): boolean {
+    return Date.now() - checkedAt < ttlMs;
+  }
+
+  private async canCurrentUserUseTTS(): Promise<boolean> {
+    const supabase = this.config.supabaseClient;
+    if (!supabase) return true;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id || null;
+
+      if (
+        this.ttsAccessCache &&
+        this.ttsAccessCache.userId === userId &&
+        this.isCacheFresh(this.ttsAccessCache.checkedAt, DashVoiceService.TTS_ACCESS_CACHE_TTL_MS)
+      ) {
+        return this.ttsAccessCache.allowed;
+      }
+
+      if (!user) {
+        this.ttsAccessCache = { userId: null, allowed: true, checkedAt: Date.now() };
+        return true;
+      }
+
+      const [{ data: directTierData }, { data: directUsageData }, { data: profileByAuth }] = await Promise.all([
+        supabase.from('user_ai_tiers').select('tier').eq('user_id', user.id).maybeSingle(),
+        supabase.from('user_ai_usage').select('current_tier').eq('user_id', user.id).maybeSingle(),
+        supabase
+          .from('profiles')
+          .select('id, role, subscription_tier, organization_id, preschool_id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle(),
+      ]);
+
+      const profile = profileByAuth || (await supabase
+        .from('profiles')
+        .select('id, role, subscription_tier, organization_id, preschool_id')
+        .eq('id', user.id)
+        .maybeSingle()).data;
+
+      let profileTierData: any = null;
+      let profileUsageData: any = null;
+      if (profile?.id) {
+        const [tierByProfileId, usageByProfileId] = await Promise.all([
+          supabase.from('user_ai_tiers').select('tier').eq('user_id', profile.id).maybeSingle(),
+          supabase.from('user_ai_usage').select('current_tier').eq('user_id', profile.id).maybeSingle(),
+        ]);
+        profileTierData = tierByProfileId.data;
+        profileUsageData = usageByProfileId.data;
+      }
+
+      const orgId = profile?.organization_id || profile?.preschool_id;
+      let orgTier: string | null = null;
+      if (orgId) {
+        const { data: preschoolData } = await supabase
+          .from('preschools')
+          .select('subscription_tier')
+          .eq('id', orgId)
+          .maybeSingle();
+        orgTier = preschoolData?.subscription_tier || null;
+
+        if (!orgTier) {
+          const { data: organizationData } = await supabase
+            .from('organizations')
+            .select('subscription_tier')
+            .eq('id', orgId)
+            .maybeSingle();
+          orgTier = organizationData?.subscription_tier || null;
+        }
+      }
+
+      const resolvedTier = resolveEffectiveTier({
+        role: profile?.role,
+        profileTier: profile?.subscription_tier,
+        organizationTier: orgTier,
+        usageTier: directUsageData?.current_tier,
+        candidates: [
+          directTierData?.tier,
+          profileTierData?.tier,
+          profileUsageData?.current_tier,
+        ],
+      }).capabilityTier;
+
+      const allowed = DashVoiceService.TTS_ALLOWED_CAPABILITY_TIERS.has(resolvedTier);
+      this.ttsAccessCache = {
+        userId,
+        allowed,
+        checkedAt: Date.now(),
+      };
+      return allowed;
+    } catch (tierErr) {
+      console.warn('[DashVoice] Could not check tier for TTS, allowing request:', tierErr);
+      // Allow request to proceed - Edge Function will do final tier check
+      return true;
+    }
+  }
+
+  private async getCachedVoicePreferences(): Promise<{ language?: string; voice_id?: string } | null> {
+    if (
+      this.voicePrefsCache &&
+      this.isCacheFresh(this.voicePrefsCache.checkedAt, DashVoiceService.VOICE_PREFS_CACHE_TTL_MS)
+    ) {
+      return this.voicePrefsCache.value;
+    }
+
+    try {
+      const { voiceService } = await import('@/lib/voice/client');
+      const prefs = await voiceService.getPreferences().catch(() => null);
+      this.voicePrefsCache = {
+        value: prefs,
+        checkedAt: Date.now(),
+      };
+      return prefs;
+    } catch {
+      this.voicePrefsCache = {
+        value: null,
+        checkedAt: Date.now(),
+      };
+      return null;
+    }
+  }
+
   /**
    * Speak text using TTS with intelligent text normalization
    * Note: TTS is a premium feature - free tier users will get an error callback
@@ -604,107 +735,21 @@ export class DashVoiceService {
     try {
       const voiceSettings = this.config.voiceSettings;
       
-      // Check tier access for TTS (premium feature)
-      try {
-        // We can't use hooks here, so check via Supabase directly.
-        // Resolve from multiple sources and pick the highest capability tier.
-        const supabase = this.config.supabaseClient;
-        if (supabase) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: directTierData } = await supabase
-              .from('user_ai_tiers')
-              .select('tier')
-              .eq('user_id', user.id)
-              .maybeSingle();
-            
-            const { data: directUsageData } = await supabase
-              .from('user_ai_usage')
-              .select('current_tier')
-              .eq('user_id', user.id)
-              .maybeSingle();
-
-            let profile: any = null;
-            const { data: profileByAuth } = await supabase
-              .from('profiles')
-              .select('id, subscription_tier, organization_id, preschool_id')
-              .eq('auth_user_id', user.id)
-              .maybeSingle();
-            if (profileByAuth) {
-              profile = profileByAuth;
-            } else {
-              const { data: profileById } = await supabase
-                .from('profiles')
-                .select('id, subscription_tier, organization_id, preschool_id')
-                .eq('id', user.id)
-                .maybeSingle();
-              profile = profileById;
-            }
-
-            let profileTierData: any = null;
-            let profileUsageData: any = null;
-            if (profile?.id) {
-              const { data: tierByProfileId } = await supabase
-                .from('user_ai_tiers')
-                .select('tier')
-                .eq('user_id', profile.id)
-                .maybeSingle();
-              profileTierData = tierByProfileId;
-
-              const { data: usageByProfileId } = await supabase
-                .from('user_ai_usage')
-                .select('current_tier')
-                .eq('user_id', profile.id)
-                .maybeSingle();
-              profileUsageData = usageByProfileId;
-            }
-
-            const orgId = profile?.organization_id || profile?.preschool_id;
-            let orgTier: string | null = null;
-            if (orgId) {
-              const { data: preschoolData } = await supabase
-                .from('preschools')
-                .select('subscription_tier')
-                .eq('id', orgId)
-                .maybeSingle();
-              orgTier = preschoolData?.subscription_tier || null;
-
-              if (!orgTier) {
-                const { data: organizationData } = await supabase
-                  .from('organizations')
-                  .select('subscription_tier')
-                  .eq('id', orgId)
-                  .maybeSingle();
-                orgTier = organizationData?.subscription_tier || null;
-              }
-            }
-
-            const resolvedTier = resolveEffectiveTier({
-              role: profile?.role,
-              profileTier: profile?.subscription_tier,
-              organizationTier: orgTier,
-              usageTier: directUsageData?.current_tier,
-              candidates: [
-                directTierData?.tier,
-                profileTierData?.tier,
-                profileUsageData?.current_tier,
-              ],
-            }).capabilityTier;
-
-            if (!DashVoiceService.TTS_ALLOWED_CAPABILITY_TIERS.has(resolvedTier)) {
-              console.log(`[DashVoice] TTS blocked for free tier user`);
-              callbacks?.onError?.(new Error('TTS_FREE_TIER_BLOCKED'));
-              return;
-            }
-          }
-        }
-      } catch (tierErr) {
-        console.warn('[DashVoice] Could not check tier for TTS, allowing request:', tierErr);
-        // Allow request to proceed - Edge Function will do final tier check
+      // Check tier access for TTS (premium feature), cached for chunked playback.
+      const canUseTTS = await this.canCurrentUserUseTTS();
+      if (!canUseTTS) {
+        console.log('[DashVoice] TTS blocked for free tier user');
+        callbacks?.onError?.(new Error('TTS_FREE_TIER_BLOCKED'));
+        return;
       }
       
-      // Normalize text first
-      const normalizedText = this.normalizeTextForSpeech(text);
+      // Normalize text first (legacy readability + SSOT TTS normalization).
+      const legacyNormalizedText = this.normalizeTextForSpeech(text);
+      const phonicsMode = shouldUsePhonicsMode(text) || shouldUsePhonicsMode(legacyNormalizedText);
+      const normalizedText = normalizeForTTS(legacyNormalizedText, {
+        phonicsMode,
+        preservePhonicsMarkers: phonicsMode,
+      });
       if (normalizedText.length === 0) {
         console.log('[DashVoice] No speakable content after normalization');
         callbacks?.onError?.('No speakable content after normalization');
@@ -747,8 +792,8 @@ export class DashVoiceService {
         }
 
         // Resolve voice ID preference
+        const prefs = await this.getCachedVoicePreferences();
         const { voiceService } = await import('@/lib/voice/client');
-        const prefs = await voiceService.getPreferences().catch(() => null);
         const gender = (voiceSettings as any).voice === 'male' ? 'male' : 'female';
         const voice_id = (prefs?.language === shortLang && prefs?.voice_id)
           ? prefs.voice_id
@@ -758,7 +803,10 @@ export class DashVoiceService {
         const baseRate = Number.isFinite(voiceSettings.rate) && voiceSettings.rate > 0
           ? voiceSettings.rate
           : 1.0;
-        const speaking_rate = Math.round((baseRate - 1.0) * 100);
+        const profileSpeakingRate = Math.round((baseRate - 1.0) * 100);
+        const speaking_rate = phonicsMode
+          ? Math.min(profileSpeakingRate, AZURE_RATE_PHONICS)
+          : profileSpeakingRate;
         const pitch = Math.round(((voiceSettings.pitch ?? 1.0) - 1.0) * 100);
 
 
@@ -770,6 +818,7 @@ export class DashVoiceService {
             voice_id,
             speaking_rate,
             pitch,
+            phonics_mode: phonicsMode,
           });
 
           // Play via audio manager
@@ -891,6 +940,7 @@ export class DashVoiceService {
    */
   public updateConfig(config: Partial<VoiceRecordingConfig>): void {
     this.config = { ...this.config, ...config };
+    this.voicePrefsCache = null;
   }
 
   /**
@@ -910,6 +960,8 @@ export class DashVoiceService {
     }
     
     this.isRecording = false;
+    this.voicePrefsCache = null;
+    this.ttsAccessCache = null;
     console.log('[DashVoice] Disposal complete');
   }
 

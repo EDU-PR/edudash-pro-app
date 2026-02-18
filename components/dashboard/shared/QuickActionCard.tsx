@@ -24,6 +24,7 @@ export interface QuickActionCardProps {
   badgeCount?: number;
   disabled?: boolean;
   cardWidth?: number;
+  variant?: 'default' | 'glass';
 }
 
 export const QuickActionCard: React.FC<QuickActionCardProps> = ({ 
@@ -35,9 +36,10 @@ export const QuickActionCard: React.FC<QuickActionCardProps> = ({
   badgeCount,
   disabled = false,
   cardWidth: customCardWidth,
+  variant = 'default',
 }) => {
   const { theme } = useTheme();
-  const styles = createStyles(theme, customCardWidth);
+  const styles = createStyles(theme, customCardWidth, variant);
 
   const handlePress = async () => {
     if (disabled) return;
@@ -79,22 +81,43 @@ export const QuickActionCard: React.FC<QuickActionCardProps> = ({
   );
 };
 
-const createStyles = (theme: any, customCardWidth?: number) => {
+const isDarkHex = (hex: string): boolean => {
+  const match = String(hex || '').trim().match(/^#([0-9a-f]{6})$/i);
+  if (!match) return false;
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance < 0.55;
+};
+
+const createStyles = (theme: any, customCardWidth?: number, variant: 'default' | 'glass' = 'default') => {
   const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  const isDark = isDarkHex(theme?.background);
+  const glass = variant === 'glass';
+  const cardBackground = glass
+    ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.72)')
+    : theme.cardBackground;
+  const cardBorder = glass
+    ? (isDark ? 'rgba(255,255,255,0.26)' : 'rgba(255,255,255,0.82)')
+    : 'transparent';
 
   return StyleSheet.create({
     actionCard: {
-      backgroundColor: theme.cardBackground,
+      backgroundColor: cardBackground,
       borderRadius: isSmallScreen ? 12 : 16,
       padding: isSmallScreen ? 12 : 16,
       alignItems: 'center',
       ...(customCardWidth ? { width: customCardWidth } : { flex: 1 }),
       marginBottom: cardGap,
+      borderWidth: glass ? 1 : 0,
+      borderColor: cardBorder,
       shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 6,
-      elevation: 2,
+      shadowOffset: { width: 0, height: glass ? 10 : 2 },
+      shadowOpacity: glass ? 0.16 : 0.06,
+      shadowRadius: glass ? 16 : 6,
+      elevation: glass ? 6 : 2,
       minHeight: isSmallScreen ? 90 : 110,
     },
     actionCardDisabled: {
@@ -120,7 +143,7 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
-      borderColor: theme.cardBackground,
+      borderColor: cardBackground,
     },
     badgeText: {
       color: '#FFFFFF',

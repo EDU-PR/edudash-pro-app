@@ -1,16 +1,58 @@
 /**
  * K-12 Parent Dashboard Styles
- * 
- * Extracted from dashboard.tsx to comply with WARP file size limits.
+ *
+ * Extracted from dashboard.tsx and tuned for #NEXT-GEN visual language.
  */
 
 import { StyleSheet } from 'react-native';
 
-// Note: Using percentage-based widths for responsive design
+const GLASS_BG = 'rgba(255,255,255,0.05)';
+const GLASS_BG_SOFT = 'rgba(255,255,255,0.04)';
+const GLASS_BORDER = 'rgba(255,255,255,0.10)';
+const GLASS_BORDER_SOFT = 'rgba(255,255,255,0.08)';
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  cosmicBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  cosmicBackdropFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  nebulaGlow: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: '#5A409D',
+    opacity: 0.1,
+  },
+  nebulaTop: {
+    width: 280,
+    height: 280,
+    top: -120,
+    right: -80,
+  },
+  nebulaMid: {
+    width: 340,
+    height: 340,
+    top: '34%',
+    left: -180,
+    backgroundColor: '#3C8E62',
+    opacity: 0.08,
+  },
+  nebulaBottom: {
+    width: 300,
+    height: 300,
+    bottom: -140,
+    right: -120,
+    opacity: 0.09,
+  },
+  starDot: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: '#EAF0FF',
   },
   loadingContainer: {
     flex: 1,
@@ -28,6 +70,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
+    backgroundColor: 'rgba(15,18,30,0.8)',
   },
   headerLeftSection: {
     flexDirection: 'row',
@@ -46,7 +89,223 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  heroSummaryCard: {
+    borderRadius: 18,
     padding: 16,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  heroSummaryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 10,
+  },
+  heroSummaryTitle: {
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  heroSummarySubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  heroSummaryStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: 'rgba(15,18,30,0.32)',
+  },
+  heroSummaryStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  heroSummaryValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  heroSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: GLASS_BORDER_SOFT,
+  },
+  currentClassCard: {
+    borderRadius: 18,
+    marginBottom: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.32,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  currentClassGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    gap: 14,
+  },
+  currentClassTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  currentClassTitleWrap: {
+    flex: 1,
+  },
+  currentClassEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  currentClassTitle: {
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  currentClassSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  currentClassAverageChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(15,18,30,0.3)',
+    alignItems: 'flex-end',
+    minWidth: 88,
+  },
+  currentClassAverageLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  currentClassAverageValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  currentClassStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  currentClassStatPill: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: 'rgba(15,18,30,0.3)',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentClassStatValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  currentClassStatLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  inlineTutorCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    elevation: 9,
+  },
+  inlineTutorGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    gap: 12,
+  },
+  inlineTutorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  inlineTutorIcon: {
+    width: 74,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -14,
+  },
+  inlineTutorMascot: {
+    width: 70,
+    height: 70,
+    resizeMode: 'contain',
+  },
+  inlineTutorTextWrap: {
+    flex: 1,
+  },
+  inlineTutorTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  inlineTutorSubtitle: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  inlineTutorCta: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: 'rgba(15,18,30,0.34)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  inlineTutorCtaText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   header: {
     flexDirection: 'row',
@@ -63,7 +322,7 @@ export const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginBottom: 2,
   },
   schoolName: {
@@ -91,7 +350,7 @@ export const styles = StyleSheet.create({
   notificationBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   profileButton: {
     width: 44,
@@ -108,63 +367,24 @@ export const styles = StyleSheet.create({
   profileInitial: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  greetingCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-  },
-  greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  greetingActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  greetingUpgradeButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  greetingUpgradeText: {
-    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  schoolTypeBadge: {
-    marginBottom: 16,
-    alignSelf: 'flex-start',
-  },
-  schoolTypeBadgeGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
-  },
-  schoolTypeBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 28,
   },
   sectionHeaderCard: {
     width: '100%',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
-    borderWidth: 1,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: GLASS_BG_SOFT,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.26,
+    shadowRadius: 20,
+    elevation: 8,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -173,15 +393,15 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   sectionHeaderTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
   },
   sectionHeaderAction: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   sectionHeaderHint: {
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 6,
   },
   sectionHeader: {
@@ -191,8 +411,8 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 19,
+    fontWeight: '700',
     marginBottom: 12,
   },
   seeAllText: {
@@ -200,9 +420,17 @@ export const styles = StyleSheet.create({
     fontWeight: '500',
   },
   childCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: GLASS_BG,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
+    elevation: 9,
   },
   childCardHeader: {
     flexDirection: 'row',
@@ -224,7 +452,7 @@ export const styles = StyleSheet.create({
   childAvatarText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   childInfo: {
     flex: 1,
@@ -232,7 +460,7 @@ export const styles = StyleSheet.create({
   },
   childName: {
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 2,
   },
   childGrade: {
@@ -261,18 +489,45 @@ export const styles = StyleSheet.create({
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between', // Distribute cards evenly
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
+  learningHubGrid: {
+    gap: 14,
+    marginBottom: 14,
+  },
+  learningHubHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  learningHubHintText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  secondaryToolsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   quickActionCard: {
-    // 3-column layout with consistent spacing
-    // Container padding: 16*2 = 32px, gap between cards: 8px * 2 = 16px
-    // Card width: (screenWidth - 32 - 16) / 3 = (screenWidth - 48) / 3
-    // Using 33% minus margin for better cross-device compatibility
-    width: '31%', // Slightly less than 33.33% to account for spacing
+    width: '31%',
     borderRadius: 16,
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    marginBottom: 12, // Vertical gap between rows
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: GLASS_BG_SOFT,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 7,
   },
   quickActionDisabled: {
     opacity: 0.55,
@@ -296,16 +551,19 @@ export const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quickActionLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
   },
   updateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 8,
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: GLASS_BG_SOFT,
   },
   updateIcon: {
     width: 36,
@@ -324,7 +582,7 @@ export const styles = StyleSheet.create({
   },
   updateMessage: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   updateTime: {
     fontSize: 12,
@@ -332,9 +590,12 @@ export const styles = StyleSheet.create({
   eventCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 8,
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: GLASS_BG_SOFT,
   },
   eventDate: {
     width: 50,
@@ -357,15 +618,22 @@ export const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 4,
   },
   eventTime: {
     fontSize: 13,
   },
   communicationCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    elevation: 9,
   },
   communicationGradient: {
     flexDirection: 'row',
@@ -392,11 +660,11 @@ export const styles = StyleSheet.create({
   communicationTitle: {
     color: '#FFFFFF',
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 4,
   },
   communicationSubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.84)',
     fontSize: 13,
   },
   dashAICard: {
@@ -440,8 +708,11 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 24,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 8,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: GLASS_BG_SOFT,
   },
   emptyStateText: {
     fontSize: 14,

@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Alert } from 'react-native';
+import { useAlertModal } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { validateTierAssignment, ORGANIZATION_MIN_MONTHLY_PRICE } from '@/lib/tiers';
@@ -17,7 +17,8 @@ import type {
 } from './types';
 import { INITIAL_CREATE_FORM } from './utils';
 
-export function useSubscriptions(): UseSubscriptionsResult {
+export function useSubscriptions(): UseSubscriptionsResult & { AlertModalComponent: React.FC } {
+  const { showAlert, AlertModalComponent } = useAlertModal();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -104,7 +105,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
       setPlans(plansData || []);
     } catch (e) {
       console.error('Failed to fetch subscription data:', e);
-      Alert.alert('Error', 'Failed to load subscription data');
+      showAlert({ title: 'Error', message: 'Failed to load subscription data', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -132,10 +133,10 @@ export function useSubscriptions(): UseSubscriptionsResult {
 
         track('subscription_status_updated', { subscription_id: id, status });
         setSubscriptions((prev) => prev.map((sub) => (sub.id === id ? { ...sub, status } : sub)));
-        Alert.alert('Success', `Subscription ${status}`);
+        showAlert({ title: 'Success', message: `Subscription ${status}`, type: 'success' });
       } catch (e: any) {
         console.error('Failed to update subscription status:', e);
-        Alert.alert('Error', e.message || 'Failed to update subscription');
+        showAlert({ title: 'Error', message: e.message || 'Failed to update subscription', type: 'error' });
       }
     },
     []
@@ -143,24 +144,24 @@ export function useSubscriptions(): UseSubscriptionsResult {
 
   const createSubscription = useCallback(async () => {
     if (!createForm.school_id || !createForm.plan_tier) {
-      Alert.alert('Error', 'Please select a school and plan');
+      showAlert({ title: 'Error', message: 'Please select a school and plan', type: 'error' });
       return;
     }
 
     const selectedSchool = schools.find((s) => s.id === createForm.school_id);
     if (!selectedSchool) {
-      Alert.alert('Error', 'Selected school is invalid. Please refresh and try again.');
+      showAlert({ title: 'Error', message: 'Selected school is invalid. Please refresh and try again.', type: 'error' });
       return;
     }
 
     // Validate tier is appropriate for organizations
     const tierValidation = validateTierAssignment(createForm.plan_tier, 'organization');
     if (!tierValidation.valid) {
-      Alert.alert(
-        'Invalid Tier',
-        `${tierValidation.error}\n\nMinimum organization tier: school_starter (R${ORGANIZATION_MIN_MONTHLY_PRICE}/month)`,
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: 'Invalid Tier',
+        message: `${tierValidation.error}\n\nMinimum organization tier: school_starter (R${ORGANIZATION_MIN_MONTHLY_PRICE}/month)`,
+        type: 'warning',
+      });
       return;
     }
 
@@ -172,7 +173,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
       });
 
       if (!selectedPlan) {
-        Alert.alert('Error', 'Selected plan not found');
+        showAlert({ title: 'Error', message: 'Selected plan not found', type: 'error' });
         return;
       }
 
@@ -235,26 +236,27 @@ export function useSubscriptions(): UseSubscriptionsResult {
           console.warn('Failed to send payment notifications');
         }
 
-        Alert.alert(
-          'Paid Subscription Created',
-          `Subscription created with status 'pending_payment'.\n\n✅ The school principal has been notified via email and push notification to complete payment.\n\n💡 The school will have limited access until payment is confirmed via PayFast.`,
-          [
+        showAlert({
+          title: 'Paid Subscription Created',
+          message: `Subscription created with status 'pending_payment'.\n\n✅ The school principal has been notified via email and push notification to complete payment.\n\n💡 The school will have limited access until payment is confirmed via PayFast.`,
+          type: 'success',
+          buttons: [
             { text: 'OK', style: 'default' },
             {
               text: 'Manual Override',
               style: 'destructive',
               onPress: () => {
-                Alert.alert(
-                  'Manual Activation',
-                  'You can manually activate this subscription from the subscriptions list if needed for exceptional circumstances.',
-                  [{ text: 'Understood', style: 'default' }]
-                );
+                showAlert({
+                  title: 'Manual Activation',
+                  message: 'You can manually activate this subscription from the subscriptions list if needed for exceptional circumstances.',
+                  type: 'info',
+                });
               },
             },
-          ]
-        );
+          ],
+        });
       } else {
-        Alert.alert('Success', 'Free subscription created and activated successfully!');
+        showAlert({ title: 'Success', message: 'Free subscription created and activated successfully!', type: 'success' });
       }
 
       setShowCreateModal(false);
@@ -262,7 +264,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
       await fetchData();
     } catch (e: any) {
       console.error('Failed to create subscription:', e);
-      Alert.alert('Error', e.message || 'Failed to create subscription');
+      showAlert({ title: 'Error', message: e.message || 'Failed to create subscription', type: 'error' });
     } finally {
       setCreating(false);
     }
@@ -270,10 +272,11 @@ export function useSubscriptions(): UseSubscriptionsResult {
 
   const handleManualActivation = useCallback(
     (subscription: Subscription) => {
-      Alert.alert(
-        'Manually Activate Subscription',
-        `Are you sure you want to activate the subscription for ${subscription.school?.name || 'Unknown School'} without payment confirmation?\n\nThis should only be used in exceptional circumstances and will be logged for audit purposes.`,
-        [
+      showAlert({
+        title: 'Manually Activate Subscription',
+        message: `Are you sure you want to activate the subscription for ${subscription.school?.name || 'Unknown School'} without payment confirmation?\n\nThis should only be used in exceptional circumstances and will be logged for audit purposes.`,
+        type: 'warning',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Activate',
@@ -303,26 +306,27 @@ export function useSubscriptions(): UseSubscriptionsResult {
                   reason: 'superadmin_override',
                 });
 
-                Alert.alert('Success', 'Subscription activated manually. This action has been logged.');
+                showAlert({ title: 'Success', message: 'Subscription activated manually. This action has been logged.', type: 'success' });
                 await fetchData();
               } catch (e: any) {
                 console.error('Failed to manually activate subscription:', e);
-                Alert.alert('Error', e.message || 'Failed to activate subscription');
+                showAlert({ title: 'Error', message: e.message || 'Failed to activate subscription', type: 'error' });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     },
     [fetchData]
   );
 
   const deleteSubscription = useCallback(
     (id: string, schoolName: string) => {
-      Alert.alert(
-        'Confirm Delete',
-        `Are you sure you want to delete the subscription for ${schoolName}? This action cannot be undone.`,
-        [
+      showAlert({
+        title: 'Confirm Delete',
+        message: `Are you sure you want to delete the subscription for ${schoolName}? This action cannot be undone.`,
+        type: 'warning',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Delete',
@@ -334,16 +338,16 @@ export function useSubscriptions(): UseSubscriptionsResult {
                 if (error) throw error;
 
                 track('subscription_deleted_by_admin', { subscription_id: id });
-                Alert.alert('Success', 'Subscription deleted');
+                showAlert({ title: 'Success', message: 'Subscription deleted', type: 'success' });
                 await fetchData();
               } catch (e: any) {
                 console.error('Failed to delete subscription:', e);
-                Alert.alert('Error', e.message || 'Failed to delete subscription');
+                showAlert({ title: 'Error', message: e.message || 'Failed to delete subscription', type: 'error' });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     },
     [fetchData]
   );
@@ -398,5 +402,6 @@ export function useSubscriptions(): UseSubscriptionsResult {
     setFilter,
     setShowCreateModal,
     setCreateForm,
+    AlertModalComponent,
   };
 }

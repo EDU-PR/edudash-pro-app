@@ -35,6 +35,10 @@ export function executeOrgAction(
       showAlert({ title: 'Edit Organization', message: 'Organization editing coming soon' });
       break;
 
+    case 'change_type':
+      openTypePicker(org, deps);
+      break;
+
     case 'suspend':
       showAlert({
         title: 'Suspend Organization',
@@ -102,6 +106,94 @@ export function executeOrgAction(
       confirmDelete(org, deps);
       break;
   }
+}
+
+const PRESCHOOL_TYPE_OPTIONS = [
+  { label: 'Preschool', value: 'preschool' },
+  { label: 'Combined', value: 'combined' },
+  { label: 'Community School', value: 'community_school' },
+  { label: 'Primary', value: 'primary' },
+  { label: 'Secondary', value: 'secondary' },
+];
+
+const ORGANIZATION_TYPE_OPTIONS = [
+  { label: 'Organization', value: 'org' },
+  { label: 'Preschool', value: 'preschool' },
+  { label: 'Daycare', value: 'daycare' },
+  { label: 'K-12', value: 'k12' },
+  { label: 'Primary School', value: 'primary_school' },
+  { label: 'Skills', value: 'skills' },
+  { label: 'Tertiary', value: 'tertiary' },
+  { label: 'Other', value: 'other' },
+];
+
+async function updateOrganizationType(
+  org: Organization,
+  nextType: string,
+  deps: OrgActionDeps
+): Promise<void> {
+  const { showAlert, loadOrganizations, setShowActionsModal, setShowDetailModal } = deps;
+  try {
+    const { entityType, actualId } = getEntityMeta(org);
+    const supabase = assertSupabase();
+
+    if (entityType === 'school') {
+      showAlert({
+        title: 'Not Supported',
+        message: 'K-12 school records currently use a fixed type. Update this from school setup tools.',
+      });
+      return;
+    }
+
+    const { data, error } = await supabase.rpc('superadmin_update_entity_type', {
+      p_entity_type: entityType,
+      p_entity_id: actualId,
+      p_next_type: nextType,
+      p_sync_duplicates: true,
+    });
+    if (error) throw error;
+    if (data?.success === false) {
+      throw new Error(data?.message || 'Type update was rejected.');
+    }
+
+    track('superadmin_org_type_updated', {
+      org_id: actualId,
+      source_type: entityType,
+      previous_type: org.organization_type_raw || org.type,
+      next_type: nextType,
+    });
+    showAlert({ title: 'Success', message: `Organization type updated to "${nextType}".` });
+    setShowActionsModal(false);
+    setShowDetailModal(false);
+    await loadOrganizations();
+  } catch (error: any) {
+    logger.error('[Organizations] Type update error:', error);
+    showAlert({ title: 'Error', message: error?.message || 'Failed to update organization type.' });
+  }
+}
+
+function openTypePicker(org: Organization, deps: OrgActionDeps): void {
+  const sourceType = org.id.split('_')[0];
+  if (sourceType === 'school') {
+    deps.showAlert({
+      title: 'Type Locked',
+      message: 'This record is from the K-12 schools table. Type changes are not available here.',
+    });
+    return;
+  }
+
+  const options = sourceType === 'preschool' ? PRESCHOOL_TYPE_OPTIONS : ORGANIZATION_TYPE_OPTIONS;
+  deps.showAlert({
+    title: 'Change Organization Type',
+    message: `Set a new type for ${org.name}:`,
+    buttons: [
+      ...options.map((option) => ({
+        text: option.label,
+        onPress: () => updateOrganizationType(org, option.value, deps),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ],
+  });
 }
 
 // ── Delete (extracted for readability) ──────────────────────

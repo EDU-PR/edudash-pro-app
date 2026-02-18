@@ -121,6 +121,12 @@ export async function consumePendingCameraResult(
       return null;
     }
     const normalized = normalizeResult(pending);
+    if (normalized.canceled || !normalized.assets?.length) {
+      // Clear the marker even when the user cancels camera so we do not
+      // keep trying to recover a stale session on future launches.
+      await clearPendingCameraResult(contextKey);
+      return null;
+    }
     if (!normalized.canceled && normalized.assets?.length) {
       console.log('[camera_recovered] Recovered pending camera result', {
         contextKey,

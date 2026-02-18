@@ -1,7 +1,9 @@
 /**
- * Shared text normalization for all Dash TTS paths.
- * Keeps pronunciation consistent across mobile/web/edge proxies.
+ * SINGLE SOURCE OF TRUTH for Dash TTS text normalization.
+ * All TTS paths (VoiceOrb, DashVoiceController, DashVoiceService, web useTTS)
+ * MUST use this module. Do not create platform-specific copies.
  *
+ * Keeps pronunciation consistent across mobile/web/edge proxies.
  * Uses the central pronunciation dictionary for brand names, SA language
  * names, abbreviations, and educational terms.
  *
@@ -49,6 +51,16 @@ const SUSTAINED_SOUND_MAP: Record<string, string> = {
   ah: 'a', eh: 'e', ih: 'i', aw: 'o', uh: 'u',
 };
 
+function normalizeEduDashBrandForms(text: string): string {
+  return text
+    // "E D U DashPro" / "E.D.U Dash Pro" -> "EduDash Pro"
+    .replace(/\bE[\s.\-]*D[\s.\-]*U[\s.\-]*DASH[\s-]*PRO\b/gi, 'EduDash Pro')
+    // "Edu Dash Pro" / "Edu-Dash-Pro" -> "EduDash Pro"
+    .replace(/\bEDU[\s-]*DASH[\s-]*PRO\b/gi, 'EduDash Pro')
+    // "EduDashPro" -> "EduDash Pro"
+    .replace(/\bEduDashPro\b/g, 'EduDash Pro');
+}
+
 function normalizePhonicsMarkers(
   text: string,
   phonicsMode: boolean,
@@ -79,7 +91,7 @@ function normalizePhonicsMarkers(
 function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): string {
   // 1. Convert spaced repetitions: "s s s" → "/s/"
   let result = text.replace(
-    /\b([b-df-hj-np-tv-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi,
+    /\b([a-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi,
     (match, letter: string) => {
       const lower = letter.toLowerCase();
       if (phonicsMode) {
@@ -94,7 +106,33 @@ function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): strin
     }
   );
 
-  // 2. In phonics mode, convert sustained-sound words to slash markers:
+  // 2. Convert continuous repeated letters: "ssss" -> "/s/" (phonics) or "ssss" (non-phonics)
+  result = result.replace(
+    /\b([a-z])\1{2,11}\b/gi,
+    (match, letter: string) => {
+      const lower = letter.toLowerCase();
+      if (phonicsMode) return `/${lower}/`;
+      const repeats = Math.max(3, Math.min(6, match.length));
+      return lower.repeat(repeats);
+    }
+  );
+
+  // 3. Convert spaced digraph repetitions: "sh sh sh" -> "/sh/"
+  result = result.replace(
+    /\b(sh|ch|th|ph|ng)(?:[\s,;:/\\|._-]+\1){1,6}\b/gi,
+    (match, token: string) => {
+      const lower = String(token || '').toLowerCase();
+      if (phonicsMode) return `/${lower}/`;
+      const repeats = match
+        .replace(/[^\w\s-]/g, ' ')
+        .split(/[\s-]+/)
+        .filter(Boolean).length;
+      const size = Math.max(2, Math.min(4, repeats));
+      return lower.repeat(size);
+    }
+  );
+
+  // 4. In phonics mode, convert sustained-sound words to slash markers:
   //    "sss" → "/s/", "buh" → "/b/", "mmm" → "/m/", etc.
   if (phonicsMode) {
     const sustainedPattern = new RegExp(
@@ -108,6 +146,31 @@ function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): strin
   }
 
   return result;
+}
+
+function normalizeChoiceLabels(text: string): string {
+  let next = String(text || '');
+
+  // Preserve multiple-choice labels so TTS reads them as alphabet options
+  // instead of blending into the answer value (e.g., "A)42" -> "Option A. 42").
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\(([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\[([A-H])\]\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /\bOption ([A-H])\.(?=\S)/g,
+    (_m, label: string) => `Option ${label}. `
+  );
+
+  return next;
 }
 
 function normalizeSouthAfricanLanguageNames(text: string): string {
@@ -142,7 +205,10 @@ function stripMarkdownAndMeta(text: string, preservePhonicsMarkers: boolean): st
 
   return next
     .replace(/_Tools used:.*?_/gi, '')
-    .replace(/_.*?tokens used_/gi, '');
+    .replace(/_.*?tokens used_/gi, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*tools?\s*used\s*:.*$/gim, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*\d[\d,\s]*(?:\.\d+)?\s*tokens?\s*used\b.*$/gim, '')
+    .replace(/^\s*(?:[^\w\s]\s*)*tokens?\s*used\b.*$/gim, '');
 }
 
 function stripEmojiAndSymbols(text: string): string {
@@ -177,6 +243,8 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
 
   text = stripMarkdownAndMeta(text, preservePhonicsMarkers);
   text = stripEmojiAndSymbols(text);
+  text = normalizeChoiceLabels(text);
+  text = normalizeEduDashBrandForms(text);
 
   // Apply pronunciation dictionary (brand names, SA languages, acronyms)
   text = applyPronunciationPlainText(text);

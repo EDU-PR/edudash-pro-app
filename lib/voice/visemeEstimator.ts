@@ -54,6 +54,28 @@ const CHAR_VISEME: Record<string, number> = {
   t: 15, v: 18, w: 7, x: 14, y: 6, z: 14,
 };
 
+const PHONICS_MARKER_TO_VISEME: Record<string, number> = {
+  m: 20,
+  n: 15,
+  s: 14,
+  f: 18,
+  v: 18,
+  z: 14,
+  l: 15,
+  r: 16,
+  th: 19,
+  sh: 13,
+  ch: 13,
+};
+
+const PHONICS_SUSTAINED_SOUND_TO_TOKEN: Record<string, string> = {
+  sss: 's', mmm: 'm', fff: 'f', zzz: 'z', nnn: 'n', lll: 'l',
+  rrr: 'r', vvv: 'v', hhh: 'h',
+  buh: 'b', duh: 'd', tuh: 't', puh: 'p', guh: 'g', kuh: 'k',
+  juh: 'j', wuh: 'w', yuh: 'y',
+  ah: 'a', eh: 'e', ih: 'i', aw: 'o', uh: 'u',
+};
+
 // Digraph overrides (checked first)
 const DIGRAPH_VISEME: Array<[string, number]> = [
   ['th', 19],
@@ -79,6 +101,9 @@ const PHONEME_DURATION_MS = 85;
 const WORD_GAP_MS = 40;
 // Silence at sentence boundaries
 const SILENCE_MS = 120;
+// Held consonants for phonics mode
+const PHONICS_SUSTAINED_DURATION_MS = 280;
+const PHONICS_MARKER_SILENCE_MS = 200;
 
 /**
  * Estimate a viseme timeline from plain text.
@@ -141,6 +166,66 @@ export function estimateVisemeTimeline(text: string): VisemeEvent[] {
 
   // Terminal silence
   events.push({ visemeId: 21, offsetMs, durationMs: SILENCE_MS });
+
+  return events;
+}
+
+function normalizePhonicsToken(tokenRaw: string): string {
+  const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!token) return '';
+  return PHONICS_SUSTAINED_SOUND_TO_TOKEN[token] || token;
+}
+
+/**
+ * Estimate viseme timeline for phonics-focused utterances.
+ * Marker examples: /m/, /s/, /n/, [sh], [th]
+ */
+export function estimateVisemeTimelinePhonics(text: string): VisemeEvent[] {
+  if (!text || text.trim().length === 0) return [];
+
+  const markerRegex = /\/\s*([a-z]{1,8})\s*\/|\[\s*([a-z]{1,8})\s*\]/gi;
+  const markerMatches = Array.from(text.matchAll(markerRegex));
+  if (markerMatches.length === 0) {
+    return estimateVisemeTimeline(text);
+  }
+
+  const events: VisemeEvent[] = [];
+  let offsetMs = 0;
+
+  for (const match of markerMatches) {
+    const rawToken = match[1] || match[2] || '';
+    const token = normalizePhonicsToken(rawToken);
+    if (!token) continue;
+
+    const visemeId = PHONICS_MARKER_TO_VISEME[token];
+    if (typeof visemeId !== 'number') {
+      const fallback = estimateVisemeTimeline(token);
+      const withoutTerminalSilence = fallback.filter((evt, idx) => idx < fallback.length - 1);
+      for (const evt of withoutTerminalSilence) {
+        events.push({
+          visemeId: evt.visemeId,
+          offsetMs: offsetMs + evt.offsetMs,
+          durationMs: evt.durationMs,
+        });
+      }
+      if (withoutTerminalSilence.length > 0) {
+        const last = withoutTerminalSilence[withoutTerminalSilence.length - 1];
+        offsetMs += last.offsetMs + last.durationMs;
+      }
+      continue;
+    }
+
+    events.push({ visemeId, offsetMs, durationMs: PHONICS_SUSTAINED_DURATION_MS });
+    offsetMs += PHONICS_SUSTAINED_DURATION_MS;
+
+    // Mirror phonics SSML marker breaks with a visible rest viseme.
+    events.push({ visemeId: 21, offsetMs, durationMs: PHONICS_MARKER_SILENCE_MS });
+    offsetMs += PHONICS_MARKER_SILENCE_MS;
+  }
+
+  if (events.length === 0) {
+    return estimateVisemeTimeline(text);
+  }
 
   return events;
 }

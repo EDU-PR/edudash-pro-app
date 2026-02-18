@@ -55,6 +55,32 @@ serve(async (req: Request) => {
       });
     }
 
+    // Quota check — prevent free-tier abuse
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: user.id,
+        p_request_type: 'stt',
+      });
+
+      if (!quota.error) {
+        const quotaData = quota.data as Record<string, unknown> | null;
+        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+          return new Response(JSON.stringify({
+            error: 'quota_exceeded',
+            message: 'Speech-to-text usage quota exceeded for this billing period',
+            details: quotaData,
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+    }
+
     if (!OPENAI_API_KEY) {
       return new Response(
         JSON.stringify({ error: 'Transcription service not configured' }),
@@ -114,6 +140,26 @@ serve(async (req: Request) => {
     }
 
     const result = await whisperResp.json();
+
+    // Record usage (non-fatal)
+    try {
+      await supabase.rpc('record_ai_usage', {
+        p_user_id: user.id,
+        p_feature_used: 'stt',
+        p_model_used: 'whisper-1',
+        p_tokens_used: 0,
+        p_request_tokens: 0,
+        p_response_tokens: 0,
+        p_success: true,
+        p_metadata: {
+          scope: 'transcribe_audio',
+          language: result.language || language || 'en',
+          text_length: (result.text || '').length,
+        },
+      });
+    } catch (usageErr) {
+      console.warn('[transcribe-audio] record_ai_usage failed (non-fatal):', usageErr);
+    }
 
     return new Response(
       JSON.stringify({

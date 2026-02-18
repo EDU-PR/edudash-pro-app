@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { assertSupabase } from '@/lib/supabase';
+import { base64ToUint8Array } from '@/lib/utils/base64';
 import type {
   AnnouncementAttachmentMenuSource,
   AnnouncementAttachmentMenuStructured,
@@ -61,12 +63,29 @@ async function uploadSourceFile(params: {
   const fileName = sanitizeFileName(params.sourceFile.fileName);
   const path = `${params.preschoolId}/${params.weekStartDate}/${Date.now()}-${fileName}`;
 
-  let uploadBody: File | Blob;
+  let uploadBody: File | Blob | Uint8Array;
   if (params.sourceFile.file) {
     uploadBody = params.sourceFile.file;
   } else if (params.sourceFile.uri) {
-    const res = await fetch(params.sourceFile.uri);
-    uploadBody = await res.blob();
+    const uri = params.sourceFile.uri;
+    const isRemoteUri = /^https?:\/\//i.test(uri) || uri.startsWith('data:');
+
+    if (Platform.OS === 'web' || isRemoteUri) {
+      const res = await fetch(uri);
+      uploadBody = await res.blob();
+    } else {
+      try {
+        // Android content:// URIs can fail with `fetch(uri)` ("Network request failed").
+        // Read via Expo filesystem and upload bytes directly.
+        const base64 = await LegacyFileSystem.readAsStringAsync(uri, {
+          encoding: LegacyFileSystem.EncodingType.Base64,
+        });
+        uploadBody = base64ToUint8Array(base64);
+      } catch {
+        const res = await fetch(uri);
+        uploadBody = await res.blob();
+      }
+    }
   } else {
     throw new Error('Missing source file payload');
   }

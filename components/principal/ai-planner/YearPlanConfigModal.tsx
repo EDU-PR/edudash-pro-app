@@ -10,6 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +31,7 @@ export function YearPlanConfigModal({
 }: YearPlanConfigModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = createStyles(theme, insets.bottom);
+  const styles = createStyles(theme, insets.top, insets.bottom);
 
   const [config, setConfig] = useState<YearPlanConfig>(getInitialConfig());
 
@@ -64,7 +65,7 @@ export function YearPlanConfigModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.modalContainer}>
+      <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={theme.text} />
@@ -104,9 +105,9 @@ export function YearPlanConfigModal({
           
           {/* Number of Terms */}
           <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Number of Terms</Text>
+            <Text style={styles.formLabel}>Number of Terms (Quarters)</Text>
             <View style={styles.termSelector}>
-              {[3, 4].map((num) => (
+              {[4].map((num) => (
                 <TouchableOpacity
                   key={num}
                   style={[
@@ -254,7 +255,7 @@ export function YearPlanConfigModal({
             />
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

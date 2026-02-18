@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Stack } from 'expo-router';
 import { z } from 'zod';
 import { useAuth } from '@/contexts/AuthContext';
@@ -462,7 +463,7 @@ export default function PrincipalParentRequestsScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      <FlatList
+      <FlashList
         data={requests}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme?.primary || '#00f5ff'} />}
@@ -489,6 +490,7 @@ export default function PrincipalParentRequestsScreen() {
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>No pending requests</Text>}
+        estimatedItemSize={140}
       />
       <AlertModal {...alertProps} />
     </View>

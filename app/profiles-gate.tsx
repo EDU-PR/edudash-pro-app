@@ -8,7 +8,7 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { validateUserAccess, routeAfterLogin, isNavigationLocked } from '@/lib/routeAfterLogin';
-import { createProfilesGateStyles } from './profiles-gate.styles';
+import { createProfilesGateStyles } from './_profiles-gate.styles';
 import { fetchEnhancedUserProfile, type Role } from '@/lib/rbac';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
@@ -62,7 +62,10 @@ export default function ProfilesGateScreen() {
   const [pendingTimeout, setPendingTimeout] = useState(false);
 
   useEffect(() => {
-    // Allow recovery to proceed even if AuthContext `loading` stays true for too long\n    // (e.g., network timeout). After 5s we force through.\n    if (!user) return;\n    if (loading && !pendingTimeout) return;
+    // Allow recovery to proceed even if AuthContext `loading` stays true for too long
+    // (e.g., network timeout). After 5s we force through.
+    if (!user) return;
+    if (loading && !pendingTimeout) return;
 
     // Reset recovery when user changes (prevents stale ref blocking a new user)
     if (user.id !== lastRecoveryUserId.current) {
@@ -460,4 +463,3 @@ export default function ProfilesGateScreen() {
     </SafeAreaView>
   );
 }
-

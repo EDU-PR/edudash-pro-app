@@ -55,6 +55,9 @@ try {
   /* noop */
 }
 
+// ── Routing generation counter (prevents stale navigations) ────
+let routingGeneration = 0;
+
 // ──────────────────────────────────────────────────────────────
 // Main function
 // ──────────────────────────────────────────────────────────────
@@ -71,8 +74,11 @@ export async function routeAfterLogin(
   profile?: EnhancedUserProfile | null,
 ): Promise<void> {
   const userId = user?.id;
+  const currentGen = ++routingGeneration;
+  const isStaleRoute = () => routingGeneration !== currentGen;
+
   debugLog('[DEBUG_AGENT] RouteAfterLogin-ENTRY', JSON.stringify({
-    userId, hasProfile: !!profile, role: profile?.role, timestamp: Date.now(),
+    userId, hasProfile: !!profile, role: profile?.role, generation: currentGen, timestamp: Date.now(),
   }));
 
   if (!userId) {
@@ -228,6 +234,12 @@ export async function routeAfterLogin(
 
     console.log('🚦 [ROUTE] Navigating to route:', route.path);
     clearTimeout(overallTimeout);
+
+    // Stale-generation check — if a newer routeAfterLogin call was made, skip this one
+    if (isStaleRoute()) {
+      console.log('🚦 [ROUTE] Skipping stale route (gen', currentGen, 'vs current', routingGeneration, ')');
+      return;
+    }
 
     try {
       // Skip stale navigations when auth user switched mid-flight

@@ -6,6 +6,7 @@
  */
 
 import { assertSupabase } from './supabase';
+import { getStableDeviceId } from './notifications';
 
 /**
  * Deactivate push tokens for current user on this device
@@ -15,22 +16,22 @@ export async function deactivateCurrentUserTokens(userId: string): Promise<void>
   if (!userId) return;
   try {
     if (__DEV__) console.log('[PushTokenUtils] Deactivating tokens for user:', userId);
-    
-    // Get device installation ID
-    const Constants = require('expo-constants').default;
-    const installationId = Constants.deviceId || Constants.sessionId;
-    
+
+    // Use the same stable installation id as push registration paths.
+    const installationId = await getStableDeviceId();
+
     if (!installationId) {
       if (__DEV__) console.warn('[PushTokenUtils] No installation ID, skipping token deactivation');
       return;
     }
-    
+
     // Mark tokens as inactive
     const { error } = await assertSupabase()
       .from('push_devices')
       .update({ 
         is_active: false,
-        revoked_at: new Date().toISOString()
+        revoked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
       .eq('device_installation_id', installationId);
@@ -53,11 +54,10 @@ export async function reactivateUserTokens(userId: string): Promise<void> {
   if (!userId) return;
   try {
     if (__DEV__) console.log('[PushTokenUtils] Reactivating tokens for user:', userId);
-    
-    // Get device installation ID
-    const Constants = require('expo-constants').default;
-    const installationId = Constants.deviceId || Constants.sessionId;
-    
+
+    // Use the same stable installation id as push registration paths.
+    const installationId = await getStableDeviceId();
+
     if (!installationId) {
       if (__DEV__) console.warn('[PushTokenUtils] No installation ID, skipping token reactivation');
       return;
@@ -66,7 +66,11 @@ export async function reactivateUserTokens(userId: string): Promise<void> {
     // Deactivate all other users' tokens on this device
     await assertSupabase()
       .from('push_devices')
-      .update({ is_active: false })
+      .update({
+        is_active: false,
+        revoked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('device_installation_id', installationId)
       .neq('user_id', userId);
     
@@ -76,7 +80,8 @@ export async function reactivateUserTokens(userId: string): Promise<void> {
       .update({ 
         is_active: true,
         last_seen_at: new Date().toISOString(),
-        revoked_at: null
+        revoked_at: null,
+        updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
       .eq('device_installation_id', installationId);

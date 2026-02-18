@@ -159,6 +159,79 @@ const EN_ZA_PHONEMES: Record<string, PhonemeEntry> = {
     mouthTip: 'Tongue high and forward, lips relaxed — slides into the next vowel.',
     example: 'yellow',
   },
+  // --- Single-letter phonemes (for /s/, /m/, /b/, etc.) ---
+  's': {
+    ipa: 's',
+    sound: 'sss',
+    mouthTip: 'Push tongue behind top teeth, keep lips apart, hiss like a snake.',
+    example: 'sun',
+  },
+  'm': {
+    ipa: 'm',
+    sound: 'mmm',
+    mouthTip: 'Press your lips together and hum — feel the buzz on your lips.',
+    example: 'mat',
+  },
+  'b': {
+    ipa: 'b',
+    sound: 'buh',
+    mouthTip: 'Press lips together, build up air, then pop them open.',
+    example: 'bat',
+  },
+  'd': {
+    ipa: 'd',
+    sound: 'duh',
+    mouthTip: 'Tongue tip taps behind top teeth, then release.',
+    example: 'dog',
+  },
+  't': {
+    ipa: 't',
+    sound: 'tuh',
+    mouthTip: 'Tongue tip taps behind top teeth, then release with a puff of air.',
+    example: 'top',
+  },
+  'p': {
+    ipa: 'p',
+    sound: 'puh',
+    mouthTip: 'Press lips together, build up air, then pop them open.',
+    example: 'pat',
+  },
+  'g': {
+    ipa: 'ɡ',
+    sound: 'guh',
+    mouthTip: 'Back of tongue touches soft palate, then release.',
+    example: 'go',
+  },
+  'k': {
+    ipa: 'k',
+    sound: 'kuh',
+    mouthTip: 'Back of tongue touches soft palate, then release with a puff of air.',
+    example: 'cat',
+  },
+  'f': {
+    ipa: 'f',
+    sound: 'fff',
+    mouthTip: 'Top teeth touch bottom lip, blow air through gently.',
+    example: 'fish',
+  },
+  'n': {
+    ipa: 'n',
+    sound: 'nnn',
+    mouthTip: 'Tongue tip taps behind top teeth, hum through your nose.',
+    example: 'net',
+  },
+  'l': {
+    ipa: 'l',
+    sound: 'lll',
+    mouthTip: 'Tongue tip touches behind top teeth, let sound flow out the sides.',
+    example: 'leg',
+  },
+  'r': {
+    ipa: 'ɹ',
+    sound: 'rrr',
+    mouthTip: 'Curl tongue tip up toward the roof of your mouth — don\'t touch!',
+    example: 'rabbit',
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,7 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showScrollFab, setShowScrollFab] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [threadParticipantCount, setThreadParticipantCount] = useState<number | null>(null);
   // Keyboard
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -60,6 +61,36 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
   useEffect(() => {
     if (getStoredWallpaper) getStoredWallpaper().then(wp => { if (wp) setCurrentWallpaper(wp); }).catch(() => {});
   }, []);
+  // Resolve participant count once per thread so sender labels follow true 1:1 vs group rules.
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!threadId) {
+      setThreadParticipantCount(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const { count, error } = await assertSupabase()
+          .from('message_participants')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('thread_id', threadId);
+
+        if (!isCancelled) {
+          setThreadParticipantCount(!error && typeof count === 'number' ? count : null);
+        }
+      } catch {
+        if (!isCancelled) {
+          setThreadParticipantCount(null);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [threadId]);
   // Data hooks
   let messages: Message[] = [];
   let loading = false;
@@ -107,6 +138,19 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
 
   // Voice IDs
   const voiceMessageIdsAsc = useMemo(() => allMessages.filter(m => m.voice_url).map(m => m.id), [allMessages]);
+
+  const showSenderNames = useMemo(() => {
+    if (typeof threadParticipantCount === 'number') {
+      return threadParticipantCount > 2;
+    }
+
+    const nonSelfSenderIds = new Set(
+      messages
+        .map((message) => message.sender_id)
+        .filter((senderId) => !!senderId && senderId !== userId)
+    );
+    return nonSelfSenderIds.size > 1;
+  }, [messages, threadParticipantCount, userId]);
 
   // Chat rows
   const rowsAsc = useMemo<ChatRow[]>(() => {
@@ -196,7 +240,7 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
     showMessageActions, setShowMessageActions, currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId,
     replyingTo, setReplyingTo, showScrollFab, showScheduler, setShowScheduler,
     messages, loading, error, refetch, allMessages, voiceMessageIdsAsc, rowsAsc,
-    getWallpaperGradient, otherParticipant,
+    getWallpaperGradient, otherParticipant, showSenderNames,
     handleSend, handleVoiceRecording, handleImageAttach, handleMessageLongPress,
     handleScroll, scrollToBottom, handleComposerLayout,
   };

@@ -6,16 +6,16 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput, ScrollView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Linking, Alert, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { messageStyles as styles } from './styles/message.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
-import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MathRenderer } from './MathRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
+import InlineQuizCard, { parseQuizPayload, type QuizQuestionPayload } from './InlineQuizCard';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -143,6 +143,60 @@ const firstText = (...values: unknown[]) => {
   return null;
 };
 
+type ToolChartKind = 'bar' | 'line' | 'pie';
+type ToolChartPoint = {
+  label: string;
+  value: number;
+  color: string;
+};
+type ToolChartPreview = {
+  title: string;
+  type: ToolChartKind;
+  points: ToolChartPoint[];
+};
+
+const TOOL_CHART_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#f97316', '#6366f1', '#10b981', '#ef4444', '#8b5cf6'];
+
+const toFiniteNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const buildToolChartPreview = (
+  toolName: string,
+  toolArgs?: Record<string, any> | null
+): ToolChartPreview | null => {
+  if (String(toolName || '').toLowerCase() !== 'generate_chart') return null;
+  if (!toolArgs || typeof toolArgs !== 'object') return null;
+
+  const labels = Array.isArray(toolArgs.labels) ? toolArgs.labels : [];
+  const values = Array.isArray(toolArgs.values) ? toolArgs.values : [];
+  if (labels.length === 0 || values.length === 0) return null;
+
+  const typeRaw = String(toolArgs.chart_type || 'bar').toLowerCase();
+  const type: ToolChartKind = typeRaw === 'pie' ? 'pie' : (typeRaw === 'line' ? 'line' : 'bar');
+  const colors = Array.isArray(toolArgs.colors) ? toolArgs.colors : [];
+  const points: ToolChartPoint[] = labels
+    .map((label: unknown, idx: number) => {
+      const text = String(label || '').trim();
+      if (!text) return null;
+      return {
+        label: text,
+        value: toFiniteNumber(values[idx]),
+        color: String(colors[idx] || TOOL_CHART_COLORS[idx % TOOL_CHART_COLORS.length]),
+      };
+    })
+    .filter((point: ToolChartPoint | null): point is ToolChartPoint => !!point)
+    .slice(0, 8);
+
+  if (points.length === 0) return null;
+  return {
+    title: firstText(toolArgs.title) || 'Chart Preview',
+    type,
+    points,
+  };
+};
+
 const AttachmentImagePreview: React.FC<{
   attachment: DashMessage['attachments'][number];
   isUser: boolean;
@@ -194,7 +248,6 @@ interface DashMessageBubbleProps {
   onSpeak: (message: DashMessage) => void;
   onRetry: (content: string) => void;
   onSendFollowUp: (text: string) => void;
-  onSendTutorAnswer?: (text: string, sourceMessageId?: string) => void;
   extractFollowUps: (text: string) => string[];
   assistantLabel?: string;
 }
@@ -210,13 +263,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   onSpeak,
   onRetry,
   onSendFollowUp,
-  onSendTutorAnswer,
   extractFollowUps,
   assistantLabel,
 }) => {
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
-  const [inlineAnswer, setInlineAnswer] = React.useState('');
   const [showRawToolPayload, setShowRawToolPayload] = React.useState(false);
   
   // Enhanced gradients for better visual appeal
@@ -225,47 +276,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     : ['#0ea5e9', '#3b82f6', '#6366f1']; // Sky blue → Blue → Indigo
 
   React.useEffect(() => {
-    setInlineAnswer('');
     setShowRawToolPayload(false);
   }, [message.id]);
 
-  const getTutorPhase = () => {
-    const explicitPhase = (message.metadata as any)?.tutor_phase || (message.metadata as any)?.phase;
-    if (explicitPhase) {
-      return String(explicitPhase);
-    }
-    const content = (message.content || '').toLowerCase();
-    if (!content) return null;
-    if (/(quiz|practice|exercise|try it|solve|work through)/.test(content)) {
-      return 'Practice';
-    }
-    if (/(diagnose|check in|quick check|question|assess)/.test(content) || (content.endsWith('?') && content.length < 180)) {
-      return 'Diagnose';
-    }
-    if (/(explain|example|step|here's how|why this works)/.test(content)) {
-      return 'Teach';
-    }
-    return null;
-  };
-
-  const phase = !isUser ? getTutorPhase() : null;
-  const phaseColors = phase
-    ? {
-        Diagnose: { bg: theme.warning + '22', text: theme.warning || '#f59e0b' },
-        Teach: { bg: theme.primary + '22', text: theme.primary },
-        Practice: { bg: theme.success + '22', text: theme.success || '#16a34a' },
-      }[phase as 'Diagnose' | 'Teach' | 'Practice'] || { bg: theme.surfaceVariant, text: theme.textSecondary }
-    : null;
-  
   // Check if this is the last user message (for retry button)
-  const isLastUserMessage = isUser && (() => {
-    for (let i = totalMessages - 1; i >= 0; i--) {
-      // We'd need access to all messages array to check this properly
-      // For now, approximate by checking if near the end
-      return index >= totalMessages - 2;
-    }
-    return false;
-  })();
+  const isLastUserMessage = isUser && index >= totalMessages - 2;
 
   // Extract URLs from content
   const extractUrl = (content: string): string | undefined => {
@@ -281,132 +296,32 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const isPdf = url ? /\.pdf(\?|$)/i.test(url) : false;
 
   const isLatestMessage = index === totalMessages - 1;
-  const hasTutorQuestion = !!message.metadata?.tutor_question || !!message.metadata?.tutor_question_text;
-  const showInlineAnswer = !isUser && isLatestMessage && !isLoading && hasTutorQuestion;
-
-  const handleInlineSend = () => {
-    const trimmed = inlineAnswer.trim();
-    if (!trimmed) return;
-    if (onSendTutorAnswer) {
-      onSendTutorAnswer(trimmed, message.id);
-    } else {
-      onSendFollowUp(trimmed);
-    }
-    setInlineAnswer('');
-  };
 
   // Get suggestions from metadata or extract from content
-  const suggestions = !isUser && showFollowUps && !message.metadata?.tutor_question && (
+  const suggestions = !isUser && showFollowUps && (
     (message.metadata?.suggested_actions && message.metadata.suggested_actions.length > 0)
       ? message.metadata.suggested_actions
       : extractFollowUps(message.content)
   );
 
-  const isTutorPromptLeak = (content: string) =>
-    /tutor_payload|return only json|you are dash, an interactive tutor|tutor mode override/i.test(content || '');
-
-  const parseTutorPayload = (content: string) => {
-    if (!content) return null;
-    const tagMatch = content.match(/<TUTOR_PAYLOAD>([\s\S]*?)<\/TUTOR_PAYLOAD>/i);
-    const jsonCandidate = tagMatch ? tagMatch[1] : null;
-    const fallbackMatch = !jsonCandidate ? content.match(/\{[\s\S]*\}/) : null;
-    const raw = (jsonCandidate || fallbackMatch?.[0] || '').trim();
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  };
-
-  const buildTutorDisplay = (payload: Record<string, unknown>) => {
-    const question = typeof payload.question === 'string' ? payload.question.trim() : '';
-    if (question) return question;
-
-    const lines: string[] = [];
-    if (typeof payload.is_correct === 'boolean') {
-      lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
-    }
-    if (typeof payload.feedback === 'string' && payload.feedback.trim()) {
-      lines.push(payload.feedback.trim());
-    }
-    if (typeof payload.hint === 'string' && payload.hint.trim()) {
-      lines.push(payload.hint.trim());
-    }
-    if (typeof payload.correct_answer === 'string' && payload.correct_answer.trim()) {
-      lines.push(`Correct answer: ${payload.correct_answer.trim()}`);
-    }
-    if (typeof payload.steps === 'string' && payload.steps.trim()) {
-      lines.push(payload.steps.trim());
-    }
-    if (typeof payload.explanation === 'string' && payload.explanation.trim()) {
-      lines.push(payload.explanation.trim());
-    }
-    if (typeof payload.follow_up_question === 'string' && payload.follow_up_question.trim()) {
-      lines.push(`Next question:\n${payload.follow_up_question.trim()}`);
-    }
-    return lines.filter(Boolean).join('\n\n') || null;
-  };
-
   const sanitizeAssistantContent = (content: string) => {
-    return (content || '')
-      .split(/\n+/)
-      .filter(line => !/^\s*User:\s*/i.test(line))
-      .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
-      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Age band:|School type:)/i.test(line))
-      .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
-      .filter(line => !/^\s*Return ONLY JSON/i.test(line))
-      .filter(line => !/TUTOR_PAYLOAD/i.test(line))
-      .join('\n')
-      .trim();
+    return (content || '').trim();
   };
 
-  const getAssistantDisplayContent = () => {
-    const raw = message.content || '';
-    const payload = parseTutorPayload(raw);
-    if (payload) {
-      const display = buildTutorDisplay(payload);
-      if (display) return display;
-    }
-    const metaQuestion = message.metadata?.tutor_question_text;
-    if (metaQuestion) {
-      const cleaned = sanitizeAssistantContent(raw);
-      if (cleaned && cleaned.length > metaQuestion.trim().length + 20) {
-        return cleaned;
-      }
-      return metaQuestion;
-    }
-    if (isTutorPromptLeak(raw)) {
-      return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
-    }
-    const cleaned = sanitizeAssistantContent(raw);
-    return cleaned || raw.trim();
-  };
-
-  const sanitizeUserDisplayContent = (content: string) => {
-    if (!content) return content;
-    const lower = content.toLowerCase();
-    const isTutorPrompt = /you are dash, an interactive tutor|tutor_payload|return only json|tutor mode override/i.test(lower);
-    if (!isTutorPrompt) return content;
-    const requestMatch = content.match(/Learner request:\s*([^\n]+)/i);
-    if (requestMatch?.[1]) return requestMatch[1].trim();
-    const answerMatch = content.match(/Learner answer:\s*([^\n]+)/i);
-    if (answerMatch?.[1]) return answerMatch[1].trim();
-    const questionMatch = content.match(/Question:\s*([^\n]+)/i);
-    if (questionMatch?.[1]) return questionMatch[1].trim();
-    return 'Tutor request';
-  };
-
-  const assistantContent = getAssistantDisplayContent();
-  const userContent = sanitizeUserDisplayContent(message.content || '');
+  const assistantContent = sanitizeAssistantContent(message.content || '');
+  const userContent = message.content || '';
   const hasAssistantContent = assistantContent.trim().length > 0;
   const assistantFallbackText = isLoading && isLatestMessage
     ? 'Working on your request...'
     : 'I completed that step. Ask a follow-up and I will refine it.';
   const assistantDisplayText = hasAssistantContent ? assistantContent : assistantFallbackText;
   const metadata = (message.metadata || {}) as Record<string, any>;
+  const tutorPhase = String(metadata.tutor_phase || metadata.phase || '').toLowerCase();
+  const showPracticeMicrocopy = !isUser && tutorPhase.includes('practice');
   const rawToolName = firstText(metadata.tool_name);
+  const toolNameKey = String(rawToolName || '').toLowerCase();
   const toolExecution = metadata.tool_result as Record<string, any> | undefined;
+  const toolArgs = metadata.tool_args as Record<string, any> | undefined;
   const isToolOperation = !isUser && !!rawToolName && !!toolExecution;
   const toolPayload = toolExecution ? (toolExecution.result ?? toolExecution.data ?? null) : null;
   const toolSuccess = toolExecution ? toolExecution.success !== false : true;
@@ -428,7 +343,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     const count = typeof toolPayload?.count === 'number' ? toolPayload.count : null;
     const grade = firstText(toolPayload?.grade, toolPayload?.grade_level);
     const subject = firstText(toolPayload?.subject, toolPayload?.topic);
-    const toolKey = String(rawToolName || '').toLowerCase();
+    const toolKey = toolNameKey;
 
     if (toolKey === 'get_caps_documents') {
       const target = [grade ? `Grade ${String(grade).replace(/^grade\s*/i, '')}` : null, subject]
@@ -473,13 +388,26 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       return null;
     }
   }, [toolExecution, toolPayload]);
+  const toolChartPreview = React.useMemo(
+    () => buildToolChartPreview(toolNameKey, toolArgs || null),
+    [toolArgs, toolNameKey]
+  );
+  const toolDownloadUrl = firstText(
+    toolPayload?.publicUrl,
+    toolPayload?.public_url,
+    toolPayload?.uri,
+    toolPayload?.url,
+    toolPayload?.download_url,
+    extractUrl(assistantContent || ''),
+  );
   const markdownStyles = React.useMemo(() => buildMarkdownStyles(theme, isUser), [theme, isUser]);
 
   type RichSegment =
     | { type: 'markdown'; content: string }
     | { type: 'math'; content: string }
     | { type: 'inlineMath'; content: string }
-    | { type: 'mermaid'; content: string };
+    | { type: 'mermaid'; content: string }
+    | { type: 'quiz'; content: string };
 
   const parseRichSegments = (content: string): RichSegment[] => {
     const splitByPattern = (
@@ -515,7 +443,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     };
 
     const base: RichSegment[] = [{ type: 'markdown', content }];
-    const withMermaid = splitByPattern(base, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
+    // Quiz blocks: ```quiz ... ```
+    const withQuiz = splitByPattern(base, /```quiz\s*([\s\S]*?)```/gi, (value) => ({
+      type: 'quiz' as const,
+      content: value,
+    }));
+    const withMermaid = splitByPattern(withQuiz, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
       type: 'mermaid',
       content: value,
     }));
@@ -533,6 +466,33 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       if (segment.type === 'markdown') return segment.content.trim().length > 0;
       return segment.content.length > 0;
     });
+  };
+
+  const safeParseQuizJson = (raw: string): QuizQuestionPayload | null => {
+    const cleaned = String(raw || '').trim();
+    if (!cleaned) return null;
+
+    // First try the InlineQuizCard parser contract.
+    const wrapped = `\`\`\`quiz\n${cleaned}\n\`\`\``;
+    const parsed = parseQuizPayload(wrapped);
+    if (parsed) return parsed;
+
+    try {
+      const direct = JSON.parse(cleaned);
+      if (
+        direct &&
+        typeof direct === 'object' &&
+        (direct as any).type === 'quiz_question' &&
+        typeof (direct as any).question === 'string' &&
+        typeof (direct as any).correct === 'string'
+      ) {
+        return direct as QuizQuestionPayload;
+      }
+    } catch {
+      // Keep null fallback to fenced markdown render below.
+    }
+
+    return null;
   };
 
   const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
@@ -579,6 +539,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 borderColor: theme.border, 
                 borderWidth: 1.5 
               },
+          isUser && isLastUserMessage && !isLoading ? { paddingBottom: 34 } : null,
           bubbleShadow,
         ]}
       >
@@ -589,21 +550,34 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
               </View>
               <Text style={[styles.messageRoleLabel, { color: theme.text }]}>
-                {assistantLabel || 'Dash AI'}
+                {assistantLabel || 'Dash'}
               </Text>
             </View>
-            {phase && (
-              <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg, borderColor: phaseColors?.text || theme.border }]}>
-                <Text style={[styles.phaseText, { color: phaseColors?.text }]}>{phase}</Text>
-              </View>
-            )}
           </View>
         )}
         <View style={styles.messageContentRow}>
+          {showPracticeMicrocopy && (
+            <View
+              style={{
+                width: '100%',
+                marginBottom: 8,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: theme.primary + '44',
+                backgroundColor: theme.primary + '14',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+              }}
+            >
+              <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700' }}>
+                This is a Tutor Practice Question (not a formal exam).
+              </Text>
+            </View>
+          )}
           {isToolOperation ? (
             <View
               style={{
-                flex: 1,
+                width: '100%',
                 padding: 12,
                 borderRadius: 14,
                 borderWidth: 1,
@@ -681,6 +655,153 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </View>
               )}
 
+              {toolChartPreview && (
+                <View
+                  style={{
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                    padding: 12,
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flex: 1 }}>
+                      {toolChartPreview.title}
+                    </Text>
+                    <View
+                      style={{
+                        borderRadius: 999,
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        backgroundColor: theme.surfaceVariant,
+                      }}
+                    >
+                      <Text style={{ color: theme.textSecondary, fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
+                        {toolChartPreview.type}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {toolChartPreview.type === 'pie' ? (
+                    <>
+                      <View
+                        style={{
+                          height: 14,
+                          borderRadius: 999,
+                          overflow: 'hidden',
+                          flexDirection: 'row',
+                          backgroundColor: theme.surfaceVariant || '#e2e8f0',
+                        }}
+                      >
+                        {toolChartPreview.points.map((point, pointIndex) => (
+                          <View
+                            key={`pie-segment-${pointIndex}`}
+                            style={{
+                              flex: Math.max(Math.abs(point.value), 0.5),
+                              backgroundColor: point.color,
+                            }}
+                          />
+                        ))}
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        {toolChartPreview.points.map((point, pointIndex) => (
+                          <View
+                            key={`pie-legend-${pointIndex}`}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: point.color }} />
+                              <Text
+                                style={{ color: theme.textSecondary, fontSize: 12, flexShrink: 1 }}
+                                numberOfLines={1}
+                              >
+                                {point.label}
+                              </Text>
+                            </View>
+                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
+                              {point.value}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10, minHeight: 120 }}>
+                        {(() => {
+                          const maxValue = Math.max(
+                            1,
+                            ...toolChartPreview.points.map((point) => Math.abs(point.value))
+                          );
+                          return toolChartPreview.points.map((point, pointIndex) => {
+                            const barHeight = Math.max(12, Math.round((Math.abs(point.value) / maxValue) * 84));
+                            return (
+                              <View key={`bar-${pointIndex}`} style={{ width: 46, alignItems: 'center', gap: 4 }}>
+                                <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>
+                                  {point.value}
+                                </Text>
+                                <View
+                                  style={{
+                                    width: 28,
+                                    borderRadius: 7,
+                                    backgroundColor: point.color,
+                                    height: barHeight,
+                                  }}
+                                />
+                                <Text
+                                  style={{ color: theme.textSecondary, fontSize: 10, textAlign: 'center' }}
+                                  numberOfLines={1}
+                                >
+                                  {point.label}
+                                </Text>
+                              </View>
+                            );
+                          });
+                        })()}
+                      </View>
+                    </ScrollView>
+                  )}
+                </View>
+              )}
+
+              {toolDownloadUrl && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      const canOpen = await Linking.canOpenURL(toolDownloadUrl);
+                      if (!canOpen) throw new Error('UNSUPPORTED_URL');
+                      await Linking.openURL(toolDownloadUrl);
+                    } catch {
+                      Alert.alert('Unable to open file', 'Please try again from a stable connection.');
+                    }
+                  }}
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 999,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderWidth: 1,
+                    borderColor: theme.primary + '55',
+                    backgroundColor: theme.primary + '16',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open generated file"
+                >
+                  <Ionicons name="open-outline" size={14} color={theme.primary} />
+                  <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
+                    Open Generated File
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {toolRawPayload && (
                 <TouchableOpacity
                   onPress={() => setShowRawToolPayload((prev) => !prev)}
@@ -745,8 +866,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             <Text
               style={[
                 styles.messageText,
-                { color: isUser ? theme.onPrimary : theme.text, flex: 1 },
-                message.content?.length < 18 ? { textAlign: 'center' } : null,
+                { color: isUser ? theme.onPrimary : theme.text },
               ]}
               selectable={true}
               selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
@@ -754,7 +874,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               {isUser ? userContent : assistantDisplayText}
             </Text>
           ) : (
-            <View style={{ flex: 1 }}>
+            <View style={{ width: '100%' }}>
               {parseRichSegments(assistantDisplayText).map((segment, segmentIndex) => {
                 if (segment.type === 'math') {
                   return (
@@ -780,6 +900,23 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       key={`mermaid-${message.id}-${segmentIndex}`}
                       definition={segment.content}
                     />
+                  );
+                }
+                if (segment.type === 'quiz') {
+                  const payload = safeParseQuizJson(segment.content);
+                  if (payload) {
+                    return (
+                      <InlineQuizCard
+                        key={`quiz-${message.id}-${segmentIndex}`}
+                        payload={payload}
+                        onAnswer={(answer) => onSendFollowUp(answer)}
+                      />
+                    );
+                  }
+                  return (
+                    <Markdown key={`quiz-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                      {'```quiz\n' + segment.content + '\n```'}
+                    </Markdown>
                   );
                 }
                 return (
@@ -898,43 +1035,6 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </Text>
               </View>
             ))}
-          </View>
-        )}
-
-        {showInlineAnswer && (
-          <View style={[styles.inlineAnswerContainer, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
-            <Text style={[styles.inlineAnswerLabel, { color: theme.textSecondary }]}>Your answer</Text>
-            <View style={styles.inlineAnswerRow}>
-              <TextInput
-                style={[styles.inlineAnswerInput, { color: theme.text }]}
-                placeholder="Type your answer…"
-                placeholderTextColor={theme.textTertiary}
-                value={inlineAnswer}
-                onChangeText={setInlineAnswer}
-                editable={!isLoading}
-                onSubmitEditing={handleInlineSend}
-                returnKeyType="send"
-              />
-              <TouchableOpacity
-                style={[
-                  styles.inlineAnswerSend,
-                  { backgroundColor: inlineAnswer.trim() ? theme.primary : theme.border }
-                ]}
-                onPress={handleInlineSend}
-                disabled={!inlineAnswer.trim()}
-                accessibilityLabel="Send answer"
-                accessibilityRole="button"
-              >
-                <Ionicons name="send" size={14} color={inlineAnswer.trim() ? theme.onPrimary : theme.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        
-        {/* CAPS results (tool outputs) */}
-        {!isUser && message.metadata?.tool_results && (
-          <View style={{ marginTop: 8 }}>
-            {renderCAPSResults(message.metadata)}
           </View>
         )}
 

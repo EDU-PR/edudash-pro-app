@@ -10,8 +10,8 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { DashAttachment } from '@/services/dash-ai/types';
 
 const BUCKET_NAME = 'dash-attachments';
-// Increase mobile/native attachments default to 4MB to allow slightly larger uploads
-const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB
+// Keep lightweight AI image uploads while allowing modern camera photos.
+const MAX_IMAGE_SIZE = 6 * 1024 * 1024; // 6MB
 const THUMBNAIL_SIZE = 200; // 200px thumbnail
 
 export interface ImageUploadResult {

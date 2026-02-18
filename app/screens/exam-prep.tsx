@@ -3,15 +3,13 @@
  * 
  * CAPS-aligned exam preparation with AI-powered question generation.
  * Features: Grade selection, subject selection, exam type selection.
- * Feature-flagged: Only active when exam_prep_enabled is true.
  */
 
 import React, { useCallback, useState } from 'react';
-import { Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack } from 'expo-router';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
@@ -41,16 +39,19 @@ function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'seni
 
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
-  const flags = getFeatureFlagsSync();
   const { tier } = useSubscription();
- 
+  const { grade: gradeParam, childName } = useLocalSearchParams<{ grade?: string; childName?: string }>();
+
+  // If a grade was passed from the dashboard, pre-fill it and skip to subject step
+  const hasPrefilledGrade = !!(gradeParam && GRADES.some((g) => g.value === gradeParam));
+
   // State
-  const [selectedGrade, setSelectedGrade] = useState<string>('grade_4');
+  const [selectedGrade, setSelectedGrade] = useState<string>(hasPrefilledGrade ? gradeParam! : 'grade_4');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedExamType, setSelectedExamType] = useState<string>('practice_test');
   const [selectedLanguage, setSelectedLanguage] = useState<SouthAfricanLanguage>('en-ZA');
   const [generating, setGenerating] = useState(false);
-  const [step, setStep] = useState<'grade' | 'subject' | 'type'>('grade');
+  const [step, setStep] = useState<'grade' | 'subject' | 'type'>(hasPrefilledGrade ? 'subject' : 'grade');
  
   // Get subjects for current grade
   const phase = getPhaseFromGrade(selectedGrade);
@@ -172,15 +173,12 @@ export default function ExamPrepScreen() {
         {gradeInfo?.label} - CAPS Curriculum
       </Text>
 
-      <FlatList
-        data={subjects}
-        numColumns={2}
-        keyExtractor={(item) => item}
-        contentContainerStyle={styles.subjectGrid}
-        renderItem={({ item }) => {
+      <View style={styles.subjectGrid}>
+        {subjects.map((item) => {
           const isSelected = selectedSubject === item;
           return (
             <TouchableOpacity
+              key={item}
               style={[
                 styles.subjectCard,
                 {
@@ -206,8 +204,8 @@ export default function ExamPrepScreen() {
               </Text>
             </TouchableOpacity>
           );
-        }}
-      />
+        })}
+      </View>
 
       {selectedSubject && (
         <TouchableOpacity
@@ -371,30 +369,6 @@ export default function ExamPrepScreen() {
     </View>
   );
  
-  // Feature flag check (after hooks are initialized to satisfy rules-of-hooks)
-  if (!flags.exam_prep_enabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'Exam Prep' }} />
-        <View style={styles.disabledContainer}>
-          <Ionicons name="school-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            Exam Prep is not available
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Please upgrade your subscription to access this feature.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   if (!canUseExamPrep) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -645,6 +619,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   subjectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingVertical: 8,
   },
   subjectCard: {

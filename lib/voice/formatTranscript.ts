@@ -125,6 +125,17 @@ const normalizePhonicsTranscript = (text: string, lang: SupportedLang): string =
   next = next.replace(/\bthe\s+sound\s+is\s+([a-z])\b/gi, 'the sound is /$1/');
   next = next.replace(/\bsound\s+([a-z])\b/gi, 'sound /$1/');
 
+  // "sss" / "ffff" / "mmmm" -> "/s/" / "/f/" / "/m/" for better phonics capture.
+  // This helps when the learner says only a letter sound and STT returns repeated chars.
+  next = next.replace(/\b([b-df-hj-np-tv-z])\1{2,8}\b/gi, (_m, letter: string) => {
+    return `/${String(letter || '').toLowerCase()}/`;
+  });
+
+  // "/sss/" -> "/s/" (normalize over-extended markers to a single phoneme symbol)
+  next = next.replace(/\/([b-df-hj-np-tv-z])\1{1,8}\//gi, (_m, letter: string) => {
+    return `/${String(letter || '').toLowerCase()}/`;
+  });
+
   // Repeated single letters become one phoneme marker.
   next = next.replace(
     /\b([b-df-hj-np-tv-z])(?:[\s,;:/\\|._-]+\1){1,8}\b/gi,

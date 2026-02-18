@@ -1,0 +1,5 @@
+
+> edudash-pro@1.0.26 check:expo-filesystem
+> node scripts/check-expo-filesystem-usage.js
+
+[check-expo-filesystem-usage] OK

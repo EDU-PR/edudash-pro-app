@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { normalizeForTTS } from '../../../lib/dash-ai/ttsNormalize';
+import { getVoiceIdForLanguage } from '../../../lib/voice/voiceMapping';
 
 interface TTSOptions {
   rate?: number; // -50 to +50
@@ -35,11 +36,16 @@ const TTS_LIMITS: Record<string, number> = {
   school: 1000,
 };
 
+const resolveVoiceId = (language: string, voice: 'male' | 'female') => {
+  return getVoiceIdForLanguage(language, voice);
+};
+
 export function useTTS(userId?: string) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isSupported] = useState(true); // Always supported via Azure
   const [error, setError] = useState<string | null>(null);
+  const [languageFallback, setLanguageFallback] = useState<{ requested: string; actual: string } | null>(null);
   const [quota, setQuota] = useState<TTSQuota | null>(null);
   const [userTier, setUserTier] = useState<string>('free');
   const [voicePreference, setVoicePreference] = useState<'male' | 'female'>('female');
@@ -232,13 +238,14 @@ export function useTTS(userId?: string) {
 
       // Use user's voice preference if not specified in options
       const voiceGender = options.voice || voicePreference;
+      const voiceId = resolveVoiceId(language, voiceGender);
 
       // Call Azure TTS via edge function
       const { data, error: ttsError } = await supabase.functions.invoke('tts-proxy', {
         body: {
           text: cleanText,
           language: language,
-          voiceId: voiceGender === 'male' ? `${language}-ZA-male` : undefined,
+          voice_id: voiceId,
           style: options.style || 'friendly',
           rate: options.rate ?? 0,
           pitch: options.pitch ?? 0,
@@ -258,6 +265,14 @@ export function useTTS(userId?: string) {
 
       if (!data.audio_url) {
         throw new Error('No audio URL returned');
+      }
+
+      // Detect language fallback from Edge Function
+      if (data.language_fallback === true && data.actual_voice) {
+        const actualLang = (data.actual_voice as string).split('-')[0] || 'en';
+        setLanguageFallback({ requested: language, actual: actualLang });
+      } else {
+        setLanguageFallback(null);
       }
 
       // Play audio
@@ -356,6 +371,7 @@ export function useTTS(userId?: string) {
     isPaused,
     isSupported,
     error,
+    languageFallback,
     quota,
     userTier,
     voicePreference,

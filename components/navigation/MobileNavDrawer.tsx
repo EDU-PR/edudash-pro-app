@@ -43,6 +43,28 @@ interface MobileNavDrawerProps {
   navItems?: NavItem[];
 }
 
+const GLOBAL_FUNCTION_SEARCH_ITEM: NavItem = {
+  id: 'find-feature',
+  label: 'Find Feature',
+  icon: 'search',
+  route: '/screens/app-search',
+};
+
+function ensureGlobalSearchItem(items: NavItem[]): NavItem[] {
+  if (items.some((item) => item.id === GLOBAL_FUNCTION_SEARCH_ITEM.id || item.route.startsWith('/screens/app-search'))) {
+    return items;
+  }
+  const homeIndex = items.findIndex((item) => item.id === 'home');
+  if (homeIndex >= 0) {
+    return [
+      ...items.slice(0, homeIndex + 1),
+      GLOBAL_FUNCTION_SEARCH_ITEM,
+      ...items.slice(homeIndex + 1),
+    ];
+  }
+  return [GLOBAL_FUNCTION_SEARCH_ITEM, ...items];
+}
+
 // Default nav items by role
 const getDefaultNavItems = (
   role: string,
@@ -294,7 +316,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
       }) || '/screens/org-admin-dashboard'
     )
     : undefined;
-  const items = navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute });
+  const items = ensureGlobalSearchItem(navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute }));
   
   // Get display role - prioritize member_type for membership organizations
   const displayRole = memberType 

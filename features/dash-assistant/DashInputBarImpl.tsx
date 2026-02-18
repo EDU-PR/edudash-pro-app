@@ -1,0 +1,512 @@
+/**
+ * DashInputBar Component
+ * 
+ * Input area for the Dash AI Assistant with text input, attachments, and send button.
+ * Extracted from DashAssistant for better maintainability.
+ */
+
+import React from 'react';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import * as Haptics from 'expo-haptics';
+import { inputStyles as styles } from '@/components/ai/dash-assistant/styles/input.styles';
+import { useTheme } from '@/contexts/ThemeContext';
+import type { DashAttachment } from '@/services/dash-ai/types';
+import type { AttachmentProgress } from '@/hooks/useDashAttachments';
+import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+interface DashInputBarProps {
+  inputRef: React.RefObject<TextInput>;
+  inputText: string;
+  setInputText: (text: string) => void;
+  enterToSend?: boolean;
+  selectedAttachments: DashAttachment[];
+  attachmentProgress?: Map<string, AttachmentProgress>;
+  isLoading: boolean;
+  isUploading: boolean;
+  isRecording?: boolean;
+  isSpeaking?: boolean;
+  partialTranscript?: string;
+  bottomInset?: number;
+  placeholder?: string;
+  messages?: any[];
+  onSend: () => void;
+  onMicPress: () => void;
+  onTakePhoto: () => void;
+  onAttachFile: () => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  onQuickAction?: (text: string) => void;
+  onCancel?: () => void;
+  onInterrupt?: () => void | Promise<void>;
+  onInputFocus?: () => void;
+  hideQuickChips?: boolean;
+  showAttachmentDropzone?: boolean;
+  /** Web: paste image from clipboard (receives File). Optional. */
+  onPasteImage?: (file: File) => void;
+}
+
+export const DashInputBar: React.FC<DashInputBarProps> = ({
+  inputRef,
+  inputText,
+  setInputText,
+  enterToSend = true,
+  selectedAttachments,
+  attachmentProgress,
+  isLoading,
+  isUploading,
+  isRecording = false,
+  isSpeaking = false,
+  partialTranscript = '',
+  bottomInset = 0,
+  placeholder,
+  messages = [],
+  onSend,
+  onMicPress,
+  onTakePhoto,
+  onAttachFile,
+  onRemoveAttachment,
+  onQuickAction,
+  onCancel,
+  onInterrupt,
+  onInputFocus,
+  hideQuickChips = false,
+  showAttachmentDropzone = true,
+  onPasteImage,
+}) => {
+  const { t } = useTranslation();
+  const { theme } = useTheme();
+  const { width: screenWidth } = Dimensions.get('window');
+  const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
+  const orbRingSize = orbSize + 14;
+
+  const renderAttachmentStrip = () => (
+    <>
+      {selectedAttachments.length === 0 ? (
+        showAttachmentDropzone ? (
+          <TouchableOpacity
+            style={[
+              styles.attachmentStrip,
+              {
+                backgroundColor: theme.surfaceVariant + '40',
+                borderColor: theme.border,
+              },
+            ]}
+            onPress={() => {
+              try {
+                Haptics.selectionAsync?.();
+              } catch {}
+              onAttachFile();
+            }}
+            activeOpacity={0.7}
+            accessibilityLabel={t('common.ai_drop_files_or_tap')}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.attachmentDropZoneText, { color: theme.textSecondary }]}>
+              {t('common.ai_drop_files_or_tap')}
+            </Text>
+            <Text style={[styles.attachmentDropZoneSubtext, { color: theme.textTertiary }]}>
+              {t('common.ai_drop_files_subtext')}
+            </Text>
+          </TouchableOpacity>
+        ) : null
+        ) : (
+        <View
+          style={[
+            styles.attachmentChipsContainer,
+            {
+              backgroundColor: theme.surfaceVariant + '66',
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.attachmentChipsScroll}
+          >
+          {selectedAttachments.map((attachment) => {
+            // Get real-time progress from the hook
+            const progress = attachmentProgress?.get(attachment.id);
+            const status = progress?.status || attachment.status || 'pending';
+            const uploadProgress = progress?.progress ?? attachment.uploadProgress ?? 0;
+            const isImage = attachment.kind === 'image';
+            const imageUri = attachment.previewUri || attachment.uri;
+            
+            return (
+              <View 
+                key={attachment.id}
+                style={[
+                  isImage ? styles.attachmentImageCard : styles.attachmentChip,
+                  { 
+                    backgroundColor: theme.surface,
+                    borderColor: status === 'failed' ? theme.error : theme.border
+                  }
+                ]}
+              >
+              {/* Image preview (ChatGPT style) */}
+              {isImage && imageUri ? (
+                <View style={styles.attachmentImageWrapper}>
+                  <Image 
+                    source={{ uri: imageUri }}
+                    style={styles.attachmentImagePreview}
+                    resizeMode="cover"
+                  />
+                  {/* Overlay for status */}
+                  {status === 'uploading' && (
+                    <View style={[styles.attachmentImageOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                      <EduDashSpinner size="small" color="#FFFFFF" />
+                    </View>
+                  )}
+                  {status === 'uploaded' && (
+                    <View style={[styles.attachmentImageBadge, { backgroundColor: theme.success }]}>
+                      <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                    </View>
+                  )}
+                  {status === 'failed' && (
+                    <View style={[styles.attachmentImageOverlay, { backgroundColor: 'rgba(220, 38, 38, 0.8)' }]}>
+                      <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
+                    </View>
+                  )}
+                  {/* Remove button */}
+                  {status !== 'uploading' && (
+                    <TouchableOpacity
+                      style={[styles.attachmentImageRemove, { backgroundColor: theme.error }]}
+                      onPress={() => onRemoveAttachment(attachment.id)}
+                      accessibilityLabel={`Remove ${attachment.name}`}
+                    >
+                      <Ionicons name="close" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+                  {/* File size label */}
+                  <View style={[styles.attachmentImageSize, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+                    <Text style={styles.attachmentImageSizeText}>
+                      {formatFileSize(attachment.size)}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                /* File/document chip (original style) */
+                <>
+              <View style={styles.attachmentChipContent}>
+                <Ionicons 
+                  name={getFileIconName(attachment.kind)}
+                  size={16} 
+                  color={status === 'failed' ? theme.error : theme.text} 
+                />
+                <View style={styles.attachmentChipText}>
+                  <Text 
+                    style={[
+                      styles.attachmentChipName, 
+                      { color: status === 'failed' ? theme.error : theme.text }
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {attachment.name}
+                  </Text>
+                  <Text style={[styles.attachmentChipSize, { color: theme.textSecondary }]}>
+                    {formatFileSize(attachment.size)}
+                  </Text>
+                </View>
+                
+                {/* Progress indicator */}
+                {status === 'uploading' && (
+                  <View style={styles.attachmentProgressContainer}>
+                    <EduDashSpinner size="small" color={theme.primary} />
+                  </View>
+                )}
+                
+                {/* Status indicator */}
+                {status === 'uploaded' && (
+                  <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+                )}
+                
+                {status === 'failed' && (
+                  <Ionicons name="alert-circle" size={16} color={theme.error} />
+                )}
+                
+                {/* Remove button */}
+                {status !== 'uploading' && (
+                  <TouchableOpacity
+                    style={styles.attachmentChipRemove}
+                    onPress={() => onRemoveAttachment(attachment.id)}
+                    accessibilityLabel={`Remove ${attachment.name}`}
+                  >
+                    <Ionicons name="close" size={14} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              {/* Progress bar */}
+              {status === 'uploading' && uploadProgress !== undefined && (
+                <View style={[styles.attachmentProgressBar, { backgroundColor: theme.surfaceVariant }]}>
+                  <View 
+                    style={[
+                      styles.attachmentProgressFill,
+                      { 
+                        backgroundColor: theme.primary,
+                        width: `${uploadProgress}%`
+                      }
+                    ]} 
+                  />
+                </View>
+              )}
+              </>
+              )}
+            </View>
+            );
+          })}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
+
+  const hasContent = inputText.trim() || selectedAttachments.length > 0;
+  const hasMessages = messages && messages.length > 0;
+  // Show conversation starters when chat is empty
+  const canShowQuickChips = !hideQuickChips && !hasContent && !isRecording && !isLoading && !hasMessages;
+
+  const quickChips = [
+    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this to me in simple terms.' },
+    { id: 'write', label: 'Write', icon: 'create-outline', prompt: 'Help me write something.' },
+    { id: 'brainstorm', label: 'Brainstorm', icon: 'sparkles-outline', prompt: 'Help me brainstorm ideas.' },
+    { id: 'analyze', label: 'Analyze', icon: 'analytics-outline', prompt: 'Analyze this for me.' },
+  ];
+
+  return (
+    <View
+      style={[
+        styles.inputContainer,
+        {
+          backgroundColor: 'transparent',
+          paddingBottom: Math.max(12, bottomInset),
+        }
+      ]}
+    >
+      {/* Attachment strip: drop zone when empty, thumbnails when present */}
+      {renderAttachmentStrip()}
+
+      {(isRecording || partialTranscript) && (
+        <View style={[styles.voiceStatusRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+          <Ionicons
+            name={isRecording ? 'mic' : 'chatbubble-ellipses-outline'}
+            size={16}
+            color={isRecording ? theme.error : theme.primary}
+          />
+          <View style={styles.voiceStatusContent}>
+            <Text style={[styles.voiceStatusText, { color: theme.textSecondary }]}>
+              {isRecording ? 'Listening' : 'Transcript ready'}
+            </Text>
+            {!!partialTranscript && (
+              <Text style={[styles.voiceTranscript, { color: theme.text }]} numberOfLines={3}>
+                {partialTranscript}
+              </Text>
+            )}
+            <Text style={[styles.voiceHint, { color: theme.textTertiary }]}>
+              Keep speaking naturally. Dash will prepare your response as soon as you finish.
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Conversation starters */}
+      {canShowQuickChips && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tutorChipRow}
+        >
+          {quickChips.map((chip) => (
+            <TouchableOpacity
+              key={chip.id}
+              style={[styles.tutorChip, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={() => onQuickAction?.(chip.prompt)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={chip.icon as any} size={14} color={theme.primary} />
+              <Text style={[styles.tutorChipText, { color: theme.text }]}>{chip.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+      
+      <View style={styles.inputRow}>
+        {/* Input wrapper */}
+        <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+          <View style={styles.inputAccessoryLeft}>
+            {/* Attach files button */}
+            <TouchableOpacity
+              style={styles.inputIconButton}
+              onPress={async () => {
+                try {
+                  await Haptics.selectionAsync();
+                } catch {}
+                onAttachFile();
+              }}
+              disabled={isLoading || isUploading}
+              accessibilityLabel="Attach files"
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="attach"
+                size={20}
+                color={selectedAttachments.length > 0 ? theme.primary : (isLoading || isUploading ? theme.textTertiary : theme.textSecondary)}
+              />
+              {selectedAttachments.length > 0 && (
+                <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
+                  <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
+                    {selectedAttachments.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Camera button (hide while typing) */}
+            {inputText.trim().length === 0 && !isRecording && (
+              <TouchableOpacity
+                style={styles.inputIconButton}
+                onPress={async () => {
+                  try {
+                    await Haptics.selectionAsync();
+                  } catch {}
+                  onTakePhoto();
+                }}
+                disabled={isLoading || isUploading}
+                accessibilityLabel="Take photo"
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="camera-outline"
+                  size={20}
+                  color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TextInput
+            ref={inputRef}
+            style={[
+              styles.textInput,
+              {
+                color: theme.inputText,
+              }
+            ]}
+            placeholder={
+              isRecording
+                ? "Listening..."
+                : (placeholder || "Message Dash...")
+            }
+            placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
+            value={inputText}
+            onChangeText={setInputText}
+            onFocus={onInputFocus}
+            {...(Platform.OS === 'web' && onPasteImage
+              ? ({
+                  onPaste: (e: { nativeEvent?: { clipboardData?: DataTransfer } }) => {
+                    const clipboardData = e?.nativeEvent?.clipboardData;
+                    if (!clipboardData?.items?.length) return;
+                    const item = Array.from(clipboardData.items).find((i) => i?.type?.startsWith('image/'));
+                    if (!item) return;
+                    const file = item.getAsFile();
+                    if (file) onPasteImage(file);
+                  },
+                } as Record<string, unknown>)
+              : {})}
+            onKeyPress={(e) => {
+              if (!enterToSend || Platform.OS !== 'web') return;
+              const nativeEvent = (e as any)?.nativeEvent || {};
+              const key = nativeEvent.key;
+              const shiftKey = nativeEvent.shiftKey;
+              if (key === 'Enter' && !shiftKey) {
+                (e as any).preventDefault?.();
+                onSend();
+              }
+            }}
+            multiline={true}
+            maxLength={500}
+            editable={!isLoading && !isUploading && !isRecording}
+            onSubmitEditing={undefined}
+            returnKeyType={enterToSend ? 'send' : 'default'}
+            blurOnSubmit={false}
+          />
+        </View>
+        
+        {/* Dash Orb (voice) */}
+        <TouchableOpacity
+          style={[
+            styles.orbButton,
+            { opacity: (isLoading || isSpeaking || isRecording) ? 0.9 : 1, width: orbSize + 4, height: orbSize + 4 }
+          ]}
+          onPress={() => {
+            if ((isLoading || isSpeaking) && onInterrupt) {
+              void onInterrupt();
+              return;
+            }
+            onMicPress();
+          }}
+          accessibilityLabel={(isLoading || isSpeaking) ? "Stop Dash activity" : isRecording ? "Stop recording" : "Speak to Dash"}
+          accessibilityRole="button"
+          activeOpacity={0.85}
+        >
+          <CosmicOrb size={orbSize} isProcessing={isRecording || isLoading} isSpeaking={isSpeaking} />
+          <View style={[
+            styles.orbPulseRing,
+            { 
+              width: orbRingSize,
+              height: orbRingSize,
+              borderRadius: orbRingSize / 2,
+              borderColor: isRecording ? theme.error : theme.primary,
+              opacity: isRecording ? 0.7 : 0.2,
+            }
+          ]} />
+        </TouchableOpacity>
+
+        {/* Stop generation button — shown when AI is generating a response */}
+        {isLoading && onCancel && !hasContent && (
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: theme.error }]}
+            onPress={async () => {
+              try {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } catch {}
+              onCancel();
+            }}
+            accessibilityLabel="Stop generating"
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            <Ionicons name="stop" size={20} color={theme.onPrimary || '#fff'} />
+          </TouchableOpacity>
+        )}
+
+        {/* Send button */}
+        {hasContent && (
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: theme.primary, opacity: (isLoading || isUploading) ? 0.5 : 1 }]}
+            onPress={async () => {
+              try {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } catch {}
+              onSend();
+            }}
+            disabled={isLoading || isUploading}
+            accessibilityLabel="Send message"
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            {(isLoading || isUploading) ? (
+              <EduDashSpinner size="small" color={theme.onPrimary} />
+            ) : (
+              <Ionicons name="send" size={20} color={theme.onPrimary} />
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { useBottomInset } from '@/hooks/useBottomInset';
 
 interface ThreadOption {
   id: string;
@@ -37,6 +38,7 @@ export function ForwardMessagePicker({
   onSelect,
   onCancel,
 }: ForwardMessagePickerProps) {
+  const bottomInset = useBottomInset();
   const { user } = useAuth();
   const [threads, setThreads] = useState<ThreadOption[]>([]);
   const [filtered, setFiltered] = useState<ThreadOption[]>([]);
@@ -155,7 +157,7 @@ export function ForwardMessagePicker({
       onRequestClose={onCancel}
     >
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingBottom: bottomInset + 12 }]}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Forward to...</Text>

@@ -21,7 +21,7 @@ import { CreateGroupModal } from '@/components/messaging/CreateGroupModal';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
-import { getMessageDisplayText } from '@/lib/messaging/messageContent';
+import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
 import { 
   type MessageThread,
   DASH_AI_THREAD_ID, 
@@ -1239,6 +1239,11 @@ function TeacherMessagesPage() {
     : contactParticipant?.user_profile
       ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
       : 'Contact';
+  const isGroupSelected = !isDashAISelected && (
+    Boolean(selectedThread?.is_group) ||
+    Boolean((selectedThread as any)?.group_type) ||
+    selectedParticipants.length > 2
+  );
   
   // Display messages - use Dash AI messages when that thread is selected
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
@@ -1455,6 +1460,16 @@ function TeacherMessagesPage() {
         messageElement.style.background = 'transparent';
       }, 1500);
     }
+  };
+
+  const handleCallEventPress = (event: CallEventContent) => {
+    if (!event.callerId) return;
+    const callOptions = selectedThreadId ? { threadId: selectedThreadId } : undefined;
+    if (event.callType === 'video') {
+      startVideoCall(event.callerId, event.callerName || 'Contact', callOptions);
+      return;
+    }
+    startVoiceCall(event.callerId, event.callerName || 'Contact', callOptions);
   };
 
   return (
@@ -1834,7 +1849,7 @@ function TeacherMessagesPage() {
                   {isDesktop ? (
                     <>
                       <button
-                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
+                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                         title="Start voice call"
                         className="w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
                         style={{
@@ -1845,7 +1860,7 @@ function TeacherMessagesPage() {
                         <Phone size={18} color="white" />
                       </button>
                       <button
-                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
+                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                         title="Start video call"
                         className="w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
                         style={{
@@ -1869,7 +1884,7 @@ function TeacherMessagesPage() {
                   ) : (
                     <>
                       <button
-                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
+                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                         title="Voice call"
                         className="w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95"
                         style={{
@@ -1880,7 +1895,7 @@ function TeacherMessagesPage() {
                         <Phone size={16} color="white" />
                       </button>
                       <button
-                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
+                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName, selectedThreadId ? { threadId: selectedThreadId } : undefined)}
                         title="Video call"
                         className="w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95"
                         style={{
@@ -1984,8 +1999,8 @@ function TeacherMessagesPage() {
                     {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
-                        ? `${message.sender.first_name} ${message.sender.last_name}`
-                        : 'Unknown';
+                        ? `${message.sender.first_name || ''} ${message.sender.last_name || ''}`.trim()
+                        : '';
                       const otherParticipantIds = selectedParticipants
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
@@ -2007,11 +2022,13 @@ function TeacherMessagesPage() {
                               isOwn={isOwn}
                               isDesktop={isDesktop}
                               formattedTime={formatMessageTime(message.created_at)}
-                              senderName={!isOwn ? senderName : undefined}
+                              senderName={!isOwn && senderName ? senderName : undefined}
+                              showSenderName={isGroupSelected}
                               otherParticipantIds={otherParticipantIds}
                               hideAvatars={!isDesktop}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                               onReplyClick={scrollToMessage}
+                              onCallEventPress={handleCallEventPress}
                             />
                           </div>
                         </div>

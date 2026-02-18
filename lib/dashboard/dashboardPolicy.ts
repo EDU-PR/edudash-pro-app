@@ -76,6 +76,7 @@ const POLICY: PolicyMap = {
       'weekly-menu',
       'year-planner',
       'ai-year-planner',
+      'daily-program-ai',
       'curriculum-themes',
       'lesson-templates',
       'weekly-plans',
@@ -87,6 +88,7 @@ const POLICY: PolicyMap = {
       'settings',
       'dash-studio',
       'dash-advisor',
+      'dash-tutor',
     ]),
   },
   k12_school: {
@@ -149,6 +151,7 @@ const POLICY: PolicyMap = {
       'weekly-menu',
       'year-planner',
       'ai-year-planner',
+      'daily-program-ai',
       'curriculum-themes',
       'lesson-templates',
       'weekly-plans',
@@ -156,6 +159,7 @@ const POLICY: PolicyMap = {
       'announcements',
       'settings',
       'dash-advisor',
+      'dash-tutor',
     ]),
   },
 };

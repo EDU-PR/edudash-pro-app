@@ -86,6 +86,7 @@ export function createEmptyTeacherData(): TeacherDashboardData {
     myClasses: [],
     recentAssignments: [],
     upcomingEvents: [],
+    todayRoutine: null,
   };
 }
 
@@ -134,6 +135,27 @@ export interface TeacherDashboardData {
     time: string;
     type: 'meeting' | 'activity' | 'assessment';
   }>;
+  todayRoutine?: {
+    weeklyProgramId: string;
+    classId?: string | null;
+    termId?: string | null;
+    themeId?: string | null;
+    title?: string | null;
+    summary?: string | null;
+    weekStartDate: string;
+    weekEndDate: string;
+    dayOfWeek: number;
+    blockCount: number;
+    nextBlockTitle?: string | null;
+    nextBlockStart?: string | null;
+    blocks: Array<{
+      id: string;
+      title: string;
+      blockType: string;
+      startTime?: string | null;
+      endTime?: string | null;
+    }>;
+  } | null;
 }
 
 export interface ParentDashboardData {

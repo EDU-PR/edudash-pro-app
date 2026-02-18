@@ -1,493 +1,390 @@
 /**
- * DashOrb — #NEXT-GEN Viseme-Reactive ZA-Inspired Voice Orb
+ * DashOrb — Glass-Ring Particle Orb
  *
- * A premium, state-driven animated orb for the Dash voice interface.
- * Uses react-native-reanimated (already installed v4.1.1) and expo-linear-gradient.
+ * State-driven animated orb with sparkle particles, rotating gradient ring,
+ * and voice-amplitude reactivity. Uses react-native-reanimated v4 and
+ * expo-linear-gradient.
  *
- * States:
- *  - idle:      gentle breathing pulse, slow gradient rotation
- *  - listening:  glow expands, scale driven by audio metering (voice amplitude)
- *  - thinking:   shrinks + fast rotation, teal shimmer
- *  - speaking:   viseme-reactive scale + borderRadius via amplitude proxy
- *
- * ZA-inspired palette: Gold (#FFD700), Emerald (#007A33), Deep Blue (#002395)
- * blended into the existing dark-cosmic UI.
+ * States: idle · listening · thinking · speaking
  *
  * @module components/dash-orb/DashOrb
  */
 
 import React, { useEffect, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withSpring,
-  Easing,
-  cancelAnimation,
-  interpolate,
-  interpolateColor,
-} from 'react-native-reanimated';
+import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  Extrapolate,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
-// ── ZA-Inspired Color Palette ───────────────────────────────────────
-const ZA = {
-  gold: '#FFD700',
-  emerald: '#007A33',
-  deepBlue: '#002395',
-  goldSoft: '#FFC83D',
-  emeraldSoft: '#00A347',
-  deepBlueSoft: '#1E3A8A',
-  // Blended accent colors for state
-  listeningGlow: '#00C853',   // bright emerald for "I hear you"
-  speakingGlow: '#FFD700',    // warm gold for "I'm speaking"
-  thinkingGlow: '#00BCD4',    // teal shimmer for processing
-  idleGlow: '#FFD70060',      // subtle gold ambient
-} as const;
+// ── Types ───────────────────────────────────────────────────────────
+
+export type DashOrbState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 export interface DashOrbProps {
-  /** Orb diameter in pixels */
-  size?: number;
+  /** Outer orb diameter in pixels */
+  size: number;
   /** Current animation state */
-  state: 'idle' | 'listening' | 'thinking' | 'speaking';
-  /** Normalized audio level 0–1 from microphone metering */
+  state?: DashOrbState;
+  /** Normalized audio level 0‑1 */
   audioLevel?: number;
-  /** Azure viseme ID 0–21 (optional, degrades gracefully to amplitude) */
+  /** Optional viseme ID (0‑n) when speaking */
   visemeId?: number;
 }
 
-// ── Viseme → animation mapping ──────────────────────────────────────
-// Open vowels = larger, closed consonants = tighter
-function visemeToAnimation(id: number): { scale: number; radius: number } {
-  // Open vowels: Ah(1), Oh(2), Ow(11), Uh(20)
-  if ([1, 2, 11, 20].includes(id)) return { scale: 1.3, radius: 80 };
-  // Semi-open: Ee(6), Ih(3), Eh(4)
-  if ([3, 4, 6].includes(id)) return { scale: 1.2, radius: 90 };
-  // Closed consonants: F/V(18), Th(19), M/B/P(21)
-  if ([18, 19, 21].includes(id)) return { scale: 1.05, radius: 110 };
-  // Default mid-position
-  return { scale: 1.15, radius: 100 };
+type RingColors = readonly [string, string, string, string];
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** Deterministic PRNG – particles stay put across re-renders */
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-export const DashOrb: React.FC<DashOrbProps> = ({
-  size = 150,
-  state,
-  audioLevel = 0,
-  visemeId = 0,
-}) => {
-  // ── Shared animation values ─────────────────────────────────────
-  const coreScale = useSharedValue(1);
-  const corePulse = useSharedValue(1);
-  const coreRotation = useSharedValue(0);
-  const glowScale = useSharedValue(1.1);
-  const glowOpacity = useSharedValue(0.2);
-  const voiceAmplitude = useSharedValue(1);
-  const borderRadiusFactor = useSharedValue(1);
+// ── ParticleDot ─────────────────────────────────────────────────────
 
-  // Ring ripple values
-  const ring1Scale = useSharedValue(1);
-  const ring1Opacity = useSharedValue(0.4);
-  const ring2Scale = useSharedValue(1);
-  const ring2Opacity = useSharedValue(0.3);
+const ParticleDot: React.FC<{
+  x: number;
+  y: number;
+  r: number;
+  delayMs: number;
+  durationMs: number;
+  intensity: number;
+}> = ({ x, y, r, delayMs, durationMs, intensity }) => {
+  const o = useSharedValue(0);
+  const s = useSharedValue(1);
 
-  // ── Audio metering → voiceAmplitude ──────────────────────────────
   useEffect(() => {
-    if (state === 'listening' || state === 'speaking') {
-      const clamped = Math.max(0, Math.min(1, audioLevel));
-      const target = 1 + clamped * 0.3; // scale 1.0 → 1.3
-      voiceAmplitude.value = withTiming(target, {
-        duration: state === 'speaking' ? 80 : 100,
-        easing: Easing.out(Easing.quad),
-      });
-    } else {
-      voiceAmplitude.value = withTiming(1, { duration: 300 });
-    }
-  }, [audioLevel, state]);
+    o.value = withDelay(
+      delayMs,
+      withRepeat(
+        withSequence(
+          withTiming(0.0, { duration: 10 }),
+          withTiming(0.85, { duration: durationMs * 0.35 }),
+          withTiming(0.1, { duration: durationMs * 0.65 }),
+        ),
+        -1,
+        false,
+      ),
+    );
 
-  // ── Viseme → scale + radius (speaking only) ──────────────────────
-  useEffect(() => {
-    if (state !== 'speaking') {
-      borderRadiusFactor.value = withTiming(1, { duration: 200 });
-      return;
-    }
-    const anim = visemeToAnimation(visemeId);
-    coreScale.value = withTiming(anim.scale, {
-      duration: 80,
-      easing: Easing.out(Easing.quad),
-    });
-    borderRadiusFactor.value = withTiming(anim.radius / 100, {
-      duration: 80,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [visemeId, state]);
+    s.value = withDelay(
+      delayMs,
+      withRepeat(
+        withSequence(
+          withTiming(1.0, { duration: durationMs * 0.4 }),
+          withTiming(1.25, { duration: durationMs * 0.2 }),
+          withTiming(1.0, { duration: durationMs * 0.4 }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, [delayMs, durationMs, o, s]);
 
-  // ── State-based animation loops ──────────────────────────────────
-  useEffect(() => {
-    // Cancel previous loops
-    cancelAnimation(corePulse);
-    cancelAnimation(coreRotation);
-    cancelAnimation(glowScale);
-    cancelAnimation(glowOpacity);
-    cancelAnimation(ring1Scale);
-    cancelAnimation(ring1Opacity);
-    cancelAnimation(ring2Scale);
-    cancelAnimation(ring2Opacity);
-
-    switch (state) {
-      case 'idle':
-        // Gentle breathing: scale 1 ↔ 1.05 over 2500ms
-        corePulse.value = withRepeat(
-          withSequence(
-            withTiming(1.05, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
-            withTiming(1.0, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        coreScale.value = withTiming(1, { duration: 300 });
-        // Slow rotation
-        coreRotation.value = withRepeat(
-          withTiming(360, { duration: 30000, easing: Easing.linear }),
-          -1,
-          false,
-        );
-        // Subtle glow
-        glowScale.value = withRepeat(
-          withSequence(
-            withTiming(1.15, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
-            withTiming(1.05, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        glowOpacity.value = withRepeat(
-          withSequence(
-            withTiming(0.35, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
-            withTiming(0.2, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        // Ripple rings
-        ring1Scale.value = withRepeat(
-          withSequence(
-            withTiming(1.3, { duration: 3000, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring1Opacity.value = withRepeat(
-          withSequence(
-            withTiming(0, { duration: 3000, easing: Easing.out(Easing.ease) }),
-            withTiming(0.4, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring2Scale.value = withRepeat(
-          withSequence(
-            withTiming(1.5, { duration: 4000, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring2Opacity.value = withRepeat(
-          withSequence(
-            withTiming(0, { duration: 4000, easing: Easing.out(Easing.ease) }),
-            withTiming(0.3, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        break;
-
-      case 'listening':
-        // Listen mode: glow expands, rings pulse with audio
-        corePulse.value = withRepeat(
-          withSequence(
-            withTiming(1.06, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-            withTiming(1.0, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        coreScale.value = withTiming(1, { duration: 200 });
-        coreRotation.value = withRepeat(
-          withTiming(360, { duration: 25000, easing: Easing.linear }),
-          -1,
-          false,
-        );
-        glowScale.value = withTiming(1.4, { duration: 400 });
-        glowOpacity.value = withTiming(0.55, { duration: 300 });
-        // Faster ripple
-        ring1Scale.value = withRepeat(
-          withSequence(
-            withTiming(1.4, { duration: 2000, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring1Opacity.value = withRepeat(
-          withSequence(
-            withTiming(0, { duration: 2000, easing: Easing.out(Easing.ease) }),
-            withTiming(0.5, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring2Scale.value = withRepeat(
-          withSequence(
-            withTiming(1.6, { duration: 2500, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring2Opacity.value = withRepeat(
-          withSequence(
-            withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) }),
-            withTiming(0.35, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        break;
-
-      case 'thinking':
-        // Shrink + fast rotation + teal shimmer
-        coreScale.value = withTiming(0.9, { duration: 300, easing: Easing.out(Easing.quad) });
-        corePulse.value = withRepeat(
-          withSequence(
-            withTiming(1.04, { duration: 600, easing: Easing.inOut(Easing.sin) }),
-            withTiming(0.96, { duration: 600, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        coreRotation.value = withRepeat(
-          withTiming(360, { duration: 4000, easing: Easing.linear }),
-          -1,
-          false,
-        );
-        glowScale.value = withRepeat(
-          withSequence(
-            withTiming(1.3, { duration: 800, easing: Easing.inOut(Easing.sin) }),
-            withTiming(1.1, { duration: 800, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        glowOpacity.value = withRepeat(
-          withSequence(
-            withTiming(0.6, { duration: 800 }),
-            withTiming(0.3, { duration: 800 }),
-          ),
-          -1,
-          false,
-        );
-        // No ripple rings while thinking
-        ring1Opacity.value = withTiming(0, { duration: 300 });
-        ring2Opacity.value = withTiming(0, { duration: 300 });
-        break;
-
-      case 'speaking':
-        // Speaking: viseme-reactive (handled by visemeId effect)
-        // Base pulse is faster; amplitude overlays on top
-        corePulse.value = withRepeat(
-          withSequence(
-            withTiming(1.08, { duration: 400, easing: Easing.inOut(Easing.sin) }),
-            withTiming(1.0, { duration: 400, easing: Easing.inOut(Easing.sin) }),
-          ),
-          -1,
-          false,
-        );
-        coreRotation.value = withRepeat(
-          withTiming(360, { duration: 20000, easing: Easing.linear }),
-          -1,
-          false,
-        );
-        glowScale.value = withTiming(1.25, { duration: 300 });
-        glowOpacity.value = withTiming(0.5, { duration: 200 });
-        // Gentle ripple
-        ring1Scale.value = withRepeat(
-          withSequence(
-            withTiming(1.3, { duration: 2500, easing: Easing.out(Easing.ease) }),
-            withTiming(1.0, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring1Opacity.value = withRepeat(
-          withSequence(
-            withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) }),
-            withTiming(0.35, { duration: 0 }),
-          ),
-          -1,
-          false,
-        );
-        ring2Opacity.value = withTiming(0, { duration: 200 });
-        break;
-    }
-
-    return () => {
-      cancelAnimation(corePulse);
-      cancelAnimation(coreRotation);
-      cancelAnimation(glowScale);
-      cancelAnimation(glowOpacity);
-      cancelAnimation(ring1Scale);
-      cancelAnimation(ring1Opacity);
-      cancelAnimation(ring2Scale);
-      cancelAnimation(ring2Opacity);
-    };
-  }, [state]);
-
-  // ── Glow color per state ─────────────────────────────────────────
-  const glowColor = useMemo(() => {
-    switch (state) {
-      case 'listening': return ZA.listeningGlow;
-      case 'speaking':  return ZA.speakingGlow;
-      case 'thinking':  return ZA.thinkingGlow;
-      default:          return ZA.gold;
-    }
-  }, [state]);
-
-  // ── Animated styles ──────────────────────────────────────────────
-  const coreAnimatedStyle = useAnimatedStyle(() => {
-    const baseRadius = size / 2;
-    return {
-      transform: [
-        { scale: coreScale.value * corePulse.value * voiceAmplitude.value },
-        { rotate: `${coreRotation.value}deg` },
-      ] as any,
-      borderRadius: baseRadius * borderRadiusFactor.value,
-    };
-  });
-
-  const glowAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: glowScale.value }] as any,
-    opacity: glowOpacity.value,
-  }));
-
-  const ring1AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ring1Scale.value }] as any,
-    opacity: ring1Opacity.value,
-  }));
-
-  const ring2AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ring2Scale.value }] as any,
-    opacity: ring2Opacity.value,
-  }));
-
-  // ── Render ───────────────────────────────────────────────────────
-  const glowSize = size * 1.5;
-  const ringSize = size * 1.2;
+  const st = useAnimatedStyle(() => ({
+    opacity: o.value * intensity,
+    transform: [{ scale: s.value }],
+  }), [intensity]);
 
   return (
-    <View style={[orbStyles.container, { width: size * 2, height: size * 2 }]}>
+    <Animated.View
+      style={[
+        styles.particle,
+        st,
+        { left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r },
+      ]}
+    />
+  );
+};
+
+// ── DashOrb ─────────────────────────────────────────────────────────
+
+export function DashOrb({
+  size,
+  state = 'idle',
+  audioLevel = 0,
+  visemeId = 0,
+}: DashOrbProps) {
+  const ringThickness = Math.max(8, Math.round(size * 0.11));
+  const innerSize = size - ringThickness * 2;
+
+  const glowPulse = useSharedValue(0);
+  const ringSpin = useSharedValue(0);
+  const ringBreathe = useSharedValue(1);
+  const voiceAmp = useSharedValue(0);
+
+  const a = clamp01(audioLevel || 0);
+
+  const visemeScale = useMemo(() => {
+    if (state !== 'speaking') return 1;
+    const v = Number(visemeId || 0);
+    if (v <= 0) return 1.0;
+    if (v <= 3) return 1.03;
+    if (v <= 7) return 1.06;
+    return 1.08;
+  }, [state, visemeId]);
+
+  const palette = useMemo<{
+    ring: RingColors;
+    glow: string;
+    core: string;
+    cutout: string;
+  }>(() => {
+    switch (state) {
+      case 'listening':
+        return {
+          ring: ['rgba(255,255,255,0.95)', 'rgba(140,255,220,0.95)', 'rgba(160,235,255,0.95)', 'rgba(255,210,170,0.85)'],
+          glow: 'rgba(140,255,220,0.22)',
+          core: 'rgba(255,255,255,0.10)',
+          cutout: 'rgba(0,0,0,0.10)',
+        };
+      case 'thinking':
+        return {
+          ring: ['rgba(255,255,255,0.90)', 'rgba(170,140,255,0.85)', 'rgba(120,220,255,0.90)', 'rgba(255,180,255,0.75)'],
+          glow: 'rgba(160,200,255,0.20)',
+          core: 'rgba(255,255,255,0.08)',
+          cutout: 'rgba(0,0,0,0.12)',
+        };
+      case 'speaking':
+        return {
+          ring: ['rgba(255,255,255,0.95)', 'rgba(255,235,170,0.95)', 'rgba(170,230,255,0.90)', 'rgba(255,190,220,0.80)'],
+          glow: 'rgba(255,240,190,0.22)',
+          core: 'rgba(255,255,255,0.12)',
+          cutout: 'rgba(0,0,0,0.10)',
+        };
+      case 'idle':
+      default:
+        return {
+          ring: ['rgba(255,255,255,0.85)', 'rgba(160,235,255,0.80)', 'rgba(255,210,170,0.70)', 'rgba(170,140,255,0.70)'],
+          glow: 'rgba(255,255,255,0.10)',
+          core: 'rgba(255,255,255,0.06)',
+          cutout: 'rgba(0,0,0,0.14)',
+        };
+    }
+  }, [state]);
+
+  // ── Drive animations per state ────────────────────────────────────
+  useEffect(() => {
+    voiceAmp.value = withTiming(a, { duration: 90 });
+
+    const spinMs =
+      state === 'speaking' ? 1400 :
+      state === 'listening' ? 2200 :
+      state === 'thinking' ? 1800 : 3200;
+
+    ringSpin.value = withRepeat(withTiming(1, { duration: spinMs }), -1, false);
+
+    const breathe =
+      state === 'speaking'
+        ? withRepeat(withTiming(1.09, { duration: 520 }), -1, true)
+        : state === 'listening'
+          ? withRepeat(withTiming(1.06, { duration: 850 }), -1, true)
+          : state === 'thinking'
+            ? withRepeat(withTiming(1.05, { duration: 950 }), -1, true)
+            : withRepeat(withTiming(1.03, { duration: 1400 }), -1, true);
+
+    ringBreathe.value = breathe as any;
+
+    glowPulse.value =
+      state === 'speaking'
+        ? withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(0.2, { duration: 380 })), -1, false)
+        : state === 'listening'
+          ? withRepeat(withSequence(withTiming(0.9, { duration: 380 }), withTiming(0.15, { duration: 520 })), -1, false)
+          : withRepeat(withSequence(withTiming(0.6, { duration: 650 }), withTiming(0.1, { duration: 850 })), -1, false);
+  }, [a, state, glowPulse, ringSpin, ringBreathe, voiceAmp]);
+
+  // ── Particle data ─────────────────────────────────────────────────
+  const particleIntensity = useMemo(() => {
+    if (state === 'speaking') return 1.0;
+    if (state === 'listening') return 0.85;
+    if (state === 'thinking') return 0.55;
+    return 0.35;
+  }, [state]);
+
+  const particles = useMemo(() => {
+    const seed = Math.floor(size * 1000) ^ 0x9e3779b9;
+    const rnd = mulberry32(seed);
+    const count = 16;
+    const cx = size / 2;
+    const cy = size / 2;
+    const bandInner = (size / 2) - ringThickness;
+    const bandOuter = size / 2;
+
+    return Array.from({ length: count }).map((_, i) => {
+      const t = (i / count) * Math.PI * 2 + rnd() * 0.35;
+      const rr = bandInner + rnd() * (bandOuter - bandInner);
+      const x = cx + Math.cos(t) * rr;
+      const y = cy + Math.sin(t) * rr;
+      const dot = Math.max(1.5, size * (0.010 + rnd() * 0.020));
+      const delayMs = Math.floor(rnd() * 1200);
+      const durationMs = Math.floor(900 + rnd() * 1800);
+      return { x, y, r: dot, delayMs, durationMs };
+    });
+  }, [size, ringThickness]);
+
+  // ── Animated styles ───────────────────────────────────────────────
+  const glowStyle = useAnimatedStyle(() => {
+    const s = interpolate(glowPulse.value, [0, 1], [0.98, 1.08], Extrapolate.CLAMP);
+    const o = interpolate(glowPulse.value, [0, 1], [0.18, 0.38], Extrapolate.CLAMP);
+    return { opacity: o, transform: [{ scale: s }] };
+  });
+
+  const ringStyle = useAnimatedStyle(() => {
+    const rot = `${ringSpin.value * 360}deg`;
+    const amp = voiceAmp.value;
+    const voiceScale = interpolate(amp, [0, 1], [1.0, state === 'speaking' ? 1.07 : 1.05], Extrapolate.CLAMP);
+    return {
+      transform: [
+        { rotate: rot } as any,
+        { scale: ringBreathe.value * voiceScale * visemeScale } as any,
+      ],
+    };
+  }, [state, visemeScale]);
+
+  const innerGlowStyle = useAnimatedStyle(() => {
+    const amp = voiceAmp.value;
+    const inner = interpolate(amp, [0, 1], [0.9, state === 'speaking' ? 1.25 : 1.15], Extrapolate.CLAMP);
+    const o = interpolate(amp, [0, 1], [0.25, 0.65], Extrapolate.CLAMP);
+    return { opacity: o, transform: [{ scale: inner }] };
+  }, [state]);
+
+  // ── Render ────────────────────────────────────────────────────────
+  return (
+    <View style={[styles.root, { width: size, height: size }]}>
       {/* Outer glow */}
       <Animated.View
         style={[
-          orbStyles.glow,
-          { width: glowSize, height: glowSize, borderRadius: glowSize / 2, backgroundColor: glowColor },
-          glowAnimatedStyle,
-        ]}
-      />
-
-      {/* Ripple ring 1 */}
-      <Animated.View
-        style={[
-          orbStyles.ring,
+          styles.glow,
+          glowStyle,
           {
-            width: ringSize,
-            height: ringSize,
-            borderRadius: ringSize / 2,
-            borderColor: ZA.gold + '60',
+            width: size * 1.55,
+            height: size * 1.55,
+            borderRadius: (size * 1.55) / 2,
+            backgroundColor: palette.glow,
           },
-          ring1AnimatedStyle,
         ]}
       />
 
-      {/* Ripple ring 2 */}
+      {/* Ring */}
       <Animated.View
         style={[
-          orbStyles.ring,
-          {
-            width: ringSize * 1.15,
-            height: ringSize * 1.15,
-            borderRadius: (ringSize * 1.15) / 2,
-            borderColor: ZA.emerald + '40',
-          },
-          ring2AnimatedStyle,
-        ]}
-      />
-
-      {/* Core orb */}
-      <Animated.View
-        style={[
-          orbStyles.core,
+          styles.ringWrap,
+          ringStyle,
           { width: size, height: size, borderRadius: size / 2 },
-          coreAnimatedStyle,
         ]}
       >
         <LinearGradient
-          colors={[ZA.gold, ZA.emerald, ZA.deepBlue] as [string, string, ...string[]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[orbStyles.coreGradient, { width: size, height: size, borderRadius: size / 2 }]}
+          colors={palette.ring}
+          start={{ x: 0.15, y: 0.2 }}
+          end={{ x: 0.9, y: 0.85 }}
+          style={StyleSheet.absoluteFillObject}
         />
-        {/* Inner highlight for depth */}
+
+        {/* Sparkle particles */}
+        <View style={StyleSheet.absoluteFill}>
+          {particles.map((p, idx) => (
+            <ParticleDot
+              key={`p-${idx}`}
+              x={p.x}
+              y={p.y}
+              r={p.r}
+              delayMs={p.delayMs}
+              durationMs={p.durationMs}
+              intensity={particleIntensity}
+            />
+          ))}
+        </View>
+
+        {/* Inner cutout (creates ring) */}
         <View
           style={[
-            orbStyles.highlight,
+            styles.cutout,
             {
-              width: size * 0.35,
-              height: size * 0.2,
-              borderRadius: size * 0.15,
+              width: innerSize,
+              height: innerSize,
+              borderRadius: innerSize / 2,
+              backgroundColor: palette.cutout,
+            },
+          ]}
+        />
+
+        {/* Inner glow / core */}
+        <Animated.View
+          style={[
+            styles.innerGlow,
+            innerGlowStyle,
+            {
+              width: innerSize * 0.86,
+              height: innerSize * 0.86,
+              borderRadius: (innerSize * 0.86) / 2,
+              backgroundColor: palette.core,
             },
           ]}
         />
       </Animated.View>
     </View>
   );
-};
+}
 
-const orbStyles = StyleSheet.create({
-  container: {
+export default DashOrb;
+
+// ── Styles ──────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  root: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   glow: {
     position: 'absolute',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFFFFF',
+        shadowOpacity: 0.35,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 0 },
+      },
+      android: { elevation: 8 },
+    }),
   },
-  ring: {
-    position: 'absolute',
-    borderWidth: 2,
-  },
-  core: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 20,
-    justifyContent: 'center',
+  ringWrap: {
     alignItems: 'center',
+    justifyContent: 'center',
     overflow: 'hidden',
   },
-  coreGradient: {
+  cutout: {
     position: 'absolute',
   },
-  highlight: {
+  innerGlow: {
     position: 'absolute',
-    top: '15%',
-    left: '20%',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    transform: [{ rotate: '-20deg' }],
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FFFFFF',
+        shadowOpacity: 0.25,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 0 },
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  particle: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
 });
-
-export default DashOrb;

@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { Calendar, Plus, Edit, Trash2, CheckCircle, XCircle, BookOpen, X } from 'lucide-react';
+import { Calendar, Plus, Edit, Trash2, CheckCircle, XCircle, BookOpen, X, Sparkles } from 'lucide-react';
+import { useTermSuggestionAI } from '@/hooks/useTermSuggestionAI';
+import type { TermFormData } from '@/components/principal/year-planner/types';
 
 interface AcademicTerm {
   id: string;
@@ -37,6 +39,24 @@ export default function YearPlannerPage() {
     is_active: false,
     is_published: false,
   });
+
+  const {
+    suggest: aiSuggest,
+    isBusy: aiBusy,
+    error: aiError,
+    lastResult: aiLastResult,
+    applyToWebForm: aiApplyToWebForm,
+  } = useTermSuggestionAI({ context: 'ecd' });
+
+  const handleAISuggest = useCallback(async () => {
+    const currentForSuggest: TermFormData = {
+      ...formData,
+      start_date: formData.start_date ? new Date(formData.start_date) : new Date(),
+      end_date: formData.end_date ? new Date(formData.end_date) : new Date(),
+    };
+    const result = await aiSuggest(currentForSuggest);
+    if (result) aiApplyToWebForm(formData, setFormData);
+  }, [formData, aiSuggest, aiApplyToWebForm]);
 
   const { profile } = useUserProfile(userId);
   const preschoolId = profile?.preschoolId;
@@ -310,10 +330,34 @@ export default function YearPlannerPage() {
                 <h2 style={{ margin: 0 }}>
                   {editingTerm ? 'Edit Term' : 'Create New Term'}
                 </h2>
-                <button className="iconBtn" onClick={() => setShowCreateModal(false)}>
-                  <X size={20} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btnSecondary"
+                    onClick={handleAISuggest}
+                    disabled={aiBusy}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Sparkles size={18} />
+                    {aiBusy ? '…' : 'Suggest with Dash'}
+                  </button>
+                  <button className="iconBtn" onClick={() => setShowCreateModal(false)}>
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
+
+              {aiError && (
+                <div className="card" style={{ marginBottom: 16, padding: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error)' }}>
+                  {aiError}
+                </div>
+              )}
+              {aiLastResult?.tips && (
+                <div className="card" style={{ marginBottom: 16, padding: 12, background: 'rgba(139,92,246,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+                  <span style={{ fontSize: 13 }}>{aiLastResult.tips}</span>
+                </div>
+              )}
 
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gap: 16 }}>

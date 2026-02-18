@@ -5,6 +5,7 @@
 
 // Prefix guards ensure plain-text payloads never get parsed as structured media blocks
 const MEDIA_PREFIX = '__media__';
+const CALL_EVENT_PREFIX = '__call_event__';
 
 export type MediaType = 'image' | 'audio' | 'file';
 
@@ -34,11 +35,75 @@ export interface EncodeMediaOptions {
   durationMs?: number;
 }
 
+export type CallEventType = 'missed_call';
+
+export interface CallEventContent {
+  eventType: CallEventType;
+  callId: string;
+  callType: 'voice' | 'video';
+  callerId?: string;
+  callerName?: string;
+  threadId?: string;
+  occurredAt?: string;
+}
+
+export interface EncodeCallEventOptions {
+  eventType: CallEventType;
+  callId: string;
+  callType: 'voice' | 'video';
+  callerId?: string;
+  callerName?: string;
+  threadId?: string;
+  occurredAt?: string;
+}
+
 /**
  * Encode media content as a __media__ prefixed string
  */
 export const encodeMediaContent = (options: EncodeMediaOptions): string => {
   return `${MEDIA_PREFIX}${JSON.stringify(options)}`;
+};
+
+/**
+ * Encode call events as a __call_event__ prefixed payload for thread cards.
+ */
+export const encodeCallEventContent = (options: EncodeCallEventOptions): string => {
+  return `${CALL_EVENT_PREFIX}${JSON.stringify(options)}`;
+};
+
+/**
+ * Parse __call_event__ payloads for rich call cards.
+ */
+export const parseCallEventContent = (rawContent: string): CallEventContent | null => {
+  if (typeof rawContent !== 'string' || !rawContent.startsWith(CALL_EVENT_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawContent.slice(CALL_EVENT_PREFIX.length));
+    const callId = typeof parsed?.callId === 'string' ? parsed.callId : parsed?.call_id;
+    const rawCallType = typeof parsed?.callType === 'string' ? parsed.callType : parsed?.call_type;
+    if (!parsed || typeof callId !== 'string' || typeof rawCallType !== 'string') {
+      return null;
+    }
+
+    const eventType = parsed.eventType || parsed.event_type;
+    if (eventType !== 'missed_call') {
+      return null;
+    }
+
+    return {
+      eventType: 'missed_call',
+      callId,
+      callType: rawCallType === 'video' ? 'video' : 'voice',
+      callerId: typeof parsed.callerId === 'string' ? parsed.callerId : parsed.caller_id,
+      callerName: typeof parsed.callerName === 'string' ? parsed.callerName : parsed.caller_name,
+      threadId: typeof parsed.threadId === 'string' ? parsed.threadId : parsed.thread_id,
+      occurredAt: typeof parsed.occurredAt === 'string' ? parsed.occurredAt : parsed.occurred_at,
+    };
+  } catch (_err) {
+    return null;
+  }
 };
 
 /**
@@ -90,6 +155,11 @@ export const isFileMedia = (content: RichMessageContent): content is MediaMessag
 export const getMessageDisplayText = (rawContent: string): string => {
   if (!rawContent || typeof rawContent !== 'string') {
     return '';
+  }
+
+  const callEvent = parseCallEventContent(rawContent);
+  if (callEvent?.eventType === 'missed_call') {
+    return callEvent.callType === 'video' ? '📹 Missed video call' : '📞 Missed call';
   }
 
   const content = parseMessageContent(rawContent);

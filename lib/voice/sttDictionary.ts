@@ -23,6 +23,19 @@ export const STT_CONTEXTUAL_STRINGS: string[] = [
   'EduDash Pro',
   'Dash AI',
   'Dash Tutor',
+  'superadmin',
+  'super admin',
+
+  // App surfaces commonly spoken
+  'dashboard',
+  'principal',
+  'principal dashboard',
+  'parent dashboard',
+  'teacher dashboard',
+  'learner dashboard',
+  'subscription',
+  'notifications',
+  'settings',
 
   // Commands users say to Dash
   'check',
@@ -35,6 +48,14 @@ export const STT_CONTEXTUAL_STRINGS: string[] = [
   'mark my work',
   'did I get it right',
   'diagnose',
+  'generate',
+  'create a lesson',
+  'grade this',
+  'voice chunks',
+  'chunking',
+  'breaking up',
+  'letter sound',
+  'phoneme',
 
   // Educational
   'phonics',
@@ -47,8 +68,16 @@ export const STT_CONTEXTUAL_STRINGS: string[] = [
   'Grade 1',
   'Grade 2',
   'Grade 3',
+  'Grade 4',
+  'Grade 5',
+  'Grade 6',
+  'Grade 7',
   'worksheet',
   'lesson',
+  'curriculum',
+  'assessment',
+  'rubric',
+  'memorandum',
 
   // SA languages (frequently spoken in voice input)
   'isiZulu',
@@ -74,9 +103,7 @@ export const STT_CONTEXTUAL_STRINGS: string[] = [
 // Order matters — more specific patterns first.
 
 export const STT_CORRECTIONS: Array<[RegExp, string]> = [
-  // ── Existing generic corrections ──
-  [/\bit socks\b/gi, "it's socks"],
-  [/\bsummeriz(e|ing|ed|er)\b/gi, 'summarize$1'],
+  // ── Voice-dictation punctuation ──
   [/\bsend comma\b/gi, 'send,'],
   [/\bnew line\b/gi, '. '],
   [/\bfull stop\b/gi, '.'],
@@ -86,12 +113,49 @@ export const STT_CORRECTIONS: Array<[RegExp, string]> = [
   [/\bclose bracket\b/gi, ')'],
   [/\bcomma\b/gi, ','],
 
-  // ── EduDash brand (common misrecognitions) ──
+  // ── Generic misrecognitions ──
+  [/\bit socks\b/gi, "it's socks"],
+  [/\bsummeriz(e|ing|ed|er)\b/gi, 'summarize$1'],
+  [/\bbreaking up junks\b/gi, 'breaking up chunks'],
+  [/\bjunks\b/gi, 'chunks'],
+  [/\bhi dish\b/gi, 'Hi Dash'],
+  [/\bhey dish\b/gi, 'Hey Dash'],
+
+  // ── "superadmin" — the #1 misrecognised domain term ──
+  [/\bsuper\s*8[\s-]*mon\b/gi, 'superadmin'],
+  [/\bsuper\s*admin\b/gi, 'superadmin'],
+  [/\bsuper\s+at\s*mon\b/gi, 'superadmin'],
+  [/\bsuper\s*atm[io]n\b/gi, 'superadmin'],
+  [/\bsuper\s*add?\s*min\b/gi, 'superadmin'],
+  [/\bsuper\s*aid\s*men\b/gi, 'superadmin'],
+  [/\bsuper\s*at?\s*men\b/gi, 'superadmin'],
+  [/\bsuper\s*admit\b/gi, 'superadmin'],
+
+  // ── "dashboard" ──
+  [/\bdash\s*board\b/gi, 'dashboard'],
+  [/\bdash\s*bolt\b/gi, 'dashboard'],
+  [/\bdash\s*bored\b/gi, 'dashboard'],
+  [/\bdust\s*board\b/gi, 'dashboard'],
+
+  // ── "principal" ──
+  [/\bprincip[ae]l?\b/gi, 'principal'],
+  [/\bprincipal's\b/gi, "principal's"],
+
+  // ── "subscription" ──
+  [/\bsubscript\b/gi, 'subscription'],
+  [/\bsub\s*scription\b/gi, 'subscription'],
+
+  // ── "curriculum" ──
+  [/\bcurricul[ae]m?\b/gi, 'curriculum'],
+
+  // ── EduDash brand ──
   [/\bdestruct\b/gi, 'Dash check'],
   [/\bdash\s*check\b/gi, 'Dash check'],
   [/\bedge?\s*dash\b/gi, 'EduDash'],
   [/\bedu\s+dash\b/gi, 'EduDash'],
   [/\bedu\s*-?\s*dash\s+pro\b/gi, 'EduDash Pro'],
+  [/\bedu\s*-?\s*dash\s*prow?\b/gi, 'EduDash Pro'],
+  [/\bany\s*dash\b/gi, 'EduDash'],
 
   // ── SA language names ──
   [/\bissy?\s*zulu\b/gi, 'isiZulu'],
@@ -112,4 +176,21 @@ export const STT_CORRECTIONS: Array<[RegExp, string]> = [
   // ── Educational terms ──
   [/\bcaps\b/g, 'CAPS'],
   [/\bgrade\s*are\b/gi, 'Grade R'],
+  [/\bgrade\s*our\b/gi, 'Grade R'],
+  [/\bmemorandum\b/gi, 'memorandum'],
+  [/\brubric\b/gi, 'rubric'],
+  [/\bassessment\b/gi, 'assessment'],
 ];
+
+// ── Lightweight partial correction ─────────────────────────────────
+// Applied to live partial results for immediate visual correction.
+// Must be fast — only domain-specific replacements, no filler removal.
+
+export function applyPartialCorrections(text: string): string {
+  if (!text) return text;
+  let result = text;
+  for (const [pattern, replacement] of STT_CORRECTIONS) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}

@@ -7,7 +7,8 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -716,7 +717,7 @@ export default function AttendanceHistoryScreen() {
       <ThemedStatusBar />
       
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: palette.background }}>
-        <FlatList
+        <FlashList
           data={records}
           keyExtractor={(item) => item.id}
           renderItem={renderAttendanceRecord}
@@ -735,6 +736,7 @@ export default function AttendanceHistoryScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          estimatedItemSize={80}
         />
         
         {/* Floating Action Button */}

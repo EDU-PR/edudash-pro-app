@@ -107,6 +107,7 @@ interface WhatsAppStyleVideoCallProps {
   calleeId?: string;
   callId?: string;
   meetingUrl?: string;
+  threadId?: string;
   onCallStateChange?: (state: CallState) => void;
   onMinimize?: () => void;
 }
@@ -123,6 +124,7 @@ export function WhatsAppStyleVideoCall({
   calleeId,
   callId,
   meetingUrl,
+  threadId,
   onCallStateChange,
   onMinimize,
 }: WhatsAppStyleVideoCallProps) {
@@ -608,8 +610,11 @@ export function WhatsAppStyleVideoCall({
   }, [callState, isSpeakerOn]);
 
   /**
-   * Play custom ringback using expo-audio with retry logic
-   * CRITICAL: This plays the ringback tone for the CALLER while waiting for callee to answer
+   * Play ringback tone for the caller while waiting for callee to answer.
+   * 
+   * PRIORITY ORDER — uses device default first for familiar "krring-krring":
+   * 1. InCallManager.startRingback('_DEFAULT_') — system/carrier ringback tone
+   * 2. expo-audio with bundled ringback.mp3 — fallback if InCallManager unavailable
    */
   const playCustomRingback = useCallback(async (retryAttempt = 0) => {
     if (ringbackStartedRef.current && ringbackPlayerRef.current?.playing) {
@@ -619,62 +624,54 @@ export function WhatsAppStyleVideoCall({
     
     console.log('[VideoCall] 🔊 playCustomRingback called', {
       attempt: retryAttempt + 1,
-      hasAsset: !!RINGBACK_SOUND,
-      loadError: RINGBACK_LOAD_ERROR,
       hasInCallManager: !!InCallManager,
+      hasAsset: !!RINGBACK_SOUND,
     });
+    
+    // STRATEGY 1: Use InCallManager system ringback (device default "krring-krring")
+    if (InCallManager) {
+      try {
+        InCallManager.setForceSpeakerphoneOn(false);
+        InCallManager.startRingback('_DEFAULT_');
+        ringbackStartedRef.current = true;
+        if (!callTelemetryRef.current.ringbackStartedAt) {
+          callTelemetryRef.current.ringbackStartedAt = Date.now();
+          track('edudash.calls.ringback_started', { call_type: 'video', source: 'incallmanager' });
+        }
+        console.log('[VideoCall] ✅ Device default ringback started via InCallManager');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        return;
+      } catch (e) {
+        console.warn('[VideoCall] InCallManager ringback failed, falling back to expo-audio:', e);
+      }
+    }
+    
+    // STRATEGY 2: Fallback to expo-audio with bundled sound
+    if (!RINGBACK_SOUND) {
+      console.error('[VideoCall] ❌ No ringback sound available');
+      return;
+    }
     
     const MAX_RETRIES = 3;
     const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000);
     
-    // Check if sound file is loaded
-    if (!RINGBACK_SOUND) {
-      console.error('[VideoCall] ❌ Ringback sound not loaded at module level');
-      
-      // Try InCallManager as last resort fallback
-      if (retryAttempt >= MAX_RETRIES - 1 && InCallManager) {
-        try {
-          console.log('[VideoCall] 🔄 Falling back to InCallManager system ringback');
-          InCallManager.startRingback('_DEFAULT_');
-          ringbackStartedRef.current = true;
-          if (!callTelemetryRef.current.ringbackStartedAt) {
-            callTelemetryRef.current.ringbackStartedAt = Date.now();
-            track('edudash.calls.ringback_started', { call_type: 'video', source: 'incallmanager' });
-          }
-          console.log('[VideoCall] ✅ InCallManager system ringback started');
-        } catch (e) {
-          console.error('[VideoCall] ❌ System ringback fallback also failed:', e);
-        }
-      }
-      return;
-    }
-    
     try {
-      console.log(`[VideoCall] 🔊 Starting ringback via expo-audio (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
+      console.log(`[VideoCall] 🔊 Starting ringback via expo-audio fallback (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
       
-      // Set audio mode to allow playback through earpiece
       await setAudioModeAsync({
         playsInSilentMode: true,
         interruptionMode: 'duckOthers',
         allowsRecording: true,
         shouldPlayInBackground: true,
-        shouldRouteThroughEarpiece: true, // Route to earpiece like a phone call
+        shouldRouteThroughEarpiece: true,
       });
-      console.log('[VideoCall] ✅ Audio mode set for earpiece');
       
-      // Create and play the ringback sound
       const player = createAudioPlayer(RINGBACK_SOUND);
       player.loop = true;
       player.volume = 1.0;
-      
-      // Store ref before playing
       ringbackPlayerRef.current = player;
       
-      // Start playback
       player.play();
-      console.log('[VideoCall] 🎵 player.play() called');
-      
-      // Short delay to verify playback started
       await new Promise(resolve => setTimeout(resolve, 200));
       
       ringbackStartedRef.current = true;
@@ -682,37 +679,18 @@ export function WhatsAppStyleVideoCall({
         callTelemetryRef.current.ringbackStartedAt = Date.now();
         track('edudash.calls.ringback_started', { call_type: 'video', source: 'expo-audio' });
       }
-      console.log('[VideoCall] ✅ Custom ringback playing!');
-      
-      // Haptic feedback
+      console.log('[VideoCall] ✅ expo-audio ringback playing (fallback)');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (error) {
-      console.error(`[VideoCall] ❌ Failed to start ringback (attempt ${retryAttempt + 1}):`, error);
+      console.error(`[VideoCall] ❌ expo-audio ringback failed (attempt ${retryAttempt + 1}):`, error);
       ringbackStartedRef.current = false;
       ringbackPlayerRef.current = null;
       
-      // Retry with exponential backoff
       if (retryAttempt < MAX_RETRIES - 1) {
         console.log(`[VideoCall] 🔄 Retrying ringback in ${retryDelay}ms...`);
         setTimeout(() => {
           playCustomRingback(retryAttempt + 1);
         }, retryDelay);
-      } else {
-        // Final fallback: try InCallManager system ringback
-        if (InCallManager) {
-          try {
-            console.log('[VideoCall] 🔄 Final fallback to InCallManager system ringback');
-            InCallManager.startRingback('_DEFAULT_');
-            ringbackStartedRef.current = true;
-            if (!callTelemetryRef.current.ringbackStartedAt) {
-              callTelemetryRef.current.ringbackStartedAt = Date.now();
-              track('edudash.calls.ringback_started', { call_type: 'video', source: 'incallmanager_fallback' });
-            }
-            console.log('[VideoCall] ✅ InCallManager fallback ringback started');
-          } catch (e) {
-            console.error('[VideoCall] ❌ All ringback methods failed:', e);
-          }
-        }
       }
     }
   }, []);
@@ -729,6 +707,7 @@ export function WhatsAppStyleVideoCall({
       });
       callTelemetryRef.current.ringbackStartedAt = null;
     }
+    // Stop expo-audio player if used
     if (ringbackPlayerRef.current) {
       try {
         ringbackPlayerRef.current.pause();
@@ -738,14 +717,20 @@ export function WhatsAppStyleVideoCall({
       }
       ringbackPlayerRef.current = null;
     }
+    // Stop InCallManager ringback (primary method)
+    if (InCallManager) {
+      try {
+        InCallManager.stopRingback();
+      } catch (e) {
+        // Ignore - may not have been started
+      }
+    }
     ringbackStartedRef.current = false;
   }, []);
 
   // InCallManager: Start ringback for caller, stop when connected
-  // Uses ONLY custom ringback via expo-audio to prevent duplicate audio
-  // System ringback (_DEFAULT_) was removed because:
-  // 1. It can cause double audio when combined with custom ringback
-  // 2. InCallManager system ringback ignores earpiece setting on some Android devices
+  // Uses device default ringback via InCallManager as primary source
+  // Falls back to expo-audio with bundled ringback.mp3 if InCallManager fails
   useEffect(() => {
     if (callState === 'connecting' || callState === 'ringing') {
       const initAudio = async () => {
@@ -918,6 +903,7 @@ export function WhatsAppStyleVideoCall({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
+              thread_id: threadId || null,
               call_type: 'video',
               status: 'ringing',
               caller_name: callerName,
@@ -939,10 +925,17 @@ export function WhatsAppStyleVideoCall({
                 caller_name: callerName,
                 call_type: 'video',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => res.json()).then(result => {
               if (result.success) {
                 console.log('[VideoCall] ✅ FCM wake-on-call message sent');
+              } else if (result?.fallback_to_expo) {
+                console.log('[VideoCall] ℹ️ FCM fallback active', {
+                  attempted: result?.attempted_tokens,
+                  successful: result?.successful_tokens,
+                  errorCodes: result?.error_codes,
+                });
               } else {
                 console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
               }
@@ -965,6 +958,7 @@ export function WhatsAppStyleVideoCall({
                 caller_name: callerName,
                 call_type: 'video',
                 meeting_url: roomUrl,
+                thread_id: threadId,
               }),
             }).then(res => {
               if (res.ok) {
@@ -987,6 +981,7 @@ export function WhatsAppStyleVideoCall({
                 meeting_url: roomUrl,
                 call_type: 'video',
                 caller_name: callerName,
+                thread_id: threadId,
               },
             });
 
@@ -1380,7 +1375,7 @@ export function WhatsAppStyleVideoCall({
       isCleanedUp = true;
       cleanupCall();
     };
-  }, [isOpen, meetingUrl, userName, isOwner, calleeId, cleanupCall, updateParticipants]);
+  }, [isOpen, meetingUrl, userName, isOwner, calleeId, threadId, cleanupCall, updateParticipants]);
 
   // Show controls on tap
   const handleScreenTap = useCallback(() => {

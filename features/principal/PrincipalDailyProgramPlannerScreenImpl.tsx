@@ -1,0 +1,1778 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { extractOrganizationId } from '@/lib/tenant/compat';
+import type { DailyProgramBlock, WeeklyProgramDraft } from '@/types/ecd-planning';
+import { WeeklyProgramCopilotService } from '@/lib/services/weeklyProgramCopilotService';
+import {
+  WeeklyProgramService,
+  type ProgramTimeRules,
+} from '@/lib/services/weeklyProgramService';
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+const DAY_ORDER = [1, 2, 3, 4, 5] as const;
+const DAY_LABELS: Record<number, string> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+  7: 'Sunday',
+};
+
+function toDateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfWeekMonday(value: Date | string): string {
+  const date = typeof value === 'string'
+    ? new Date(`${String(value).slice(0, 10)}T00:00:00.000Z`)
+    : new Date(value);
+
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const day = safeDate.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  safeDate.setUTCDate(safeDate.getUTCDate() + offset);
+  return toDateOnly(safeDate);
+}
+
+function addDays(dateLike: string, days: number): string {
+  const date = new Date(`${dateLike}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateOnly(date);
+}
+
+function normalizeTime(value: string): string {
+  const trimmed = String(value || '').trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return trimmed;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return trimmed;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return trimmed;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+const buildDefaultRules = (): ProgramTimeRules => ({
+  arrivalStartTime: '07:30',
+  arrivalCutoffTime: '08:30',
+  pickupStartTime: '13:00',
+  pickupCutoffTime: '14:00',
+});
+
+const THEME_SUGGESTIONS = [
+  'Healthy Habits',
+  'All About Me',
+  'Community Helpers',
+  'Seasons & Weather',
+  'Numbers & Shapes',
+] as const;
+
+const OBJECTIVE_SUGGESTIONS = [
+  'Routine consistency',
+  'Self-help skills',
+  'Social confidence',
+  'Early numeracy',
+  'Oral language',
+] as const;
+
+type PlannerPreset = {
+  id: 'half_day' | 'full_day' | 'aftercare';
+  label: string;
+  caption: string;
+  themeTitle: string;
+  ageGroup: string;
+  dailyMinutes: string;
+  weeklyObjectives: string;
+  budgetLevel: 'low' | 'medium' | 'high';
+  includeAssessment: boolean;
+  includeParentTips: boolean;
+  rules: ProgramTimeRules;
+};
+
+type RoutineOptionId =
+  | 'toiletRoutine'
+  | 'napTime'
+  | 'mealBreaks'
+  | 'outdoorPlay'
+  | 'storyCircle'
+  | 'transitionCues'
+  | 'hygieneChecks';
+
+type RoutineOptionState = Record<RoutineOptionId, boolean>;
+
+const SMART_PRESETS: PlannerPreset[] = [
+  {
+    id: 'half_day',
+    label: 'Half-Day Core',
+    caption: 'Fastest setup for 3-6 classes.',
+    themeTitle: 'Playful Foundations',
+    ageGroup: '3-6',
+    dailyMinutes: '300',
+    weeklyObjectives: 'Routine consistency, self-help skills, social confidence',
+    budgetLevel: 'medium',
+    includeAssessment: true,
+    includeParentTips: true,
+    rules: {
+      arrivalStartTime: '07:30',
+      arrivalCutoffTime: '08:30',
+      pickupStartTime: '12:30',
+      pickupCutoffTime: '13:30',
+    },
+  },
+  {
+    id: 'full_day',
+    label: 'Full-Day Focus',
+    caption: 'Long day with learning + rest.',
+    themeTitle: 'Curious Learners',
+    ageGroup: '4-6',
+    dailyMinutes: '480',
+    weeklyObjectives: 'Literacy readiness, numeracy confidence, social-emotional growth',
+    budgetLevel: 'high',
+    includeAssessment: true,
+    includeParentTips: true,
+    rules: {
+      arrivalStartTime: '07:00',
+      arrivalCutoffTime: '08:30',
+      pickupStartTime: '16:00',
+      pickupCutoffTime: '17:00',
+    },
+  },
+  {
+    id: 'aftercare',
+    label: 'Aftercare Blend',
+    caption: 'Academic support + calmer transitions.',
+    themeTitle: 'Homework & Enrichment',
+    ageGroup: '6-9',
+    dailyMinutes: '360',
+    weeklyObjectives: 'Homework support, emotional regulation, independent routines',
+    budgetLevel: 'low',
+    includeAssessment: false,
+    includeParentTips: true,
+    rules: {
+      arrivalStartTime: '12:30',
+      arrivalCutoffTime: '13:30',
+      pickupStartTime: '17:00',
+      pickupCutoffTime: '18:00',
+    },
+  },
+];
+
+const ROUTINE_ESSENTIALS: Array<{ id: RoutineOptionId; label: string; hint: string }> = [
+  { id: 'toiletRoutine', label: 'Toilet Routine', hint: 'Bathroom prompts and support moments' },
+  { id: 'napTime', label: 'Nap / Quiet Time', hint: 'Rest reset in the daily flow' },
+  { id: 'mealBreaks', label: 'Meals & Snacks', hint: 'Nutrition windows every day' },
+  { id: 'outdoorPlay', label: 'Outdoor Play', hint: 'Gross-motor movement outside' },
+  { id: 'storyCircle', label: 'Story / Circle Time', hint: 'Daily literacy touchpoint' },
+  { id: 'transitionCues', label: 'Transition Cues', hint: 'Clear move-to-next activity cues' },
+  { id: 'hygieneChecks', label: 'Hygiene Routines', hint: 'Handwashing, cleanup, self-care' },
+];
+
+const DEFAULT_ROUTINE_OPTIONS: RoutineOptionState = {
+  toiletRoutine: true,
+  napTime: true,
+  mealBreaks: true,
+  outdoorPlay: true,
+  storyCircle: true,
+  transitionCues: true,
+  hygieneChecks: true,
+};
+
+const routineOptionsForPreset = (presetId: PlannerPreset['id']): RoutineOptionState => {
+  if (presetId === 'aftercare') {
+    return {
+      ...DEFAULT_ROUTINE_OPTIONS,
+      napTime: false,
+      storyCircle: false,
+    };
+  }
+
+  if (presetId === 'half_day') {
+    return {
+      ...DEFAULT_ROUTINE_OPTIONS,
+      napTime: false,
+    };
+  }
+
+  return {
+    ...DEFAULT_ROUTINE_OPTIONS,
+    napTime: true,
+  };
+};
+
+function toMinutes(value: string): number | null {
+  const normalized = normalizeTime(value);
+  if (!normalized || !normalized.includes(':')) return null;
+  const [hours, minutes] = normalized.split(':').map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+export default function PrincipalDailyProgramPlannerScreen() {
+  const { theme } = useTheme();
+  const { profile, user } = useAuth();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const organizationId = extractOrganizationId(profile);
+  const userId = user?.id || profile?.id;
+
+  const [weekStartDate, setWeekStartDate] = useState(() => startOfWeekMonday(new Date()));
+  const [themeTitle, setThemeTitle] = useState('Healthy Habits');
+  const [ageGroup, setAgeGroup] = useState('3-6');
+  const [weeklyObjectives, setWeeklyObjectives] = useState('Routine consistency, self-help skills, social confidence');
+  const [dailyMinutes, setDailyMinutes] = useState('300');
+  const [budgetLevel, setBudgetLevel] = useState<'low' | 'medium' | 'high'>('medium');
+  const [includeAssessment, setIncludeAssessment] = useState(true);
+  const [includeParentTips, setIncludeParentTips] = useState(true);
+  const [routineOptions, setRoutineOptions] = useState<RoutineOptionState>(() => ({
+    ...DEFAULT_ROUTINE_OPTIONS,
+  }));
+  const [selectedPresetId, setSelectedPresetId] = useState<PlannerPreset['id'] | null>(null);
+
+  const [rules, setRules] = useState<ProgramTimeRules>(buildDefaultRules());
+
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
+  const [programs, setPrograms] = useState<WeeklyProgramDraft[]>([]);
+
+  const loadPrograms = useCallback(async () => {
+    if (!organizationId) {
+      setPrograms([]);
+      return;
+    }
+
+    try {
+      const data = await WeeklyProgramService.listWeeklyPrograms({
+        preschoolId: organizationId,
+        limit: 16,
+      });
+      setPrograms(data);
+    } catch (error: unknown) {
+      console.error('Failed to load weekly programs:', error);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    void loadPrograms();
+  }, [loadPrograms]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadPrograms();
+    setRefreshing(false);
+  }, [loadPrograms]);
+
+  const generateProgram = useCallback(async () => {
+    if (!organizationId || !userId) {
+      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      return;
+    }
+
+    if (!themeTitle.trim()) {
+      Alert.alert('Theme required', 'Please add a weekly theme.');
+      return;
+    }
+
+    if (!ageGroup.trim()) {
+      Alert.alert('Age group required', 'Please specify the learner age group.');
+      return;
+    }
+
+    const safeDailyMinutes = Number(dailyMinutes);
+    if (!Number.isFinite(safeDailyMinutes) || safeDailyMinutes < 120) {
+      Alert.alert('Daily minutes too low', 'Use at least 120 minutes so Dash can build a realistic routine.');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const generated = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm({
+        preschoolId: organizationId,
+        createdBy: userId,
+        weekStartDate,
+        theme: themeTitle.trim(),
+        ageGroup: ageGroup.trim() || '3-6',
+        weeklyObjectives: weeklyObjectives
+          .split(/[\n,;|]/g)
+          .map((item) => item.trim())
+          .filter(Boolean),
+        constraints: {
+          dailyMinutes: Math.max(120, safeDailyMinutes || 300),
+          budgetLevel,
+          includeAssessmentBlock: includeAssessment,
+          includeParentTipPerDay: includeParentTips,
+          includeToiletRoutine: routineOptions.toiletRoutine,
+          includeNapTime: routineOptions.napTime,
+          includeMealBlocks: routineOptions.mealBreaks,
+          includeOutdoorPlay: routineOptions.outdoorPlay,
+          includeStoryCircle: routineOptions.storyCircle,
+          includeTransitionCues: routineOptions.transitionCues,
+          includeHygieneChecks: routineOptions.hygieneChecks,
+        },
+      });
+
+      setDraft({
+        ...generated,
+        preschool_id: organizationId,
+        created_by: userId,
+        week_start_date: startOfWeekMonday(weekStartDate),
+        week_end_date: addDays(startOfWeekMonday(weekStartDate), 4),
+      });
+
+      Alert.alert('Draft ready', 'AI generated your daily routine. Review and share when ready.');
+    } catch (error: unknown) {
+      Alert.alert('Generation failed', error instanceof Error ? error.message : 'Could not generate program.');
+    } finally {
+      setGenerating(false);
+    }
+  }, [
+    ageGroup,
+    budgetLevel,
+    dailyMinutes,
+    includeAssessment,
+    includeParentTips,
+    organizationId,
+    routineOptions.hygieneChecks,
+    routineOptions.mealBreaks,
+    routineOptions.napTime,
+    routineOptions.outdoorPlay,
+    routineOptions.storyCircle,
+    routineOptions.toiletRoutine,
+    routineOptions.transitionCues,
+    themeTitle,
+    userId,
+    weekStartDate,
+    weeklyObjectives,
+  ]);
+
+  const saveDraft = useCallback(async (): Promise<WeeklyProgramDraft | null> => {
+    if (!draft) {
+      Alert.alert('No draft', 'Generate or load a draft first.');
+      return null;
+    }
+
+    if (!organizationId || !userId) {
+      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      return null;
+    }
+
+    setSaving(true);
+    try {
+      const saved = await WeeklyProgramService.saveWeeklyProgram({
+        weeklyProgram: {
+          ...draft,
+          preschool_id: organizationId,
+          created_by: userId,
+          week_start_date: startOfWeekMonday(draft.week_start_date || weekStartDate),
+          week_end_date: addDays(startOfWeekMonday(draft.week_start_date || weekStartDate), 4),
+          age_group: draft.age_group || ageGroup,
+          title: draft.title || `${themeTitle} Daily Program`,
+          summary: draft.summary || `${themeTitle} routine plan for the week`,
+          status: draft.status || 'draft',
+        },
+      });
+
+      setDraft(saved);
+      await loadPrograms();
+      Alert.alert('Saved', 'Daily routine draft saved successfully.');
+      return saved;
+    } catch (error: unknown) {
+      Alert.alert('Save failed', error instanceof Error ? error.message : 'Failed to save draft.');
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }, [ageGroup, draft, loadPrograms, organizationId, themeTitle, userId, weekStartDate]);
+
+  const shareWithParents = useCallback(async (programOverride?: WeeklyProgramDraft) => {
+    const activeProgram = programOverride || draft;
+    if (!activeProgram) {
+      Alert.alert('No program', 'Generate or load a program before sharing.');
+      return;
+    }
+
+    if (!organizationId || !userId) {
+      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      return;
+    }
+
+    const { normalized, issues } = WeeklyProgramService.validateProgramTimeRules(rules);
+    if (issues.length > 0) {
+      Alert.alert('Fix time rules', issues.join('\n'));
+      return;
+    }
+
+    setSharing(true);
+    try {
+      let programToShare = activeProgram;
+      if (!programToShare.id) {
+        const saved = await saveDraft();
+        if (!saved?.id) {
+          setSharing(false);
+          return;
+        }
+        programToShare = saved;
+      }
+
+      await WeeklyProgramService.shareWeeklyProgramWithParents({
+        weeklyProgramId: programToShare.id,
+        preschoolId: organizationId,
+        sharedBy: userId,
+        rules: normalized,
+      });
+
+      await loadPrograms();
+      Alert.alert(
+        'Shared with Parents',
+        'Routine shared with strict arrival and pickup rules. Parents received a published announcement.',
+      );
+    } catch (error: unknown) {
+      Alert.alert('Share failed', error instanceof Error ? error.message : 'Could not share routine.');
+    } finally {
+      setSharing(false);
+    }
+  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
+
+  const applyPreset = useCallback((preset: 'half_day' | 'full_day' | 'aftercare') => {
+    if (preset === 'half_day') {
+      setRules({
+        arrivalStartTime: '07:30',
+        arrivalCutoffTime: '08:30',
+        pickupStartTime: '12:30',
+        pickupCutoffTime: '13:30',
+      });
+      return;
+    }
+
+    if (preset === 'aftercare') {
+      setRules({
+        arrivalStartTime: '12:30',
+        arrivalCutoffTime: '13:30',
+        pickupStartTime: '17:00',
+        pickupCutoffTime: '18:00',
+      });
+      return;
+    }
+
+    setRules({
+      arrivalStartTime: '07:00',
+      arrivalCutoffTime: '08:30',
+      pickupStartTime: '16:00',
+      pickupCutoffTime: '17:00',
+    });
+  }, []);
+
+  const applySmartPreset = useCallback((preset: PlannerPreset) => {
+    setSelectedPresetId(preset.id);
+    setThemeTitle(preset.themeTitle);
+    setAgeGroup(preset.ageGroup);
+    setDailyMinutes(preset.dailyMinutes);
+    setWeeklyObjectives(preset.weeklyObjectives);
+    setBudgetLevel(preset.budgetLevel);
+    setIncludeAssessment(preset.includeAssessment);
+    setIncludeParentTips(preset.includeParentTips);
+    setRoutineOptions(routineOptionsForPreset(preset.id));
+    setRules(preset.rules);
+  }, []);
+
+  const toggleRoutineOption = useCallback((id: RoutineOptionId) => {
+    setRoutineOptions((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const addObjectiveChip = useCallback((value: string) => {
+    setWeeklyObjectives((prev) => {
+      const existing = prev
+        .split(/[\n,;|]/g)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (existing.some((item) => item.toLowerCase() === value.toLowerCase())) {
+        return prev;
+      }
+      return [...existing, value].join(', ');
+    });
+  }, []);
+
+  const updateDraftBlock = useCallback((day: number, order: number, patch: Partial<DailyProgramBlock>) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        blocks: prev.blocks.map((block) => {
+          if (block.day_of_week !== day || block.block_order !== order) return block;
+          return { ...block, ...patch };
+        }),
+      };
+    });
+  }, []);
+
+  const addBlockForDay = useCallback((day: number) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const dayBlocks = prev.blocks.filter((block) => block.day_of_week === day);
+      const nextOrder = dayBlocks.length > 0 ? Math.max(...dayBlocks.map((block) => block.block_order)) + 1 : 1;
+
+      return {
+        ...prev,
+        blocks: [
+          ...prev.blocks,
+          {
+            day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+            block_order: nextOrder,
+            block_type: 'learning',
+            title: `Block ${nextOrder}`,
+            start_time: null,
+            end_time: null,
+            objectives: [],
+            materials: [],
+            transition_cue: null,
+            notes: null,
+            parent_tip: '',
+          },
+        ],
+      };
+    });
+  }, []);
+
+  const removeBlock = useCallback((day: number, order: number) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const remaining = prev.blocks
+        .filter((block) => !(block.day_of_week === day && block.block_order === order))
+        .map((block) => ({ ...block }));
+
+      return {
+        ...prev,
+        blocks: remaining,
+      };
+    });
+  }, []);
+
+  const loadProgramIntoEditor = useCallback((program: WeeklyProgramDraft) => {
+    setSelectedPresetId(null);
+    setWeekStartDate(startOfWeekMonday(program.week_start_date));
+    setThemeTitle(program.title || themeTitle);
+    setAgeGroup(program.age_group || '3-6');
+    setDailyMinutes('300');
+    setWeeklyObjectives(program.summary || weeklyObjectives);
+    setDraft(program);
+    Alert.alert('Loaded', 'Program loaded into editor.');
+  }, [themeTitle, weeklyObjectives]);
+
+  const programStats = useMemo(() => {
+    const draftBlocks = draft?.blocks || [];
+    const totalBlocks = draftBlocks.length;
+    const parentTipCount = draftBlocks.filter((block) => !!block.parent_tip?.trim()).length;
+    return { totalBlocks, parentTipCount };
+  }, [draft?.blocks]);
+
+  const recentThemeSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const suggestions: string[] = [];
+    for (const program of programs) {
+      const title = String(program.title || '').trim();
+      if (!title || seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+      suggestions.push(title);
+      if (suggestions.length >= 3) break;
+    }
+    return suggestions;
+  }, [programs]);
+
+  const ruleValidation = useMemo(
+    () => WeeklyProgramService.validateProgramTimeRules(rules),
+    [rules]
+  );
+
+  const draftInsights = useMemo(() => {
+    const blocks = draft?.blocks || [];
+    const missingTimes = blocks.filter((block) => !block.start_time || !block.end_time).length;
+    const missingTitles = blocks.filter((block) => !String(block.title || '').trim()).length;
+    const missingParentTips = includeParentTips
+      ? blocks.filter((block) => !String(block.parent_tip || '').trim()).length
+      : 0;
+
+    const blockHasKeywords = (keywords: string[]) =>
+      blocks.some((block) => {
+        const haystack = [
+          block.block_type,
+          block.title,
+          block.notes,
+          block.transition_cue,
+          block.parent_tip,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+        return keywords.some((keyword) => haystack.includes(keyword));
+      });
+
+    const missingEssentials: string[] = [];
+    if (routineOptions.toiletRoutine && !blockHasKeywords(['toilet', 'bathroom', 'potty', 'washroom'])) {
+      missingEssentials.push('Toilet Routine');
+    }
+    if (routineOptions.napTime && !blockHasKeywords([' nap', 'quiet time', 'rest'])) {
+      missingEssentials.push('Nap / Quiet Time');
+    }
+    if (routineOptions.mealBreaks && !blockHasKeywords(['meal', 'snack', 'breakfast', 'lunch'])) {
+      missingEssentials.push('Meals & Snacks');
+    }
+    if (routineOptions.outdoorPlay && !blockHasKeywords(['outdoor', 'outside', 'gross motor'])) {
+      missingEssentials.push('Outdoor Play');
+    }
+    if (routineOptions.storyCircle && !blockHasKeywords(['story', 'circle time', 'read aloud', 'reading'])) {
+      missingEssentials.push('Story / Circle Time');
+    }
+    if (routineOptions.transitionCues && !blocks.some((block) => String(block.transition_cue || '').trim().length > 0)) {
+      missingEssentials.push('Transition Cues');
+    }
+    if (routineOptions.hygieneChecks && !blockHasKeywords(['hygiene', 'handwash', 'hand wash', 'cleanup', 'clean-up'])) {
+      missingEssentials.push('Hygiene Routines');
+    }
+
+    const arrivalStart = toMinutes(ruleValidation.normalized.arrivalStartTime);
+    const pickupCutoff = toMinutes(ruleValidation.normalized.pickupCutoffTime);
+    const outOfWindow = blocks.filter((block) => {
+      const start = block.start_time ? toMinutes(String(block.start_time)) : null;
+      const end = block.end_time ? toMinutes(String(block.end_time)) : null;
+      if (start === null || end === null || arrivalStart === null || pickupCutoff === null) return false;
+      return start < arrivalStart || end > pickupCutoff;
+    }).length;
+
+    return {
+      total: blocks.length,
+      missingTimes,
+      missingTitles,
+      missingParentTips,
+      outOfWindow,
+      missingEssentialsCount: missingEssentials.length,
+      missingEssentials,
+    };
+  }, [
+    draft?.blocks,
+    includeParentTips,
+    routineOptions.hygieneChecks,
+    routineOptions.mealBreaks,
+    routineOptions.napTime,
+    routineOptions.outdoorPlay,
+    routineOptions.storyCircle,
+    routineOptions.toiletRoutine,
+    routineOptions.transitionCues,
+    ruleValidation.normalized.arrivalStartTime,
+    ruleValidation.normalized.pickupCutoffTime,
+  ]);
+
+  const setupReady = Boolean(themeTitle.trim()) && Boolean(ageGroup.trim()) && (Number(dailyMinutes) || 0) >= 120;
+  const draftReady = draftInsights.total > 0;
+  const shareReady =
+    draftReady &&
+    draftInsights.missingTimes === 0 &&
+    draftInsights.missingTitles === 0 &&
+    draftInsights.outOfWindow === 0 &&
+    draftInsights.missingEssentialsCount === 0;
+
+  const readinessScore = useMemo(() => {
+    let score = 0;
+    if (setupReady) score += 30;
+    if (ruleValidation.issues.length === 0) score += 30;
+    if (draftReady) score += 20;
+    if (shareReady) score += 20;
+    return Math.min(100, score);
+  }, [draftReady, ruleValidation.issues.length, setupReady, shareReady]);
+
+  const readinessTone = readinessScore >= 80
+    ? '#10b981'
+    : readinessScore >= 50
+      ? '#f59e0b'
+      : '#ef4444';
+
+  const canGenerate = setupReady;
+
+  return (
+    <DesktopLayout role="principal" title="AI Daily Routine Planner" showBackButton>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        <LinearGradient
+          colors={[theme.primary + '30', theme.primary + '12', theme.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="sparkles" size={22} color={theme.primary} />
+            </View>
+            <Text style={styles.heroTag}>AI Copilot</Text>
+          </View>
+          <Text style={styles.heroTitle}>Daily Routine & Program Helper</Text>
+          <Text style={styles.heroSubtitle}>
+            Generate a practical day flow, lock strict arrival/pickup windows, and share it with parents in one publish flow.
+          </Text>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statPill}>
+              <Text style={styles.statLabel}>Blocks</Text>
+              <Text style={styles.statValue}>{programStats.totalBlocks}</Text>
+            </View>
+            <View style={styles.statPill}>
+              <Text style={styles.statLabel}>Parent Tips</Text>
+              <Text style={styles.statValue}>{programStats.parentTipCount}</Text>
+            </View>
+            <View style={styles.statPill}>
+              <Text style={styles.statLabel}>Saved Plans</Text>
+              <Text style={styles.statValue}>{programs.length}</Text>
+            </View>
+          </View>
+
+          <View style={styles.readinessWrap}>
+            <View style={styles.readinessHeader}>
+              <Text style={styles.readinessLabel}>Publish Readiness</Text>
+              <Text style={[styles.readinessValue, { color: readinessTone }]}>{readinessScore}%</Text>
+            </View>
+            <View style={styles.readinessTrack}>
+              <View style={[styles.readinessFill, { width: `${readinessScore}%`, backgroundColor: readinessTone }]} />
+            </View>
+            <Text style={styles.readinessHint}>
+              {shareReady
+                ? 'Ready to share with parents.'
+                : 'Complete setup, validate rules, and review blocks to publish confidently.'}
+            </Text>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Smart Quick Start</Text>
+          <Text style={styles.sectionHint}>One tap applies a full setup profile with matching strict time rules.</Text>
+          <View style={styles.presetGrid}>
+            {SMART_PRESETS.map((preset) => (
+              <TouchableOpacity
+                key={preset.id}
+                style={[styles.presetCard, selectedPresetId === preset.id && styles.presetCardActive]}
+                onPress={() => applySmartPreset(preset)}
+              >
+                <Text style={[styles.presetCardTitle, selectedPresetId === preset.id && styles.presetCardTitleActive]}>
+                  {preset.label}
+                </Text>
+                <Text style={styles.presetCardCaption}>{preset.caption}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {programs.length > 0 && (
+            <TouchableOpacity
+              style={styles.inlineBtn}
+              onPress={() => loadProgramIntoEditor(programs[0])}
+            >
+              <Ionicons name="time-outline" size={14} color={theme.primary} />
+              <Text style={styles.inlineBtnText}>Load most recent saved plan</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Program Setup</Text>
+          <Text style={styles.sectionHint}>Set core details first. Dash uses this context to generate better daily blocks.</Text>
+          <Text style={styles.fieldLabel}>Week Start (Monday)</Text>
+          <TextInput
+            style={styles.input}
+            value={weekStartDate}
+            onChangeText={(value) => setWeekStartDate(value)}
+            placeholder="Week start (YYYY-MM-DD)"
+            placeholderTextColor={theme.textSecondary}
+            autoCapitalize="none"
+          />
+          <Text style={styles.fieldLabel}>Theme</Text>
+          <TextInput
+            style={styles.input}
+            value={themeTitle}
+            onChangeText={setThemeTitle}
+            placeholder="Weekly theme"
+            placeholderTextColor={theme.textSecondary}
+          />
+          <View style={styles.chipRow}>
+            {THEME_SUGGESTIONS.map((themeChip) => (
+              <TouchableOpacity key={themeChip} style={styles.quickChip} onPress={() => setThemeTitle(themeChip)}>
+                <Text style={styles.quickChipText}>{themeChip}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {recentThemeSuggestions.length > 0 && (
+            <View style={styles.chipRow}>
+              {recentThemeSuggestions.map((themeChip) => (
+                <TouchableOpacity key={themeChip} style={styles.quickChipGhost} onPress={() => setThemeTitle(themeChip)}>
+                  <Text style={styles.quickChipGhostText}>Recent: {themeChip}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.row}>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Age Group</Text>
+              <TextInput
+                style={styles.input}
+                value={ageGroup}
+                onChangeText={setAgeGroup}
+                placeholder="Age group"
+                placeholderTextColor={theme.textSecondary}
+              />
+            </View>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Daily Minutes</Text>
+              <TextInput
+                style={styles.input}
+                value={dailyMinutes}
+                onChangeText={setDailyMinutes}
+                placeholder="Daily minutes"
+                keyboardType="number-pad"
+                placeholderTextColor={theme.textSecondary}
+              />
+            </View>
+          </View>
+
+          <Text style={styles.fieldLabel}>Weekly Objectives</Text>
+          <TextInput
+            style={styles.input}
+            value={weeklyObjectives}
+            onChangeText={setWeeklyObjectives}
+            placeholder="Objectives (comma-separated)"
+            placeholderTextColor={theme.textSecondary}
+            multiline
+          />
+          <View style={styles.chipRow}>
+            {OBJECTIVE_SUGGESTIONS.map((objectiveChip) => (
+              <TouchableOpacity
+                key={objectiveChip}
+                style={styles.quickChip}
+                onPress={() => addObjectiveChip(objectiveChip)}
+              >
+                <Text style={styles.quickChipText}>+ {objectiveChip}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>Routine Essentials</Text>
+          <Text style={styles.fieldSubHint}>
+            Select routines that must appear in the generated plan. Dash will enforce these as daily anchors.
+          </Text>
+          <View style={styles.essentialsGrid}>
+            {ROUTINE_ESSENTIALS.map((option) => {
+              const active = routineOptions[option.id];
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.essentialChip, active && styles.essentialChipActive]}
+                  onPress={() => toggleRoutineOption(option.id)}
+                >
+                  <Text style={[styles.essentialLabel, active && styles.essentialLabelActive]}>{option.label}</Text>
+                  <Text style={styles.essentialHint}>{option.hint}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[styles.togglePill, includeAssessment && styles.togglePillActive]}
+              onPress={() => setIncludeAssessment((prev) => !prev)}
+            >
+              <Text style={[styles.toggleText, includeAssessment && styles.toggleTextActive]}>Assessment Block</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.togglePill, includeParentTips && styles.togglePillActive]}
+              onPress={() => setIncludeParentTips((prev) => !prev)}
+            >
+              <Text style={[styles.toggleText, includeParentTips && styles.toggleTextActive]}>Parent Tips</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.toggleRow}>
+            {(['low', 'medium', 'high'] as const).map((level) => (
+              <TouchableOpacity
+                key={level}
+                style={[styles.togglePill, budgetLevel === level && styles.togglePillActive]}
+                onPress={() => setBudgetLevel(level)}
+              >
+                <Text style={[styles.toggleText, budgetLevel === level && styles.toggleTextActive]}>
+                  {level.charAt(0).toUpperCase() + level.slice(1)} Budget
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Strict Arrival & Pickup Rules</Text>
+          <Text style={styles.sectionHint}>
+            These limits are enforced before parents can receive the routine. Program blocks outside this window are blocked from publishing.
+          </Text>
+
+          <View style={styles.row}>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Arrival Starts</Text>
+              <TextInput
+                style={styles.input}
+                value={rules.arrivalStartTime}
+                onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalStartTime: normalizeTime(value) }))}
+                placeholder="HH:MM"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Arrival Cutoff</Text>
+              <TextInput
+                style={styles.input}
+                value={rules.arrivalCutoffTime}
+                onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalCutoffTime: normalizeTime(value) }))}
+                placeholder="HH:MM"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Pickup Starts</Text>
+              <TextInput
+                style={styles.input}
+                value={rules.pickupStartTime}
+                onChangeText={(value) => setRules((prev) => ({ ...prev, pickupStartTime: normalizeTime(value) }))}
+                placeholder="HH:MM"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.halfInput}>
+              <Text style={styles.fieldLabel}>Pickup Cutoff</Text>
+              <TextInput
+                style={styles.input}
+                value={rules.pickupCutoffTime}
+                onChangeText={(value) => setRules((prev) => ({ ...prev, pickupCutoffTime: normalizeTime(value) }))}
+                placeholder="HH:MM"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          <View style={styles.presetRow}>
+            <TouchableOpacity style={styles.presetBtn} onPress={() => applyPreset('half_day')}>
+              <Text style={styles.presetBtnText}>Half-Day Preset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.presetBtn} onPress={() => applyPreset('full_day')}>
+              <Text style={styles.presetBtnText}>Full-Day Preset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.presetBtn} onPress={() => applyPreset('aftercare')}>
+              <Text style={styles.presetBtnText}>Aftercare Preset</Text>
+            </TouchableOpacity>
+          </View>
+
+          {ruleValidation.issues.length > 0 ? (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningTitle}>Fix before publishing</Text>
+              {ruleValidation.issues.slice(0, 3).map((issue) => (
+                <Text key={issue} style={styles.warningItem}>• {issue}</Text>
+              ))}
+              <TouchableOpacity
+                style={styles.inlineBtn}
+                onPress={() => applyPreset((Number(dailyMinutes) || 0) >= 360 ? 'full_day' : 'half_day')}
+              >
+                <Ionicons name="construct-outline" size={14} color={theme.primary} />
+                <Text style={styles.inlineBtnText}>Auto-fix using recommended preset</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.successBox}>
+              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+              <Text style={styles.successBoxText}>Time rules are valid and publish-safe.</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.actionsCard}>
+          <View style={styles.readinessPillsRow}>
+            <View style={[styles.readinessPill, setupReady && styles.readinessPillActive]}>
+              <Text style={[styles.readinessPillText, setupReady && styles.readinessPillTextActive]}>1. Setup</Text>
+            </View>
+            <View style={[styles.readinessPill, ruleValidation.issues.length === 0 && styles.readinessPillActive]}>
+              <Text style={[styles.readinessPillText, ruleValidation.issues.length === 0 && styles.readinessPillTextActive]}>2. Rules</Text>
+            </View>
+            <View style={[styles.readinessPill, draftReady && styles.readinessPillActive]}>
+              <Text style={[styles.readinessPillText, draftReady && styles.readinessPillTextActive]}>3. Draft</Text>
+            </View>
+            <View style={[styles.readinessPill, shareReady && styles.readinessPillActive]}>
+              <Text style={[styles.readinessPillText, shareReady && styles.readinessPillTextActive]}>4. Share</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, (generating || !canGenerate) && styles.buttonDisabled]}
+            onPress={generateProgram}
+            disabled={generating || !canGenerate}
+          >
+            {generating ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="sparkles" size={16} color="#fff" />}
+            <Text style={styles.primaryBtnText}>{generating ? 'Generating...' : 'Generate Smart Routine'}</Text>
+          </TouchableOpacity>
+          {!canGenerate && (
+            <Text style={styles.actionHint}>Add theme, age group, and at least 120 daily minutes to generate.</Text>
+          )}
+
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, styles.halfButton, (saving || !draft) && styles.buttonDisabled]}
+              onPress={() => void saveDraft()}
+              disabled={saving || !draft}
+            >
+              {saving ? <EduDashSpinner size="small" color={theme.primary} /> : <Ionicons name="save-outline" size={16} color={theme.primary} />}
+              <Text style={styles.secondaryBtnText}>{saving ? 'Saving...' : 'Save Draft'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.successBtn, styles.halfButton, (sharing || !draft) && styles.buttonDisabled]}
+              onPress={() => void shareWithParents()}
+              disabled={sharing || !draft}
+            >
+              {sharing ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="megaphone-outline" size={16} color="#fff" />}
+              <Text style={styles.successBtnText}>{sharing ? 'Sharing...' : 'Share with Parents'}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.actionHint}>
+            {shareReady
+              ? 'Everything looks ready. You can share this routine with parents now.'
+              : 'Tip: Complete block times, include selected routine essentials, and keep times inside the strict window.'}
+          </Text>
+        </View>
+
+        {draft && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Draft Blocks</Text>
+            <Text style={styles.sectionHint}>Tune times, titles, and parent tips before sharing.</Text>
+            <View style={styles.draftInsightRow}>
+              <View style={styles.draftInsightPill}>
+                <Text style={styles.draftInsightLabel}>Missing Times</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.missingTimes}</Text>
+              </View>
+              <View style={styles.draftInsightPill}>
+                <Text style={styles.draftInsightLabel}>No Parent Tip</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.missingParentTips}</Text>
+              </View>
+              <View style={styles.draftInsightPill}>
+                <Text style={styles.draftInsightLabel}>Out of Window</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.outOfWindow}</Text>
+              </View>
+              <View style={styles.draftInsightPill}>
+                <Text style={styles.draftInsightLabel}>Missing Essentials</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.missingEssentialsCount}</Text>
+              </View>
+            </View>
+            {draftInsights.missingEssentialsCount > 0 && (
+              <Text style={styles.sectionHint}>
+                Still missing: {draftInsights.missingEssentials.join(', ')}
+              </Text>
+            )}
+
+            {DAY_ORDER.map((day) => {
+              const dayBlocks = draft.blocks
+                .filter((block) => block.day_of_week === day)
+                .sort((a, b) => a.block_order - b.block_order);
+
+              return (
+                <View key={day} style={styles.daySection}>
+                  <View style={styles.dayHeader}>
+                    <Text style={styles.dayTitle}>{DAY_LABELS[day]}</Text>
+                    <TouchableOpacity style={styles.inlineBtn} onPress={() => addBlockForDay(day)}>
+                      <Ionicons name="add" size={14} color={theme.primary} />
+                      <Text style={styles.inlineBtnText}>Add Block</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {dayBlocks.length === 0 ? (
+                    <Text style={styles.dayEmpty}>No blocks yet.</Text>
+                  ) : (
+                    dayBlocks.map((block) => (
+                      <View key={`${day}-${block.block_order}`} style={styles.blockCard}>
+                        <View style={styles.blockTitleRow}>
+                          <Text style={styles.blockBadge}>#{block.block_order}</Text>
+                          <TouchableOpacity onPress={() => removeBlock(day, block.block_order)}>
+                            <Ionicons name="trash-outline" size={16} color={theme.error} />
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          value={block.title}
+                          onChangeText={(value) => updateDraftBlock(day, block.block_order, { title: value })}
+                          placeholder="Block title"
+                          placeholderTextColor={theme.textSecondary}
+                        />
+                        <View style={styles.row}>
+                          <TextInput
+                            style={[styles.input, styles.halfInput]}
+                            value={String(block.start_time || '')}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { start_time: normalizeTime(value) })}
+                            placeholder="Start HH:MM"
+                            placeholderTextColor={theme.textSecondary}
+                            autoCapitalize="none"
+                          />
+                          <TextInput
+                            style={[styles.input, styles.halfInput]}
+                            value={String(block.end_time || '')}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { end_time: normalizeTime(value) })}
+                            placeholder="End HH:MM"
+                            placeholderTextColor={theme.textSecondary}
+                            autoCapitalize="none"
+                          />
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          value={block.parent_tip || ''}
+                          onChangeText={(value) => updateDraftBlock(day, block.block_order, { parent_tip: value })}
+                          placeholder="Parent tip (optional)"
+                          placeholderTextColor={theme.textSecondary}
+                        />
+                      </View>
+                    ))
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Saved Programs</Text>
+          {programs.length === 0 ? (
+            <Text style={styles.sectionHint}>No saved daily programs yet.</Text>
+          ) : (
+            programs.map((program) => (
+              <View key={program.id} style={styles.savedCard}>
+                <View style={styles.savedHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.savedTitle}>{program.title || 'Weekly Program'}</Text>
+                    <Text style={styles.savedMeta}>
+                      {program.week_start_date} to {program.week_end_date}
+                    </Text>
+                  </View>
+                  <View style={styles.statusPill}>
+                    <Text style={styles.statusPillText}>{program.status || 'draft'}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.savedActions}>
+                  <TouchableOpacity style={styles.inlineBtn} onPress={() => loadProgramIntoEditor(program)}>
+                    <Ionicons name="create-outline" size={14} color={theme.primary} />
+                    <Text style={styles.inlineBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.inlineBtn} onPress={() => void shareWithParents(program)}>
+                    <Ionicons name="megaphone-outline" size={14} color={theme.primary} />
+                    <Text style={styles.inlineBtnText}>Share</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </DesktopLayout>
+  );
+}
+
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      padding: 16,
+      gap: 12,
+      paddingBottom: 36,
+    },
+    hero: {
+      borderRadius: 18,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.card + 'd1',
+      shadowColor: theme.primary,
+      shadowOpacity: 0.24,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 8,
+    },
+    heroTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8,
+    },
+    heroIconWrap: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: theme.background + 'aa',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.primary + '30',
+    },
+    heroTag: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    heroTitle: {
+      color: theme.text,
+      fontSize: 22,
+      fontWeight: '800',
+    },
+    heroSubtitle: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
+    },
+    statsRow: {
+      marginTop: 14,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    statPill: {
+      flex: 1,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'b3',
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+    },
+    statLabel: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    statValue: {
+      color: theme.text,
+      fontWeight: '800',
+      fontSize: 16,
+      marginTop: 2,
+    },
+    readinessWrap: {
+      marginTop: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.primary + '45',
+      backgroundColor: theme.background + 'c9',
+      padding: 10,
+      gap: 6,
+    },
+    readinessHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    readinessLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    readinessValue: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    readinessTrack: {
+      height: 7,
+      borderRadius: 999,
+      backgroundColor: theme.border + '80',
+      overflow: 'hidden',
+    },
+    readinessFill: {
+      height: '100%',
+      borderRadius: 999,
+    },
+    readinessHint: {
+      color: theme.textSecondary,
+      fontSize: 11,
+    },
+    card: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.primary + '30',
+      backgroundColor: theme.card + 'cf',
+      padding: 14,
+      gap: 8,
+      shadowColor: theme.primary,
+      shadowOpacity: 0.12,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 3,
+    },
+    actionsCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.primary + '16',
+      padding: 14,
+      gap: 10,
+      shadowColor: theme.primary,
+      shadowOpacity: 0.16,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 9 },
+      elevation: 4,
+    },
+    sectionTitle: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    sectionHint: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    fieldLabel: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+      marginBottom: 2,
+      marginTop: 4,
+    },
+    fieldSubHint: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      lineHeight: 16,
+      marginBottom: 2,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: theme.primary + '30',
+      borderRadius: 10,
+      backgroundColor: theme.background + 'cc',
+      color: theme.text,
+      paddingHorizontal: 11,
+      paddingVertical: 10,
+      fontSize: 14,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    halfInput: {
+      flex: 1,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 2,
+    },
+    quickChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.primary + '45',
+      backgroundColor: theme.primary + '12',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    quickChipText: {
+      color: theme.primary,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    quickChipGhost: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'b8',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    quickChipGhostText: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    presetGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 2,
+      marginBottom: 4,
+    },
+    presetCard: {
+      flexBasis: '31%',
+      flexGrow: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'cc',
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      gap: 4,
+    },
+    presetCardActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '16',
+    },
+    presetCardTitle: {
+      color: theme.text,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    presetCardTitleActive: {
+      color: theme.primary,
+    },
+    presetCardCaption: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      lineHeight: 15,
+    },
+    essentialsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 2,
+      marginBottom: 4,
+    },
+    essentialChip: {
+      flexBasis: '48%',
+      flexGrow: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'c4',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      gap: 2,
+    },
+    essentialChipActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '1f',
+    },
+    essentialLabel: {
+      color: theme.text,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    essentialLabelActive: {
+      color: theme.primary,
+    },
+    essentialHint: {
+      color: theme.textSecondary,
+      fontSize: 10,
+      lineHeight: 13,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 2,
+    },
+    togglePill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+      backgroundColor: theme.background,
+    },
+    togglePillActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '18',
+    },
+    toggleText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    toggleTextActive: {
+      color: theme.primary,
+    },
+    presetRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 4,
+    },
+    presetBtn: {
+      flexBasis: '31%',
+      flexGrow: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 10,
+      alignItems: 'center',
+      backgroundColor: theme.background + 'cc',
+    },
+    presetBtnText: {
+      color: theme.text,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    primaryBtn: {
+      borderRadius: 12,
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    primaryBtnText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 14,
+    },
+    actionHint: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    warningBox: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#f59e0b66',
+      backgroundColor: '#f59e0b1a',
+      padding: 10,
+      gap: 4,
+    },
+    warningTitle: {
+      color: '#f59e0b',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    warningItem: {
+      color: theme.text,
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    successBox: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#10b98155',
+      backgroundColor: '#10b9811a',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    successBoxText: {
+      color: '#10b981',
+      fontSize: 12,
+      fontWeight: '700',
+      flex: 1,
+    },
+    readinessPillsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    readinessPill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: theme.background + 'cc',
+    },
+    readinessPillActive: {
+      borderColor: '#10b981',
+      backgroundColor: '#10b9811f',
+    },
+    readinessPillText: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      fontWeight: '700',
+    },
+    readinessPillTextActive: {
+      color: '#10b981',
+    },
+    secondaryBtn: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      backgroundColor: theme.background,
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    secondaryBtnText: {
+      color: theme.primary,
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    successBtn: {
+      borderRadius: 12,
+      backgroundColor: '#059669',
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    successBtnText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    halfButton: {
+      flex: 1,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    daySection: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.primary + '2e',
+      padding: 10,
+      gap: 8,
+      backgroundColor: theme.background + 'b8',
+    },
+    draftInsightRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 2,
+    },
+    draftInsightPill: {
+      flexBasis: '48%',
+      flexGrow: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary + '2e',
+      backgroundColor: theme.background + 'c2',
+      paddingVertical: 7,
+      paddingHorizontal: 9,
+      alignItems: 'center',
+    },
+    draftInsightLabel: {
+      color: theme.textSecondary,
+      fontSize: 10,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      textAlign: 'center',
+    },
+    draftInsightValue: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '800',
+      marginTop: 2,
+    },
+    dayHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dayTitle: {
+      color: theme.text,
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    dayEmpty: {
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    blockCard: {
+      borderWidth: 1,
+      borderColor: theme.primary + '22',
+      borderRadius: 10,
+      padding: 10,
+      gap: 8,
+      backgroundColor: theme.card + 'd6',
+    },
+    blockTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    blockBadge: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    inlineBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: theme.primary + '12',
+    },
+    inlineBtnText: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    savedCard: {
+      borderWidth: 1,
+      borderColor: theme.primary + '22',
+      borderRadius: 12,
+      padding: 11,
+      backgroundColor: theme.background + 'cb',
+      gap: 10,
+    },
+    savedHeader: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    savedTitle: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    savedMeta: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    statusPill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      alignSelf: 'flex-start',
+      backgroundColor: theme.card,
+    },
+    statusPillText: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      textTransform: 'capitalize',
+      fontWeight: '700',
+    },
+    savedActions: {
+      flexDirection: 'row',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+  });

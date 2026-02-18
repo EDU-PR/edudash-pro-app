@@ -10,8 +10,8 @@
 import { StyleSheet, Dimensions, Platform } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
-const bubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.82 : screenWidth < 400 ? screenWidth * 0.8 : screenWidth * 0.72;
-const bubbleMinWidth = screenWidth < 360 ? 100 : 120;
+const bubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.9 : screenWidth < 420 ? screenWidth * 0.9 : screenWidth * 0.88;
+const bubbleMinWidth = screenWidth < 360 ? 128 : 148;
 
 export const messageStyles = StyleSheet.create({
   // Messages Container
@@ -93,31 +93,31 @@ export const messageStyles = StyleSheet.create({
   messageBubble: {
     maxWidth: bubbleMaxWidth,
     minWidth: bubbleMinWidth,
-    paddingHorizontal: screenWidth < 400 ? 16 : 18,
-    paddingVertical: screenWidth < 400 ? 12 : 14,
+    paddingHorizontal: screenWidth < 400 ? 14 : 16,
+    paddingVertical: screenWidth < 400 ? 10 : 12,
     minHeight: 48,
     alignSelf: 'flex-start',
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'transparent',
     overflow: 'hidden',
   },
   userBubble: {
-    borderRadius: 22,
+    borderRadius: 18,
     borderBottomRightRadius: 8,
-    marginLeft: 16,
+    marginLeft: 10,
     alignSelf: 'flex-end',
   },
   assistantBubble: {
-    borderRadius: 22,
+    borderRadius: 18,
     borderBottomLeftRadius: 8,
-    marginRight: 32,
+    marginRight: 10,
   },
 
   // Message Content
   messageText: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     letterSpacing: 0.2,
     flexShrink: 1,
     fontWeight: '400',
@@ -152,16 +152,25 @@ export const messageStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   messageContentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     justifyContent: 'flex-start',
     gap: 6,
+    position: 'relative',
   },
   inlineBubbleRetryButton: {
-    padding: 6,
-    marginLeft: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    position: 'absolute',
+    right: 10,
+    bottom: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   bubbleHeaderRow: {
     flexDirection: 'row',

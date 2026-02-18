@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, RefreshControl, Alert, Modal } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -184,7 +185,7 @@ export default function PrincipalParentsScreen() {
             placeholder="Search by name, email, or phone"
             placeholderTextColor={theme?.textSecondary || '#9CA3AF'}
           />
-          <FlatList
+          <FlashList
             data={filtered}
             keyExtractor={(item) => item.auth_user_id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme?.primary || '#00f5ff'} />}
@@ -209,6 +210,7 @@ export default function PrincipalParentsScreen() {
                 </View>
               );
             }}
+            estimatedItemSize={90}
           />
         </>
       )}

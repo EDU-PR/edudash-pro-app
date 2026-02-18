@@ -86,6 +86,53 @@ function computeAgeGroupFromDob(dob?: string | null): AgeGroup | undefined {
   return 'adult';
 }
 
+const TRANSIENT_PROFILE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+
+function isTransientProfileError(error: unknown): boolean {
+  const status = Number((error as any)?.status || (error as any)?.code || 0);
+  if (TRANSIENT_PROFILE_STATUS_CODES.has(status)) return true;
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    message.includes('http_response_incomplete') ||
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('timeout')
+  );
+}
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchProfileRecord(
+  supabaseClient: any,
+  columns: string,
+  userId: string,
+): Promise<Record<string, any> | null> {
+  const lookupFields = ['auth_user_id', 'id'] as const;
+  for (const field of lookupFields) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select(columns)
+        .eq(field, userId)
+        .maybeSingle();
+
+      if (data) return data;
+      if (!error) break;
+
+      if (!isTransientProfileError(error) || attempt === 1) {
+        console.warn(`[DashAICompat] profile lookup failed on ${field}:`, error);
+        break;
+      }
+
+      await wait(120 * (attempt + 1));
+    }
+  }
+
+  return null;
+}
+
 // Re-export types for backward compatibility
 export type {
   DashMessage,
@@ -124,6 +171,8 @@ export interface IDashAIAssistant {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      metadata?: Record<string, unknown>;
+      signal?: AbortSignal;
     }
   ): Promise<DashMessage>;
 
@@ -205,18 +254,11 @@ export class DashAIAssistant implements IDashAIAssistant {
           let organizationId: string | undefined;
           let preschoolId: string | undefined;
           try {
-            const { data: profileByAuth } = await initConfig.supabaseClient
-              .from('profiles')
-              .select('organization_id, preschool_id')
-              .eq('auth_user_id', session.user_id)
-              .maybeSingle();
-            const profile = profileByAuth
-              ? profileByAuth
-              : (await initConfig.supabaseClient
-                  .from('profiles')
-                  .select('organization_id, preschool_id')
-                  .eq('id', session.user_id)
-                  .maybeSingle()).data;
+            const profile = await fetchProfileRecord(
+              initConfig.supabaseClient,
+              'organization_id, preschool_id',
+              session.user_id,
+            );
             // Use organization_id (standardized) or fallback to preschool_id
             organizationId = profile?.organization_id || profile?.preschool_id;
             preschoolId = profile?.organization_id || profile?.preschool_id;
@@ -229,18 +271,11 @@ export class DashAIAssistant implements IDashAIAssistant {
           let ageGroup: AgeGroup | undefined;
           let dateOfBirth: string | undefined;
           try {
-            const { data: fullProfileByAuth } = await initConfig.supabaseClient
-              .from('profiles')
-              .select('role, date_of_birth, age_group')
-              .eq('auth_user_id', session.user_id)
-              .maybeSingle();
-            const fullProfile = fullProfileByAuth
-              ? fullProfileByAuth
-              : (await initConfig.supabaseClient
-                  .from('profiles')
-                  .select('role, date_of_birth, age_group')
-                  .eq('id', session.user_id)
-                  .maybeSingle()).data;
+            const fullProfile = await fetchProfileRecord(
+              initConfig.supabaseClient,
+              'role, date_of_birth, age_group',
+              session.user_id,
+            );
             if (fullProfile?.role) {
               userRole = fullProfile.role;
             }
@@ -304,6 +339,8 @@ export class DashAIAssistant implements IDashAIAssistant {
       contextOverride?: string | null;
       modelOverride?: string | null;
       messagesOverride?: ConversationContextMessage[];
+      metadata?: Record<string, unknown>;
+      signal?: AbortSignal;
     }
   ): Promise<DashMessage> {
     // Delegate to DashAICore which now handles AI calls

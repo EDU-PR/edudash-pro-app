@@ -66,6 +66,6 @@ export const getVoiceNoteDuration = (content: string): number => {
  * Get sender display name from message
  */
 export const getSenderName = (sender?: { first_name?: string; last_name?: string }): string => {
-  if (!sender) return 'User';
-  return `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'User';
+  if (!sender) return '';
+  return `${sender.first_name || ''} ${sender.last_name || ''}`.trim();
 };

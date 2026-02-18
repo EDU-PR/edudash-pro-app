@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { WakeWordModelLoader } from '@/lib/services/WakeWordModelLoader';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 
@@ -21,13 +21,19 @@ import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
  *   If not installed, it silently disables listening and logs a message.
  */
 export default function DashWakeWordListener() {
+  const pathname = usePathname();
   const [enabled, setEnabled] = useState<boolean>(false);
   const appStateRef = useRef<string>('active');
+  const enabledRef = useRef<boolean>(false);
+  const pathnameRef = useRef<string>('');
 
-  // Porcupine refs (if available)
-  const porcupineRef = useRef<any>(null);
-  const audioEngineRef = useRef<any>(null);
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  useEffect(() => { pathnameRef.current = pathname || ''; }, [pathname]);
+
+  // Porcupine manager ref (if available)
+  const porcupineManagerRef = useRef<any>(null);
   const isListeningRef = useRef<boolean>(false);
+  const isHandlingWakeRef = useRef<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
@@ -45,7 +51,7 @@ export default function DashWakeWordListener() {
       appStateRef.current = next;
       if (next === 'active') {
         await loadToggle();
-        if (enabled) startListening().catch(() => { /* Intentional: error handled */ });
+        if (enabledRef.current) startListening().catch(() => { /* Intentional: error handled */ });
       } else {
         stopListening().catch(() => { /* Intentional: error handled */ });
       }
@@ -56,7 +62,7 @@ export default function DashWakeWordListener() {
     });
 
     // Start if already active and enabled
-    if (appStateRef.current === 'active' && enabled) {
+    if (appStateRef.current === 'active' && enabledRef.current) {
       startListening().catch(() => { /* Intentional: error handled */ });
     }
 
@@ -78,13 +84,40 @@ export default function DashWakeWordListener() {
     }
   }, [enabled]);
 
+  function isWakeWordBlockedRoute(p: string): boolean {
+    // Avoid mic conflicts with voice + call surfaces; wake word is meant to *open* the ORB.
+    return (
+      p.includes('/dash-voice') ||
+      p.includes('/dash-orb') ||
+      p.includes('/dash-assistant') ||
+      p.includes('/super-admin-ai') ||
+      p.includes('/calls')
+    );
+  }
+
+  const shouldPauseOnRoute = useMemo(() => {
+    const p = pathname || '';
+    return isWakeWordBlockedRoute(p);
+  }, [pathname]);
+
+  useEffect(() => {
+    // Pause/resume on route changes to prevent microphone contention.
+    if (appStateRef.current !== 'active') return;
+    if (!enabled) return;
+    if (shouldPauseOnRoute) {
+      stopListening().catch(() => {});
+    } else {
+      startListening().catch(() => {});
+    }
+  }, [enabled, shouldPauseOnRoute]);
+
   const ensurePorcupine = async (): Promise<boolean> => {
     if (Platform.OS === 'web') return false;
-    if (porcupineRef.current) return true;
+    if (porcupineManagerRef.current) return true;
 
     try {
       // Dynamic import to avoid hard dependency when module isn't installed
-      const { Porcupine } = require('@picovoice/porcupine-react-native');
+      const { PorcupineManager } = require('@picovoice/porcupine-react-native');
       const accessKey = process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY || '';
 
       if (!accessKey) {
@@ -97,33 +130,54 @@ export default function DashWakeWordListener() {
         return false;
       }
 
-      // Load custom "Hello Dash" model from assets
+      // Try custom "Hello Dash" model first, fall back to built-in "COMPUTER"
       let modelPath: string | null = null;
       try {
         modelPath = await WakeWordModelLoader.loadHelloDashModel();
         console.log('[DashWakeWord] Loaded custom Hello Dash model:', modelPath);
       } catch (e) {
-        console.debug('[DashWakeWord] Custom model not available, falling back to built-in:', e);
+        console.debug('[DashWakeWord] Custom model not available, trying built-in:', e);
       }
 
-      // Initialize with custom model or fallback to built-in
       if (modelPath) {
-        // Use custom "Hello Dash" model
-        porcupineRef.current = await Porcupine.fromKeywordPaths(
+        // Use custom model
+        porcupineManagerRef.current = await PorcupineManager.fromKeywordPaths(
           accessKey,
           [modelPath],
-          [0.65] // sensitivity
+          () => {
+            if (isHandlingWakeRef.current) return;
+            isHandlingWakeRef.current = true;
+            setTimeout(() => { isHandlingWakeRef.current = false; }, 1500);
+            const currentPath = pathnameRef.current || '';
+            if (currentPath.includes('/dash-voice')) return;
+            console.log('[DashWakeWord] Wake word detected! Opening voice orb...');
+            stopListening().catch(() => {});
+            router.push('/screens/dash-voice?mode=orb&wake=1');
+          },
+          (error: any) => { console.debug('[DashWakeWord] Porcupine error:', error); }
         );
       } else {
-        // Fallback to built-in "Porcupine" keyword
-        porcupineRef.current = await Porcupine.fromBuiltInKeywords(
+        // Fallback: use built-in "COMPUTER" keyword (say "Computer" to activate)
+        const { BuiltInKeyword } = require('@picovoice/porcupine-react-native');
+        porcupineManagerRef.current = await PorcupineManager.fromBuiltInKeywords(
           accessKey,
-          [Porcupine.BuiltInKeyword.PORCUPINE],
-          [0.65]
+          [BuiltInKeyword.COMPUTER],
+          () => {
+            if (isHandlingWakeRef.current) return;
+            isHandlingWakeRef.current = true;
+            setTimeout(() => { isHandlingWakeRef.current = false; }, 1500);
+            const currentPath = pathnameRef.current || '';
+            if (currentPath.includes('/dash-voice')) return;
+            console.log('[DashWakeWord] Wake word (Computer) detected! Opening voice orb...');
+            stopListening().catch(() => {});
+            router.push('/screens/dash-voice?mode=orb&wake=1');
+          },
+          (error: any) => { console.debug('[DashWakeWord] Porcupine error:', error); }
         );
+        console.log('[DashWakeWord] Using built-in COMPUTER keyword (say "Computer" to activate)');
       }
 
-      console.log('[DashWakeWord] Porcupine initialized', modelPath ? 'with custom model' : 'with built-in keyword');
+      console.log('[DashWakeWord] Porcupine manager initialized');
       return true;
     } catch (e) {
       console.debug('[DashWakeWord] Wake word engine not available or failed to init:', e);
@@ -139,25 +193,17 @@ export default function DashWakeWordListener() {
   const startListening = async () => {
     if (isListeningRef.current) return;
     if (!enabled) return;
+    const currentPath = pathnameRef.current || '';
+    if (isWakeWordBlockedRoute(currentPath)) return;
 
     const ok = await ensurePorcupine();
     if (!ok) return;
 
     try {
-      // Start the Porcupine engine
-      if (porcupineRef.current && porcupineRef.current.start) {
-        await porcupineRef.current.start();
+      // Start the Porcupine manager (opens mic + processes frames)
+      if (porcupineManagerRef.current && porcupineManagerRef.current.start) {
+        await porcupineManagerRef.current.start();
       }
-      
-      // Set up the detection callback
-      if (porcupineRef.current && porcupineRef.current.onDetection) {
-        porcupineRef.current.onDetection((keywordIndex: number) => {
-          console.log('[DashWakeWord] Wake word detected! Index:', keywordIndex);
-          // Navigate to Dash Assistant when wake word is detected
-          router.push('/screens/dash-assistant');
-        });
-      }
-      
       isListeningRef.current = true;
       console.log('[DashWakeWord] Listening for "Hello Dash" (in app)');
     } catch (e) {
@@ -168,8 +214,8 @@ export default function DashWakeWordListener() {
   const stopListening = async () => {
     if (!isListeningRef.current) return;
     try {
-      if (porcupineRef.current && porcupineRef.current.stop) {
-        await porcupineRef.current.stop();
+      if (porcupineManagerRef.current && porcupineManagerRef.current.stop) {
+        await porcupineManagerRef.current.stop();
       }
       isListeningRef.current = false;
       console.log('[DashWakeWord] Stopped listening');
@@ -178,8 +224,8 @@ export default function DashWakeWordListener() {
 
   const release = async () => {
     try {
-      if (porcupineRef.current?.delete) await porcupineRef.current.delete();
-      porcupineRef.current = null;
+      if (porcupineManagerRef.current?.delete) porcupineManagerRef.current.delete();
+      porcupineManagerRef.current = null;
     } catch { /* Intentional: non-fatal */ }
   };
 

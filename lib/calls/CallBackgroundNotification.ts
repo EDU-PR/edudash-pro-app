@@ -16,6 +16,7 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { extractCallId, extractCallType, extractThreadId } from '@/lib/notifications/payload';
 
 /**
  * Detect whether the native binary includes custom call sounds in res/raw/.
@@ -373,10 +374,15 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
   }
   
   const data = notification.request.content.data as any;
+  const notificationCallId = extractCallId(data);
+  const notificationCallType = extractCallType(data);
+  const notificationThreadId = extractThreadId(data);
   
   console.log('[CallBackgroundNotification] Background notification received:', {
     type: data?.type,
-    callId: data?.call_id,
+    callId: notificationCallId,
+    callType: notificationCallType,
+    threadId: notificationThreadId,
     appState: AppState.currentState,
   });
   
@@ -384,10 +390,10 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
   if (data?.type === 'incoming_call') {
     const callData: IncomingCallNotificationData = {
       type: 'incoming_call',
-      call_id: data.call_id,
+      call_id: notificationCallId || data.call_id,
       caller_id: data.caller_id,
       caller_name: data.caller_name || 'Unknown',
-      call_type: data.call_type || 'voice',
+      call_type: notificationCallType || 'voice',
       meeting_url: data.meeting_url,
     };
     
@@ -417,16 +423,16 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
   // This works even when app is backgrounded or killed (WhatsApp-style)
   if (data?.type === 'message' || data?.type === 'chat') {
     try {
-      const { assertSupabase } = require('./supabase');
+      const { assertSupabase } = require('@/lib/supabase');
       const supabase = assertSupabase();
       
       // Get current user from session (if available)
       const { data: sessionData } = await supabase.auth.getSession();
       const currentUserId = sessionData?.session?.user?.id;
       
-      if (currentUserId && data.thread_id) {
+      if (currentUserId && notificationThreadId) {
         await supabase.rpc('mark_messages_delivered', {
-          p_thread_id: data.thread_id,
+          p_thread_id: notificationThreadId,
           p_user_id: currentUserId,
         });
         console.log('[CallBackgroundNotification] ✅ Marked messages as delivered (background)');
@@ -500,14 +506,16 @@ export async function checkForIncomingCallOnLaunch(): Promise<IncomingCallNotifi
     
     if (response?.notification?.request?.content?.data?.type === 'incoming_call') {
       const data = response.notification.request.content.data as any;
-      console.log('[CallBackgroundNotification] App opened from call notification:', data.call_id);
+      const callId = extractCallId(data);
+      const callType = extractCallType(data);
+      console.log('[CallBackgroundNotification] App opened from call notification:', callId);
       
       return {
         type: 'incoming_call',
-        call_id: data.call_id,
+        call_id: callId || data.call_id,
         caller_id: data.caller_id,
         caller_name: data.caller_name || 'Unknown',
-        call_type: data.call_type || 'voice',
+        call_type: callType || 'voice',
         meeting_url: data.meeting_url,
       };
     }

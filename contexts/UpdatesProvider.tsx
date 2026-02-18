@@ -199,7 +199,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Update Ready',
-          body: 'Tap to restart and apply the latest version',
+          body: 'Open app and restart to apply the latest improvements',
           data: { type: 'update_ready', forceShow: true },
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,

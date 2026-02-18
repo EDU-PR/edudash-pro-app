@@ -341,8 +341,8 @@ describe('Video Calls Flow', () => {
   let callId: string;
 
   test('Daily.co integration is configured', async () => {
-    // Check if Daily API key is set
-    const dailyApiKey = process.env.EXPO_PUBLIC_DAILY_API_KEY;
+    // Check if Daily API key is set (server-side only)
+    const dailyApiKey = process.env.DAILY_API_KEY;
     
     if (!dailyApiKey || dailyApiKey === '${DAILY_API_KEY}') {
       console.log('⚠️ Daily.co API key not configured - skipping call tests');

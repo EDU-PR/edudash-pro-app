@@ -23,6 +23,10 @@ export default function ParentProgressScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => createProgressStyles(theme), [theme]);
+  const isNextGenParentTheme = String(theme.background).toLowerCase() === '#0f121e';
+  const headerGradientColors: [string, string] = isNextGenParentTheme
+    ? ['#23214D', '#5A409D']
+    : ['#10B981', '#059669'];
   
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +81,7 @@ export default function ParentProgressScreen() {
       
       {/* Header */}
       <LinearGradient
-        colors={['#10B981', '#059669']}
+        colors={headerGradientColors}
         style={[styles.header, { paddingTop: insets.top + 16 }]}
       >
         <View style={styles.headerRow}>
@@ -354,4 +358,3 @@ export default function ParentProgressScreen() {
     </View>
   );
 }
-

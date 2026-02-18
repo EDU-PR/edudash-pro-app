@@ -14,6 +14,7 @@ import { Platform, Alert } from 'react-native';
 import { assertSupabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 import { DashAttachment, DashAttachmentKind } from '@/services/dash-ai/types';
 import { base64ToUint8Array } from '@/lib/utils/base64';
+import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 import {
   consumePendingCameraResult,
   launchCameraWithRecovery,
@@ -22,8 +23,9 @@ import {
 
 // File size limits (in bytes)
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_MOBILE_BASE64_FALLBACK_SIZE = 4 * 1024 * 1024; // 4MB fallback guard
+const MAX_IMAGE_SIZE = 12 * 1024 * 1024; // 12MB
+const MAX_IMAGE_BASE64_FOR_ATTACHMENT = Math.floor((MAX_IMAGE_SIZE * 4) / 3); // Base64 char length for ~12MB binary
+const MAX_MOBILE_BASE64_FALLBACK_SIZE = 6 * 1024 * 1024; // 6MB fallback guard
 const DASH_ATTACHMENT_CAMERA_CONTEXT = 'dash_attachment_camera';
 
 // Supported file types
@@ -78,6 +80,71 @@ function createImageAttachment(
       height: asset.height,
     },
   };
+}
+
+async function getFileSizeSafe(uri: string, fallbackSize: number = 0): Promise<number> {
+  try {
+    const info = await LegacyFileSystem.getInfoAsync(uri);
+    if (info.exists && typeof info.size === 'number') {
+      return info.size;
+    }
+  } catch (error) {
+    console.warn('[attachment_size] Could not read file size', { uri, error });
+  }
+  return fallbackSize;
+}
+
+async function createOptimizedImageAttachment(
+  asset: ImagePicker.ImagePickerAsset,
+  fallbackName: string,
+): Promise<DashAttachment> {
+  const originalUri = normalizeMediaUri(asset.uri);
+  const originalSize = await getFileSizeSafe(originalUri, asset.fileSize || 0);
+
+  let finalUri = originalUri;
+  let finalSize = originalSize;
+  let finalWidth = asset.width;
+  let finalHeight = asset.height;
+  let compressed = false;
+
+  if (finalSize > MAX_IMAGE_SIZE) {
+    try {
+      const optimized = await compressImageForAI(originalUri, MAX_IMAGE_BASE64_FOR_ATTACHMENT);
+      finalUri = normalizeMediaUri(optimized.uri);
+      finalWidth = optimized.width;
+      finalHeight = optimized.height;
+      finalSize = await getFileSizeSafe(finalUri, Math.floor(optimized.base64.length * 0.75));
+      compressed = true;
+      console.log('[attachment_compress] Auto-compressed oversized image', {
+        originalBytes: originalSize,
+        compressedBytes: finalSize,
+      });
+    } catch (error) {
+      throw new Error(
+        `This image is too large to process (${Math.round(originalSize / (1024 * 1024))}MB). Try a lower-resolution photo.`
+      );
+    }
+  }
+
+  if (finalSize > MAX_IMAGE_SIZE) {
+    throw new Error(
+      `This image is still over ${Math.round(MAX_IMAGE_SIZE / (1024 * 1024))}MB after optimization. Please choose a smaller image.`
+    );
+  }
+
+  const attachment = createImageAttachment(asset, fallbackName);
+  attachment.uri = finalUri;
+  attachment.previewUri = finalUri;
+  attachment.size = finalSize;
+  attachment.meta = {
+    ...(attachment.meta || {}),
+    width: finalWidth,
+    height: finalHeight,
+    compressed,
+    originalSize: compressed ? originalSize : undefined,
+  };
+
+  return attachment;
 }
 
 function resolveAttachmentUri(attachment: DashAttachment): string {
@@ -205,8 +272,8 @@ export async function takePhoto(): Promise<DashAttachment[]> {
     // Launch camera with Android process-restart recovery
     const result = await launchCameraWithRecovery(DASH_ATTACHMENT_CAMERA_CONTEXT, {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
+      quality: 0.65,
+      allowsEditing: false,
       exif: false,
       base64: false,
     });
@@ -220,26 +287,17 @@ export async function takePhoto(): Promise<DashAttachment[]> {
     const attachments: DashAttachment[] = [];
 
     for (const asset of result.assets) {
-      // Get file info to check size
-      let fileInfo = { exists: false, size: 0 } as { exists: boolean; size?: number };
       try {
-        fileInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
-      } catch (infoError) {
-        console.warn('[Camera] Failed to read file info, continuing without size check:', infoError);
-      }
-      
-      if (fileInfo.exists && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
+        const attachment = await createOptimizedImageAttachment(asset, `photo_${Date.now()}.jpg`);
+        attachments.push(attachment);
+      } catch (error) {
         Alert.alert(
           'Image Too Large',
-          `Photo is too large. Maximum image size is ${Math.round(MAX_IMAGE_SIZE / (1024 * 1024))}MB.`
+          error instanceof Error
+            ? error.message
+            : `Photo is too large. Maximum image size is ${Math.round(MAX_IMAGE_SIZE / (1024 * 1024))}MB.`,
         );
-        continue;
       }
-
-      const attachment = createImageAttachment(asset, `photo_${Date.now()}.jpg`);
-      attachment.size = fileInfo.exists ? (fileInfo.size || 0) : attachment.size;
-
-      attachments.push(attachment);
     }
 
     return attachments;
@@ -253,7 +311,15 @@ export async function recoverPendingPhoto(): Promise<DashAttachment[]> {
   try {
     const result = await consumePendingCameraResult(DASH_ATTACHMENT_CAMERA_CONTEXT);
     if (!result || result.canceled || !result.assets?.length) return [];
-    return result.assets.map((asset) => createImageAttachment(asset, `photo_${Date.now()}.jpg`));
+    const attachments: DashAttachment[] = [];
+    for (const asset of result.assets) {
+      try {
+        attachments.push(await createOptimizedImageAttachment(asset, `photo_${Date.now()}.jpg`));
+      } catch (error) {
+        console.warn('[camera_recovered] Skipping recovered photo that failed optimization', { error });
+      }
+    }
+    return attachments;
   } catch (error) {
     console.warn('[camera_recovered] Failed to recover pending Dash attachment photo', error);
     return [];
@@ -288,22 +354,25 @@ export async function pickImages(): Promise<DashAttachment[]> {
 
     const attachments: DashAttachment[] = [];
 
+    let skippedCount = 0;
     for (const asset of result.assets) {
-      // Get file info to check size
-      const fileInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
-      
-      if (fileInfo.exists && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
-        Alert.alert(
-          'Image Too Large',
-          `One of the selected images is too large. Maximum image size is ${Math.round(MAX_IMAGE_SIZE / (1024 * 1024))}MB.`
-        );
-        continue;
+      try {
+        const attachment = await createOptimizedImageAttachment(asset, `image_${Date.now()}.jpg`);
+        attachments.push(attachment);
+      } catch (error) {
+        skippedCount += 1;
+        console.warn('[attachment_compress] Skipping image that exceeded limits', {
+          name: asset.fileName,
+          error,
+        });
       }
+    }
 
-      const attachment = createImageAttachment(asset, `image_${Date.now()}.jpg`);
-      attachment.size = fileInfo.exists ? (fileInfo.size || 0) : attachment.size;
-
-      attachments.push(attachment);
+    if (skippedCount > 0) {
+      Alert.alert(
+        'Some Images Were Skipped',
+        `${skippedCount} image${skippedCount === 1 ? '' : 's'} could not be optimized within the upload limit. Try lower-resolution photos.`
+      );
     }
 
     return attachments;
@@ -434,21 +503,36 @@ export async function uploadAttachment(
       }
 
       if (!binaryUploaded) {
-        if (fileSize > MAX_MOBILE_BASE64_FALLBACK_SIZE) {
-          console.warn('[upload_oom_guard] Blocking mobile base64 fallback for large attachment', {
+        let uploadBase64: string;
+        let uploadMimeType = attachment.mimeType;
+        if (fileSize > MAX_MOBILE_BASE64_FALLBACK_SIZE && attachment.kind === 'image') {
+          // Auto-compress large images for base64 fallback uploads instead of hard-failing.
+          const compressed = await compressImageForAI(uploadUri, Math.floor(MAX_MOBILE_BASE64_FALLBACK_SIZE * 0.9));
+          uploadBase64 = compressed.base64;
+          uploadMimeType = 'image/jpeg';
+          console.log('[upload_fallback_compressed]', {
             storagePath,
-            size: fileSize,
-            max: MAX_MOBILE_BASE64_FALLBACK_SIZE,
+            originalSize: fileSize,
+            compressedBytes: Math.floor(uploadBase64.length * 0.75),
           });
-          throw new Error('Image too large for analysis/upload, please retake with lower resolution.');
+        } else {
+          if (fileSize > MAX_MOBILE_BASE64_FALLBACK_SIZE) {
+            console.warn('[upload_oom_guard] Blocking mobile base64 fallback for large attachment', {
+              storagePath,
+              size: fileSize,
+              max: MAX_MOBILE_BASE64_FALLBACK_SIZE,
+            });
+            throw new Error(
+              `Attachment is too large to upload right now. Try a smaller file (about ${Math.round(MAX_MOBILE_BASE64_FALLBACK_SIZE / (1024 * 1024))}MB or less) or retry on a stable network.`
+            );
+          }
+          uploadBase64 = await LegacyFileSystem.readAsStringAsync(uploadUri, { encoding: LegacyFileSystem.EncodingType.Base64 });
         }
-
-        const base64Data = await LegacyFileSystem.readAsStringAsync(uploadUri, { encoding: LegacyFileSystem.EncodingType.Base64 });
-        const fileData = base64ToUint8Array(base64Data);
+        const fileData = base64ToUint8Array(uploadBase64);
         const { error: uploadError } = await supabase.storage
           .from('attachments')
           .upload(storagePath, fileData, {
-            contentType: attachment.mimeType,
+            contentType: uploadMimeType,
             upsert: false,
           });
 

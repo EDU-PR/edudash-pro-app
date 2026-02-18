@@ -17,7 +17,6 @@ import { useLearnerEnrollments } from '@/hooks/useLearnerData';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { QuickActions } from '@/components/learner/QuickActions';
 import type { LearnerQuickAction } from '@/components/learner/QuickActions';
-import DashOrb from '@/components/dash-orb';
 import { logger } from '@/lib/logger';
 
 const TAG = 'StudentDashboard';
@@ -252,12 +251,6 @@ export default function StudentDashboard() {
           <GradesCard />
         </View>
           </ScrollView>
-      
-      <DashOrb
-        position="bottom-right"
-        size={54}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'student_dashboard' })}
-      />
       
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer

@@ -158,6 +158,13 @@ export interface WeeklyProgramGenerationConstraints {
   includeAssessmentBlock?: boolean;
   includeParentTipPerDay?: boolean;
   maxMaterialsPerDay?: number;
+  includeToiletRoutine?: boolean;
+  includeNapTime?: boolean;
+  includeMealBlocks?: boolean;
+  includeOutdoorPlay?: boolean;
+  includeStoryCircle?: boolean;
+  includeTransitionCues?: boolean;
+  includeHygieneChecks?: boolean;
 }
 
 export const DEVELOPMENTAL_DOMAINS = [

@@ -1,11 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { isAIEnabled } from '@/lib/ai/aiConfig';
+import { getDefaultModelIdForTier } from '@/lib/ai/modelForTier';
+import { getCurrentLanguage } from '@/lib/i18n';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 
 export type GraderOptions = {
   submissionText: string;
+  assignmentTitle?: string;
   rubric?: string[];
-  gradeLevel?: number;
+  gradeLevel?: number | string;
   language?: string;
 };
 
@@ -17,10 +21,12 @@ export type GraderCallOptions = {
 };
 
 export function useGrader() {
+  const { tier } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const defaultModel = getDefaultModelIdForTier(tier ?? 'free');
 
   /** Cancel any in-flight grading request */
   const cancel = useCallback(() => {
@@ -45,18 +51,38 @@ export function useGrader() {
         return fallback.feedback;
       }
 
-      const basePayload: any = {
-        submission: opts.submissionText,
-        rubric: opts.rubric || [],
-        gradeLevel: opts.gradeLevel || null,
-        language: opts.language || 'en',
-        model: callOpts?.model || 'claude-sonnet-4-20250514',
-      };
+      // Build a proper grading prompt so the AI knows exactly what to do
+      const rubricList = (opts.rubric && opts.rubric.length > 0)
+        ? opts.rubric.join(', ')
+        : 'accuracy, completeness, effort, understanding';
+      const gradeLevelStr = opts.gradeLevel ? String(opts.gradeLevel) : 'not specified';
+      const assignmentStr = opts.assignmentTitle || 'homework submission';
+      const lang = opts.language || getCurrentLanguage() || 'en';
+
+      const gradingPrompt = [
+        'You are an experienced South African teacher. Grade this student submission.',
+        `Assignment: ${assignmentStr}`,
+        `Grade level: ${gradeLevelStr}`,
+        `Rubric criteria: ${rubricList}`,
+        `Respond in language: ${lang}`,
+        '',
+        'Student submission:',
+        opts.submissionText,
+        '',
+        'Respond with ONLY valid JSON (no markdown fences):',
+        '{',
+        '  "score": <number 0-100>,',
+        '  "feedback": "<constructive age-appropriate feedback>",',
+        '  "strengths": ["<what the learner did well>"],',
+        '  "areasForImprovement": ["<areas to work on>"],',
+        '  "suggestions": ["<actionable next steps>"]',
+        '}',
+      ].join('\n');
 
       if (callOpts?.streaming) {
-        // Streaming via direct fetch to Supabase function endpoint
+        // Streaming via direct fetch to ai-proxy
         const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-        const url = `${SUPABASE_URL}/functions/v1/ai-gateway`;
+        const url = `${SUPABASE_URL}/functions/v1/ai-proxy`;
         const { data: { session } } = await assertSupabase().auth.getSession();
         const token = session?.access_token || '';
         const res = await fetch(url, {
@@ -66,13 +92,33 @@ export function useGrader() {
             'Authorization': `Bearer ${token}`,
             'Accept': 'text/event-stream',
           },
-          body: JSON.stringify({ action: 'grading_assistance_stream', ...basePayload }),
+          body: JSON.stringify({
+            scope: 'teacher',
+            service_type: 'grading',
+            stream: true,
+            payload: {
+              prompt: gradingPrompt,
+              model: callOpts?.model || defaultModel,
+            },
+            metadata: {
+              assignment_title: assignmentStr,
+              grade_level: gradeLevelStr,
+              locale: lang,
+            },
+          }),
           signal: controller.signal,
         });
         if (!res.ok) throw new Error(`Streaming request failed: ${res.status}`);
         // If streaming not supported in this environment, fall back to non-stream
         if (!res.body || !(res.body as any).getReader) {
-          const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: { action: 'grading_assistance', ...basePayload } as any });
+          const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
+            body: {
+              scope: 'teacher',
+              service_type: 'grading',
+              payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
+              metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
+            } as any,
+          });
           if (error) throw error;
           const text: string = (data && data.content) || '';
           setResult({ text, __fallbackUsed: !!(data && (data as any).provider_error) });
@@ -124,12 +170,44 @@ export function useGrader() {
         }
         return accumulatedContent;
       } else {
-        const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: { action: 'grading_assistance', ...basePayload } as any });
+        const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
+          body: {
+            scope: 'teacher',
+            service_type: 'grading',
+            payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
+            metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
+          } as any,
+        });
         if (error) throw error;
-        const text: string = (data && data.content) || '';
-        const parsed = { text, __fallbackUsed: !!(data && (data as any).provider_error) };
-        setResult(parsed);
-        callOpts?.onFinal?.({ feedback: text });
+        // ai-proxy returns { content, ... } or { result: { ... } }
+        const raw: any = data?.result || data || {};
+        let text: string;
+        let finalResult: any;
+        if (typeof raw === 'string') {
+          text = raw;
+          try {
+            const p = JSON.parse(raw);
+            finalResult = { score: p.score, feedback: p.feedback, suggestions: p.suggestions, strengths: p.strengths, areasForImprovement: p.areasForImprovement };
+          } catch {
+            finalResult = { feedback: raw };
+          }
+        } else if (typeof raw.content === 'string') {
+          text = raw.content;
+          try {
+            const p = JSON.parse(raw.content);
+            finalResult = { score: p.score, feedback: p.feedback, suggestions: p.suggestions, strengths: p.strengths, areasForImprovement: p.areasForImprovement };
+          } catch {
+            finalResult = { feedback: raw.content };
+          }
+        } else if (typeof raw.score === 'number') {
+          finalResult = raw;
+          text = JSON.stringify(raw);
+        } else {
+          text = JSON.stringify(raw);
+          finalResult = { feedback: text };
+        }
+        setResult({ ...finalResult, __fallbackUsed: !!(data && (data as any).provider_error) });
+        callOpts?.onFinal?.(finalResult);
         return text;
       }
       } catch (e: any) {
@@ -137,29 +215,13 @@ export function useGrader() {
         setError('Grading cancelled');
         return '';
       }
-      // Fallback to Dash assistant
-      try {
-        const { getAssistant } = await import('@/services/core/getAssistant');
-        const dash = await getAssistant();
-        await dash.initialize?.();
-        if (!dash.getCurrentConversationId?.()) {
-          await dash.startNewConversation?.('AI Grader');
-        }
-        const prompt = `Provide constructive feedback and a concise score (0-100) for the following student submission.\nGrade Level: ${opts.gradeLevel || 'N/A'}\nRubric: ${(opts.rubric || []).join(', ') || 'accuracy, completeness, clarity'}\nSubmission:\n${opts.submissionText}`;
-        const response = await dash.sendMessage(prompt);
-        const text = response.content || '';
-        setResult({ text, __fallbackUsed: true });
-        callOpts?.onFinal?.({ feedback: text });
-        return text;
-      } catch {
-        setError(e?.message || 'Failed to grade submission');
-        throw e;
-      }
+      setError(e?.message || 'Failed to grade submission');
+      throw e;
     } finally {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [cancel]);
+  }, [cancel, defaultModel]);
 
   return { loading, error, result, grade, cancel } as const;
 }

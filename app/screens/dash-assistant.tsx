@@ -12,40 +12,48 @@ import { useTheme } from '@/contexts/ThemeContext';
 import DashAssistant from '@/components/ai/DashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
+import { resolveDashboardFallback } from '@/lib/dashboard/resolveDashboardFallback';
+import type { TutorMode } from '@/hooks/dash-assistant/tutorTypes';
 
 export default function DashAssistantScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const params = useLocalSearchParams<{ initialMessage?: string; conversationId?: string; source?: string }>();
+  const params = useLocalSearchParams<{
+    initialMessage?: string;
+    conversationId?: string;
+    source?: string;
+    mode?: string;
+    tutorMode?: string;
+    subject?: string;
+    grade?: string;
+    topic?: string;
+  }>();
   const initialMessage = typeof params?.initialMessage === 'string' ? params.initialMessage : undefined;
   const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
   const handoffSource = typeof params?.source === 'string' ? params.source : undefined;
-
-  const getFallbackPath = () => {
-    const role = normalizeRole(String(profile?.role || ''));
-    switch (role) {
-      case 'teacher':
-        return '/screens/teacher-dashboard';
-      case 'principal':
-      case 'principal_admin':
-        return '/screens/principal-dashboard';
-      case 'parent':
-        return '/screens/parent-dashboard';
-      case 'student':
-        return '/screens/learner-dashboard';
-      case 'super_admin':
-        return '/screens/super-admin-dashboard';
-      default:
-        return '/'; // safe landing
-    }
+  const isK12ParentDashSource = handoffSource === 'k12_parent_tab';
+  const mode = typeof params?.mode === 'string' ? params.mode.toLowerCase() : undefined;
+  const tutorMode = (typeof params?.tutorMode === 'string' ? params.tutorMode.toLowerCase() : null) as TutorMode | null;
+  const tutorConfig = {
+    subject: typeof params?.subject === 'string' ? params.subject : undefined,
+    grade: typeof params?.grade === 'string' ? params.grade : undefined,
+    topic: typeof params?.topic === 'string' ? params.topic : undefined,
   };
+  const hasTutorConfig = Boolean(tutorConfig.subject || tutorConfig.grade || tutorConfig.topic);
+  const shouldForceTutorMode = !isK12ParentDashSource && (mode === 'tutor' || !!tutorMode);
+  const uiMode: 'advisor' | 'tutor' | 'orb' | 'exam' | null =
+    isK12ParentDashSource
+      ? 'advisor'
+      : mode === 'advisor' || mode === 'orb' || mode === 'tutor' || mode === 'exam'
+        ? mode
+        : null;
 
   const handleClose = () => {
     // Navigate back to the previous screen
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(getFallbackPath());
+      router.replace(resolveDashboardFallback(profile) as any);
     }
   };
 
@@ -64,6 +72,9 @@ export default function DashAssistantScreen() {
         initialMessage={initialMessage}
         conversationId={conversationId}
         handoffSource={handoffSource}
+        uiMode={uiMode}
+        tutorMode={shouldForceTutorMode ? (tutorMode || 'diagnostic') : null}
+        tutorConfig={hasTutorConfig ? tutorConfig : undefined}
       />
     </View>
   );

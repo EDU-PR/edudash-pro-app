@@ -13,10 +13,13 @@ import { getMessageDisplayText } from '@/lib/utils/messageContent';
 export interface ParentThreadItemProps {
   thread: any;
   onPress: () => void;
+  onLongPress?: () => void;
   typingText?: string | null;
+  selectionMode?: boolean;
+  isSelected?: boolean;
 }
 
-export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ thread, onPress, typingText }) => {
+export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ thread, onPress, onLongPress, typingText, selectionMode = false, isSelected = false }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -48,6 +51,8 @@ export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ t
     container: {
       backgroundColor: theme.surface,
       marginHorizontal: 16, marginBottom: 8, borderRadius: 16, overflow: 'hidden',
+      borderWidth: isSelected ? 2 : 0,
+      borderColor: isSelected ? theme.primary : 'transparent',
       ...Platform.select({
         ios: { shadowColor: theme.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
         android: { elevation: 2 },
@@ -72,10 +77,19 @@ export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ t
     bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
     unreadBadge: { backgroundColor: theme.primary, borderRadius: 12, minWidth: 24, height: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
     unreadText: { color: theme.onPrimary, fontSize: 12, fontWeight: '700' },
-  }), [theme, hasUnread]);
+    selectedIndicator: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      marginLeft: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+    },
+  }), [theme, hasUnread, isSelected]);
 
   return (
-    <TouchableOpacity style={s.container} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={s.container} onPress={onPress} onLongPress={onLongPress} delayLongPress={220} activeOpacity={0.7}>
       <View style={s.inner}>
         <View style={s.avatar}>
           {isGroup ? (
@@ -110,6 +124,19 @@ export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ t
             {hasUnread && (
               <View style={s.unreadBadge}>
                 <Text style={s.unreadText}>{thread.unread_count && thread.unread_count > 99 ? '99+' : thread.unread_count}</Text>
+              </View>
+            )}
+            {selectionMode && (
+              <View
+                style={[
+                  s.selectedIndicator,
+                  {
+                    borderColor: isSelected ? theme.primary : theme.border,
+                    backgroundColor: isSelected ? theme.primary : 'transparent',
+                  },
+                ]}
+              >
+                {isSelected && <Ionicons name="checkmark" size={14} color={theme.onPrimary} />}
               </View>
             )}
           </View>

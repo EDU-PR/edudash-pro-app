@@ -18,6 +18,7 @@ import {
   formatEventTime,
   createEmptyTeacherData,
 } from '@/lib/dashboard/utils';
+import { fetchTodayRoutine } from '@/lib/dashboard/fetchTeacherTodayRoutine';
 
 interface ResolvedTeacherProfile {
   id: string;
@@ -368,6 +369,13 @@ export async function fetchTeacherDashboardData(
       schoolId ? fetchEvents(schoolId) : Promise.resolve([]),
     ]);
 
+  const todayRoutine = schoolId
+    ? await fetchTodayRoutine(
+        schoolId,
+        myClasses.map((cls: any) => String(cls.id))
+      )
+    : null;
+
   const uniqueStudentIds = new Set<string>();
   myClasses.forEach((cls: any) => {
     const ids = Array.isArray(cls?.__studentIds) ? cls.__studentIds : [];
@@ -395,5 +403,6 @@ export async function fetchTeacherDashboardData(
     myClasses: normalizedClasses,
     recentAssignments,
     upcomingEvents,
+    todayRoutine,
   };
 }

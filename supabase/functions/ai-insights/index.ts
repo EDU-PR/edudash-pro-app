@@ -16,6 +16,14 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 const ANTHROPIC_API_KEY=REDACTED
 
+function getDefaultModelForTier(tier: string | null | undefined): string {
+  const t = String(tier ?? 'free').toLowerCase();
+  if (t.includes('enterprise') || t === 'superadmin' || t === 'super_admin') return 'claude-sonnet-4-20250514';
+  if (t.includes('premium') || t.includes('pro') || t.includes('plus') || t.includes('basic')) return 'claude-3-7-sonnet-20250219';
+  if (t.includes('starter') || t === 'trial') return 'claude-3-5-sonnet-20241022';
+  return 'claude-3-haiku-20240307';
+}
+
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
 }
@@ -42,7 +50,10 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { scope, period_days = 14, context } = body;
+    const { scope, period_days = 14, context, model: bodyModel } = body;
+
+    const { data: tier } = await supabase.rpc('get_user_subscription_tier', { user_id: user.id });
+    const model = bodyModel || getDefaultModelForTier(tier);
 
     if (!scope || !['teacher', 'principal', 'parent'].includes(scope)) {
       return new Response(JSON.stringify({ error: 'Invalid scope' }), {
@@ -110,7 +121,7 @@ Return ONLY a JSON array of strings, e.g.: ["Insight 1", "Insight 2", "Insight 3
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
+        model: model!,
         max_tokens: 512,
         messages: [{ role: 'user', content: prompt }],
       }),

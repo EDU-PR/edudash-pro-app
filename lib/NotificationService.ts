@@ -6,6 +6,12 @@ import { assertSupabase } from './supabase';
 import { getFCMToken, onFCMTokenRefresh } from './calls/CallHeadlessTask';
 import { getStableDeviceId } from './notifications';
 
+const EXPO_PROJECT_ID =
+  Constants.easConfig?.projectId ||
+  Constants.expoConfig?.extra?.eas?.projectId ||
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+  null;
+
 export interface NotificationData {
   id: string;
   title: string;
@@ -29,6 +35,7 @@ export interface PushToken {
     deviceName?: string;
     osVersion?: string;
     appVersion: string;
+    expoProjectId?: string | null;
   };
   isActive: boolean;
   createdAt: string;
@@ -155,9 +162,14 @@ class NotificationService {
         }
       }
 
+      if (!EXPO_PROJECT_ID) {
+        console.error('Missing Expo project ID; cannot register push token');
+        return null;
+      }
+
       // Get Expo push token (for general notifications)
       const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: Constants.expoConfig?.extra?.eas?.projectId, // From app.json
+        projectId: EXPO_PROJECT_ID,
       });
 
       this.pushToken = tokenData.data;
@@ -189,6 +201,7 @@ class NotificationService {
         deviceName: Device.deviceName || undefined,
         osVersion: Device.osVersion || undefined,
         appVersion,
+        expoProjectId: EXPO_PROJECT_ID,
       };
 
       // Get device installation ID for upsert conflict key

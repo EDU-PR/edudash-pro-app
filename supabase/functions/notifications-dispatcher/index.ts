@@ -107,6 +107,12 @@ interface NotificationContext {
   warning_deadline_date?: string;
   resolution_reason?: string;
   inactive_on?: string;
+  // Build update notifications
+  version?: string;
+  build_number?: string;
+  store_url?: string;
+  mandatory?: boolean;
+  platform?: string;
 }
 
 // Notification template type
@@ -183,6 +189,12 @@ interface NotificationRequest {
   target_user_id?: string;
   channel?: string;
   case_id?: string;
+  // Build update notifications
+  version?: string;
+  build_number?: string;
+  store_url?: string;
+  mandatory?: boolean;
+  platform?: string;
   email_template_override?: {
     subject?: string;
     text?: string;
@@ -196,6 +208,7 @@ interface PushDevice {
   expo_push_token: string;
   fcm_token?: string | null;
   language?: string;
+  device_metadata?: Record<string, unknown> | null;
 }
 
 // Environment variables
@@ -220,6 +233,8 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       data: {
         type: 'message',
         thread_id: context.thread_id,
+        threadId: context.thread_id,
+        conversation_id: context.thread_id,
         message_id: context.message_id,
         screen: 'messages'
       },
@@ -530,9 +545,13 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       data: {
         type: 'incoming_call',
         call_id: context.call_id,
+        callId: context.call_id,
         caller_id: context.caller_id,
         caller_name: context.caller_name,
         call_type: context.call_type || 'voice',
+        callType: context.call_type || 'voice',
+        thread_id: context.thread_id,
+        threadId: context.thread_id,
         meeting_url: context.meeting_url,
         screen: 'incoming-call'
       },
@@ -542,6 +561,25 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       channelId: 'incoming-calls',
       _contentAvailable: true,
       categoryId: 'incoming_call'
+    },
+    build_update_available: {
+      title: context.mandatory ? 'Required App Update' : 'New App Version Available',
+      body: context.version
+        ? `Version ${context.version}${context.build_number ? ` (${context.build_number})` : ''} is ready. Open the store to update.`
+        : 'A new app build is available. Open the store to update.',
+      data: {
+        type: 'build_update_available',
+        store_url: context.store_url,
+        version: context.version,
+        build_number: context.build_number,
+        mandatory: context.mandatory ?? false,
+        platform: context.platform || 'android',
+        screen: 'store'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'default'
     },
     lesson_assigned: {
       title: '📚 New Lesson Assigned',
@@ -1161,10 +1199,22 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
 /**
  * Get push tokens for users
  */
-async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
+function normalizeExpoProjectId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getExpoProjectIdFromMetadata(metadata: unknown): string {
+  if (!metadata || typeof metadata !== 'object') return '';
+  return normalizeExpoProjectId((metadata as Record<string, unknown>).expo_project_id);
+}
+
+async function getPushTokensForUsers(
+  userIds: string[],
+  options?: { expectedExpoProjectId?: string; dedupeByUser?: boolean }
+): Promise<PushDevice[]> {
   const { data, error } = await supabase
     .from('push_devices')
-    .select('user_id, expo_push_token, fcm_token, language')
+    .select('user_id, expo_push_token, fcm_token, language, device_metadata')
     .in('user_id', userIds)
     .eq('is_active', true)
     .order('updated_at', { ascending: false });
@@ -1174,15 +1224,51 @@ async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
     return [];
   }
 
-  // Deduplicate by user_id (keeping the most recent)
+  const expectedExpoProjectId = normalizeExpoProjectId(options?.expectedExpoProjectId);
+  const dedupeByUser = options?.dedupeByUser === true;
+  const rawCandidates = data || [];
+
+  // Keep strict match for explicit project IDs, but allow legacy tokens with missing metadata.
+  // This avoids dropping valid devices that were registered before expo_project_id was persisted.
+  const candidates = expectedExpoProjectId
+    ? rawCandidates.filter((device: PushDevice) => {
+        const deviceProjectId = getExpoProjectIdFromMetadata(device.device_metadata);
+        return deviceProjectId === expectedExpoProjectId || deviceProjectId.length === 0;
+      })
+    : rawCandidates;
+
+  // Deduplicate by token (not user).
+  // A user can legitimately have multiple active devices, and all should receive push.
   const uniqueTokens = new Map<string, PushDevice>();
-  (data || []).forEach((device: PushDevice) => {
-    if (!uniqueTokens.has(device.user_id)) {
-      uniqueTokens.set(device.user_id, device);
+  candidates.forEach((device: PushDevice) => {
+    const token = String(device.expo_push_token || '').trim();
+    if (!token) return;
+    if (!uniqueTokens.has(token)) {
+      uniqueTokens.set(token, device);
     }
   });
 
-  return Array.from(uniqueTokens.values());
+  if (expectedExpoProjectId) {
+    console.log(
+      `[push_tokens] users=${userIds.length} expected_project=${expectedExpoProjectId} raw=${rawCandidates.length} filtered=${candidates.length} unique_tokens=${uniqueTokens.size} dedupe_by_user=${dedupeByUser}`
+    );
+  }
+
+  let tokens = Array.from(uniqueTokens.values());
+
+  // Build-update broadcasts should avoid duplicate banners on a single physical device.
+  // Keep only the most recent token per user for these events.
+  if (dedupeByUser) {
+    const byUser = new Map<string, PushDevice>();
+    for (const device of tokens) {
+      if (!byUser.has(device.user_id)) {
+        byUser.set(device.user_id, device);
+      }
+    }
+    tokens = Array.from(byUser.values());
+  }
+
+  return tokens;
 }
 
 const normalizeRoleTarget = (role: string): string => {
@@ -1236,6 +1322,34 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
 
   // Get users based on event context
   switch (request.event_type) {
+    case 'build_update_available': {
+      const platform = String(request.platform || request.custom_payload?.platform || '').toLowerCase();
+      const expectedExpoProjectId = normalizeExpoProjectId(
+        request.custom_payload?.expo_project_id ||
+        request.custom_payload?.expected_expo_project_id
+      );
+      let query = supabase
+        .from('push_devices')
+        .select('user_id, device_metadata')
+        .eq('is_active', true)
+        .not('expo_push_token', 'is', null);
+
+      if (platform === 'android' || platform === 'ios' || platform === 'web') {
+        query = query.eq('platform', platform);
+      }
+
+      const { data: devices } = await query;
+      if (devices) {
+        const filtered = expectedExpoProjectId
+          ? devices.filter((row: { user_id: string; device_metadata?: Record<string, unknown> }) => {
+              return getExpoProjectIdFromMetadata(row.device_metadata) === expectedExpoProjectId;
+            })
+          : devices;
+        userIds.push(...filtered.map((row: { user_id: string }) => row.user_id));
+      }
+      break;
+    }
+
     case 'new_message':
       if (request.thread_id) {
         const { data: thread } = await supabase
@@ -2041,6 +2155,31 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         context.meeting_url = request.meeting_url;
         break;
 
+      case 'build_update_available': {
+        const customPayload = request.custom_payload || {};
+        context.version =
+          request.version ||
+          String(customPayload.version || context.version || '').trim() ||
+          undefined;
+        context.build_number =
+          request.build_number ||
+          String(customPayload.build_number || customPayload.buildNumber || context.build_number || '').trim() ||
+          undefined;
+        context.store_url =
+          request.store_url ||
+          String(customPayload.store_url || customPayload.storeUrl || context.store_url || '').trim() ||
+          undefined;
+        context.platform =
+          request.platform ||
+          String(customPayload.platform || context.platform || 'android').trim() ||
+          'android';
+        context.mandatory =
+          request.mandatory === true ||
+          customPayload.mandatory === true ||
+          context.mandatory === true;
+        break;
+      }
+
       case 'lesson_assigned':
         // Get assignment and student details for notification
         if (request.assignment_id) {
@@ -2525,8 +2664,26 @@ async function sendExpoNotification(notification: ExpoNotificationPayload): Prom
     }
 
     const result = await response.json();
+    const tickets = Array.isArray(result?.data) ? result.data : [];
+    const failedTicket = tickets.find((ticket: Record<string, unknown>) => ticket?.status === 'error');
+
+    if (failedTicket) {
+      const errorMessage =
+        String(failedTicket?.message || failedTicket?.details?.error || 'Expo ticket error');
+      console.error('Expo ticket error:', failedTicket);
+      return {
+        success: false,
+        data: { id: String(failedTicket?.id || '') || undefined },
+        error: errorMessage
+      };
+    }
+
+    const firstTicket = tickets[0] || {};
     console.log('Expo notification sent successfully:', result);
-    return result;
+    return {
+      success: true,
+      data: { id: String(firstTicket?.id || '') || undefined },
+    };
   } catch (error) {
     console.error('Error sending Expo notification:', error);
     throw error;
@@ -2639,6 +2796,7 @@ function mapEventTypeToNotificationType(
   const normalized = eventType.toLowerCase();
 
   if (normalized.includes('message')) return 'message';
+  if (normalized.includes('build_update')) return 'reminder';
   if (normalized.includes('inactivity')) return 'reminder';
   if (
     normalized.includes('announcement') ||
@@ -2710,6 +2868,7 @@ function getNotificationCategory(eventType: string): string {
     'student_inactivity_warning',
     'student_inactivity_resolved',
     'student_inactivity_marked_inactive',
+    'build_update_available',
   ];
   
   if (schoolEvents.includes(eventType)) return 'school';
@@ -2842,6 +3001,48 @@ async function filterUsersByPreferences(
 }
 
 /**
+ * Prevent duplicate push sends for the same message_id + recipient set.
+ * This protects against accidental double invocations of new_message dispatch.
+ */
+async function filterNewMessageRecipientsByDeliveryHistory(
+  userIds: string[],
+  messageId?: string
+): Promise<string[]> {
+  if (!messageId || userIds.length === 0) {
+    return userIds;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('push_notifications')
+      .select('recipient_user_id')
+      .eq('notification_type', 'new_message')
+      .in('recipient_user_id', userIds)
+      .contains('data', { message_id: messageId })
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+
+    if (error) {
+      console.warn('[dedup] unable to query existing new_message notifications:', error.message);
+      return userIds;
+    }
+
+    const alreadyNotified = new Set<string>((data || []).map((row: { recipient_user_id: string }) => row.recipient_user_id));
+    if (alreadyNotified.size === 0) {
+      return userIds;
+    }
+
+    const filtered = userIds.filter((userId) => !alreadyNotified.has(userId));
+    console.log(
+      `[dedup] new_message message_id=${messageId} original=${userIds.length} already_notified=${alreadyNotified.size} remaining=${filtered.length}`
+    );
+    return filtered;
+  } catch (error) {
+    console.warn('[dedup] new_message delivery-history check failed:', error);
+    return userIds;
+  }
+}
+
+/**
  * Get signature for a user if they have email_include_signature enabled
  */
 async function getUserSignature(userId: string): Promise<string | null> {
@@ -2892,6 +3093,10 @@ async function dispatchNotification(request: Request): Promise<Response> {
       );
     }
     console.log('Processing notification request:', notificationRequest);
+    const expectedExpoProjectId = normalizeExpoProjectId(
+      notificationRequest.custom_payload?.expo_project_id ||
+      notificationRequest.custom_payload?.expected_expo_project_id
+    );
 
     // Deduplication: prevent double-send for pop_uploaded (both DB trigger and client may fire)
     if (notificationRequest.event_type === 'pop_uploaded' && notificationRequest.pop_upload_id) {
@@ -2946,7 +3151,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
           await sendEmailNotification(emails, `[TEST] ${template.title}`, emailHtml, template.body);
         }
       } else {
-        const pushTokens = await getPushTokensForUsers([targetUserId]);
+        const pushTokens = await getPushTokensForUsers([targetUserId], {
+          expectedExpoProjectId,
+        });
         if (pushTokens.length > 0) {
           await sendExpoNotification({
             to: pushTokens.map((t) => t.expo_push_token),
@@ -3007,9 +3214,34 @@ async function dispatchNotification(request: Request): Promise<Response> {
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
+
+      if (notificationRequest.event_type === 'new_message') {
+        filteredUserIds = await filterNewMessageRecipientsByDeliveryHistory(
+          filteredUserIds,
+          notificationRequest.message_id
+        );
+
+        if (filteredUserIds.length === 0 && recipientEmails.length === 0) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Message push already sent for this message_id',
+              recipients: 0,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
     }
 
-    const pushTokens = filteredUserIds.length > 0 ? await getPushTokensForUsers(filteredUserIds) : [];
+    const pushTokens = filteredUserIds.length > 0
+      ? await getPushTokensForUsers(filteredUserIds, {
+          expectedExpoProjectId,
+          dedupeByUser:
+            notificationRequest.event_type === 'build_update_available' ||
+            notificationRequest.custom_payload?.dedupe_by_user === true,
+        })
+      : [];
     console.log(`[dispatch] Event: ${notificationRequest.event_type}, UserIDs: ${filteredUserIds.length}, PushTokens: ${pushTokens.length}`);
     if (pushTokens.length > 0) {
       console.log(`[dispatch] Push tokens found for: ${pushTokens.map(t => t.user_id).join(', ')}`);
@@ -3093,6 +3325,40 @@ async function dispatchNotification(request: Request): Promise<Response> {
       await recordNotification(filteredUserIds, template, notificationRequest, expoResult);
     }
 
+    // Mark messages as delivered server-side when push is sent for message events.
+    // This is the most reliable delivery receipt — the server confirms the push was
+    // accepted by Expo/APNS/FCM, meaning the message reached the recipient's device.
+    if (
+      notificationRequest.event_type === 'new_message' &&
+      notificationRequest.thread_id &&
+      supabase &&
+      expoResults.some((r) => r.success)
+    ) {
+      try {
+        const deliveredUserIds = pushTokens
+          .filter((_, i) => expoResults[i]?.success)
+          .map((t) => t.user_id);
+        // Use direct UPDATE (not RPC) because service-role has no auth.uid() context.
+        // Logic matches mark_messages_delivered: set delivered_at on messages NOT sent
+        // by the recipient in this thread.
+        for (const uid of deliveredUserIds) {
+          const { error: deliveryError, count } = await supabase
+            .from('messages')
+            .update({ delivered_at: new Date().toISOString() })
+            .eq('thread_id', notificationRequest.thread_id)
+            .neq('sender_id', uid)
+            .is('delivered_at', null)
+            .is('deleted_at', null);
+          if (deliveryError) {
+            console.warn(`[dispatch] mark_delivered failed for ${uid}:`, deliveryError.message);
+          }
+        }
+        console.log(`[dispatch] ✅ Marked messages as delivered for ${deliveredUserIds.length} user(s) in thread ${notificationRequest.thread_id}`);
+      } catch (deliveryErr) {
+        console.warn('[dispatch] Failed to mark messages as delivered:', deliveryErr);
+      }
+    }
+
     const isInvoiceEvent = [
       'new_invoice',
       'invoice_sent',
@@ -3129,12 +3395,15 @@ async function dispatchNotification(request: Request): Promise<Response> {
       }
     }
 
+    const pushSuccessCount = expoResults.filter((result) => result.success).length;
+    const pushFailureCount = expoResults.filter((result) => result.success === false).length;
+
     await trackAnalyticsEvent('edudash.notifications.sent', {
       event_type: notificationRequest.event_type,
       channel: isInvoiceEvent ? 'email' : 'push',
       recipients: filteredUserIds.length + recipientEmails.length,
-      success_count: pushTokens.length + (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
-      failure_count: 0
+      success_count: pushSuccessCount + (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
+      failure_count: pushFailureCount
     });
 
     if (filteredUserIds.length > 0) {
@@ -3209,6 +3478,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
         direct_email_recipients: recipientEmails.length,
         event_type: notificationRequest.event_type,
         expo_result: expoResult,
+        push_success_count: pushSuccessCount,
+        push_failure_count: pushFailureCount,
+        expected_expo_project_id: expectedExpoProjectId || null,
         sent_immediately: notificationRequest.send_immediately !== false,
         preferences_filtered: userIds.length - filteredUserIds.length
       }),

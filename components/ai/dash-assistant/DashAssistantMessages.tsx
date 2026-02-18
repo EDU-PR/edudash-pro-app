@@ -1,5 +1,6 @@
 import React from 'react';
 import { Platform, View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import TutorHome from './TutorHome';
 import { ParentDashHome, type ParentChild } from './ParentDashHome';
@@ -24,7 +25,7 @@ export interface DashAssistantMessagesProps {
   setIsNearBottom: (v: boolean) => void;
   unreadCount: number;
   setUnreadCount: (n: number) => void;
-  scrollToBottom: (opts: { animated?: boolean; delay?: number }) => void;
+  scrollToBottom: (opts: { animated?: boolean; delay?: number; force?: boolean }) => void;
   renderTypingIndicator: () => React.ReactElement | null;
   renderSuggestedActions: () => React.ReactElement | null;
   onSendMessage?: (text: string) => void;
@@ -32,6 +33,7 @@ export interface DashAssistantMessagesProps {
   learnerContext?: LearnerContext | null;
   bottomInset?: number;
   onScroll?: (scrollY: number) => void;
+  compactBottomPadding?: boolean;
   /** Parent-specific: list of children */
   parentChildren?: ParentChild[];
   /** Parent-specific: currently selected child */
@@ -44,6 +46,8 @@ export interface DashAssistantMessagesProps {
   lastConversationId?: string | null;
   /** Actual user role from profile (not learnerContext which may be overridden) */
   userRole?: string | null;
+  /** Explicit tutor mode from route/session bootstrap */
+  tutorMode?: string | null;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -63,6 +67,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onAgeBandChange,
   learnerContext,
   onScroll,
+  compactBottomPadding = false,
   bottomInset = 0,
   keyboardVisible = false,
   parentChildren,
@@ -71,7 +76,10 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onOpenScanner,
   lastConversationId,
   userRole,
+  tutorMode,
 }) => {
+  const contentHeightRef = React.useRef(0);
+  const lastAutoScrollAtRef = React.useRef(0);
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
     if (explicitPhase) {
@@ -103,6 +111,10 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
 
   const phaseOrder = ['Diagnose', 'Teach', 'Practice'];
   const phaseIndex = currentPhase ? phaseOrder.indexOf(currentPhase) : -1;
+  const hasTutorHeader = Boolean(tutorMode || currentPhase);
+  const tutorModeLabel = tutorMode
+    ? `${String(tutorMode).charAt(0).toUpperCase()}${String(tutorMode).slice(1)}`
+    : 'Diagnose → Teach → Practice';
   
   // Only show phase indicator for student/learner roles in tutoring context
   // Parents and staff don't need clinical Diagnose→Teach→Practice labels
@@ -150,10 +162,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
     {
       backgroundColor: 'transparent',
       flexGrow: 1,
-      paddingBottom: Math.max(
-        keyboardVisible ? 80 : 104,
-        (styles.messagesContent?.paddingBottom || 0) + bottomInset + 16
-      ),
+      paddingBottom: compactBottomPadding
+        ? Math.max(8, (styles.messagesContent?.paddingBottom || 0))
+        : Math.max(
+            keyboardVisible ? 80 : 104,
+            (styles.messagesContent?.paddingBottom || 0) + bottomInset + 16
+          ),
     },
   ]) as ViewStyle;
 
@@ -163,11 +177,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       data={messages}
       keyExtractor={(item: any, index: number) => item.id || `msg-${index}`}
       renderItem={({ item, index }) => renderMessage(item, index)}
+      estimatedItemSize={220}
       style={listStyle}
       contentContainerStyle={listContentStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      removeClippedSubviews={Platform.OS === 'android'}
+      removeClippedSubviews={false}
       onScroll={(e: any) => {
         try {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent as any;
@@ -187,28 +202,65 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
         } catch {}
       }}
       scrollEventThrottle={16}
-      onContentSizeChange={() => {
-        // Auto-scroll when content grows (new messages)
-        if (isLoading || isNearBottom) {
-          scrollToBottom({ animated: true, delay: 80 });
-        }
+      onContentSizeChange={(_width: number, height: number) => {
+        const previousHeight = contentHeightRef.current;
+        contentHeightRef.current = height;
+
+        // Keep the viewport stable when the user is reading older messages.
+        if (!isNearBottom) return;
+        if (Math.abs(height - previousHeight) < 6) return;
+
+        const now = Date.now();
+        if (now - lastAutoScrollAtRef.current < 220) return;
+        lastAutoScrollAtRef.current = now;
+        scrollToBottom({ animated: !isLoading, delay: 0 });
       }}
       ListHeaderComponent={
-        messages.length > 0 && showPhaseIndicator ? (
-          <View style={[styles.phaseRailContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={[styles.phaseRailTrack, { backgroundColor: theme.border }]} />
-            {phaseOrder.map((phase, index) => {
-              const active = index === phaseIndex;
-              const completed = phaseIndex >= 0 && index < phaseIndex;
-              const dotColor = active ? theme.primary : completed ? theme.primary : theme.border;
-              const labelColor = active ? theme.primary : completed ? theme.text : theme.textTertiary;
-              return (
-                <View key={phase} style={styles.phaseRailStep}>
-                  <View style={[styles.phaseRailDot, { backgroundColor: dotColor }]} />
-                  <Text style={[styles.phaseRailLabel, { color: labelColor }]}>{phase}</Text>
+        messages.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            {hasTutorHeader && (
+              <View
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: theme.primary + '44',
+                  backgroundColor: theme.primary + '14',
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Ionicons name="school-outline" size={14} color={theme.primary} />
+                  <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
+                    Tutor Session Active
+                  </Text>
                 </View>
-              );
-            })}
+                <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '600' }}>
+                  Mode: {tutorModeLabel}
+                </Text>
+              </View>
+            )}
+            {showPhaseIndicator && (
+              <View style={[styles.phaseRailContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={[styles.phaseRailTrack, { backgroundColor: theme.border }]} />
+                {phaseOrder.map((phase, index) => {
+                  const active = index === phaseIndex;
+                  const completed = phaseIndex >= 0 && index < phaseIndex;
+                  const dotColor = active ? theme.primary : completed ? theme.primary : theme.border;
+                  const labelColor = active ? theme.primary : completed ? theme.text : theme.textTertiary;
+                  return (
+                    <View key={phase} style={styles.phaseRailStep}>
+                      <View style={[styles.phaseRailDot, { backgroundColor: dotColor }]} />
+                      <Text style={[styles.phaseRailLabel, { color: labelColor }]}>{phase}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         ) : null
       }
