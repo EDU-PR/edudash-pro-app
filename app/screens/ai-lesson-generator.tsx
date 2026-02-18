@@ -35,6 +35,41 @@ import {
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type LanguageCode = 'en' | 'es' | 'fr' | 'pt' | 'de' | 'af' | 'zu' | 'st';
 
+type LessonSectionCard = {
+  title: string;
+  body: string;
+};
+
+function parseLessonSections(raw: string): LessonSectionCard[] {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  const lines = text.split('\n');
+  const sections: LessonSectionCard[] = [];
+  let currentTitle = 'Overview';
+  let buffer: string[] = [];
+
+  const pushSection = () => {
+    const body = buffer.join('\n').trim();
+    if (!body) return;
+    sections.push({ title: currentTitle, body });
+    buffer = [];
+  };
+
+  lines.forEach((line) => {
+    const headingMatch = line.match(/^#{1,3}\s+(.+)$/);
+    if (headingMatch) {
+      pushSection();
+      currentTitle = headingMatch[1].trim();
+      return;
+    }
+    buffer.push(line);
+  });
+
+  pushSection();
+  return sections.length > 0 ? sections : [{ title: 'Lesson', body: text }];
+}
+
 export default function AILessonGeneratorScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -51,6 +86,7 @@ export default function AILessonGeneratorScreen() {
   const [objectives, setObjectives] = useState('Understand proper fractions; Compare simple fractions');
   const [language, setLanguage] = useState<LanguageCode>('en');
   const [saving, setSaving] = useState(false);
+  const [resultViewMode, setResultViewMode] = useState<'cards' | 'raw'>('cards');
   const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
   const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
   const quickDefaultsApplied = useRef(false);
@@ -122,7 +158,7 @@ export default function AILessonGeneratorScreen() {
   }, [isQuickMode]);
 
   useEffect(() => {
-    if (!isQuickMode || !schoolId || !user?.id) return;
+    if (!schoolId || !user?.id) return;
     let cancelled = false;
 
     const loadContext = async () => {
@@ -142,7 +178,7 @@ export default function AILessonGeneratorScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isQuickMode, schoolId, user?.id]);
+  }, [schoolId, user?.id]);
 
   const buildDashPrompt = useCallback(() => {
     const objs = (objectives || '').split(';').map(s => s.trim()).filter(Boolean);
@@ -150,7 +186,7 @@ export default function AILessonGeneratorScreen() {
     const quickHint = isQuickMode
       ? '\nThis is QUICK MODE: keep prep minimal, use common classroom materials, and deliver in compact timed steps.'
       : '';
-    const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
+    const planningHint = buildQuickLessonThemeHint(quickLessonContext);
     return `Generate a ${Number(duration) || 45} minute lesson plan for Grade ${Number(gradeLevel) || 3} in ${subject} on "${topic}". Learning objectives: ${objs.join('; ') || 'derive objectives'}. Provide objectives, warm-up, activities, assessment, and closure.${quickHint}${planningHint ? `\nPlanning Alignment Context:\n${planningHint}` : ''}.${langSuffix}`;
   }, [topic, subject, gradeLevel, duration, objectives, language, isQuickMode, quickLessonContext]);
 
@@ -169,8 +205,28 @@ export default function AILessonGeneratorScreen() {
 
   const handleGenerate = useCallback(() => {
     if (isQuotaExhausted) { router.push('/pricing'); return; }
-    onGenerate({ topic, subject, gradeLevel, duration, objectives, language, selectedModel });
-  }, [isQuotaExhausted, onGenerate, topic, subject, gradeLevel, duration, objectives, language, selectedModel]);
+    onGenerate({
+      topic,
+      subject,
+      gradeLevel,
+      duration,
+      objectives,
+      language,
+      selectedModel,
+      planningContext: buildQuickLessonThemeHint(quickLessonContext),
+    });
+  }, [
+    isQuotaExhausted,
+    onGenerate,
+    topic,
+    subject,
+    gradeLevel,
+    duration,
+    objectives,
+    language,
+    selectedModel,
+    quickLessonContext,
+  ]);
 
   const onSave = useCallback(async () => {
     try {
@@ -239,12 +295,12 @@ export default function AILessonGeneratorScreen() {
         <TouchableOpacity style={[styles.actionBtn, { borderColor: palette.outline }]} onPress={onOpenWithDash}><Ionicons name="chatbubbles-outline" size={16} color={palette.text} /><Text style={[styles.actionBtnText, { color: palette.text }]}>Dash</Text></TouchableOpacity>
       </View>
 
-      {isQuickMode && (
+      {(isQuickMode || quickLessonContextLoading || !!quickLessonContext) && (
         <View style={[styles.quickModeBanner, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
           <Ionicons name="flash" size={16} color={theme.primary} />
           <View style={styles.quickModeTextWrap}>
             <Text style={[styles.quickModeText, { color: theme.primary }]}>
-              Quick Lesson Mode • Low prep • Fast classroom recovery
+              {isQuickMode ? 'Quick Lesson Mode • Low prep • Fast classroom recovery' : 'Weekly Alignment Mode • Planning context active'}
             </Text>
             <Text style={[styles.quickModeSubText, { color: palette.textSec }]}>
               {quickLessonContextLoading
@@ -324,15 +380,51 @@ export default function AILessonGeneratorScreen() {
         {(generated?.content || generated?.description) && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16, marginBottom: 100 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Lesson Generated!</Text></View>
+            <View style={styles.resultViewToggleRow}>
+              <TouchableOpacity
+                onPress={() => setResultViewMode('cards')}
+                style={[
+                  styles.resultViewPill,
+                  { borderColor: resultViewMode === 'cards' ? theme.primary : palette.outline, backgroundColor: resultViewMode === 'cards' ? theme.primary + '20' : 'transparent' },
+                ]}
+              >
+                <Text style={{ color: resultViewMode === 'cards' ? theme.primary : palette.textSec, fontSize: 12, fontWeight: '700' }}>Card View</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setResultViewMode('raw')}
+                style={[
+                  styles.resultViewPill,
+                  { borderColor: resultViewMode === 'raw' ? theme.primary : palette.outline, backgroundColor: resultViewMode === 'raw' ? theme.primary + '20' : 'transparent' },
+                ]}
+              >
+                <Text style={{ color: resultViewMode === 'raw' ? theme.primary : palette.textSec, fontSize: 12, fontWeight: '700' }}>Raw View</Text>
+              </TouchableOpacity>
+            </View>
             <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10, minHeight: 100 }}>
               {(() => {
-                // Safely extract content string
-                const contentText = typeof generated.content === 'string' && generated.content.trim() 
-                  ? generated.content 
+                const contentText = typeof generated.content === 'string' && generated.content.trim()
+                  ? generated.content
                   : typeof generated.content === 'object' && generated.content
                     ? JSON.stringify(generated.content, null, 2)
                     : generated.description || 'No content generated';
-                
+
+                if (resultViewMode === 'cards') {
+                  const sections = parseLessonSections(contentText);
+                  return (
+                    <View style={styles.resultCardsWrap}>
+                      {sections.map((section, idx) => (
+                        <View
+                          key={`${section.title}-${idx}`}
+                          style={[styles.resultCardItem, { borderColor: theme.primary + '33', backgroundColor: theme.primary + '10' }]}
+                        >
+                          <Text style={[styles.resultCardTitle, { color: theme.primary }]}>{section.title}</Text>
+                          <Text style={[styles.resultCardBody, { color: palette.text }]}>{section.body}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                }
+
                 return (
                   <Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>
                     {contentText || 'No content generated. Please try again.'}
@@ -377,6 +469,24 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
   label: { fontSize: 12, fontWeight: '600' },
   input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'transparent' },
+  resultViewToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  resultViewPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultCardsWrap: { gap: 8 },
+  resultCardItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  resultCardTitle: { fontSize: 12, fontWeight: '800', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 },
+  resultCardBody: { fontSize: 13, lineHeight: 20 },
   btn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   btnText: { fontWeight: '700' },
 });

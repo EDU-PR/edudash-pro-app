@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 export function PWAUpdateChecker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
+  const pathname = usePathname();
+  const routeKnown = typeof pathname === 'string' && pathname.length > 0;
+  const isDisplayRoute = !routeKnown || pathname.startsWith('/display');
 
   useEffect(() => {
+    if (isDisplayRoute) return;
     if (process.env.NODE_ENV !== 'production') return;
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return;
@@ -91,7 +96,7 @@ export function PWAUpdateChecker() {
       if (intervalId) clearInterval(intervalId);
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
-  }, []);
+  }, [isDisplayRoute]);
 
   const handleUpdate = () => {
     if (!registration?.waiting) return;
@@ -108,6 +113,7 @@ export function PWAUpdateChecker() {
     setUpdateAvailable(false);
   };
 
+  if (isDisplayRoute) return null;
   if (process.env.NODE_ENV !== 'production') return null;
   if (!updateAvailable) return null;
 

@@ -1,7 +1,7 @@
 /* EduDash Pro Service Worker - PWA Support */
 
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20260217235800';
+const SW_VERSION = 'v20260218105003';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -86,6 +86,17 @@ self.addEventListener('fetch', (event) => {
   if (request.url.startsWith('chrome-extension://') || request.url.includes('chrome-devtools://')) {
     return;
   }
+  const url = new URL(request.url);
+
+  // Keep room display network-fresh to avoid stale TV payload/UI.
+  if (url.pathname.startsWith('/display')) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .catch(() => caches.match(request))
+        .then((response) => response || Response.error())
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -108,7 +119,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const url = new URL(request.url);
   const dest = request.destination;
 
   if (dest === 'image' || dest === 'font' || dest === 'audio' || url.pathname.startsWith('/sounds/')) {

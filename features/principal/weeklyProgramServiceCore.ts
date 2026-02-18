@@ -16,6 +16,8 @@ export interface ShareWeeklyProgramInput {
   rules: ProgramTimeRules;
 }
 
+export type WeeklyProgramShareAudience = 'parents' | 'teachers';
+
 export interface SaveWeeklyProgramInput {
   weeklyProgram: WeeklyProgramDraft;
 }
@@ -222,15 +224,47 @@ function renderParentSummary(params: {
           : 'Time TBD';
 
       lines.push(`- ${timeLabel}: ${block.title}`);
-      if (block.parent_tip) {
-        lines.push(`  Parent tip: ${block.parent_tip}`);
-      }
     }
 
     lines.push('');
   }
 
   lines.push('Please follow the arrival and pickup windows strictly to protect class flow and safety.');
+  return lines.join('\n');
+}
+
+function renderStaffSummary(params: {
+  program: any;
+  blocks: DailyProgramBlock[];
+  rules: ProgramTimeRules;
+}): string {
+  const { program, blocks, rules } = params;
+  const lines: string[] = [];
+
+  lines.push(`Teacher Routine Brief (${formatDateRange(program.week_start_date)})`);
+  lines.push('');
+  lines.push(`Arrival control window: ${rules.arrivalStartTime} - ${rules.arrivalCutoffTime}`);
+  lines.push(`Pickup control window: ${rules.pickupStartTime} - ${rules.pickupCutoffTime}`);
+  lines.push('Please keep transitions tight and escalate late arrivals/pickups to front-office protocol.');
+  lines.push('');
+
+  for (let day = 1; day <= 5; day += 1) {
+    const dayBlocks = blocks.filter((block) => block.day_of_week === day);
+    if (dayBlocks.length === 0) continue;
+
+    lines.push(DAY_LABELS[day]);
+    for (const block of dayBlocks) {
+      const timeLabel = block.start_time && block.end_time
+        ? `${block.start_time} - ${block.end_time}`
+        : block.start_time
+          ? `${block.start_time}`
+          : 'Time TBD';
+      lines.push(`- ${timeLabel}: ${block.title}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('This routine is now active for classroom execution.');
   return lines.join('\n');
 }
 
@@ -464,7 +498,10 @@ export class WeeklyProgramService {
     };
   }
 
-  static async shareWeeklyProgramWithParents(input: ShareWeeklyProgramInput): Promise<{ announcementId: string }> {
+  private static async shareWeeklyProgramByAudience(
+    input: ShareWeeklyProgramInput,
+    audience: WeeklyProgramShareAudience,
+  ): Promise<{ announcementId: string }> {
     const supabase = assertSupabase();
 
     const { normalized, issues: ruleIssues } = validateRules(input.rules);
@@ -506,9 +543,11 @@ export class WeeklyProgramService {
 
     const weekStartDate = String(programRow.week_start_date || '').slice(0, 10);
     const dateRange = formatDateRange(weekStartDate);
-    const title = `Daily Routine • ${dateRange}`;
+    const title = audience === 'teachers'
+      ? `Teacher Routine • ${dateRange}`
+      : `Daily Routine • ${dateRange}`;
 
-    const summary = renderParentSummary({
+    const summary = (audience === 'teachers' ? renderStaffSummary : renderParentSummary)({
       program: programRow,
       blocks,
       rules: normalized,
@@ -536,7 +575,7 @@ export class WeeklyProgramService {
         author_id: input.sharedBy,
         title,
         content: summary,
-        target_audience: 'parents',
+        target_audience: audience,
         priority: 'medium',
         is_published: true,
         published_at: new Date().toISOString(),
@@ -565,12 +604,14 @@ export class WeeklyProgramService {
           preschool_id: input.preschoolId,
           announcement_id: announcementRow.id,
           title,
-          body: 'New daily routine program shared with strict arrival and pickup windows.',
-          target_audience: 'parents',
+          body: audience === 'teachers'
+            ? 'New teacher routine brief is now active for classroom execution.'
+            : 'New daily routine program shared with strict arrival and pickup windows.',
+          target_audience: audience,
           priority: 'medium',
           send_immediately: true,
           metadata: {
-            feature: 'daily_program_share',
+            feature: audience === 'teachers' ? 'daily_program_share_teachers' : 'daily_program_share',
             weekly_program_id: input.weeklyProgramId,
             week_start_date: weekStartDate,
             platform: Platform.OS,
@@ -584,5 +625,13 @@ export class WeeklyProgramService {
     return {
       announcementId: announcementRow.id,
     };
+  }
+
+  static async shareWeeklyProgramWithParents(input: ShareWeeklyProgramInput): Promise<{ announcementId: string }> {
+    return this.shareWeeklyProgramByAudience(input, 'parents');
+  }
+
+  static async shareWeeklyProgramWithTeachers(input: ShareWeeklyProgramInput): Promise<{ announcementId: string }> {
+    return this.shareWeeklyProgramByAudience(input, 'teachers');
   }
 }

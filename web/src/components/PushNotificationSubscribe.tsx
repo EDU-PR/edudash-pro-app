@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, BellOff, Settings, AlertCircle } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE';
 
@@ -66,8 +67,12 @@ export function PushNotificationSubscribe() {
   const [isSupported, setIsSupported] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const supabase = createClient();
+  const pathname = usePathname();
+  const routeKnown = typeof pathname === 'string' && pathname.length > 0;
+  const isDisplayRoute = !routeKnown || pathname.startsWith('/display');
 
   useEffect(() => {
+    if (isDisplayRoute) return;
     const init = async () => {
       // Check if notifications are supported
       if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -90,7 +95,7 @@ export function PushNotificationSubscribe() {
     };
 
     init();
-  }, [supabase]);
+  }, [isDisplayRoute, supabase]);
 
   const handleSubscribe = async () => {
     if (!userId) return;
@@ -185,6 +190,10 @@ export function PushNotificationSubscribe() {
       setIsLoading(false);
     }
   };
+
+  if (isDisplayRoute) {
+    return null;
+  }
 
   // Don't show if notifications not supported
   if (!isSupported) {

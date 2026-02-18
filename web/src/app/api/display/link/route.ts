@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createDisplayToken } from '@/lib/display/token';
+import { resolveTrustedTvDurationDays } from '@/lib/display/trustedTv.server';
 import { randomBytes } from 'crypto';
 
 const JOIN_CODE_LENGTH = 6;
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
       token,
       joinCode: joinCode ?? undefined,
       expiresIn: '24h',
+      trustedPairingDays: resolveTrustedTvDurationDays(),
     });
   } catch (e) {
     console.error('[display/link]', e);

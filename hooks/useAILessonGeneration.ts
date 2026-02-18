@@ -43,6 +43,7 @@ interface LessonParams {
   objectives: string;
   language: string;
   selectedModel: string | null;
+  planningContext?: string | null;
 }
 
 interface UseAILessonGenerationReturn {
@@ -133,7 +134,16 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
   }, []);
 
   const onGenerate = useCallback(async (params: LessonParams, payloadOverride?: Record<string, unknown>) => {
-    const { topic, subject, gradeLevel, duration, objectives, language, selectedModel } = params;
+    const {
+      topic,
+      subject,
+      gradeLevel,
+      duration,
+      objectives,
+      language,
+      selectedModel,
+      planningContext,
+    } = params;
 
     try {
       const controller = new AbortController();
@@ -190,15 +200,31 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       setProgressMessage('Preparing request...');
       track('edudash.ai.lesson.generate_started', {});
 
+      const objectiveList = (objectives || '').split(';').map(s => s.trim()).filter(Boolean);
+      const normalizedDuration = Number(duration) || 45;
+      const lessonPrompt = [
+        `Generate a ${normalizedDuration}-minute CAPS-aligned lesson plan.`,
+        `Subject: ${subject || 'General Studies'}.`,
+        `Topic: ${topic || 'Lesson Topic'}.`,
+        `Grade level: ${Number(gradeLevel) || 3}.`,
+        `Learning objectives: ${objectiveList.length ? objectiveList.join('; ') : 'Derive clear objectives from the topic.'}.`,
+        'Return a practical classroom-ready structure with: objectives, materials, warm-up, guided activity, independent practice, assessment, differentiation, and closure.',
+        planningContext ? `Planning Alignment Context:\\n${planningContext}` : '',
+      ]
+        .filter(Boolean)
+        .join('\\n');
+
       const payload = payloadOverride || {
         action: 'lesson_generation',
+        prompt: lessonPrompt,
         topic: topic || 'Lesson Topic',
         subject: subject || 'General Studies',
         gradeLevel: Number(gradeLevel) || 3,
-        duration: Number(duration) || 45,
-        objectives: (objectives || '').split(';').map(s => s.trim()).filter(Boolean),
+        duration: normalizedDuration,
+        objectives: objectiveList,
         language: language || 'en',
         model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        context: planningContext || undefined,
       };
       setLastPayload(payload);
 

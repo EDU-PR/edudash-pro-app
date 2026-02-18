@@ -101,7 +101,6 @@ type PlannerPreset = {
   weeklyObjectives: string;
   budgetLevel: 'low' | 'medium' | 'high';
   includeAssessment: boolean;
-  includeParentTips: boolean;
   rules: ProgramTimeRules;
 };
 
@@ -127,7 +126,6 @@ const SMART_PRESETS: PlannerPreset[] = [
     weeklyObjectives: 'Routine consistency, self-help skills, social confidence',
     budgetLevel: 'medium',
     includeAssessment: true,
-    includeParentTips: true,
     rules: {
       arrivalStartTime: '07:30',
       arrivalCutoffTime: '08:30',
@@ -145,7 +143,6 @@ const SMART_PRESETS: PlannerPreset[] = [
     weeklyObjectives: 'Literacy readiness, numeracy confidence, social-emotional growth',
     budgetLevel: 'high',
     includeAssessment: true,
-    includeParentTips: true,
     rules: {
       arrivalStartTime: '07:00',
       arrivalCutoffTime: '08:30',
@@ -163,7 +160,6 @@ const SMART_PRESETS: PlannerPreset[] = [
     weeklyObjectives: 'Homework support, emotional regulation, independent routines',
     budgetLevel: 'low',
     includeAssessment: false,
-    includeParentTips: true,
     rules: {
       arrivalStartTime: '12:30',
       arrivalCutoffTime: '13:30',
@@ -223,6 +219,48 @@ function toMinutes(value: string): number | null {
   return hours * 60 + minutes;
 }
 
+function resolveSchoolName(profile: any): string {
+  const fromMembership = String(profile?.organization_membership?.organization_name || '').trim();
+  if (fromMembership) return fromMembership;
+  const fromOrg = String(profile?.organization_name || '').trim();
+  if (fromOrg) return fromOrg;
+  const fromPreschool = String(profile?.preschool_name || '').trim();
+  if (fromPreschool) return fromPreschool;
+  return '';
+}
+
+function withSchoolNamedTitle(rawTitle: string | null | undefined, schoolName: string, themeTitle: string): string {
+  const cleanSchool = String(schoolName || '').trim();
+  const cleanTheme = String(themeTitle || '').trim() || 'Daily Routine';
+  const raw = String(rawTitle || '').trim();
+  const fallbackCore = `${cleanTheme} Weekly Routine`;
+
+  if (!cleanSchool) {
+    return raw || fallbackCore;
+  }
+  if (!raw) {
+    return `${cleanSchool}: ${fallbackCore}`;
+  }
+
+  const schoolLower = cleanSchool.toLowerCase();
+  const rawLower = raw.toLowerCase();
+  if (rawLower.includes(schoolLower)) {
+    return raw;
+  }
+
+  const genericPrefixes = ['curious learners', 'playful foundations', 'homework & enrichment', 'school', 'preschool'];
+  const split = raw.split(':').map((part) => part.trim()).filter(Boolean);
+  if (split.length > 1) {
+    const first = split[0].toLowerCase();
+    const rest = split.slice(1).join(':').trim();
+    if (genericPrefixes.some((prefix) => first.includes(prefix))) {
+      return `${cleanSchool}: ${rest || fallbackCore}`;
+    }
+  }
+
+  return `${cleanSchool}: ${raw}`;
+}
+
 export default function PrincipalDailyProgramPlannerScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -230,6 +268,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
   const organizationId = extractOrganizationId(profile);
   const userId = user?.id || profile?.id;
+  const schoolName = useMemo(() => resolveSchoolName(profile), [profile]);
 
   const [weekStartDate, setWeekStartDate] = useState(() => startOfWeekMonday(new Date()));
   const [themeTitle, setThemeTitle] = useState('Healthy Habits');
@@ -238,7 +277,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [dailyMinutes, setDailyMinutes] = useState('300');
   const [budgetLevel, setBudgetLevel] = useState<'low' | 'medium' | 'high'>('medium');
   const [includeAssessment, setIncludeAssessment] = useState(true);
-  const [includeParentTips, setIncludeParentTips] = useState(true);
   const [routineOptions, setRoutineOptions] = useState<RoutineOptionState>(() => ({
     ...DEFAULT_ROUTINE_OPTIONS,
   }));
@@ -248,11 +286,13 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sharing, setSharing] = useState(false);
+  const [sharingParents, setSharingParents] = useState(false);
+  const [sharingTeachers, setSharingTeachers] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
   const [programs, setPrograms] = useState<WeeklyProgramDraft[]>([]);
+  const [draftViewMode, setDraftViewMode] = useState<'edit' | 'cards'>('edit');
 
   const loadPrograms = useCallback(async () => {
     if (!organizationId) {
@@ -309,6 +349,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
         preschoolId: organizationId,
         createdBy: userId,
         weekStartDate,
+        schoolName: schoolName || undefined,
         theme: themeTitle.trim(),
         ageGroup: ageGroup.trim() || '3-6',
         weeklyObjectives: weeklyObjectives
@@ -319,7 +360,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
           dailyMinutes: Math.max(120, safeDailyMinutes || 300),
           budgetLevel,
           includeAssessmentBlock: includeAssessment,
-          includeParentTipPerDay: includeParentTips,
           includeToiletRoutine: routineOptions.toiletRoutine,
           includeNapTime: routineOptions.napTime,
           includeMealBlocks: routineOptions.mealBreaks,
@@ -332,11 +372,14 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
       setDraft({
         ...generated,
+        title: withSchoolNamedTitle(generated.title, schoolName, themeTitle),
+        blocks: (generated.blocks || []).map((block) => ({ ...block, parent_tip: null })),
         preschool_id: organizationId,
         created_by: userId,
         week_start_date: startOfWeekMonday(weekStartDate),
         week_end_date: addDays(startOfWeekMonday(weekStartDate), 4),
       });
+      setDraftViewMode('cards');
 
       Alert.alert('Draft ready', 'AI generated your daily routine. Review and share when ready.');
     } catch (error: unknown) {
@@ -349,7 +392,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
     budgetLevel,
     dailyMinutes,
     includeAssessment,
-    includeParentTips,
     organizationId,
     routineOptions.hygieneChecks,
     routineOptions.mealBreaks,
@@ -358,6 +400,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     routineOptions.storyCircle,
     routineOptions.toiletRoutine,
     routineOptions.transitionCues,
+    schoolName,
     themeTitle,
     userId,
     weekStartDate,
@@ -385,9 +428,10 @@ export default function PrincipalDailyProgramPlannerScreen() {
           week_start_date: startOfWeekMonday(draft.week_start_date || weekStartDate),
           week_end_date: addDays(startOfWeekMonday(draft.week_start_date || weekStartDate), 4),
           age_group: draft.age_group || ageGroup,
-          title: draft.title || `${themeTitle} Daily Program`,
+          title: withSchoolNamedTitle(draft.title || `${themeTitle} Daily Program`, schoolName, themeTitle),
           summary: draft.summary || `${themeTitle} routine plan for the week`,
           status: draft.status || 'draft',
+          blocks: (draft.blocks || []).map((block) => ({ ...block, parent_tip: null })),
         },
       });
 
@@ -401,7 +445,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     } finally {
       setSaving(false);
     }
-  }, [ageGroup, draft, loadPrograms, organizationId, themeTitle, userId, weekStartDate]);
+  }, [ageGroup, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate]);
 
   const shareWithParents = useCallback(async (programOverride?: WeeklyProgramDraft) => {
     const activeProgram = programOverride || draft;
@@ -421,13 +465,13 @@ export default function PrincipalDailyProgramPlannerScreen() {
       return;
     }
 
-    setSharing(true);
+    setSharingParents(true);
     try {
       let programToShare = activeProgram;
       if (!programToShare.id) {
         const saved = await saveDraft();
         if (!saved?.id) {
-          setSharing(false);
+          setSharingParents(false);
           return;
         }
         programToShare = saved;
@@ -448,7 +492,56 @@ export default function PrincipalDailyProgramPlannerScreen() {
     } catch (error: unknown) {
       Alert.alert('Share failed', error instanceof Error ? error.message : 'Could not share routine.');
     } finally {
-      setSharing(false);
+      setSharingParents(false);
+    }
+  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
+
+  const shareWithTeachers = useCallback(async (programOverride?: WeeklyProgramDraft) => {
+    const activeProgram = programOverride || draft;
+    if (!activeProgram) {
+      Alert.alert('No program', 'Generate or load a program before sharing with teachers.');
+      return;
+    }
+
+    if (!organizationId || !userId) {
+      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      return;
+    }
+
+    const { normalized, issues } = WeeklyProgramService.validateProgramTimeRules(rules);
+    if (issues.length > 0) {
+      Alert.alert('Fix time rules', issues.join('\n'));
+      return;
+    }
+
+    setSharingTeachers(true);
+    try {
+      let programToShare = activeProgram;
+      if (!programToShare.id) {
+        const saved = await saveDraft();
+        if (!saved?.id) {
+          setSharingTeachers(false);
+          return;
+        }
+        programToShare = saved;
+      }
+
+      await WeeklyProgramService.shareWeeklyProgramWithTeachers({
+        weeklyProgramId: programToShare.id,
+        preschoolId: organizationId,
+        sharedBy: userId,
+        rules: normalized,
+      });
+
+      await loadPrograms();
+      Alert.alert(
+        'Shared with Teachers',
+        'Routine brief shared with all teachers. Dashboards and in-app notifications are now updated.',
+      );
+    } catch (error: unknown) {
+      Alert.alert('Share failed', error instanceof Error ? error.message : 'Could not share routine with teachers.');
+    } finally {
+      setSharingTeachers(false);
     }
   }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
 
@@ -489,7 +582,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
     setWeeklyObjectives(preset.weeklyObjectives);
     setBudgetLevel(preset.budgetLevel);
     setIncludeAssessment(preset.includeAssessment);
-    setIncludeParentTips(preset.includeParentTips);
     setRoutineOptions(routineOptionsForPreset(preset.id));
     setRules(preset.rules);
   }, []);
@@ -545,7 +637,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
             materials: [],
             transition_cue: null,
             notes: null,
-            parent_tip: '',
+            parent_tip: null,
           },
         ],
       };
@@ -567,21 +659,33 @@ export default function PrincipalDailyProgramPlannerScreen() {
   }, []);
 
   const loadProgramIntoEditor = useCallback((program: WeeklyProgramDraft) => {
+    const rawTitle = String(program.title || '').trim();
+    const normalizedTheme = (() => {
+      if (!rawTitle) return '';
+      if (!schoolName) return rawTitle;
+      const schoolPrefix = `${schoolName.toLowerCase()}:`;
+      const lower = rawTitle.toLowerCase();
+      if (lower.startsWith(schoolPrefix)) {
+        return rawTitle.slice(schoolPrefix.length).trim();
+      }
+      return rawTitle;
+    })();
     setSelectedPresetId(null);
     setWeekStartDate(startOfWeekMonday(program.week_start_date));
-    setThemeTitle(program.title || themeTitle);
+    setThemeTitle(normalizedTheme || themeTitle);
     setAgeGroup(program.age_group || '3-6');
     setDailyMinutes('300');
     setWeeklyObjectives(program.summary || weeklyObjectives);
     setDraft(program);
+    setDraftViewMode('edit');
     Alert.alert('Loaded', 'Program loaded into editor.');
-  }, [themeTitle, weeklyObjectives]);
+  }, [schoolName, themeTitle, weeklyObjectives]);
 
   const programStats = useMemo(() => {
     const draftBlocks = draft?.blocks || [];
     const totalBlocks = draftBlocks.length;
-    const parentTipCount = draftBlocks.filter((block) => !!block.parent_tip?.trim()).length;
-    return { totalBlocks, parentTipCount };
+    const withTimesCount = draftBlocks.filter((block) => !!block.start_time && !!block.end_time).length;
+    return { totalBlocks, withTimesCount };
   }, [draft?.blocks]);
 
   const recentThemeSuggestions = useMemo(() => {
@@ -606,9 +710,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
     const blocks = draft?.blocks || [];
     const missingTimes = blocks.filter((block) => !block.start_time || !block.end_time).length;
     const missingTitles = blocks.filter((block) => !String(block.title || '').trim()).length;
-    const missingParentTips = includeParentTips
-      ? blocks.filter((block) => !String(block.parent_tip || '').trim()).length
-      : 0;
 
     const blockHasKeywords = (keywords: string[]) =>
       blocks.some((block) => {
@@ -617,7 +718,6 @@ export default function PrincipalDailyProgramPlannerScreen() {
           block.title,
           block.notes,
           block.transition_cue,
-          block.parent_tip,
         ]
           .map((value) => String(value || '').toLowerCase())
           .join(' ');
@@ -660,14 +760,12 @@ export default function PrincipalDailyProgramPlannerScreen() {
       total: blocks.length,
       missingTimes,
       missingTitles,
-      missingParentTips,
       outOfWindow,
       missingEssentialsCount: missingEssentials.length,
       missingEssentials,
     };
   }, [
     draft?.blocks,
-    includeParentTips,
     routineOptions.hygieneChecks,
     routineOptions.mealBreaks,
     routineOptions.napTime,
@@ -727,7 +825,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
           </View>
           <Text style={styles.heroTitle}>Daily Routine & Program Helper</Text>
           <Text style={styles.heroSubtitle}>
-            Generate a practical day flow, lock strict arrival/pickup windows, and share it with parents in one publish flow.
+            Generate a robust CAPS-aligned school routine, lock strict arrival/pickup windows, and share it with parents in one publish flow.
           </Text>
 
           <View style={styles.statsRow}>
@@ -736,8 +834,8 @@ export default function PrincipalDailyProgramPlannerScreen() {
               <Text style={styles.statValue}>{programStats.totalBlocks}</Text>
             </View>
             <View style={styles.statPill}>
-              <Text style={styles.statLabel}>Parent Tips</Text>
-              <Text style={styles.statValue}>{programStats.parentTipCount}</Text>
+              <Text style={styles.statLabel}>Timed Blocks</Text>
+              <Text style={styles.statValue}>{programStats.withTimesCount}</Text>
             </View>
             <View style={styles.statPill}>
               <Text style={styles.statLabel}>Saved Plans</Text>
@@ -792,6 +890,12 @@ export default function PrincipalDailyProgramPlannerScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Program Setup</Text>
           <Text style={styles.sectionHint}>Set core details first. Dash uses this context to generate better daily blocks.</Text>
+          {!!schoolName && (
+            <View style={styles.schoolNamePill}>
+              <Ionicons name="business-outline" size={14} color={theme.primary} />
+              <Text style={styles.schoolNamePillText}>School: {schoolName}</Text>
+            </View>
+          )}
           <Text style={styles.fieldLabel}>Week Start (Monday)</Text>
           <TextInput
             style={styles.input}
@@ -896,13 +1000,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
               style={[styles.togglePill, includeAssessment && styles.togglePillActive]}
               onPress={() => setIncludeAssessment((prev) => !prev)}
             >
-              <Text style={[styles.toggleText, includeAssessment && styles.toggleTextActive]}>Assessment Block</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.togglePill, includeParentTips && styles.togglePillActive]}
-              onPress={() => setIncludeParentTips((prev) => !prev)}
-            >
-              <Text style={[styles.toggleText, includeParentTips && styles.toggleTextActive]}>Parent Tips</Text>
+              <Text style={[styles.toggleText, includeAssessment && styles.toggleTextActive]}>CAPS Assessment Block</Text>
             </TouchableOpacity>
           </View>
 
@@ -1049,33 +1147,63 @@ export default function PrincipalDailyProgramPlannerScreen() {
               <Text style={styles.secondaryBtnText}>{saving ? 'Saving...' : 'Save Draft'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.successBtn, styles.halfButton, (sharing || !draft) && styles.buttonDisabled]}
-              onPress={() => void shareWithParents()}
-              disabled={sharing || !draft}
+              style={[styles.teacherShareBtn, styles.halfButton, (sharingTeachers || !draft) && styles.buttonDisabled]}
+              onPress={() => void shareWithTeachers()}
+              disabled={sharingTeachers || !draft}
             >
-              {sharing ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="megaphone-outline" size={16} color="#fff" />}
-              <Text style={styles.successBtnText}>{sharing ? 'Sharing...' : 'Share with Parents'}</Text>
+              {sharingTeachers ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="people-outline" size={16} color="#fff" />}
+              <Text style={styles.successBtnText}>{sharingTeachers ? 'Sharing...' : 'Share with Teachers'}</Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={[styles.successBtn, (sharingParents || !draft) && styles.buttonDisabled]}
+            onPress={() => void shareWithParents()}
+            disabled={sharingParents || !draft}
+          >
+            {sharingParents ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="megaphone-outline" size={16} color="#fff" />}
+            <Text style={styles.successBtnText}>{sharingParents ? 'Sharing...' : 'Share with Parents'}</Text>
+          </TouchableOpacity>
           <Text style={styles.actionHint}>
             {shareReady
               ? 'Everything looks ready. You can share this routine with parents now.'
-              : 'Tip: Complete block times, include selected routine essentials, and keep times inside the strict window.'}
+              : 'Tip: Save to persist immediately. Share with teachers for classroom rollout, and share with parents when ready for family communication.'}
           </Text>
         </View>
 
         {draft && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Draft Blocks</Text>
-            <Text style={styles.sectionHint}>Tune times, titles, and parent tips before sharing.</Text>
+            <Text style={styles.sectionHint}>
+              {draftViewMode === 'cards'
+                ? 'Card preview mode for quick scan. Switch to Edit to change details.'
+                : 'Tune times and titles before sharing.'}
+            </Text>
+            <View style={styles.previewModeRow}>
+              <TouchableOpacity
+                style={[styles.previewModePill, draftViewMode === 'cards' && styles.previewModePillActive]}
+                onPress={() => setDraftViewMode('cards')}
+              >
+                <Text style={[styles.previewModeText, draftViewMode === 'cards' && styles.previewModeTextActive]}>
+                  Card Preview
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.previewModePill, draftViewMode === 'edit' && styles.previewModePillActive]}
+                onPress={() => setDraftViewMode('edit')}
+              >
+                <Text style={[styles.previewModeText, draftViewMode === 'edit' && styles.previewModeTextActive]}>
+                  Edit Mode
+                </Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.draftInsightRow}>
               <View style={styles.draftInsightPill}>
                 <Text style={styles.draftInsightLabel}>Missing Times</Text>
                 <Text style={styles.draftInsightValue}>{draftInsights.missingTimes}</Text>
               </View>
               <View style={styles.draftInsightPill}>
-                <Text style={styles.draftInsightLabel}>No Parent Tip</Text>
-                <Text style={styles.draftInsightValue}>{draftInsights.missingParentTips}</Text>
+                <Text style={styles.draftInsightLabel}>Missing Titles</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.missingTitles}</Text>
               </View>
               <View style={styles.draftInsightPill}>
                 <Text style={styles.draftInsightLabel}>Out of Window</Text>
@@ -1092,70 +1220,110 @@ export default function PrincipalDailyProgramPlannerScreen() {
               </Text>
             )}
 
-            {DAY_ORDER.map((day) => {
-              const dayBlocks = draft.blocks
-                .filter((block) => block.day_of_week === day)
-                .sort((a, b) => a.block_order - b.block_order);
+            {draftViewMode === 'cards' ? (
+              DAY_ORDER.map((day) => {
+                const dayBlocks = draft.blocks
+                  .filter((block) => block.day_of_week === day)
+                  .sort((a, b) => a.block_order - b.block_order);
 
-              return (
-                <View key={day} style={styles.daySection}>
-                  <View style={styles.dayHeader}>
-                    <Text style={styles.dayTitle}>{DAY_LABELS[day]}</Text>
-                    <TouchableOpacity style={styles.inlineBtn} onPress={() => addBlockForDay(day)}>
-                      <Ionicons name="add" size={14} color={theme.primary} />
-                      <Text style={styles.inlineBtnText}>Add Block</Text>
-                    </TouchableOpacity>
-                  </View>
+                return (
+                  <View key={day} style={styles.daySection}>
+                    <View style={styles.dayHeader}>
+                      <Text style={styles.dayTitle}>{DAY_LABELS[day]}</Text>
+                      <Text style={styles.previewCountLabel}>{dayBlocks.length} blocks</Text>
+                    </View>
 
-                  {dayBlocks.length === 0 ? (
-                    <Text style={styles.dayEmpty}>No blocks yet.</Text>
-                  ) : (
-                    dayBlocks.map((block) => (
-                      <View key={`${day}-${block.block_order}`} style={styles.blockCard}>
-                        <View style={styles.blockTitleRow}>
-                          <Text style={styles.blockBadge}>#{block.block_order}</Text>
-                          <TouchableOpacity onPress={() => removeBlock(day, block.block_order)}>
-                            <Ionicons name="trash-outline" size={16} color={theme.error} />
-                          </TouchableOpacity>
-                        </View>
-                        <TextInput
-                          style={styles.input}
-                          value={block.title}
-                          onChangeText={(value) => updateDraftBlock(day, block.block_order, { title: value })}
-                          placeholder="Block title"
-                          placeholderTextColor={theme.textSecondary}
-                        />
-                        <View style={styles.row}>
-                          <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            value={String(block.start_time || '')}
-                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { start_time: normalizeTime(value) })}
-                            placeholder="Start HH:MM"
-                            placeholderTextColor={theme.textSecondary}
-                            autoCapitalize="none"
-                          />
-                          <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            value={String(block.end_time || '')}
-                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { end_time: normalizeTime(value) })}
-                            placeholder="End HH:MM"
-                            placeholderTextColor={theme.textSecondary}
-                            autoCapitalize="none"
-                          />
-                        </View>
-                        <TextInput
-                          style={styles.input}
-                          value={block.parent_tip || ''}
-                          onChangeText={(value) => updateDraftBlock(day, block.block_order, { parent_tip: value })}
-                          placeholder="Parent tip (optional)"
-                          placeholderTextColor={theme.textSecondary}
-                        />
+                    {dayBlocks.length === 0 ? (
+                      <Text style={styles.dayEmpty}>No blocks yet.</Text>
+                    ) : (
+                      <View style={styles.previewBlockWrap}>
+                        {dayBlocks.map((block) => (
+                          <View key={`${day}-${block.block_order}`} style={styles.previewBlockCard}>
+                            <View style={styles.previewBlockMetaRow}>
+                              <Text style={styles.previewBlockOrder}>#{block.block_order}</Text>
+                              <Text style={styles.previewBlockTime}>
+                                {(block.start_time && String(block.start_time)) || '--:--'} - {(block.end_time && String(block.end_time)) || '--:--'}
+                              </Text>
+                            </View>
+                            <Text style={styles.previewBlockTitle}>
+                              {String(block.title || '').trim() || 'Untitled block'}
+                            </Text>
+                            {!!String(block.notes || '').trim() && (
+                              <Text style={styles.previewBlockNote}>{String(block.notes)}</Text>
+                            )}
+                          </View>
+                        ))}
                       </View>
-                    ))
-                  )}
-                </View>
-              );
-            })}
+                    )}
+                  </View>
+                );
+              })
+            ) : (
+              DAY_ORDER.map((day) => {
+                const dayBlocks = draft.blocks
+                  .filter((block) => block.day_of_week === day)
+                  .sort((a, b) => a.block_order - b.block_order);
+
+                return (
+                  <View key={day} style={styles.daySection}>
+                    <View style={styles.dayHeader}>
+                      <Text style={styles.dayTitle}>{DAY_LABELS[day]}</Text>
+                      <TouchableOpacity style={styles.inlineBtn} onPress={() => addBlockForDay(day)}>
+                        <Ionicons name="add" size={14} color={theme.primary} />
+                        <Text style={styles.inlineBtnText}>Add Block</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {dayBlocks.length === 0 ? (
+                      <Text style={styles.dayEmpty}>No blocks yet.</Text>
+                    ) : (
+                      dayBlocks.map((block) => (
+                        <View key={`${day}-${block.block_order}`} style={styles.blockCard}>
+                          <View style={styles.blockTitleRow}>
+                            <Text style={styles.blockBadge}>#{block.block_order}</Text>
+                            <TouchableOpacity onPress={() => removeBlock(day, block.block_order)}>
+                              <Ionicons name="trash-outline" size={16} color={theme.error} />
+                            </TouchableOpacity>
+                          </View>
+                          <TextInput
+                            style={styles.input}
+                            value={block.title}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { title: value })}
+                            placeholder="Block title"
+                            placeholderTextColor={theme.textSecondary}
+                          />
+                          <View style={styles.row}>
+                            <TextInput
+                              style={[styles.input, styles.halfInput]}
+                              value={String(block.start_time || '')}
+                              onChangeText={(value) => updateDraftBlock(day, block.block_order, { start_time: normalizeTime(value) })}
+                              placeholder="Start HH:MM"
+                              placeholderTextColor={theme.textSecondary}
+                              autoCapitalize="none"
+                            />
+                            <TextInput
+                              style={[styles.input, styles.halfInput]}
+                              value={String(block.end_time || '')}
+                              onChangeText={(value) => updateDraftBlock(day, block.block_order, { end_time: normalizeTime(value) })}
+                              placeholder="End HH:MM"
+                              placeholderTextColor={theme.textSecondary}
+                              autoCapitalize="none"
+                            />
+                          </View>
+                          <TextInput
+                            style={styles.input}
+                            value={block.notes || ''}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { notes: value })}
+                            placeholder="Staff note (optional)"
+                            placeholderTextColor={theme.textSecondary}
+                          />
+                        </View>
+                      ))
+                    )}
+                  </View>
+                );
+              })
+            )}
           </View>
         )}
 
@@ -1183,9 +1351,13 @@ export default function PrincipalDailyProgramPlannerScreen() {
                     <Ionicons name="create-outline" size={14} color={theme.primary} />
                     <Text style={styles.inlineBtnText}>Edit</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={styles.inlineBtn} onPress={() => void shareWithTeachers(program)}>
+                    <Ionicons name="people-outline" size={14} color={theme.primary} />
+                    <Text style={styles.inlineBtnText}>Share Teachers</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.inlineBtn} onPress={() => void shareWithParents(program)}>
                     <Ionicons name="megaphone-outline" size={14} color={theme.primary} />
-                    <Text style={styles.inlineBtnText}>Share</Text>
+                    <Text style={styles.inlineBtnText}>Share Parents</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1352,6 +1524,25 @@ const createStyles = (theme: any) =>
       color: theme.textSecondary,
       fontSize: 12,
       lineHeight: 17,
+    },
+    schoolNamePill: {
+      marginTop: 4,
+      marginBottom: 2,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.primary + '18',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    schoolNamePillText: {
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: '700',
     },
     fieldLabel: {
       color: theme.textSecondary,
@@ -1636,6 +1827,15 @@ const createStyles = (theme: any) =>
       flexDirection: 'row',
       gap: 8,
     },
+    teacherShareBtn: {
+      borderRadius: 12,
+      backgroundColor: '#0284c7',
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
     successBtnText: {
       color: '#fff',
       fontWeight: '800',
@@ -1695,9 +1895,80 @@ const createStyles = (theme: any) =>
       fontWeight: '800',
       fontSize: 13,
     },
+    previewCountLabel: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
     dayEmpty: {
       color: theme.textSecondary,
       fontSize: 12,
+    },
+    previewModeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 2,
+      marginBottom: 2,
+    },
+    previewModePill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'c2',
+      paddingHorizontal: 11,
+      paddingVertical: 6,
+    },
+    previewModePillActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '1f',
+    },
+    previewModeText: {
+      color: theme.textSecondary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    previewModeTextActive: {
+      color: theme.primary,
+    },
+    previewBlockWrap: {
+      gap: 8,
+    },
+    previewBlockCard: {
+      borderWidth: 1,
+      borderColor: theme.primary + '35',
+      borderRadius: 12,
+      backgroundColor: theme.primary + '12',
+      paddingVertical: 9,
+      paddingHorizontal: 10,
+      gap: 5,
+    },
+    previewBlockMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    previewBlockOrder: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 11,
+    },
+    previewBlockTime: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    previewBlockTitle: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    previewBlockNote: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 16,
     },
     blockCard: {
       borderWidth: 1,
