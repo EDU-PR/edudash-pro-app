@@ -26,6 +26,17 @@ type WeeklyProgramAIResponse = {
   }>;
 };
 
+type AIFunctionInvokeResult = {
+  data: unknown;
+  error: unknown;
+};
+
+type SupabaseFunctionsClient = {
+  functions: {
+    invoke: (name: string, args: { body: Record<string, unknown> }) => Promise<AIFunctionInvokeResult>;
+  };
+};
+
 const VALID_BLOCK_TYPES: DailyProgramBlockType[] = [
   'circle_time',
   'learning',
@@ -289,6 +300,91 @@ const extractFunctionErrorMessage = async (error: unknown): Promise<string | nul
   return maybeError?.message || null;
 };
 
+const extractAIContent = (data: unknown): string => {
+  if (typeof data === 'string') return data;
+  if (!data || typeof data !== 'object') return JSON.stringify(data || {});
+
+  const record = data as Record<string, unknown>;
+  const primaryKeys = ['content', 'response', 'result', 'text', 'message'] as const;
+
+  for (const key of primaryKeys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (!Array.isArray(value)) continue;
+    const combined = value
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string') {
+          return String((part as Record<string, unknown>).text);
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+    if (combined) return combined;
+  }
+
+  return JSON.stringify(data || {});
+};
+
+const repairWeeklyProgramJson = async (
+  supabase: SupabaseFunctionsClient,
+  sourceText: string,
+): Promise<WeeklyProgramAIResponse | null> => {
+  const source = String(sourceText || '').trim();
+  if (!source) return null;
+
+  const repairPrompt = [
+    'You are a JSON normalizer.',
+    'Convert the SOURCE into STRICT JSON only (no markdown fences, no extra text).',
+    'Schema:',
+    '{',
+    '  "title": "string",',
+    '  "summary": "string",',
+    '  "days": [',
+    '    {',
+    '      "day_of_week": 1,',
+    '      "blocks": [',
+    '        {',
+    '          "block_order": 1,',
+    '          "block_type": "circle_time|learning|movement|outdoor|meal|nap|assessment|transition|other",',
+    '          "title": "string",',
+    '          "start_time": "HH:MM|null",',
+    '          "end_time": "HH:MM|null",',
+    '          "objectives": ["string"],',
+    '          "materials": ["string"],',
+    '          "transition_cue": "string|null",',
+    '          "notes": "string|null",',
+    '          "parent_tip": "string|null"',
+    '        }',
+    '      ]',
+    '    }',
+    '  ]',
+    '}',
+    'Rules: map weekday names to day_of_week 1..7; preserve details; use null when unknown.',
+    '',
+    'SOURCE:',
+    source.slice(0, 12000),
+  ].join('\n');
+
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-proxy', {
+      body: {
+        service_type: 'chat_message',
+        payload: { prompt: repairPrompt },
+        stream: false,
+        enable_tools: false,
+        metadata: { source: 'weekly_program_copilot_repair' },
+      },
+    });
+    if (error) return null;
+    return extractJson(extractAIContent(data));
+  } catch {
+    return null;
+  }
+};
+
 const toBlocksFromFlat = (blocks: unknown[]): DailyProgramBlock[] =>
   blocks
     .map((item, index) => {
@@ -433,21 +529,32 @@ export class WeeklyProgramCopilotService {
       throw new Error(detailedMessage || error.message || 'Failed to generate weekly program');
     }
 
-    const content =
-      typeof data?.content === 'string'
-        ? data.content
-        : typeof data?.response === 'string'
-          ? data.response
-          : typeof data?.result === 'string'
-            ? data.result
-            : JSON.stringify(data || {});
+    const content = extractAIContent(data);
 
     const parsed = extractJson(content);
-    if (!parsed) {
-      throw new Error('Failed to parse weekly program response (AI returned non-JSON output).');
+    if (parsed) {
+      return normalizeAIResponse(parsed, input);
     }
 
-    return normalizeAIResponse(parsed, input);
+    const repaired = await repairWeeklyProgramJson(
+      supabase as unknown as SupabaseFunctionsClient,
+      content,
+    );
+    if (repaired) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[WeeklyProgramCopilot:web] Successfully repaired non-JSON AI output');
+      }
+      return normalizeAIResponse(repaired, input);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[WeeklyProgramCopilot:web] Non-JSON AI output after repair attempt', {
+        chars: content.length,
+        preview: content.slice(0, 500),
+      });
+    }
+
+    throw new Error('Failed to parse weekly program response (AI returned non-JSON output).');
   }
 
   static async generate_weekly_program_from_term(

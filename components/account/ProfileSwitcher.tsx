@@ -57,7 +57,6 @@ export function ProfileSwitcher({
   const { user, profile, refreshProfile } = useAuth();
   const pathname = usePathname();
   const { showAlert, alertProps } = useAlertModal();
-  const pathname = usePathname();
   const pathnameRef = useRef(pathname);
 
   useEffect(() => {
@@ -68,12 +67,7 @@ export function ProfileSwitcher({
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const pathnameRef = useRef(pathname);
   const routeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    pathnameRef.current = pathname;
-  }, [pathname]);
 
   useEffect(() => {
     return () => {
@@ -251,7 +245,6 @@ export function ProfileSwitcher({
 
       // Refresh profile to update UI
       if (result.sessionRestored) {
-        const routeBeforeSwitch = pathnameRef.current;
         await refreshProfile();
         clearAllNavigationLocks();
 
@@ -264,7 +257,6 @@ export function ProfileSwitcher({
           console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
         }
 
-<<<<<<< HEAD
         // Route handoff:
         // Prefer auth pipeline, but when user remains on account/auth screens immediately
         // after successful restore, proactively resolve dashboard route.
@@ -343,28 +335,9 @@ export function ProfileSwitcher({
             console.warn('[AccountSwitch] Route fallback failed:', routeErr);
           } finally {
             routeFallbackTimerRef.current = null;
-          }
-        }, 1200);
-=======
-        // Primary routing should come from auth pipeline (SIGNED_IN/TOKEN_REFRESHED).
-        // Fallback: if route did not change after switch, force route resolution.
-        setTimeout(async () => {
-          try {
-            const currentPath = pathnameRef.current;
-            const { data: { user: activeUser } } = await assertSupabase().auth.getUser();
-            if (activeUser?.id === account.userId && currentPath === routeBeforeSwitch) {
-              console.warn('[ProfileSwitcher] Route unchanged after account switch; forcing route resolution');
-              clearAllNavigationLocks();
-              const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
-              await routeAfterLogin(activeUser, null);
-            }
-          } catch (routeErr) {
-            console.warn('[ProfileSwitcher] Account switch fallback routing failed (non-fatal):', routeErr);
-          } finally {
             setAccountSwitchInProgress(false);
           }
-        }, 1500);
->>>>>>> 872fc5c00e2f3af94e5a01c0d83e580f25ce2b4d
+        }, 1200);
       } else {
         setAccountSwitchInProgress(false);
         // That account's session expired; current user is unchanged — don't sign out
