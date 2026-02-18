@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -17,6 +17,13 @@ import {
 const SECTION_ROTATION_SEC = 45;
 const DISPLAY_DATA_REFRESH_MS = 10 * 60 * 1000;
 const SECTIONS = ['routine', 'lessons', 'menu', 'announcements', 'insights'] as const;
+const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
+  routine: 'Routine',
+  lessons: 'Lessons',
+  menu: 'Menu',
+  announcements: 'Announcements',
+  insights: 'Insights',
+};
 
 function formatTime(iso: string): string {
   try {
@@ -27,14 +34,18 @@ function formatTime(iso: string): string {
   }
 }
 
-const sectionCardClass =
-  'rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/90 to-slate-800/60 shadow-lg backdrop-blur-sm p-6 sm:p-8';
+const sectionCardClass = 'rounded-3xl border p-6 shadow-xl backdrop-blur-md sm:p-8';
+const sectionCardStyle: CSSProperties = {
+  borderColor: 'color-mix(in srgb, var(--primary) 20%, var(--border))',
+  background: 'linear-gradient(150deg, color-mix(in srgb, var(--surface-1) 88%, black) 0%, color-mix(in srgb, var(--surface-2) 96%, var(--primary-subtle)) 100%)',
+  boxShadow: '0 0 0 1px rgba(255,255,255,0.02), 0 20px 60px -28px rgba(0,0,0,0.8), 0 0 72px -42px rgba(var(--primary-rgb),0.5)',
+};
 
 function SectionRoutine({ data }: { data: NonNullable<DisplayData> }) {
   const { routine, themeLabel } = data;
   if (!routine && !themeLabel) return null;
   return (
-    <section className={sectionCardClass}>
+    <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(0, 245, 255, 0.15)' }}>
           <Clock className="h-6 w-6" style={{ color: 'var(--cyan, #00f5ff)' }} />
@@ -47,7 +58,7 @@ function SectionRoutine({ data }: { data: NonNullable<DisplayData> }) {
       {routine?.blocks?.length ? (
         <ul className="space-y-3">
           {routine.blocks.map((block) => (
-            <li key={block.id} className="flex items-center gap-4 rounded-lg bg-slate-800/40 px-3 py-2 text-lg">
+            <li key={block.id} className="flex items-center gap-4 rounded-xl border px-3 py-2 text-lg" style={{ background: 'rgba(0,0,0,0.18)', borderColor: 'var(--border)' }}>
               <span className="min-w-[5rem] font-mono text-sm" style={{ color: 'var(--cyan)' }}>
                 {block.startTime ?? '–'}–{block.endTime ?? '–'}
               </span>
@@ -66,7 +77,7 @@ function SectionLessons({ data }: { data: NonNullable<DisplayData> }) {
   const { lessons } = data;
   if (!lessons?.length) return null;
   return (
-    <section className={sectionCardClass}>
+    <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)' }}>
           <BookOpen className="h-6 w-6 text-amber-400" />
@@ -75,12 +86,12 @@ function SectionLessons({ data }: { data: NonNullable<DisplayData> }) {
       </h2>
       <ul className="space-y-5">
         {lessons.map((lesson) => (
-          <li key={lesson.id} className="border-b border-slate-700/60 pb-5 last:border-0 last:pb-0">
+          <li key={lesson.id} className="border-b pb-5 last:border-0 last:pb-0" style={{ borderColor: 'color-mix(in srgb, var(--border) 75%, transparent)' }}>
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="font-mono text-lg text-cyan-400">
                 {formatTime(lesson.scheduled_at)}
               </span>
-              <span className="text-xl font-semibold text-white">{lesson.title}</span>
+              <span className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{lesson.title}</span>
               {lesson.duration_minutes != null && (
                 <span className="text-slate-400">{lesson.duration_minutes} min</span>
               )}
@@ -91,7 +102,7 @@ function SectionLessons({ data }: { data: NonNullable<DisplayData> }) {
             {lesson.steps?.length ? (
               <div className="mt-3 pl-4">
                 <p className="mb-1 text-sm font-medium text-slate-400">Steps</p>
-                <ol className="list-decimal space-y-1 text-lg text-slate-200">
+                <ol className="list-decimal space-y-1 text-lg" style={{ color: 'var(--text-secondary)' }}>
                   {lesson.steps.slice(0, 5).map((step, i) => (
                     <li key={i}>
                       {step.title}
@@ -122,7 +133,7 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
     menuToday.snack?.length;
   if (!hasAny) return null;
   return (
-    <section className={sectionCardClass}>
+    <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)' }}>
           <UtensilsCrossed className="h-6 w-6 text-emerald-400" />
@@ -133,7 +144,7 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
         {menuToday.breakfast?.length ? (
           <div>
             <p className="mb-1 font-medium text-slate-400">Breakfast</p>
-            <ul className="text-white">
+            <ul style={{ color: 'var(--text-primary)' }}>
               {menuToday.breakfast.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
@@ -143,7 +154,7 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
         {menuToday.lunch?.length ? (
           <div>
             <p className="mb-1 font-medium text-slate-400">Lunch</p>
-            <ul className="text-white">
+            <ul style={{ color: 'var(--text-primary)' }}>
               {menuToday.lunch.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
@@ -153,7 +164,7 @@ function SectionMenu({ data }: { data: NonNullable<DisplayData> }) {
         {menuToday.snack?.length ? (
           <div>
             <p className="mb-1 font-medium text-slate-400">Snack</p>
-            <ul className="text-white">
+            <ul style={{ color: 'var(--text-primary)' }}>
               {menuToday.snack.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
@@ -169,7 +180,7 @@ function SectionAnnouncements({ data }: { data: NonNullable<DisplayData> }) {
   const { announcements } = data;
   if (!announcements?.length) return null;
   return (
-    <section className={sectionCardClass}>
+    <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(251, 113, 133, 0.2)' }}>
           <Megaphone className="h-6 w-6 text-rose-400" />
@@ -178,7 +189,7 @@ function SectionAnnouncements({ data }: { data: NonNullable<DisplayData> }) {
       </h2>
       <ul className="space-y-4">
         {announcements.map((a) => (
-          <li key={a.id} className="rounded-lg bg-slate-800/40 px-3 py-2">
+          <li key={a.id} className="rounded-xl border px-3 py-2" style={{ background: 'rgba(0,0,0,0.18)', borderColor: 'var(--border)' }}>
             <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>{a.title}</p>
             <p className="text-slate-300">{a.body_preview}</p>
           </li>
@@ -192,14 +203,14 @@ function SectionInsights({ data }: { data: NonNullable<DisplayData> }) {
   const { insights } = data;
   if (!insights?.bullets?.length) return null;
   return (
-    <section className={sectionCardClass}>
+    <section className={sectionCardClass} style={sectionCardStyle}>
       <h2 className="mb-4 flex items-center gap-3 text-2xl font-bold">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md" style={{ backgroundColor: 'rgba(250, 204, 21, 0.2)' }}>
           <Lightbulb className="h-6 w-6 text-yellow-400" />
         </span>
         <span style={{ color: 'var(--text-primary)' }}>{insights.title}</span>
       </h2>
-      <ul className="list-disc space-y-2 pl-5 text-lg text-slate-200">
+      <ul className="list-disc space-y-2 pl-5 text-lg" style={{ color: 'var(--text-secondary)' }}>
         {insights.bullets.map((b, i) => (
           <li key={i}>{b}</li>
         ))}
@@ -467,7 +478,7 @@ export default function DisplayPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="min-h-screen p-6 md:p-10" style={{ background: 'radial-gradient(1200px 550px at 8% -5%, rgba(var(--primary-rgb),0.22), transparent 65%), radial-gradient(900px 500px at 95% 8%, rgba(0,245,255,0.12), transparent 62%), var(--background)' }}>
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface-1)]/80 to-[var(--surface-2)]/60 px-6 py-5 shadow-lg backdrop-blur-sm">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl" style={{ color: 'var(--text-primary)' }}>
@@ -476,6 +487,16 @@ export default function DisplayPage() {
           <p className="mt-1 text-lg" style={{ color: 'var(--text-secondary)' }}>
             {data.dayName}, {data.dateLabel}
           </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+            <span className="rounded-full border px-3 py-1" style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
+              {useTvFlow ? 'TV mode' : 'Preview mode'}
+            </span>
+            {useTvFlow && (
+              <span className="rounded-full border px-3 py-1" style={{ borderColor: 'color-mix(in srgb, var(--success) 25%, var(--border))', background: 'color-mix(in srgb, var(--success) 16%, transparent)', color: 'var(--text-primary)' }}>
+                Auto-refresh every 10 min
+              </span>
+            )}
+          </div>
         </div>
         {userId && !useTvFlow && (
           <div className="flex flex-col items-end gap-2">
@@ -541,7 +562,7 @@ export default function DisplayPage() {
                     : { background: 'var(--surface-2)', color: 'var(--text-secondary)' }
                 }
               >
-                {s}
+                {SECTION_LABELS[s]}
               </button>
             ))}
           </div>
