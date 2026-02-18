@@ -116,7 +116,7 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
   },
   daily_program: {
     path: '/screens/teacher-daily-program-planner' as Href,
-    title: 'Daily Program',
+    title: 'Daily Routine (View)',
     titleKey: 'teacher.daily_program',
     icon: 'time',
     color: '#14B8A6',

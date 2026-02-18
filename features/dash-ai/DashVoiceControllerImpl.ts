@@ -135,9 +135,13 @@ export class DashVoiceController {
       
       // Azure-only
       try {
+        const azureRate = this.resolveAzureRate(
+          voiceSettings.rate,
+          phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE,
+        );
         await this.speakWithAzureTTS(normalizedText, shortCode, callbacks, {
           phonicsMode,
-          rate: phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE,
+          rate: azureRate,
           pitch: 0,
           voice_id: voiceForLang,
         });
@@ -263,6 +267,25 @@ export class DashVoiceController {
       console.error('[DashVoiceController] Azure TTS failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Support both expo-speech style rates (1.0 = normal) and Azure SSML rates (-50..50).
+   */
+  private resolveAzureRate(requestedRate: number | undefined, fallbackRate: number): number {
+    if (!Number.isFinite(requestedRate as number)) {
+      return fallbackRate;
+    }
+
+    const value = Number(requestedRate);
+    if (value >= -50 && value <= 50 && (value < 0 || value > 2.5)) {
+      return Math.round(value);
+    }
+    if (value > 0 && value <= 2.5) {
+      const converted = Math.round((value - 1) * 65);
+      return Math.max(-40, Math.min(50, converted));
+    }
+    return fallbackRate;
   }
   
   /**

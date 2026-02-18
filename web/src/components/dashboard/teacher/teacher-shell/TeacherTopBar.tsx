@@ -14,6 +14,7 @@ interface TeacherTopBarProps {
   notificationCount: number;
   activityCount: number;
   hasRightSidebar: boolean;
+  showMenuButton: boolean;
   onMenuClick: () => void;
   onWidgetsClick: () => void;
 }
@@ -24,6 +25,7 @@ export function TeacherTopBar({
   notificationCount,
   activityCount,
   hasRightSidebar,
+  showMenuButton,
   onMenuClick,
   onWidgetsClick,
 }: TeacherTopBarProps) {
@@ -37,7 +39,7 @@ export function TeacherTopBar({
             className="iconBtn mobile-nav-btn" 
             aria-label="Menu" 
             onClick={onMenuClick}
-            style={{ display: 'none' }}
+            style={{ display: showMenuButton ? 'grid' : 'none' }}
           >
             <Menu className="icon20" />
           </button>

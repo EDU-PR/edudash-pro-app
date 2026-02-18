@@ -104,7 +104,7 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
   const {
     tier,
     language = 'en-ZA',
-    rate = 0.95,   // Vibrant, natural energy — not sluggish
+    rate = 1.08,   // Slightly faster for playground pacing and attention
     pitch = 1.15,  // Playful warmth — like a fun teacher
   } = options;
 

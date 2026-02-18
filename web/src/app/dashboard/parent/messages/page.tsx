@@ -17,7 +17,9 @@ import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker'
 import { DashAIAvatar, DashAILoading } from '@/components/dash/DashAIAvatar';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
+import { GroupChatAvatarModal } from '@/components/messaging/GroupChatAvatarModal';
 import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
+import { resolveReactionProfiles } from '@/lib/messaging/reactionProfiles';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image, Plus, Sparkles } from 'lucide-react';
 import { 
   type MessageThread, 
@@ -89,6 +91,7 @@ function ParentMessagesContent() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [newChatModalOpen, setNewChatModalOpen] = useState(false);
   const [quickCallModalOpen, setQuickCallModalOpen] = useState(false);
+  const [groupAvatarModalUser, setGroupAvatarModalUser] = useState<{ userId: string; userName: string } | null>(null);
   
   // Presets mapping (shared)
   const presetMap: Record<string, string> = {
@@ -652,7 +655,14 @@ function ParentMessagesContent() {
           emojiData.count++;
           emojiData.users.push(r.user_id);
         });
-        
+
+        const reactorUserIds: string[] = Array.from(new Set(
+          (reactions || [])
+            .map((r: any) => (typeof r.user_id === 'string' ? r.user_id : String(r.user_id || '')))
+            .filter(Boolean),
+        ));
+        const reactorProfileMap = await resolveReactionProfiles(supabase, reactorUserIds);
+
         messagesWithDetails = messagesWithDetails.map((msg: any) => {
           const msgReactions = reactionMap.get(msg.id);
           if (!msgReactions) return { ...msg, reactions: [] };
@@ -661,6 +671,8 @@ function ParentMessagesContent() {
             emoji,
             count: data.count,
             hasReacted: data.users.includes(userId || ''),
+            reactedByUserIds: data.users,
+            reactedBy: data.users.map((uid: string) => reactorProfileMap.get(uid)).filter(Boolean).map((p: any) => ({ id: p.id, first_name: p.first_name, last_name: p.last_name })),
           }));
           
           return { ...msg, reactions: reactionsArray };
@@ -1314,6 +1326,21 @@ function ParentMessagesContent() {
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
   const isGroupThread = !isDashAISelected && (currentThread?.is_group || ((currentThread?.message_participants?.length || 0) > 2));
 
+  const findOrSelectDmThread = useCallback((targetUserId: string) => {
+    const participants = (t: MessageThread) => t.message_participants || t.participants || [];
+    const dmThread = threads.find((t) => {
+      const p = participants(t);
+      if (p.length !== 2) return false;
+      const ids = new Set(p.map((x: { user_id: string }) => x.user_id));
+      return ids.has(userId ?? '') && ids.has(targetUserId);
+    });
+    if (dmThread) {
+      setSelectedThreadId(dmThread.id);
+      return true;
+    }
+    return false;
+  }, [threads, userId]);
+
   const handleSelectThread = (threadId: string) => {
     if (threadId === DASH_AI_THREAD_ID) {
       router.push('/dashboard/parent/dash-chat');
@@ -1922,7 +1949,9 @@ function ParentMessagesContent() {
                               senderName={!isOwn && senderName ? senderName : undefined}
                               showSenderName={isGroupThread}
                               otherParticipantIds={otherParticipantIds}
-                              hideAvatars={!isDesktop}
+                              hideAvatars={!isDesktop && !isGroupThread}
+                              isGroupChat={isGroupThread}
+                              onAvatarClick={isGroupThread ? (senderId, name) => setGroupAvatarModalUser({ userId: senderId, userName: name }) : undefined}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                               isDashAI={isDashAIMessage}
                               onReplyClick={scrollToMessage}
@@ -2605,10 +2634,24 @@ function ParentMessagesContent() {
       <QuickCallModal
         isOpen={quickCallModalOpen}
         onClose={() => setQuickCallModalOpen(false)}
-        onVoiceCall={(userId, userName) => startVoiceCall(userId, userName)}
-        onVideoCall={(userId, userName) => startVideoCall(userId, userName)}
+        onVoiceCall={(uid, userName) => startVoiceCall(uid, userName)}
+        onVideoCall={(uid, userName) => startVideoCall(uid, userName)}
         currentUserId={userId}
         preschoolId={profile?.preschoolId}
+      />
+
+      {/* Group chat: avatar click opens Message / Voice / Video options */}
+      <GroupChatAvatarModal
+        isOpen={!!groupAvatarModalUser}
+        onClose={() => setGroupAvatarModalUser(null)}
+        userName={groupAvatarModalUser?.userName ?? ''}
+        userId={groupAvatarModalUser?.userId ?? ''}
+        onMessage={(uid) => {
+          if (findOrSelectDmThread(uid)) setGroupAvatarModalUser(null);
+          else alert('No existing conversation with this contact. Start a new chat from the sidebar.');
+        }}
+        onVoiceCall={(uid, name) => startVoiceCall(uid, name)}
+        onVideoCall={(uid, name) => startVideoCall(uid, name)}
       />
       
       {/* Quick Call FAB - Shows when no conversation is selected */}

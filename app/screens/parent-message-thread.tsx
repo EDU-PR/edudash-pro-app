@@ -49,9 +49,11 @@ try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
 
 export default function ParentMessageThreadScreen() {
-  const params = useLocalSearchParams<{ threadId?: string; title?: string; teacherName?: string; parentName?: string; parentId?: string; recipientId?: string }>();
+  const params = useLocalSearchParams<{ threadId?: string; title?: string; teacherName?: string; parentName?: string; parentId?: string; recipientId?: string; isGroup?: string; threadType?: string }>();
   const threadId = params.threadId || '';
   const contactName = params.teacherName || params.parentName || params.title || '';
+  const isGroup = params.isGroup === '1';
+  const threadType = params.threadType || '';
   const theme = useTheme().theme || defaultTheme;
   const user: any = useAuth().user;
 
@@ -90,7 +92,24 @@ export default function ParentMessageThreadScreen() {
   // Call context
   const callContext = useCallSafe();
   const isOnline = recipientId && callContext ? callContext.isUserOnline(recipientId) : false;
-  const lastSeenText = recipientId && callContext ? callContext.getLastSeenText(recipientId) : 'Offline';
+  const lastSeenText = isGroup
+    ? (threadType === 'class_group' ? 'Class group' : threadType === 'announcement' ? 'Announcement channel' : 'Group')
+    : (recipientId && callContext ? callContext.getLastSeenText(recipientId) : 'Offline');
+
+  const handleReactionLongPress = useCallback(async (_messageId: string, emoji: string, reactedByUserIds: string[]) => {
+    if (reactedByUserIds.length === 0) return;
+    try {
+      const { assertSupabase } = require('@/lib/supabase');
+      const client = assertSupabase?.();
+      if (!client) return;
+      const { data: profiles } = await client.from('profiles').select('id, first_name, last_name').in('id', reactedByUserIds);
+      const names = (profiles || []).map((p: { first_name?: string; last_name?: string }) => [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'Someone');
+      const message = names.length > 0 ? `${names.join(', ')} reacted with ${emoji}` : `${emoji}`;
+      showThreadAlert(t('messaging.whoReacted', { defaultValue: 'Who reacted' }), message, [{ text: 'OK' }]);
+    } catch {
+      showThreadAlert(t('messaging.whoReacted', { defaultValue: 'Who reacted' }), `${emoji}`, [{ text: 'OK' }]);
+    }
+  }, [showThreadAlert, t]);
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available.', 'Voice Call'); return; }
@@ -149,6 +168,7 @@ export default function ParentMessageThreadScreen() {
           hasNextVoice={hasNextVoice} hasPreviousVoice={hasPreviousVoice}
           autoPlayVoice={!!msg.voice_url && h.currentlyPlayingVoiceId === msg.id}
           onReactionPress={actions.handleReactionPress}
+          onReactionLongPress={handleReactionLongPress}
           onReplyPress={handleScrollToMessage}
           onCallEventPress={handleCallEventPress}
           isFirstInGroup={item.isFirstInGroup}
@@ -156,7 +176,7 @@ export default function ParentMessageThreadScreen() {
         />
       </SwipeableMessageRow>
     );
-  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, handleCallEventPress, user?.id]);
+  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleReactionLongPress, handleScrollToMessage, handleCallEventPress, user?.id]);
 
   // Layout calculations
   const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
@@ -270,7 +290,7 @@ export default function ParentMessageThreadScreen() {
           onDisappearingMessages={opts.handleDisappearingMessages} onAddShortcut={opts.handleAddShortcut}
           onReport={opts.handleReport} onBlockUser={opts.handleBlockUser} onViewContact={opts.handleViewContact}
           isMuted={opts.isMuted} isBlocked={opts.isUserBlocked} disappearingLabel={opts.disappearingStatusLabel}
-          contactName={displayName} />
+          contactName={displayName} isGroup={isGroup} />
       )}
       {ChatWallpaperPicker && (
         <ChatWallpaperPicker isOpen={h.showWallpaperPicker} onClose={() => h.setShowWallpaperPicker(false)}
