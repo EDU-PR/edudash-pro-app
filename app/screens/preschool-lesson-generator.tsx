@@ -498,7 +498,7 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
       const { data: teacherProfile } = await assertSupabase()
         .from('profiles')
         .select('id,preschool_id,organization_id')
-        .eq('id', auth?.user?.id || '')
+        .or(`id.eq.${auth?.user?.id || ''},auth_user_id.eq.${auth?.user?.id || ''}`)
         .maybeSingle();
         
       if (!teacherProfile) {
@@ -916,7 +916,7 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
             </View>
 
             {/* Content */}
-            <ScrollView style={[styles.contentScroll, { backgroundColor: palette.surface }]} nestedScrollEnabled>
+            <View style={[styles.contentScroll, { backgroundColor: palette.surface }]}>
               {(() => {
                 const content = activeTab === 'lesson' ? generated.lesson :
                                activeTab === 'insights' ? generated.insights :
@@ -945,7 +945,7 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
                   </Text>
                 );
               })()}
-            </ScrollView>
+            </View>
 
             {/* Actions */}
             <View style={styles.actionsRow}>
@@ -1124,7 +1124,6 @@ const styles = StyleSheet.create({
     borderRadius: 8, 
     padding: 12,
     minHeight: 200,
-    maxHeight: 400,
   },
   generatedText: { fontSize: 14, lineHeight: 22 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },

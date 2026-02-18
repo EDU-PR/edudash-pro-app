@@ -45,6 +45,7 @@ type AssignmentRow = {
   lesson_id: string | null;
   class_id: string | null;
   due_date: string | null;
+  assigned_at: string | null;
   notes: string | null;
   priority: string | null;
   status: string | null;
@@ -130,6 +131,16 @@ function normalizeIsoForLocal(dateLabel: string, clock: string | null): string |
   const ms = parseDateWithClock(dateLabel, clock);
   if (!ms) return null;
   return new Date(ms).toISOString();
+}
+
+function toDateOnlySafe(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const dateMatch = raw.match(/^\d{4}-\d{2}-\d{2}/);
+  if (dateMatch) return dateMatch[0];
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return toDateOnly(parsed);
 }
 
 function tokens(value: string): string[] {
@@ -332,14 +343,21 @@ export async function fetchDisplayDataServer(
   if (effectiveClassId) {
     const { data } = await supabase
       .from('lesson_assignments')
-      .select('id, lesson_id, class_id, due_date, notes, priority, status')
+      .select('id, lesson_id, class_id, due_date, assigned_at, notes, priority, status')
       .eq('preschool_id', orgId)
       .eq('class_id', effectiveClassId)
-      .eq('due_date', today)
       .neq('status', 'cancelled')
-      .order('assigned_at', { ascending: false });
+      .order('assigned_at', { ascending: false })
+      .limit(250);
 
-    assignmentRows = (data || []) as AssignmentRow[];
+    const rawAssignments = (data || []) as AssignmentRow[];
+    assignmentRows = rawAssignments.filter((row) => {
+      const dueDate = toDateOnlySafe(row.due_date);
+      if (dueDate === today) return true;
+      if (dueDate) return false;
+      const assignedDate = toDateOnlySafe(row.assigned_at);
+      return assignedDate === today;
+    });
   }
 
   const blockIds = rawBlocks.map((block) => block.id);

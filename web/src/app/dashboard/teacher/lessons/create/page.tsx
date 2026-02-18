@@ -199,7 +199,7 @@ Provide clear sections: Lesson Title; Learning Objectives (3-5); Materials Neede
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, preschool_id, organization_id')
-        .eq('id', userId)
+        .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
         .maybeSingle();
 
       if (!profile) throw new Error('Profile not found');
