@@ -1,6 +1,7 @@
 'use client';
 
-import { type CSSProperties, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
