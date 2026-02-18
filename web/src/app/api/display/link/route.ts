@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createDisplayToken } from '@/lib/display/token';
 import { resolveTrustedTvDurationDays } from '@/lib/display/trustedTv.server';
+import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 
 const JOIN_CODE_LENGTH = 6;
@@ -15,6 +16,25 @@ function generateJoinCode(): string {
   return code;
 }
 
+function getBearerToken(request: Request): string | null {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (!authHeader) return null;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+async function resolveOrgIdForUser(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id, preschool_id')
+    .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
+    .maybeSingle();
+  return profile?.organization_id || profile?.preschool_id || null;
+}
+
 /**
  * GET /api/display/link
  * Returns display URL, short-lived token, and a join code so the TV can use either the link or the code.
@@ -22,20 +42,49 @@ function generateJoinCode(): string {
  */
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const cookieClient = await createClient();
+    let authenticatedClient: SupabaseClient = cookieClient;
+    let userId: string | null = null;
+    let orgId: string | null = null;
+
+    const {
+      data: { session },
+    } = await cookieClient.auth.getSession();
+
+    if (session?.user?.id) {
+      userId = session.user.id;
+      orgId = await resolveOrgIdForUser(cookieClient, userId);
+    } else {
+      const bearerToken = getBearerToken(request);
+      if (!bearerToken) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return NextResponse.json({ error: 'Server not configured' }, { status: 503 });
+      }
+
+      const bearerClient = createServiceClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${bearerToken}`,
+          },
+        },
+      });
+
+      const { data: bearerUserData, error: bearerUserError } = await bearerClient.auth.getUser(bearerToken);
+      if (bearerUserError || !bearerUserData?.user?.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      userId = bearerUserData.user.id;
+      orgId = await resolveOrgIdForUser(bearerClient, userId);
+      authenticatedClient = bearerClient;
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id, preschool_id')
-      .or(`id.eq.${session.user.id},auth_user_id.eq.${session.user.id}`)
-      .maybeSingle();
-
-    const orgId = profile?.organization_id || profile?.preschool_id;
-    if (!orgId) {
+    if (!userId || !orgId) {
       return NextResponse.json({ error: 'No organization linked to your account' }, { status: 400 });
     }
 
@@ -62,7 +111,7 @@ export async function GET(request: Request) {
 
     try {
       joinCode = generateJoinCode();
-      const { error: insertError } = await supabase.from('display_join_codes').insert({
+      const { error: insertError } = await authenticatedClient.from('display_join_codes').insert({
         code: joinCode,
         org_id: orgId,
         token,

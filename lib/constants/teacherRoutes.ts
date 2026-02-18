@@ -122,6 +122,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: '#14B8A6',
     category: 'classroom',
   },
+  room_display_connect: {
+    path: '/screens/room-display-connect' as Href,
+    title: 'Room Display',
+    titleKey: 'teacher.room_display_connect',
+    icon: 'tv',
+    color: '#8B5CF6',
+    category: 'classroom',
+  },
   
   // === COMMUNICATION ===
   messages: {
@@ -307,6 +315,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'assign_homework',
   'my_class',
   'daily_program',
+  'room_display_connect',
   'birthday_chart',
   'messages',
   'manage_groups',
