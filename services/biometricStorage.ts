@@ -477,6 +477,50 @@ export async function removeBiometricSession(userId: string): Promise<void> {
       await setSessionsMap(sessions);
     }
     await clearRefreshTokenForUser(userId);
+
+    // Clear legacy single-session key if it belongs to this user.
+    try {
+      const legacySessionRaw = await storage.getItem(BIOMETRIC_SESSION_KEY);
+      if (legacySessionRaw) {
+        const parsed = JSON.parse(legacySessionRaw);
+        if (parsed?.userId === userId) {
+          await storage.removeItem(BIOMETRIC_SESSION_KEY);
+        }
+      }
+    } catch {
+      /* Intentional: non-fatal */
+    }
+
+    // Clear legacy biometric user payload if it belongs to this user.
+    try {
+      let legacyUserRaw: string | null = null;
+      if (SecureStore) {
+        legacyUserRaw = await SecureStore.getItemAsync('biometric_user_data').catch(
+          () => null,
+        );
+      }
+      if (!legacyUserRaw && AsyncStorage) {
+        legacyUserRaw = await AsyncStorage.getItem('biometric_user_data');
+      }
+      if (legacyUserRaw) {
+        const parsed = JSON.parse(legacyUserRaw);
+        if (String(parsed?.userId || '') === userId) {
+          if (SecureStore) {
+            await SecureStore.deleteItemAsync('biometric_user_data').catch(() => {
+              /* Intentional */
+            });
+          }
+          if (AsyncStorage) {
+            await AsyncStorage.removeItem('biometric_user_data').catch(() => {
+              /* Intentional */
+            });
+          }
+        }
+      }
+    } catch {
+      /* Intentional: non-fatal */
+    }
+
     const active = await getActiveUserId();
     if (active === userId) {
       await setActiveUserId('');

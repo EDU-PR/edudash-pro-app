@@ -80,7 +80,9 @@ export const useAuthGuard = () => {
       authRouteSeenAt.current = currentUserId ? Date.now() : null;
     }
 
-    if (signingOut) { hasNavigated.current = false; return; }
+    // Only pause guard while sign-out is in-flight AND the old user is still present.
+    // Once user becomes null, allow guard redirects immediately so we never strand on a blank protected route.
+    if (signingOut && user) { hasNavigated.current = false; return; }
     // Don't redirect while auth is loading
     if (loading) { return; }
     

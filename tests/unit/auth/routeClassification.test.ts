@@ -94,8 +94,8 @@ describe('routeClassification', () => {
       expect(isAccountSwitchIntent({ switch: '1' })).toBe(true);
     });
 
-    it('returns true when fresh=1', () => {
-      expect(isAccountSwitchIntent({ fresh: '1' })).toBe(true);
+    it('returns false when fresh=1', () => {
+      expect(isAccountSwitchIntent({ fresh: '1' })).toBe(false);
     });
 
     it('returns true when addAccount is array with 1', () => {

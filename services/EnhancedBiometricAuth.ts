@@ -40,6 +40,27 @@ export {
   updateCachedProfile,
 };
 
+export type AccountSwitchResultReason =
+  | 'ok'
+  | 'target_refresh_missing'
+  | 'target_refresh_invalid'
+  | 'wrong_user_restored'
+  | 'restore_error';
+
+export type GlobalRevokeStatus =
+  | 'revoked_global'
+  | 'token_missing'
+  | 'token_invalid'
+  | 'wrong_user'
+  | 'error';
+
+type RestoreTargetUserResult = {
+  sessionRestored: boolean;
+  reason: AccountSwitchResultReason;
+  error?: string;
+  requiresPassword?: boolean;
+};
+
 export class EnhancedBiometricAuth {
   /** Set the active biometric user id */
   public static setActiveUserId = setActiveUserId;
@@ -120,6 +141,121 @@ export class EnhancedBiometricAuth {
     } catch (error) {
       console.error('Error storing biometric session:', error);
       return false;
+    }
+  }
+
+  private static isInvalidRefreshTokenError(error: unknown): boolean {
+    const message = String((error as any)?.message || '').toLowerCase();
+    return (
+      message.includes('invalid login credentials') ||
+      message.includes('invalid refresh token') ||
+      message.includes('refresh token not found') ||
+      message.includes('refresh_token_not_found') ||
+      message.includes('invalid_grant')
+    );
+  }
+
+  private static async restoreTargetUserSession(
+    userId: string,
+    logLabel: string,
+  ): Promise<RestoreTargetUserResult> {
+    try {
+      const { assertSupabase } = await import('@/lib/supabase');
+      const { data: existingSession } = await assertSupabase().auth.getSession();
+      if (existingSession?.session?.user?.id === userId) {
+        if (__DEV__) {
+          console.log(`[AccountSwitch] ${logLabel} already on target user`, {
+            targetUserId: userId,
+          });
+        }
+        return { sessionRestored: true, reason: 'ok' };
+      }
+
+      const refresh = await getRefreshTokenForUser(userId);
+      if (!refresh) {
+        if (__DEV__) {
+          console.log(`[AccountSwitch] ${logLabel} missing per-user refresh token`, {
+            targetUserId: userId,
+          });
+        }
+        return {
+          sessionRestored: false,
+          reason: 'target_refresh_missing',
+          requiresPassword: true,
+          error:
+            'No saved session found for this account. Please sign in with your password.',
+        };
+      }
+
+      const { data: refreshed, error: refreshErr } =
+        await assertSupabase().auth.refreshSession({
+          refresh_token: refresh,
+        });
+      if (__DEV__) {
+        console.log(`[AccountSwitch] ${logLabel} refreshSession(per-user)`, {
+          error: refreshErr?.message ?? null,
+          gotUserId: refreshed?.session?.user?.id ?? null,
+          expected: userId,
+        });
+      }
+
+      if (refreshErr) {
+        if (this.isInvalidRefreshTokenError(refreshErr)) {
+          try {
+            await clearRefreshTokenForUser(userId);
+          } catch {
+            /* best-effort */
+          }
+          return {
+            sessionRestored: false,
+            reason: 'target_refresh_invalid',
+            requiresPassword: true,
+            error:
+              'Your saved session for this account expired. Sign in with password to refresh it.',
+          };
+        }
+        return {
+          sessionRestored: false,
+          reason: 'restore_error',
+          error: refreshErr.message || 'Could not restore saved session.',
+        };
+      }
+
+      const restoredUserId = refreshed?.session?.user?.id;
+      if (restoredUserId && restoredUserId !== userId) {
+        try {
+          await assertSupabase().auth.signOut({ scope: 'local' } as any);
+        } catch {
+          /* best-effort */
+        }
+        return {
+          sessionRestored: false,
+          reason: 'wrong_user_restored',
+          error:
+            'Session restore returned a different account. Please sign in with password.',
+          requiresPassword: true,
+        };
+      }
+
+      if (!restoredUserId || restoredUserId !== userId) {
+        return {
+          sessionRestored: false,
+          reason: 'restore_error',
+          error: 'Could not restore your session for the selected account.',
+        };
+      }
+
+      if (refreshed.session.refresh_token && refreshed.session.refresh_token !== refresh) {
+        await setRefreshTokenForUser(userId, refreshed.session.refresh_token);
+      }
+
+      return { sessionRestored: true, reason: 'ok' };
+    } catch (error) {
+      return {
+        sessionRestored: false,
+        reason: 'restore_error',
+        error: String((error as any)?.message || 'Account switch restore failed.'),
+      };
     }
   }
 
@@ -359,12 +495,18 @@ export class EnhancedBiometricAuth {
     success: boolean;
     userData?: BiometricSessionData;
     sessionRestored?: boolean;
+    reason?: AccountSwitchResultReason;
+    requiresPassword?: boolean;
     error?: string;
   }> {
     try {
       const capabilities = await BiometricAuthService.checkCapabilities();
       if (!capabilities.isAvailable || !capabilities.isEnrolled) {
-        return { success: false, error: 'Biometric not available or not enrolled' };
+        return {
+          success: false,
+          reason: 'restore_error',
+          error: 'Biometric not available or not enrolled',
+        };
       }
 
       const sessions = await getSessionsMap();
@@ -372,6 +514,8 @@ export class EnhancedBiometricAuth {
       if (!sessionData) {
         return {
           success: false,
+          reason: 'target_refresh_missing',
+          requiresPassword: true,
           error: 'No biometric session found for selected account',
         };
       }
@@ -382,106 +526,46 @@ export class EnhancedBiometricAuth {
       if (!authResult.success) {
         return {
           success: false,
+          reason: 'restore_error',
           error: authResult.error || 'Authentication failed',
         };
       }
 
-      // Restore Supabase session: try target user's refresh token WITHOUT signing out
-      // current user first. If restore fails we keep the current user (no redirect to sign-in).
-      let sessionRestored = false;
       if (__DEV__) console.log('[AccountSwitch] Biometric auth passed, restoring session for', userId);
-      try {
-        const { assertSupabase } = await import('@/lib/supabase');
-        const { data: existingSession } = await assertSupabase().auth.getSession();
-
-        if (existingSession?.session?.user?.id === userId) {
-          sessionRestored = true;
-          if (__DEV__) console.log('[AccountSwitch] Already on target user');
-        }
-
-        if (!sessionRestored) {
-          const refresh = await getRefreshTokenForUser(userId);
-          if (refresh) {
-            const { data: refreshed, error: refreshErr } =
-              await assertSupabase().auth.refreshSession({
-                refresh_token: refresh,
-              });
-            if (__DEV__) {
-              console.log('[AccountSwitch] refreshSession(per-user)', {
-                error: refreshErr?.message ?? null,
-                gotUserId: refreshed?.session?.user?.id ?? null,
-                expected: userId,
-              });
-            }
-            if (!refreshErr && refreshed?.session?.user?.id === userId) {
-              sessionRestored = true;
-              if (
-                refreshed.session.refresh_token &&
-                refreshed.session.refresh_token !== refresh
-              ) {
-                await setRefreshTokenForUser(
-                  userId,
-                  refreshed.session.refresh_token,
-                );
-              }
-            } else if (refreshErr) {
-              const msg = String((refreshErr as any)?.message || '').toLowerCase();
-              const invalid =
-                msg.includes('invalid') ||
-                msg.includes('refresh token') ||
-                msg.includes('invalid_grant');
-              if (invalid) {
-                try {
-                  await clearRefreshTokenForUser(userId);
-                } catch {
-                  /* best-effort */
-                }
-              }
-            }
-          }
-
-          if (!sessionRestored) {
-            const globalRefresh = await getGlobalRefreshToken();
-            if (globalRefresh) {
-              const { data: refreshed, error: refreshErr } =
-                await assertSupabase().auth.refreshSession({
-                  refresh_token: globalRefresh,
-                });
-              if (__DEV__) {
-                console.log('[AccountSwitch] refreshSession(global)', {
-                  error: refreshErr?.message ?? null,
-                  gotUserId: refreshed?.session?.user?.id ?? null,
-                  expected: userId,
-                });
-              }
-              if (!refreshErr && refreshed?.session?.user?.id === userId) {
-                sessionRestored = true;
-                if (refreshed.session.refresh_token) {
-                  await setRefreshTokenForUser(
-                    userId,
-                    refreshed.session.refresh_token,
-                  );
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Switch account session restore error:', e);
+      const restoreResult = await this.restoreTargetUserSession(
+        userId,
+        'authenticateWithBiometricForUser',
+      );
+      if (!restoreResult.sessionRestored) {
+        return {
+          success: false,
+          sessionRestored: false,
+          reason: restoreResult.reason,
+          requiresPassword: restoreResult.requiresPassword,
+          error:
+            restoreResult.error ||
+            'Could not switch account. Please sign in with password.',
+        };
       }
 
-      // Update active user and last used — NEVER delete the account on failure.
+      // Update active user and last used ONLY after target-user session is verified.
       sessionData.lastUsed = new Date().toISOString();
       const newMap = await getSessionsMap();
       newMap[userId] = sessionData;
       await setSessionsMap(newMap);
       await setActiveUserId(userId);
 
-      return { success: true, userData: sessionData, sessionRestored };
+      return {
+        success: true,
+        userData: sessionData,
+        sessionRestored: true,
+        reason: 'ok',
+      };
     } catch (error) {
       console.error('authenticateWithBiometricForUser error:', error);
       return {
         success: false,
+        reason: 'restore_error',
         error: 'Authentication failed due to an error',
       };
     }
@@ -496,6 +580,8 @@ export class EnhancedBiometricAuth {
     success: boolean;
     userData?: BiometricSessionData;
     sessionRestored?: boolean;
+    reason?: AccountSwitchResultReason;
+    requiresPassword?: boolean;
     error?: string;
   }> {
     if (__DEV__) console.log('[AccountSwitch] restoreSessionForUser (token path)', { targetUserId: userId });
@@ -505,6 +591,8 @@ export class EnhancedBiometricAuth {
       if (!sessionData) {
         return {
           success: false,
+          reason: 'target_refresh_missing',
+          requiresPassword: true,
           error: 'No stored session found for this account. Please sign in with your password.',
         };
       }
@@ -513,26 +601,135 @@ export class EnhancedBiometricAuth {
       if (new Date(sessionData.expiresAt) < new Date()) {
         return {
           success: false,
+          reason: 'target_refresh_invalid',
+          requiresPassword: true,
           error: 'Your saved session has expired. Please sign in with your password.',
         };
       }
 
-      // Delegate to the shared session restoration logic
-      const sessionRestored = await this.restoreSupabaseSession(sessionData);
+      const restoreResult = await this.restoreTargetUserSession(
+        userId,
+        'restoreSessionForUser',
+      );
+      if (!restoreResult.sessionRestored) {
+        return {
+          success: false,
+          sessionRestored: false,
+          reason: restoreResult.reason,
+          requiresPassword: restoreResult.requiresPassword,
+          error:
+            restoreResult.error ||
+            'Failed to restore session. Please sign in manually.',
+        };
+      }
 
-      // Update active user and last used timestamp
+      // Update active user and last used ONLY after target-user session is verified.
       sessionData.lastUsed = new Date().toISOString();
       const newMap = await getSessionsMap();
       newMap[userId] = sessionData;
       await setSessionsMap(newMap);
       await setActiveUserId(userId);
 
-      return { success: true, userData: sessionData, sessionRestored };
+      return {
+        success: true,
+        userData: sessionData,
+        sessionRestored: true,
+        reason: 'ok',
+      };
     } catch (error) {
       console.error('restoreSessionForUser error:', error);
       return {
         success: false,
+        reason: 'restore_error',
         error: 'Failed to restore session. Please sign in manually.',
+      };
+    }
+  }
+
+  static async revokeSavedAccountSessionsGlobally(userId: string): Promise<{
+    globalRevokeStatus: GlobalRevokeStatus;
+    error?: string;
+  }> {
+    try {
+      const refresh = await getRefreshTokenForUser(userId);
+      if (!refresh) {
+        return { globalRevokeStatus: 'token_missing' };
+      }
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const { supabaseUrl, supabaseAnonKey } = await import('@/lib/supabase');
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return {
+          globalRevokeStatus: 'error',
+          error: 'Supabase configuration is missing.',
+        };
+      }
+
+      const revokeClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          storageKey: `edudash-revoke-${userId}-${Date.now()}`,
+        },
+      });
+
+      const { data: refreshed, error: refreshErr } =
+        await revokeClient.auth.refreshSession({
+          refresh_token: refresh,
+        });
+      if (refreshErr) {
+        if (this.isInvalidRefreshTokenError(refreshErr)) {
+          try {
+            await clearRefreshTokenForUser(userId);
+          } catch {
+            /* best-effort */
+          }
+          return {
+            globalRevokeStatus: 'token_invalid',
+            error: 'Saved refresh token is invalid or expired.',
+          };
+        }
+        return {
+          globalRevokeStatus: 'error',
+          error: refreshErr.message || 'Unable to authenticate saved account.',
+        };
+      }
+
+      const restoredUserId = refreshed?.session?.user?.id;
+      if (!restoredUserId || restoredUserId !== userId) {
+        try {
+          await revokeClient.auth.signOut({ scope: 'local' } as any);
+        } catch {
+          /* best-effort */
+        }
+        return {
+          globalRevokeStatus: 'wrong_user',
+          error: 'Token did not resolve to the selected account.',
+        };
+      }
+
+      const { error: signOutErr } = await revokeClient.auth.signOut({
+        scope: 'global',
+      } as any);
+      if (signOutErr) {
+        return {
+          globalRevokeStatus: 'error',
+          error: signOutErr.message || 'Global sign-out failed.',
+        };
+      }
+
+      try {
+        await revokeClient.auth.signOut({ scope: 'local' } as any);
+      } catch {
+        /* best-effort */
+      }
+
+      return { globalRevokeStatus: 'revoked_global' };
+    } catch (error) {
+      return {
+        globalRevokeStatus: 'error',
+        error: String((error as any)?.message || 'Unexpected revoke error'),
       };
     }
   }

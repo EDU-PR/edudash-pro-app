@@ -72,12 +72,11 @@ export function firstParam(value: string | string[] | undefined): string | undef
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Returns true when the user explicitly wants a fresh sign-in (account switch). */
+/** Returns true when account-switch intent is explicit in query params. */
 export function isAccountSwitchIntent(params: SearchParams): boolean {
   return (
     firstParam(params.addAccount) === '1' ||
-    firstParam(params.switch) === '1' ||
-    firstParam(params.fresh) === '1'
+    firstParam(params.switch) === '1'
   );
 }
 
