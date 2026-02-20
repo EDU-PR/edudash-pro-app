@@ -115,6 +115,14 @@ type RoutineOptionId =
 
 type RoutineOptionState = Record<RoutineOptionId, boolean>;
 
+type PreflightAnswers = {
+  nonNegotiableAnchors: string;
+  fixedWeeklyEvents: string;
+  afterLunchPattern: string;
+  resourceConstraints: string;
+  safetyCompliance: string;
+};
+
 const SMART_PRESETS: PlannerPreset[] = [
   {
     id: 'half_day',
@@ -187,6 +195,42 @@ const DEFAULT_ROUTINE_OPTIONS: RoutineOptionState = {
   storyCircle: true,
   transitionCues: true,
   hygieneChecks: true,
+};
+
+const PREFLIGHT_QUESTIONS: Array<{ key: keyof PreflightAnswers; label: string; placeholder: string }> = [
+  {
+    key: 'nonNegotiableAnchors',
+    label: '1. Daily Non-Negotiable Anchors',
+    placeholder: 'e.g., Circle at 08:00, snack at 10:00, story at 11:30',
+  },
+  {
+    key: 'fixedWeeklyEvents',
+    label: '2. Fixed Weekly Events / Constraints',
+    placeholder: 'e.g., Library Wednesday, sports Friday, speech therapist Thursday',
+  },
+  {
+    key: 'afterLunchPattern',
+    label: '3. After-Lunch Pattern & Transition Style',
+    placeholder: 'e.g., calm transition, quiet reading, then outdoor movement',
+  },
+  {
+    key: 'resourceConstraints',
+    label: '4. Resource / Staffing Constraints',
+    placeholder: 'e.g., one assistant, limited outdoor equipment, shared classroom',
+  },
+  {
+    key: 'safetyCompliance',
+    label: '5. Safety / Compliance + Fallback Rules',
+    placeholder: 'e.g., allergy protocol, heat policy, rainy-day fallback',
+  },
+];
+
+const DEFAULT_PREFLIGHT: PreflightAnswers = {
+  nonNegotiableAnchors: '',
+  fixedWeeklyEvents: '',
+  afterLunchPattern: '',
+  resourceConstraints: '',
+  safetyCompliance: '',
 };
 
 const routineOptionsForPreset = (presetId: PlannerPreset['id']): RoutineOptionState => {
@@ -280,14 +324,32 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [routineOptions, setRoutineOptions] = useState<RoutineOptionState>(() => ({
     ...DEFAULT_ROUTINE_OPTIONS,
   }));
+  const [preflight, setPreflight] = useState<PreflightAnswers>(DEFAULT_PREFLIGHT);
+  const preflightComplete = useMemo(
+    () =>
+      PREFLIGHT_QUESTIONS.every(
+        (question) => String(preflight[question.key] || '').trim().length >= 6,
+      ),
+    [preflight],
+  );
+  const confirmedAssumptions = useMemo(
+    () =>
+      PREFLIGHT_QUESTIONS.map(
+        (question) =>
+          `${question.label.replace(/^\d+\.\s*/, '')}: ${String(preflight[question.key] || '').trim()}`,
+      ),
+    [preflight],
+  );
   const [selectedPresetId, setSelectedPresetId] = useState<PlannerPreset['id'] | null>(null);
 
   const [rules, setRules] = useState<ProgramTimeRules>(buildDefaultRules());
 
   const [generating, setGenerating] = useState(false);
+  const [generationMode, setGenerationMode] = useState<'generate' | 'regenerate'>('generate');
   const [saving, setSaving] = useState(false);
   const [sharingParents, setSharingParents] = useState(false);
   const [sharingTeachers, setSharingTeachers] = useState(false);
+  const [saveAdvisory, setSaveAdvisory] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
@@ -321,7 +383,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     setRefreshing(false);
   }, [loadPrograms]);
 
-  const generateProgram = useCallback(async () => {
+  const runGeneration = useCallback(async (mode: 'generate' | 'regenerate') => {
     if (!organizationId || !userId) {
       Alert.alert('Missing profile', 'Please sign in again to continue.');
       return;
@@ -343,6 +405,19 @@ export default function PrincipalDailyProgramPlannerScreen() {
       return;
     }
 
+    if (!preflightComplete) {
+      const missing = PREFLIGHT_QUESTIONS
+        .filter((question) => String(preflight[question.key] || '').trim().length < 6)
+        .map((question) => question.label)
+        .join('\n');
+      Alert.alert(
+        'Complete Preflight First',
+        `Answer all five preflight questions before generation:\n\n${missing}`,
+      );
+      return;
+    }
+
+    setGenerationMode(mode);
     setGenerating(true);
     try {
       const generated = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm({
@@ -356,6 +431,9 @@ export default function PrincipalDailyProgramPlannerScreen() {
           .split(/[\n,;|]/g)
           .map((item) => item.trim())
           .filter(Boolean),
+        preflightAnswers: {
+          ...preflight,
+        },
         constraints: {
           dailyMinutes: Math.max(120, safeDailyMinutes || 300),
           budgetLevel,
@@ -374,18 +452,33 @@ export default function PrincipalDailyProgramPlannerScreen() {
         ...generated,
         title: withSchoolNamedTitle(generated.title, schoolName, themeTitle),
         blocks: (generated.blocks || []).map((block) => ({ ...block, parent_tip: null })),
+        generation_context: {
+          preflight: {
+            ...preflight,
+          },
+          assumptionSummary: confirmedAssumptions,
+        },
         preschool_id: organizationId,
         created_by: userId,
         week_start_date: startOfWeekMonday(weekStartDate),
         week_end_date: addDays(startOfWeekMonday(weekStartDate), 4),
       });
+      setSaveAdvisory(null);
       setDraftViewMode('cards');
 
-      Alert.alert('Draft ready', 'AI generated your daily routine. Review and share when ready.');
+      if (mode === 'regenerate') {
+        Alert.alert(
+          'Draft refreshed',
+          'Dash regenerated this routine using your current setup and preflight answers. Saved plans remain unchanged until you save again.',
+        );
+      } else {
+        Alert.alert('Draft ready', 'AI generated your daily routine. Review and share when ready.');
+      }
     } catch (error: unknown) {
       Alert.alert('Generation failed', error instanceof Error ? error.message : 'Could not generate program.');
     } finally {
       setGenerating(false);
+      setGenerationMode('generate');
     }
   }, [
     ageGroup,
@@ -405,7 +498,36 @@ export default function PrincipalDailyProgramPlannerScreen() {
     userId,
     weekStartDate,
     weeklyObjectives,
+    preflight,
+    preflightComplete,
+    confirmedAssumptions,
   ]);
+
+  const generateProgram = useCallback(() => {
+    void runGeneration('generate');
+  }, [runGeneration]);
+
+  const regenerateProgram = useCallback(() => {
+    if (!draft) {
+      Alert.alert('No draft', 'Generate a routine first, then you can re-generate variations.');
+      return;
+    }
+
+    Alert.alert(
+      'Re-generate this draft?',
+      'Dash will replace the current draft blocks using your current setup and preflight answers. Saved plans stay unchanged.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Re-generate',
+          style: 'destructive',
+          onPress: () => {
+            void runGeneration('regenerate');
+          },
+        },
+      ],
+    );
+  }, [draft, runGeneration]);
 
   const saveDraft = useCallback(async (): Promise<WeeklyProgramDraft | null> => {
     if (!draft) {
@@ -431,13 +553,25 @@ export default function PrincipalDailyProgramPlannerScreen() {
           title: withSchoolNamedTitle(draft.title || `${themeTitle} Daily Program`, schoolName, themeTitle),
           summary: draft.summary || `${themeTitle} routine plan for the week`,
           status: draft.status || 'draft',
+          generation_context: draft.generation_context || {
+            preflight: {
+              ...preflight,
+            },
+            assumptionSummary: confirmedAssumptions,
+          },
           blocks: (draft.blocks || []).map((block) => ({ ...block, parent_tip: null })),
         },
       });
 
       setDraft(saved);
+      setSaveAdvisory(saved.save_warnings?.[0] || null);
       await loadPrograms();
-      Alert.alert('Saved', 'Daily routine draft saved successfully.');
+      Alert.alert(
+        'Saved',
+        saved.save_warnings?.[0]
+          ? `Daily routine draft saved.\n\n${saved.save_warnings[0]}`
+          : 'Daily routine draft saved successfully.',
+      );
       return saved;
     } catch (error: unknown) {
       Alert.alert('Save failed', error instanceof Error ? error.message : 'Failed to save draft.');
@@ -445,7 +579,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     } finally {
       setSaving(false);
     }
-  }, [ageGroup, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate]);
+  }, [ageGroup, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate, preflight, confirmedAssumptions]);
 
   const shareWithParents = useCallback(async (programOverride?: WeeklyProgramDraft) => {
     const activeProgram = programOverride || draft;
@@ -676,6 +810,16 @@ export default function PrincipalDailyProgramPlannerScreen() {
     setAgeGroup(program.age_group || '3-6');
     setDailyMinutes('300');
     setWeeklyObjectives(program.summary || weeklyObjectives);
+    const maybePreflight = (program as any)?.generation_context?.preflight;
+    if (maybePreflight && typeof maybePreflight === 'object') {
+      setPreflight({
+        nonNegotiableAnchors: String((maybePreflight as any).nonNegotiableAnchors || ''),
+        fixedWeeklyEvents: String((maybePreflight as any).fixedWeeklyEvents || ''),
+        afterLunchPattern: String((maybePreflight as any).afterLunchPattern || ''),
+        resourceConstraints: String((maybePreflight as any).resourceConstraints || ''),
+        safetyCompliance: String((maybePreflight as any).safetyCompliance || ''),
+      });
+    }
     setDraft(program);
     setDraftViewMode('edit');
     Alert.alert('Loaded', 'Program loaded into editor.');
@@ -687,6 +831,20 @@ export default function PrincipalDailyProgramPlannerScreen() {
     const withTimesCount = draftBlocks.filter((block) => !!block.start_time && !!block.end_time).length;
     return { totalBlocks, withTimesCount };
   }, [draft?.blocks]);
+
+  const capsCoverage = useMemo(() => {
+    const rawCoverage = (draft?.generation_context as any)?.capsCoverage;
+    if (!rawCoverage || typeof rawCoverage !== 'object') return null;
+
+    return {
+      homeLanguageDays: Array.isArray(rawCoverage.homeLanguageDays) ? rawCoverage.homeLanguageDays : [],
+      mathematicsDays: Array.isArray(rawCoverage.mathematicsDays) ? rawCoverage.mathematicsDays : [],
+      lifeSkillsDays: Array.isArray(rawCoverage.lifeSkillsDays) ? rawCoverage.lifeSkillsDays : [],
+      weatherRoutineDays: Array.isArray(rawCoverage.weatherRoutineDays) ? rawCoverage.weatherRoutineDays : [],
+      missingByDay: Array.isArray(rawCoverage.missingByDay) ? rawCoverage.missingByDay : [],
+      coverageScore: Number(rawCoverage.coverageScore) || 0,
+    };
+  }, [draft?.generation_context]);
 
   const recentThemeSuggestions = useMemo(() => {
     const seen = new Set<string>();
@@ -788,12 +946,13 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
   const readinessScore = useMemo(() => {
     let score = 0;
-    if (setupReady) score += 30;
-    if (ruleValidation.issues.length === 0) score += 30;
+    if (setupReady) score += 20;
+    if (preflightComplete) score += 20;
+    if (ruleValidation.issues.length === 0) score += 20;
     if (draftReady) score += 20;
     if (shareReady) score += 20;
     return Math.min(100, score);
-  }, [draftReady, ruleValidation.issues.length, setupReady, shareReady]);
+  }, [draftReady, preflightComplete, ruleValidation.issues.length, setupReady, shareReady]);
 
   const readinessTone = readinessScore >= 80
     ? '#10b981'
@@ -801,7 +960,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
       ? '#f59e0b'
       : '#ef4444';
 
-  const canGenerate = setupReady;
+  const canGenerate = setupReady && preflightComplete;
 
   return (
     <DesktopLayout role="principal" title="AI Daily Routine Planner" showBackButton>
@@ -1020,6 +1179,59 @@ export default function PrincipalDailyProgramPlannerScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Mandatory Preflight</Text>
+          <Text style={styles.sectionHint}>
+            Dash must confirm these 5 context questions before generating the routine.
+          </Text>
+
+          {PREFLIGHT_QUESTIONS.map((question) => (
+            <View key={question.key} style={{ marginTop: 8 }}>
+              <Text style={styles.fieldLabel}>{question.label}</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 64 }]}
+                value={preflight[question.key]}
+                onChangeText={(value) =>
+                  setPreflight((prev) => ({
+                    ...prev,
+                    [question.key]: value,
+                  }))
+                }
+                placeholder={question.placeholder}
+                placeholderTextColor={theme.textSecondary}
+                multiline
+              />
+            </View>
+          ))}
+
+          <View style={preflightComplete ? styles.successBox : styles.warningBox}>
+            {preflightComplete ? (
+              <>
+                <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+                <Text style={styles.successBoxText}>Preflight complete. Confirmed assumptions are ready.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.warningTitle}>Preflight incomplete</Text>
+                <Text style={styles.warningItem}>
+                  Provide at least one clear sentence for each preflight question.
+                </Text>
+              </>
+            )}
+          </View>
+
+          {preflightComplete && (
+            <View style={{ marginTop: 8, gap: 6 }}>
+              <Text style={styles.fieldLabel}>Confirmed Assumptions</Text>
+              {confirmedAssumptions.map((line) => (
+                <Text key={line} style={styles.essentialHint}>
+                  • {line}
+                </Text>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Strict Arrival & Pickup Rules</Text>
           <Text style={styles.sectionHint}>
             These limits are enforced before parents can receive the routine. Program blocks outside this window are blocked from publishing.
@@ -1114,27 +1326,92 @@ export default function PrincipalDailyProgramPlannerScreen() {
             <View style={[styles.readinessPill, setupReady && styles.readinessPillActive]}>
               <Text style={[styles.readinessPillText, setupReady && styles.readinessPillTextActive]}>1. Setup</Text>
             </View>
+            <View style={[styles.readinessPill, preflightComplete && styles.readinessPillActive]}>
+              <Text style={[styles.readinessPillText, preflightComplete && styles.readinessPillTextActive]}>2. Preflight</Text>
+            </View>
             <View style={[styles.readinessPill, ruleValidation.issues.length === 0 && styles.readinessPillActive]}>
-              <Text style={[styles.readinessPillText, ruleValidation.issues.length === 0 && styles.readinessPillTextActive]}>2. Rules</Text>
+              <Text style={[styles.readinessPillText, ruleValidation.issues.length === 0 && styles.readinessPillTextActive]}>3. Rules</Text>
             </View>
             <View style={[styles.readinessPill, draftReady && styles.readinessPillActive]}>
-              <Text style={[styles.readinessPillText, draftReady && styles.readinessPillTextActive]}>3. Draft</Text>
+              <Text style={[styles.readinessPillText, draftReady && styles.readinessPillTextActive]}>4. Draft</Text>
             </View>
             <View style={[styles.readinessPill, shareReady && styles.readinessPillActive]}>
-              <Text style={[styles.readinessPillText, shareReady && styles.readinessPillTextActive]}>4. Share</Text>
+              <Text style={[styles.readinessPillText, shareReady && styles.readinessPillTextActive]}>5. Share</Text>
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.primaryBtn, (generating || !canGenerate) && styles.buttonDisabled]}
-            onPress={generateProgram}
-            disabled={generating || !canGenerate}
-          >
-            {generating ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="sparkles" size={16} color="#fff" />}
-            <Text style={styles.primaryBtnText}>{generating ? 'Generating...' : 'Generate Smart Routine'}</Text>
-          </TouchableOpacity>
+          {capsCoverage && (
+            <View style={styles.capsCoverageBox}>
+              <View style={styles.capsCoverageHeader}>
+                <Text style={styles.capsCoverageTitle}>CAPS / DBE Coverage</Text>
+                <Text style={styles.capsCoverageScore}>{Math.max(0, Math.min(100, Math.round(capsCoverage.coverageScore)))}%</Text>
+              </View>
+              <View style={styles.capsCoveragePills}>
+                <View style={[styles.capsCoveragePill, capsCoverage.homeLanguageDays.length >= 5 && styles.capsCoveragePillActive]}>
+                  <Text style={[styles.capsCoveragePillText, capsCoverage.homeLanguageDays.length >= 5 && styles.capsCoveragePillTextActive]}>Home Language</Text>
+                </View>
+                <View style={[styles.capsCoveragePill, capsCoverage.mathematicsDays.length >= 5 && styles.capsCoveragePillActive]}>
+                  <Text style={[styles.capsCoveragePillText, capsCoverage.mathematicsDays.length >= 5 && styles.capsCoveragePillTextActive]}>Mathematics</Text>
+                </View>
+                <View style={[styles.capsCoveragePill, capsCoverage.lifeSkillsDays.length >= 5 && styles.capsCoveragePillActive]}>
+                  <Text style={[styles.capsCoveragePillText, capsCoverage.lifeSkillsDays.length >= 5 && styles.capsCoveragePillTextActive]}>Life Skills</Text>
+                </View>
+                <View style={[styles.capsCoveragePill, capsCoverage.weatherRoutineDays.length >= 5 && styles.capsCoveragePillActive]}>
+                  <Text style={[styles.capsCoveragePillText, capsCoverage.weatherRoutineDays.length >= 5 && styles.capsCoveragePillTextActive]}>Daily Weather</Text>
+                </View>
+              </View>
+              {capsCoverage.missingByDay.length > 0 && (
+                <Text style={styles.capsCoverageHint}>
+                  Pending focus:{' '}
+                  {capsCoverage.missingByDay
+                    .slice(0, 3)
+                    .map((entry: any) => `${DAY_LABELS[Number(entry?.day) || 1]} (${(entry?.missingStrands || []).join(', ')})`)
+                    .join(' • ')}
+                </Text>
+              )}
+            </View>
+          )}
+
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.primaryBtn, styles.halfButton, (generating || !canGenerate) && styles.buttonDisabled]}
+              onPress={generateProgram}
+              disabled={generating || !canGenerate}
+            >
+              {generating && generationMode === 'generate'
+                ? <EduDashSpinner size="small" color="#fff" />
+                : <Ionicons name="sparkles" size={16} color="#fff" />}
+              <Text style={styles.primaryBtnText}>
+                {generating && generationMode === 'generate' ? 'Generating...' : 'Generate Smart Routine'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.regenerateBtn, styles.halfButton, (generating || !canGenerate || !draft) && styles.buttonDisabled]}
+              onPress={regenerateProgram}
+              disabled={generating || !canGenerate || !draft}
+            >
+              {generating && generationMode === 'regenerate'
+                ? <EduDashSpinner size="small" color={theme.primary} />
+                : <Ionicons name="refresh" size={16} color={theme.primary} />}
+              <Text style={styles.regenerateBtnText}>
+                {generating && generationMode === 'regenerate' ? 'Regenerating...' : 'Re-generate'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           {!canGenerate && (
-            <Text style={styles.actionHint}>Add theme, age group, and at least 120 daily minutes to generate.</Text>
+            <Text style={styles.actionHint}>
+              Complete setup + all five preflight questions before generation.
+            </Text>
+          )}
+          {!draft && (
+            <Text style={styles.actionHint}>
+              Re-generate unlocks after you generate a draft or load a saved plan.
+            </Text>
+          )}
+          {draft && canGenerate && (
+            <Text style={styles.actionHint}>
+              Use Re-generate any time to create a fresh variation from the same setup.
+            </Text>
           )}
 
           <View style={styles.row}>
@@ -1168,6 +1445,12 @@ export default function PrincipalDailyProgramPlannerScreen() {
               ? 'Everything looks ready. You can share this routine with parents now.'
               : 'Tip: Save to persist immediately. Share with teachers for classroom rollout, and share with parents when ready for family communication.'}
           </Text>
+          {saveAdvisory ? (
+            <View style={styles.saveAdvisoryRow}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.warning} />
+              <Text style={styles.saveAdvisoryText}>{saveAdvisory}</Text>
+            </View>
+          ) : null}
         </View>
 
         {draft && (
@@ -1802,6 +2085,60 @@ const createStyles = (theme: any) =>
     readinessPillTextActive: {
       color: '#10b981',
     },
+    capsCoverageBox: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary + '45',
+      backgroundColor: theme.background + 'd9',
+      padding: 10,
+      gap: 6,
+    },
+    capsCoverageHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    capsCoverageTitle: {
+      color: theme.text,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    capsCoverageScore: {
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: '900',
+    },
+    capsCoveragePills: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    capsCoveragePill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.background + 'c2',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    capsCoveragePillActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '20',
+    },
+    capsCoveragePillText: {
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    capsCoveragePillTextActive: {
+      color: theme.primary,
+    },
+    capsCoverageHint: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      lineHeight: 16,
+    },
     secondaryBtn: {
       borderRadius: 12,
       borderWidth: 1,
@@ -1814,6 +2151,22 @@ const createStyles = (theme: any) =>
       gap: 8,
     },
     secondaryBtnText: {
+      color: theme.primary,
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    regenerateBtn: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.primary + '66',
+      backgroundColor: theme.primary + '12',
+      paddingVertical: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    regenerateBtnText: {
       color: theme.primary,
       fontWeight: '800',
       fontSize: 13,
@@ -1846,6 +2199,25 @@ const createStyles = (theme: any) =>
     },
     buttonDisabled: {
       opacity: 0.6,
+    },
+    saveAdvisoryRow: {
+      marginTop: 2,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.warning + '55',
+      backgroundColor: theme.warning + '15',
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    saveAdvisoryText: {
+      flex: 1,
+      color: theme.warning,
+      fontSize: 11,
+      lineHeight: 16,
+      fontWeight: '600',
     },
     daySection: {
       borderRadius: 12,
