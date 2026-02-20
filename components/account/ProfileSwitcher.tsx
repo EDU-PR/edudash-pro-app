@@ -54,7 +54,7 @@ export function ProfileSwitcher({
   const { theme } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile } = useAuth();
   const pathname = usePathname();
   const { showAlert, alertProps } = useAlertModal();
   const pathnameRef = useRef(pathname);
@@ -253,8 +253,6 @@ export function ProfileSwitcher({
       onClose();
       onAccountSwitched?.(account);
 
-      // Refresh profile to update UI
-      await refreshProfile();
       clearAllNavigationLocks();
 
       // Reactivate push tokens for switched user so they receive notifications
@@ -370,7 +368,7 @@ export function ProfileSwitcher({
       }
       setSwitching(null);
     }
-  }, [user?.id, onClose, onAccountSwitched, refreshProfile, t, biometricAvailable, showAlert]);
+  }, [user?.id, onClose, onAccountSwitched, t, biometricAvailable, showAlert]);
 
   // Remove an account from stored list
   const handleRemoveAccount = useCallback(async (account: StoredAccount) => {
