@@ -9,7 +9,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { shouldAllowFallback, trackFallbackUsage } from '@/lib/security-config';
-import { getCurrentSession, clearStoredAuthData } from '@/lib/sessionManager';
+import { getCurrentSession } from '@/lib/sessionManager';
 import type { UserProfile } from '@/lib/sessionManager';
 import { log, warn, debug, error as logError } from '@/lib/debug';
 
@@ -72,16 +72,13 @@ export async function fetchEnhancedUserProfile(
     }
 
     // If stored session belongs to a different user, treat it as stale and continue.
+    // Do not clear stored auth data here; this can happen during account switch
+    // transitions and clearing storage can invalidate the new session.
     if (storedSession?.user_id && userId && storedSession.user_id !== userId) {
-      debug('[Profile] Stored session mismatch, clearing stale auth cache', {
+      debug('[Profile] Stored session mismatch, ignoring stale cached session', {
         storedUserId: storedSession.user_id,
         requestedUserId: userId,
       });
-      try {
-        await clearStoredAuthData();
-      } catch (e) {
-        debug('[Profile] Failed to clear stored auth cache (non-fatal):', e);
-      }
       storedSession = null;
       sessionUserId = null;
       session = null;
@@ -143,8 +140,7 @@ export async function fetchEnhancedUserProfile(
 
     // Block if user ID mismatch
     if (sessionUserId && sessionUserId !== userId) {
-      logError('User ID mismatch - cannot fetch profile for different user');
-      reportError(new Error('Profile fetch attempted for different user'), {
+      debug('[Profile] User ID mismatch during profile fetch (likely switch race)', {
         requestedUserId: userId,
         sessionUserId,
       });
