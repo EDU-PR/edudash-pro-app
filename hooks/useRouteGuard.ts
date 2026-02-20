@@ -9,11 +9,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useGlobalSearchParams, usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  isSignOutInProgress,
-  isAccountSwitchPending,
-  isAccountSwitchInProgress,
-} from '@/lib/authActions';
+import { isSignOutInProgress, isAccountSwitchPending } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
 import {
@@ -53,7 +49,6 @@ export const useAuthGuard = () => {
   const lastMismatchKey = useRef<string | null>(null);
   const authRouteSeenAt = useRef<number | null>(null);
   const signingOut = isSignOutInProgress();
-  const accountSwitchInProgress = isAccountSwitchInProgress();
 
   const safeReplace = useCallback((to: string, reason: string) => {
     const from = typeof pathname === 'string' ? pathname : '';
@@ -111,15 +106,7 @@ export const useAuthGuard = () => {
     }
 
     // Authenticated but missing profile: avoid dashboards getting stuck loading
-    if (
-      user &&
-      !profileLoading &&
-      !profile &&
-      !isAuthRoute &&
-      !isProfilesGate &&
-      !isOnboarding &&
-      !accountSwitchInProgress
-    ) {
+    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate && !isOnboarding) {
       console.log('[AuthGuard] Missing profile, redirecting to profiles-gate from:', pathname);
       hasNavigated.current = true;
       safeReplace('/profiles-gate', 'missing_profile_protected_route');
@@ -205,7 +192,6 @@ export const useAuthGuard = () => {
     (profile as any)?.organization_membership?.organization_kind,
     (profile as any)?.organization_type,
     profileLoading,
-    accountSwitchInProgress,
     signingOut,
     safeReplace,
   ]);
