@@ -9,7 +9,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { shouldAllowFallback, trackFallbackUsage } from '@/lib/security-config';
-import { getCurrentSession } from '@/lib/sessionManager';
+import { getCurrentSession, clearStoredAuthData } from '@/lib/sessionManager';
 import type { UserProfile } from '@/lib/sessionManager';
 import { log, warn, debug, error as logError } from '@/lib/debug';
 
@@ -72,13 +72,16 @@ export async function fetchEnhancedUserProfile(
     }
 
     // If stored session belongs to a different user, treat it as stale and continue.
-    // Do not clear auth cache here: this can occur during account-switch races where
-    // the active session has already moved to the new user.
     if (storedSession?.user_id && userId && storedSession.user_id !== userId) {
-      debug('[Profile] Stored session mismatch, ignoring stale cached session', {
+      debug('[Profile] Stored session mismatch, clearing stale auth cache', {
         storedUserId: storedSession.user_id,
         requestedUserId: userId,
       });
+      try {
+        await clearStoredAuthData();
+      } catch (e) {
+        debug('[Profile] Failed to clear stored auth cache (non-fatal):', e);
+      }
       storedSession = null;
       sessionUserId = null;
       session = null;
