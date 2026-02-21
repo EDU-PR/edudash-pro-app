@@ -182,4 +182,46 @@ describe('DashAIClient continuation loop', () => {
     expect(result.metadata?.resolution_status).toBe('needs_clarification');
     expect(result.metadata?.escalation_offer).toBe(true);
   });
+
+  it('treats stream pending tool calls as expected fallback and preserves successful output', async () => {
+    const invokeMock = jest.fn().mockResolvedValueOnce({
+      data: {
+        success: true,
+        content: 'Your PDF is ready. Tap Preview PDF to open it.',
+        tool_results: [{ name: 'export_pdf', success: true, output: { linkType: 'signed' } }],
+        pending_tool_calls: [],
+      },
+      error: null,
+    });
+
+    const client = new DashAIClient({
+      supabaseClient: { functions: { invoke: invokeMock } },
+      getUserProfile: () =>
+        ({
+          id: 'teacher-1',
+          role: 'teacher',
+          tier: 'starter',
+          organization_id: 'org-1',
+        } as any),
+    });
+
+    (client as any).callAIServiceStreaming = jest.fn().mockRejectedValue(
+      Object.assign(new Error('Streaming requires continuation for tool calls: export_pdf'), {
+        code: 'stream_requires_continuation',
+      }),
+    );
+
+    const result = await client.callAIService({
+      messages: [{ role: 'user', content: 'Please export this as PDF' }],
+      serviceType: 'chat_message',
+      stream: true,
+      onChunk: jest.fn(),
+    });
+
+    expect(result.content).toContain('PDF is ready');
+    expect(result.content.toLowerCase()).not.toContain('unavailable');
+    expect((result.metadata?.resolution_meta as any)?.stream_fallback_reason).toBe('stream_pending_tool_calls');
+    expect((result.metadata?.resolution_meta as any)?.stream_fallback_outcome).toBe('fallback_completed');
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
 });

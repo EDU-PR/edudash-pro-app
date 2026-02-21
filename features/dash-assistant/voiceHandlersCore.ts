@@ -25,6 +25,23 @@ const DEFAULT_DASH_VOICE_LOCALE = 'en-ZA';
 const TTS_FAST_START_SUMMARY_MAX_CHARS = 260;
 const TTS_FAST_START_SUMMARY_MAX_SENTENCES = 2;
 const TTS_FAST_START_FIRST_CHUNK_MAX_LEN = 220;
+const TTS_CHUNK_TIMEOUT_MIN_MS = 45_000;
+const TTS_CHUNK_TIMEOUT_MAX_MS = 210_000;
+const TTS_CHUNK_TIMEOUT_PER_CHAR_MS = 85;
+const RAW_URL_REGEX = /https?:\/\/[^\s)]+/gi;
+
+export type SpeechChunkProgress = {
+  messageId: string;
+  chunkIndex: number;
+  chunkCount: number;
+  isPlaying: boolean;
+  isComplete: boolean;
+};
+
+function resolveChunkTimeoutMs(chunk: string): number {
+  const estimate = Math.round(String(chunk || '').length * TTS_CHUNK_TIMEOUT_PER_CHAR_MS + 10_000);
+  return Math.max(TTS_CHUNK_TIMEOUT_MIN_MS, Math.min(TTS_CHUNK_TIMEOUT_MAX_MS, estimate));
+}
 
 function countMatches(input: string, pattern: RegExp): number {
   return (input.match(pattern) || []).length;
@@ -50,6 +67,18 @@ function stripToolDumpForSpeech(input: string): string {
     if (isJsonLikeToolDump(tail)) return lead;
   }
   return isJsonLikeToolDump(text) ? '' : text;
+}
+
+function normalizeUrlHeavyMarkdownForSpeech(input: string): string {
+  const value = String(input || '').trim();
+  if (!value) return '';
+  return value
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/gi, '$1')
+    .replace(RAW_URL_REGEX, ' link ')
+    .replace(/\b(token|sig|expires|signature)=[^\s&]+/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function shouldUseDetectedLocaleForSpeech(text: string, locale: string, source: string): boolean {
@@ -189,6 +218,7 @@ export async function speakDashResponse(params: {
   setVoiceEnabled: (value: boolean) => void;
   stopSpeaking: () => Promise<void>;
   preferFastStart?: boolean;
+  onSpeechChunkProgress?: (progress: SpeechChunkProgress) => void;
 }) {
   const {
     message,
@@ -207,6 +237,7 @@ export async function speakDashResponse(params: {
     setVoiceEnabled,
     stopSpeaking,
     preferFastStart = false,
+    onSpeechChunkProgress,
   } = params;
 
   if (!dashInstance || message.type !== 'assistant') return;
@@ -272,8 +303,9 @@ export async function speakDashResponse(params: {
           maxSentences: TTS_FAST_START_SUMMARY_MAX_SENTENCES,
         })
       : rawSpeechInput;
+    const normalizedSpeechInput = normalizeUrlHeavyMarkdownForSpeech(speechInput || '');
     const isPhonics = shouldUsePhonicsMode(speechInput || '');
-    const cleaned = cleanForTTS(speechInput || '', { phonicsMode: isPhonics });
+    const cleaned = cleanForTTS(normalizedSpeechInput || '', { phonicsMode: isPhonics });
     const baseChunks = splitForTTS(cleaned, TTS_CHUNK_MAX_LEN);
     const chunks = preferFastStart && baseChunks.length > 0
       ? [
@@ -282,6 +314,13 @@ export async function speakDashResponse(params: {
         ]
       : baseChunks;
     if (chunks.length === 0) {
+      onSpeechChunkProgress?.({
+        messageId: message.id,
+        chunkIndex: 0,
+        chunkCount: 0,
+        isPlaying: false,
+        isComplete: true,
+      });
       setIsSpeaking(false);
       setSpeakingMessageId(null);
       return;
@@ -359,11 +398,25 @@ export async function speakDashResponse(params: {
 
     for (let idx = 0; idx < chunks.length; idx += 1) {
       if (voiceRefs.ttsSessionIdRef && voiceRefs.ttsSessionIdRef.current !== sessionId) {
+        onSpeechChunkProgress?.({
+          messageId: message.id,
+          chunkIndex: idx,
+          chunkCount: chunks.length,
+          isPlaying: false,
+          isComplete: false,
+        });
         break;
       }
 
       const chunk = chunks[idx];
       const chunkStartedAt = Date.now();
+      onSpeechChunkProgress?.({
+        messageId: message.id,
+        chunkIndex: idx,
+        chunkCount: chunks.length,
+        isPlaying: true,
+        isComplete: false,
+      });
       const chunkMessage: DashMessage = {
         ...message,
         content: chunk,
@@ -382,7 +435,16 @@ export async function speakDashResponse(params: {
           fn();
         };
 
-        const timeout = setTimeout(() => settle(resolve), 30000);
+        const timeoutMs = resolveChunkTimeoutMs(chunk);
+        const timeout = setTimeout(() => {
+          console.warn('[DashVoice] TTS chunk timed out waiting for completion callback', {
+            index: idx + 1,
+            total: chunks.length,
+            chars: chunk.length,
+            timeoutMs,
+          });
+          settle(resolve);
+        }, timeoutMs);
         const clear = () => clearTimeout(timeout);
 
         void dashInstance.speakResponse(chunkMessage, {
@@ -431,6 +493,13 @@ export async function speakDashResponse(params: {
         });
       }
       if (chunkFailed) {
+        onSpeechChunkProgress?.({
+          messageId: message.id,
+          chunkIndex: idx,
+          chunkCount: chunks.length,
+          isPlaying: false,
+          isComplete: false,
+        });
         break;
       }
     }
@@ -439,6 +508,13 @@ export async function speakDashResponse(params: {
       if (voiceRefs.ttsSessionIdRef) {
         voiceRefs.ttsSessionIdRef.current = null;
       }
+      onSpeechChunkProgress?.({
+        messageId: message.id,
+        chunkIndex: Math.max(0, chunks.length - 1),
+        chunkCount: chunks.length,
+        isPlaying: false,
+        isComplete: true,
+      });
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
@@ -447,6 +523,13 @@ export async function speakDashResponse(params: {
     if (voiceRefs.ttsSessionIdRef) {
       voiceRefs.ttsSessionIdRef.current = null;
     }
+    onSpeechChunkProgress?.({
+      messageId: message.id,
+      chunkIndex: 0,
+      chunkCount: 0,
+      isPlaying: false,
+      isComplete: false,
+    });
     setIsSpeaking(false);
     setSpeakingMessageId(null);
   }

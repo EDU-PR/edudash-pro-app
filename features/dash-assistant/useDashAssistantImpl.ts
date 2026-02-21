@@ -59,7 +59,12 @@ import {
 } from '@/lib/dash-ai/tutorSessionService';
 import { useDashTutorSessionPersistence } from '@/hooks/dash-assistant/useDashTutorSessionPersistence';
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
-import { handleDashVoiceInputPress, speakDashResponse, stopDashVoiceRecording } from '@/hooks/dash-assistant/voiceHandlers';
+import {
+  handleDashVoiceInputPress,
+  speakDashResponse,
+  stopDashVoiceRecording,
+  type SpeechChunkProgress,
+} from '@/hooks/dash-assistant/voiceHandlers';
 import {
   resolveAutoSpeakPreference,
   shouldAutoSpeak,
@@ -179,6 +184,7 @@ interface UseDashAssistantReturn {
   isRecording: boolean;
   recordingVoiceActivity: boolean;
   partialTranscript: string;
+  speechChunkProgress: SpeechChunkProgress | null;
   voiceAutoSendCountdownActive: boolean;
   voiceAutoSendCountdownMs: number;
   
@@ -201,7 +207,7 @@ interface UseDashAssistantReturn {
   sendMessage: (text?: string) => Promise<void>;
   sendTutorAnswer: (answer: string, sourceMessageId?: string) => Promise<void>;
   cancelGeneration: () => void;
-  stopAllActivity: () => Promise<void>;
+  stopAllActivity: (reason?: string) => Promise<void>;
   speakResponse: (message: DashMessage, options?: { preferFastStart?: boolean }) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   scrollToBottom: (opts?: { animated?: boolean; delay?: number; force?: boolean }) => void;
@@ -316,6 +322,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [autoSpeakResponses, setAutoSpeakResponses] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [speechChunkProgress, setSpeechChunkProgress] = useState<SpeechChunkProgress | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingVoiceActivity, setRecordingVoiceActivity] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
@@ -418,6 +425,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const tutorOverridesRef = useRef<Record<string, string>>({});
   const learnerContextRef = useRef<LearnerContext | null>(null);
   const inputTextRef = useRef('');
+  const streamingMessageIdRef = useRef<string | null>(null);
+  const streamingContentRef = useRef('');
   const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
   const voiceAutoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceAutoSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -443,6 +452,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     inputTextRef.current = inputText;
   }, [inputText]);
+
+  useEffect(() => {
+    streamingMessageIdRef.current = streamingMessageId;
+  }, [streamingMessageId]);
+
+  useEffect(() => {
+    streamingContentRef.current = streamingContent;
+  }, [streamingContent]);
 
   const cancelVoiceAutoSend = useCallback(() => {
     if (voiceAutoSendTimeoutRef.current) {
@@ -999,15 +1016,18 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       await dashInstance.stopSpeaking();
       setIsSpeaking(false);
       setSpeakingMessageId(null);
+      setSpeechChunkProgress(null);
     } catch (error) {
       console.error('Failed to stop speaking:', error);
       setIsSpeaking(false);
       setSpeakingMessageId(null);
+      setSpeechChunkProgress(null);
     }
   }, [dashInstance]);
 
   // Speech functions
   const speakResponse = useCallback(async (message: DashMessage, options?: { preferFastStart?: boolean }) => {
+    setSpeechChunkProgress(null);
     await speakDashResponse({
       message,
       dashInstance,
@@ -1033,6 +1053,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setVoiceEnabled,
       stopSpeaking,
       preferFastStart: options?.preferFastStart,
+      onSpeechChunkProgress: setSpeechChunkProgress,
     });
   }, [
     dashInstance,
@@ -1047,6 +1068,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     consumeVoiceBudget,
     sttFinalizeTimerRef,
     sttTranscriptBufferRef,
+    setSpeechChunkProgress,
   ]);
 
   // Voice and speaking functions (custom gating + alerts)
@@ -1844,7 +1866,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           responseText: response?.content,
         })
       ) {
-        void speakResponse(response, { preferFastStart: true });
+        void speakResponse(response);
       }
 
       track(
@@ -2027,11 +2049,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       abortControllerRef.current = null;
     }
     // Keep partial streaming content visible as the final message
-    if (streamingMessageId && streamingContent) {
+    const activeStreamingId = streamingMessageIdRef.current;
+    const activeStreamingContent = streamingContentRef.current;
+    if (activeStreamingId && activeStreamingContent) {
       setMessages(prev =>
         prev.map(msg =>
-          msg.id === streamingMessageId
-            ? { ...msg, content: streamingContent + '\n\n*(Generation stopped)*' }
+          msg.id === activeStreamingId
+            ? { ...msg, content: activeStreamingContent + '\n\n*(Generation stopped)*' }
             : msg
         )
       );
@@ -2040,9 +2064,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setLoadingStatus(null);
     setStreamingMessageId(null);
     setStreamingContent('');
-  }, [streamingMessageId, streamingContent]);
+  }, []);
 
-  const stopAllActivity = useCallback(async () => {
+  const stopAllActivity = useCallback(async (reason: string = 'user_interrupt') => {
+    console.log('[DashVoice] Stop all activity', { reason });
     cancelVoiceAutoSend();
     if (isRecording) {
       await stopVoiceRecording();
@@ -2717,6 +2742,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     isRecording,
     recordingVoiceActivity,
     partialTranscript,
+    speechChunkProgress,
     voiceAutoSendCountdownActive,
     voiceAutoSendCountdownMs,
     

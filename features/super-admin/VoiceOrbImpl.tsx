@@ -101,6 +101,8 @@ interface VoiceOrbProps {
   autoStartListening?: boolean;
   /** Auto-restart listening after TTS ends (default: true) */
   autoRestartAfterTTS?: boolean;
+  /** Block auto-restart while parent screen is navigating/interrupted */
+  restartBlocked?: boolean;
   /** Preschool mode: longer silence timeout, lower speech threshold for children */
   preschoolMode?: boolean;
   /** Show the live transcription bubble while listening (default: true). */
@@ -126,6 +128,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   size = ORB_SIZE,
   autoStartListening = true,
   autoRestartAfterTTS = true,
+  restartBlocked = false,
   preschoolMode = false,
   showLiveTranscript = true,
 }, ref) => {
@@ -199,6 +202,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking, error: ttsError } = useVoiceTTS();
   const isSpeakingRef = useRef(isSpeaking);
   const ttsSpeakingRef = useRef(ttsIsSpeaking);
+  const restartBlockedRef = useRef(restartBlocked);
   const skipNextAutoRestartRef = useRef(false);
   const resetLiveSilenceTimerRef = useRef<(() => void) | null>(null);
   const finalizeLiveRef = useRef<((text: string) => void) | null>(null);
@@ -210,6 +214,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   useEffect(() => {
     ttsSpeakingRef.current = ttsIsSpeaking;
   }, [ttsIsSpeaking]);
+
+  useEffect(() => {
+    restartBlockedRef.current = restartBlocked;
+  }, [restartBlocked]);
 
   useEffect(() => {
     usingLiveSTTRef.current = usingLiveSTT;
@@ -528,6 +536,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       await stopSpeaking();
     },
     stopListening: async () => {
+      console.log('[VoiceOrb] stopListening reason=external_stop');
       if (recorderState.isRecording) {
         try {
           await recorderActions.stopRecording();
@@ -590,19 +599,19 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   
   // Auto-start listening when component mounts (only if not speaking)
   useEffect(() => {
-    if (autoStartListening && !hasAutoStarted.current && !isMuted && !isSpeaking && !ttsIsSpeaking) {
+    if (autoStartListening && !hasAutoStarted.current && !isMuted && !isSpeaking && !ttsIsSpeaking && !restartBlocked) {
       hasAutoStarted.current = true;
       console.log('[VoiceOrb] Auto-starting listening on mount...');
       // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
         // Double-check not speaking before starting
-        if (!isSpeaking && !ttsIsSpeaking) {
+        if (!isSpeaking && !ttsIsSpeaking && !restartBlockedRef.current) {
           handleStartRecordingRef.current?.();
         }
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [autoStartListening, isMuted, isSpeaking, ttsIsSpeaking]);
+  }, [autoStartListening, isMuted, isSpeaking, ttsIsSpeaking, restartBlocked]);
   
   // ── Consolidated auto-restart timer ──
   // A single timer ref prevents overlapping/conflicting restart attempts
@@ -614,17 +623,26 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     if (autoRestartTimerRef.current) clearTimeout(autoRestartTimerRef.current);
     autoRestartTimerRef.current = setTimeout(() => {
       autoRestartTimerRef.current = null;
-      if (!isSpeaking && !ttsIsSpeaking && !isMuted && !recorderState.isRecording && !usingLiveSTTRef.current && !isParentProcessing) {
+      if (
+        !isSpeaking &&
+        !ttsIsSpeaking &&
+        !isMuted &&
+        !restartBlockedRef.current &&
+        !isListening &&
+        !recorderState.isRecording &&
+        !usingLiveSTTRef.current &&
+        !isParentProcessing
+      ) {
         console.log(`[VoiceOrb] auto-restart (${source})`);
         handleStartRecordingRef.current?.();
       }
     }, AUTO_RESTART_DELAY_MS);
-  }, [isSpeaking, ttsIsSpeaking, isMuted, recorderState.isRecording, isParentProcessing]);
+  }, [isSpeaking, ttsIsSpeaking, isMuted, isListening, recorderState.isRecording, isParentProcessing]);
 
   // Auto-restart after TTS finishes
   const prevTtsSpeaking = useRef(ttsIsSpeaking);
   useEffect(() => {
-    if (prevTtsSpeaking.current && !ttsIsSpeaking && !isSpeaking && autoRestartAfterTTS && !isMuted && !isProcessing) {
+    if (prevTtsSpeaking.current && !ttsIsSpeaking && !isSpeaking && autoRestartAfterTTS && !isMuted && !isProcessing && !restartBlocked) {
       if (skipNextAutoRestartRef.current) {
         skipNextAutoRestartRef.current = false;
         prevTtsSpeaking.current = ttsIsSpeaking;
@@ -633,25 +651,25 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       scheduleAutoRestart('tts-stop');
     }
     prevTtsSpeaking.current = ttsIsSpeaking;
-  }, [isSpeaking, ttsIsSpeaking, autoRestartAfterTTS, isMuted, isProcessing, scheduleAutoRestart]);
+  }, [isSpeaking, ttsIsSpeaking, autoRestartAfterTTS, isMuted, isProcessing, restartBlocked, scheduleAutoRestart]);
 
   // Auto-restart after transcription completes
   const prevIsProcessingRef = useRef(isProcessing);
   const prevIsParentProcessingRef = useRef(isParentProcessing);
   useEffect(() => {
-    if (prevIsProcessingRef.current && !isProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS) {
+    if (prevIsProcessingRef.current && !isProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS && !restartBlocked) {
       scheduleAutoRestart('transcription-end');
     }
     prevIsProcessingRef.current = isProcessing;
-  }, [isProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, scheduleAutoRestart]);
+  }, [isProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, restartBlocked, scheduleAutoRestart]);
 
   // Auto-restart after parent finishes processing
   useEffect(() => {
-    if (prevIsParentProcessingRef.current && !isParentProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS) {
+    if (prevIsParentProcessingRef.current && !isParentProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS && !restartBlocked) {
       scheduleAutoRestart('parent-done');
     }
     prevIsParentProcessingRef.current = isParentProcessing;
-  }, [isParentProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, scheduleAutoRestart]);
+  }, [isParentProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, restartBlocked, scheduleAutoRestart]);
 
   // Cleanup timer on unmount
   useEffect(() => () => { if (autoRestartTimerRef.current) clearTimeout(autoRestartTimerRef.current); }, []);
@@ -791,7 +809,11 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       console.log('[VoiceOrb] 🚫 Blocking record start - TTS is playing (prevent feedback)');
       return;
     }
-    if (isMuted || isProcessing || recorderState.isRecording || usingLiveSTTRef.current) {
+    if (restartBlockedRef.current) {
+      console.log('[VoiceOrb] 🚫 Blocking record start - restart blocked by parent transition');
+      return;
+    }
+    if (isMuted || isProcessing || isListening || recorderState.isRecording || usingLiveSTTRef.current) {
       console.log('[VoiceOrb] Skipping start - muted:', isMuted, 'processing:', isProcessing, 'recording:', recorderState.isRecording);
       return;
     }
@@ -837,6 +859,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, [
     isMuted,
     isProcessing,
+    isListening,
     recorderState.isRecording,
     recorderActions,
     onStartListening,
@@ -867,6 +890,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       setStatusText('Interrupted');
       setTimeout(() => {
         if (
+          !restartBlockedRef.current &&
           canAutoRestartAfterInterrupt({
             isMuted,
             isProcessing,
@@ -898,6 +922,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
 
   // Handle long press to close
   const handleLongPress = () => {
+    console.log('[VoiceOrb] stop reason=long_press');
     if (recorderState.isRecording) {
       recorderActions.stopRecording();
       onStopListening();

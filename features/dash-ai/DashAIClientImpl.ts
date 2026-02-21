@@ -75,6 +75,26 @@ export interface AIServiceResponse {
     resolution_status?: 'resolved' | 'needs_clarification' | 'escalated';
     confidence_score?: number;
     escalation_offer?: boolean;
+    resolution_meta?: {
+      source?: string;
+      ocr_confidence?: number;
+      thresholds?: {
+        low: number;
+        high: number;
+      };
+      pending_tool_calls?: number;
+      stream_fallback_reason?: 'stream_pending_tool_calls' | 'stream_error';
+      stream_fallback_outcome?: 'fallback_started' | 'fallback_completed' | 'fallback_failed';
+      continuation_passes_executed?: number;
+      continuation_pass_outcome?: 'completed' | 'limit_reached' | 'failed';
+    };
+    ocr?: {
+      extracted_text?: string;
+      confidence?: number;
+      document_type?: 'homework' | 'document' | 'handwriting';
+      analysis?: string;
+      unclear_spans?: string[];
+    };
     trace_id?: string;
     continuation_limit_reached?: boolean;
   };
@@ -428,6 +448,13 @@ export class DashAIClient {
       // Tools enabled - Dash can now autonomously call tools like Claude Sonnet 4.5
       const ENABLE_TOOLS = true;
       const normalizedModel = this.normalizeRequestedModelId(params.model);
+      const requestTraceId = String((params.metadata as any)?.trace_id || this.createTraceId('dash_ai_client'));
+      let streamFallbackReason: 'none' | 'stream_pending_tool_calls' | 'stream_error' = 'none';
+      let streamFallbackOutcome:
+        | 'not_applicable'
+        | 'fallback_started'
+        | 'fallback_completed'
+        | 'fallback_failed' = 'not_applicable';
       
       if (__DEV__) {
         console.log('[DashAIClient] Calling AI service:', {
@@ -455,7 +482,10 @@ export class DashAIClient {
               ocrMode: params.ocrMode,
               ocrTask: params.ocrTask,
               ocrResponseFormat: params.ocrResponseFormat,
-              metadata: params.metadata,
+              metadata: {
+                ...(params.metadata || {}),
+                trace_id: requestTraceId,
+              },
               // Forward image data so streaming path can include vision payloads
               attachments: params.attachments,
               images: params.images,
@@ -467,16 +497,32 @@ export class DashAIClient {
           if (this.isAbortLikeError(streamError)) {
             throw streamError;
           }
-          console.warn('[DashAIClient] Streaming path failed, retrying with non-stream orchestration:', streamError);
+          const streamErrorCode = String((streamError as any)?.code || '').toLowerCase();
+          const streamErrorMessage = streamError instanceof Error
+            ? streamError.message
+            : String(streamError);
+          const isExpectedContinuation = streamErrorCode === 'stream_requires_continuation';
+          streamFallbackReason = isExpectedContinuation
+            ? 'stream_pending_tool_calls'
+            : 'stream_error';
+          streamFallbackOutcome = 'fallback_started';
+
+          if (isExpectedContinuation) {
+            console.info('[DashAIClient] Streaming pending tool calls detected, switching to non-stream continuation.');
+          } else {
+            console.warn('[DashAIClient] Streaming path failed, retrying with non-stream orchestration:', streamError);
+          }
           if (__DEV__) {
             dashAiDevLog('voice_request', {
               phase: 'streaming_fallback_non_stream',
-              message: streamError instanceof Error ? streamError.message : String(streamError),
+              message: streamErrorMessage,
               details: {
                 model: params.model || null,
                 normalized_model: normalizedModel || null,
                 service_type: params.serviceType || null,
                 response_mode: (params.metadata as any)?.response_mode || null,
+                fallback_reason: streamFallbackReason,
+                trace_id: requestTraceId,
               },
             });
           }
@@ -504,7 +550,7 @@ export class DashAIClient {
       const profile = this.getUserProfile() as any;
       const { role, scope } = this.normalizeRoleAndScope(profile?.role);
       const userTier = this.resolveUserTier(profile);
-      const traceId = this.createTraceId('dash_ai_client');
+      const traceId = requestTraceId;
       const orchestration = this.getOrchestrationConfig();
       const effectiveServiceType = params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message');
 
@@ -533,6 +579,8 @@ export class DashAIClient {
           model: normalizedModel,
           ...(params.metadata || {}),
           trace_id: traceId,
+          stream_fallback_reason: streamFallbackReason !== 'none' ? streamFallbackReason : undefined,
+          stream_fallback_outcome: streamFallbackOutcome !== 'not_applicable' ? streamFallbackOutcome : undefined,
           tool_plan: toolPlan,
           orchestration_mode: orchestration.orchestration_mode,
           loop_budget: orchestration.loop_budget,
@@ -591,6 +639,8 @@ export class DashAIClient {
       let escalationOffer = typeof data?.escalation_offer === 'boolean'
         ? data.escalation_offer
         : undefined;
+      let resolutionMeta = data?.resolution_meta;
+      let ocrPayload = data?.ocr;
 
       if (__DEV__ && toolResults.length > 0) {
         console.log('[DashAIClient] Server-side tool calls executed:', toolResults.length);
@@ -603,6 +653,7 @@ export class DashAIClient {
       let continuationMessages = [...baseMessages];
       let continuationPass = 0;
       let continuationLimitReached = false;
+      let continuationPassOutcome: 'none' | 'completed' | 'limit_reached' | 'failed' = 'none';
 
       while (
         pendingToolCalls.length > 0 &&
@@ -639,26 +690,43 @@ export class DashAIClient {
         };
 
         const toolResultMessages: Array<{ role: string; content: string; tool_use_id?: string }> = [];
-        const perToolTimeoutMs = Math.min(
-          orchestration.loop_budget.timeout_ms,
-          10000, // Max 10s per individual tool
+        const heavyToolTimeoutMs = this.parseIntegerEnv(
+          process.env.EXPO_PUBLIC_DASH_HEAVY_TOOL_TIMEOUT_MS,
+          90000,
+          15000,
+          180000
         );
+        const defaultToolTimeoutMs = Math.min(
+          orchestration.loop_budget.timeout_ms,
+          10000,
+        );
+        const longRunningTools = new Set([
+          'export_pdf',
+          'generate_worksheet',
+          'generate_chart',
+          'generate_pdf_from_prompt',
+          'generate_image',
+        ]);
 
         for (const toolCall of currentBatch) {
           try {
+            const toolName = String(toolCall?.name || '').trim();
+            const perToolTimeoutMs = longRunningTools.has(toolName)
+              ? heavyToolTimeoutMs
+              : defaultToolTimeoutMs;
             // Per-tool timeout to prevent a single tool from blocking the pipeline
             const resultPromise = unifiedToolRegistry.execute(
-              toolCall.name,
+              toolName,
               toolCall.input || {},
               executionContext
             );
             const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Tool ${toolCall.name} timed out after ${perToolTimeoutMs}ms`)), perToolTimeoutMs)
+              setTimeout(() => reject(new Error(`Tool ${toolName} timed out after ${perToolTimeoutMs}ms`)), perToolTimeoutMs)
             );
             const result = await Promise.race([resultPromise, timeoutPromise]);
             const output = result.result || result.error || 'No output';
             toolResults.push({
-              name: toolCall.name,
+              name: toolName,
               input: toolCall.input,
               output,
               success: result.success,
@@ -666,13 +734,14 @@ export class DashAIClient {
             });
             toolResultMessages.push({
               role: 'user',
-              content: `[Tool Result for ${toolCall.name}]: ${typeof output === 'string' ? output : JSON.stringify(output)}`,
+              content: `[Tool Result for ${toolName}]: ${typeof output === 'string' ? output : JSON.stringify(output)}`,
               tool_use_id: toolCall.id,
             });
           } catch (toolError: any) {
+            const toolName = String(toolCall?.name || '').trim() || 'unknown_tool';
             const message = toolError?.message || 'Unknown tool execution error';
             toolResults.push({
-              name: toolCall.name,
+              name: toolName,
               input: toolCall.input,
               output: `Tool execution error: ${message}`,
               success: false,
@@ -680,7 +749,7 @@ export class DashAIClient {
             });
             toolResultMessages.push({
               role: 'user',
-              content: `[Tool Result for ${toolCall.name}]: Error - ${message}`,
+              content: `[Tool Result for ${toolName}]: Error - ${message}`,
               tool_use_id: toolCall.id,
             });
           }
@@ -744,6 +813,8 @@ export class DashAIClient {
           escalationOffer = typeof followUp?.escalation_offer === 'boolean'
             ? followUp.escalation_offer
             : escalationOffer;
+          resolutionMeta = followUp?.resolution_meta || resolutionMeta;
+          ocrPayload = followUp?.ocr || ocrPayload;
 
           const followUpPending = Array.isArray(followUp?.pending_tool_calls)
             ? followUp.pending_tool_calls
@@ -751,6 +822,7 @@ export class DashAIClient {
           pendingToolCalls = [...overflow, ...followUpPending];
         } catch (contError) {
           console.warn('[DashAIClient] Tool continuation call failed:', contError);
+          continuationPassOutcome = 'failed';
           pendingToolCalls = [];
           break;
         }
@@ -758,9 +830,32 @@ export class DashAIClient {
 
       if (pendingToolCalls.length > 0) {
         continuationLimitReached = true;
+        continuationPassOutcome = 'limit_reached';
         resolutionStatus = resolutionStatus || 'needs_clarification';
         escalationOffer = escalationOffer ?? true;
+      } else if (continuationPass > 0 && continuationPassOutcome === 'none') {
+        continuationPassOutcome = 'completed';
       }
+
+      if (streamFallbackReason !== 'none' && streamFallbackOutcome === 'fallback_started') {
+        streamFallbackOutcome = 'fallback_completed';
+      }
+
+      const mergedResolutionMeta = (() => {
+        const base = resolutionMeta && typeof resolutionMeta === 'object'
+          ? { ...(resolutionMeta as Record<string, unknown>) }
+          : {};
+        if (streamFallbackReason !== 'none') {
+          base.stream_fallback_reason = streamFallbackReason;
+          base.stream_fallback_outcome = streamFallbackOutcome;
+        }
+        if (continuationPassOutcome !== 'none') {
+          base.continuation_passes_executed = continuationPass;
+          base.continuation_pass_outcome = continuationPassOutcome;
+        }
+        return Object.keys(base).length > 0 ? base : resolutionMeta;
+      })();
+      resolutionMeta = mergedResolutionMeta;
 
       if (!data?.success) {
         return {
@@ -772,6 +867,8 @@ export class DashAIClient {
             resolution_status: resolutionStatus,
             confidence_score: confidenceScore,
             escalation_offer: escalationOffer,
+            resolution_meta: resolutionMeta,
+            ocr: ocrPayload,
             trace_id: traceId,
             continuation_limit_reached: continuationLimitReached,
           },
@@ -787,6 +884,8 @@ export class DashAIClient {
           resolution_status: resolutionStatus,
           confidence_score: confidenceScore,
           escalation_offer: escalationOffer,
+          resolution_meta: resolutionMeta,
+          ocr: ocrPayload,
           trace_id: traceId,
           continuation_limit_reached: continuationLimitReached,
         } 
@@ -1006,7 +1105,7 @@ export class DashAIClient {
       const { role: userRole, scope } = this.normalizeRoleAndScope(userProfile?.role || 'student');
       const userTier = this.resolveUserTier(userProfile);
       const clientToolDefs = this.getClientToolDefs(userRole, userTier);
-      const traceId = this.createTraceId('dash_ai_stream');
+      const traceId = String((params?.metadata as any)?.trace_id || this.createTraceId('dash_ai_stream'));
       const toolPlan = this.buildToolPlanMetadata(userRole, userTier);
       const orchestration = this.getOrchestrationConfig();
 
@@ -1274,7 +1373,7 @@ export class DashAIClient {
         const profile = this.getUserProfile() as any;
         const { role, scope } = this.normalizeRoleAndScope(profile?.role || 'teacher');
         const userTier = this.resolveUserTier(profile);
-        const traceId = this.createTraceId('dash_ai_ws');
+        const traceId = String((params?.metadata as any)?.trace_id || this.createTraceId('dash_ai_ws'));
         const toolPlan = this.buildToolPlanMetadata(role, userTier);
         const clientTools = this.getClientToolDefs(role, userTier);
         const orchestration = this.getOrchestrationConfig();

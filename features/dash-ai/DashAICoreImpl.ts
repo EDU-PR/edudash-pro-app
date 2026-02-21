@@ -17,7 +17,17 @@ import { DashUserProfileManager } from '@/services/dash-ai/DashUserProfileManage
 import { DashAIClient } from '@/services/dash-ai/DashAIClient';
 import { DashPromptBuilder } from '@/services/dash-ai/DashPromptBuilder';
 import { fetchParentChildren } from '@/lib/parent-children';
-import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
+import {
+  buildCriteriaHeadingTemplate,
+  detectOCRTask,
+  extractCriteriaHeadings,
+  getCriteriaResponsePrompt,
+  getOCRPromptForTask,
+  isCriteriaResponseIntent,
+  isOCRIntent,
+  isShortOrAttachmentOnlyPrompt,
+} from '@/lib/dash-ai/ocrPrompts';
+import { enforceCriteriaResponseWithSingleRewrite } from '@/features/dash-ai/criteriaEnforcement';
 import { classifyResponseMode } from '@/lib/dash-ai/responseMode';
 import {
   buildLanguageDirectiveForTurn,
@@ -95,6 +105,67 @@ const DEFAULT_PERSONALITY: DashPersonality = {
 type AgeGroup = 'child' | 'teen' | 'adult';
 
 const MAX_CONTEXT_MESSAGES = 20;
+const PDF_TOOL_NAMES = new Set(['export_pdf', 'generate_worksheet', 'generate_pdf_from_prompt', 'generate_chart']);
+
+function firstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function flattenToolPayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {};
+  const base = value as Record<string, unknown>;
+  const nested = base.result && typeof base.result === 'object'
+    ? base.result as Record<string, unknown>
+    : {};
+  return { ...base, ...nested };
+}
+
+function isGeneratedPdfPublicUrl(value: unknown): boolean {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return /\/storage\/v1\/object\/public\/generated-pdfs\//i.test(text);
+}
+
+function sanitizePdfArtifactUrl(value: unknown): string | null {
+  const text = firstText(value);
+  if (!text) return null;
+  if (isGeneratedPdfPublicUrl(text)) return null;
+  return text;
+}
+
+function findLastPdfToolArtifact(toolResults: any[]): null | {
+  toolName: string;
+  payload: Record<string, unknown>;
+  url: string | null;
+  filename: string | null;
+  storagePath: string | null;
+} {
+  for (let index = toolResults.length - 1; index >= 0; index -= 1) {
+    const item = toolResults[index] as Record<string, unknown>;
+    const toolName = String(item?.name || '').toLowerCase();
+    if (!PDF_TOOL_NAMES.has(toolName)) continue;
+    if (item?.success === false) continue;
+
+    const payload = flattenToolPayload(item?.output);
+    const url = sanitizePdfArtifactUrl(firstText(
+      payload.downloadUrl,
+      payload.download_url,
+      payload.signedUrl,
+      payload.signed_url,
+      payload.uri,
+      payload.url,
+    ));
+    const filename = firstText(payload.filename, payload.file_name, payload.name);
+    const storagePath = firstText(payload.storagePath, payload.storage_path);
+    if (url || filename || storagePath) {
+      return { toolName, payload, url, filename, storagePath };
+    }
+  }
+  return null;
+}
 
 function inferAgeGroupFromGrade(gradeLevel?: string): AgeGroup | undefined {
   if (!gradeLevel) return undefined;
@@ -645,9 +716,23 @@ export class DashAICore {
             : 'Tutoring guidance: Provide direct, clear help first. Add optional practice only when requested.')
         : '';
       const detectedOcrTask = hasScannableAttachment ? detectOCRTask(userInput) : null;
-      const ocrMode = hasScannableAttachment && (isOCRIntent(userInput) || detectedOcrTask !== null);
+      const shouldForceAttachmentOCR = hasScannableAttachment && (
+        isShortOrAttachmentOnlyPrompt(userInput) ||
+        responseMode === 'tutor_interactive'
+      );
+      const ocrMode = hasScannableAttachment && (
+        shouldForceAttachmentOCR ||
+        isOCRIntent(userInput) ||
+        detectedOcrTask !== null
+      );
       const ocrTask = detectedOcrTask || 'document';
       const serviceType = ocrMode ? 'image_analysis' : (responseMode === 'direct_writing' ? 'chat_message' : 'homework_help');
+      const criteriaContext = getCriteriaResponsePrompt(userInput);
+      const criteriaIntentDetected = isCriteriaResponseIntent(userInput);
+      const criteriaHeadings = criteriaIntentDetected ? extractCriteriaHeadings(userInput) : [];
+      const criteriaTemplateContext = criteriaHeadings.length > 0
+        ? buildCriteriaHeadingTemplate(criteriaHeadings)
+        : null;
 
       const contextParts = [
         systemPrompt,
@@ -655,6 +740,8 @@ export class DashAICore {
         childrenContext,
         modeGuidance,
         tutoringGuidance,
+        criteriaContext,
+        criteriaTemplateContext,
         ocrMode ? getOCRPromptForTask(ocrTask) : null,
         languageOverrideDirective || langDirective,
         contextOverride || null,
@@ -669,7 +756,7 @@ export class DashAICore {
             .filter((msg) => msg.content.length > 0)
         : null;
 
-      const response = await this.aiClient.callAIService({
+      let response = await this.aiClient.callAIService({
         action: 'general_assistance',
         messages: normalizedMessagesOverride || this.promptBuilder.buildMessageHistory(recentMessages, userInput),
         context: contextParts.join('\n'),
@@ -690,8 +777,68 @@ export class DashAICore {
         signal,
       });
 
+      let criteriaValidationMeta: Record<string, unknown> | null = null;
+      const criteriaEnforcement = await enforceCriteriaResponseWithSingleRewrite({
+        userInput,
+        responseContent: String(response.content || ''),
+        extractedHeadings: criteriaHeadings,
+        rewriteAttempt: criteriaIntentDetected && criteriaHeadings.length > 0
+          ? async (rewritePrompt) => {
+              const correction = await this.aiClient.callAIService({
+                action: 'general_assistance',
+                messages: [
+                  { role: 'user', content: userInput },
+                  { role: 'assistant', content: String(response.content || '') },
+                  { role: 'user', content: rewritePrompt },
+                ],
+                context: [
+                  ...contextParts,
+                  'CRITERIA CORRECTION PASS: Fix heading/label mapping exactly as requested.',
+                ].join('\n'),
+                attachments,
+                serviceType,
+                ocrMode,
+                ocrTask,
+                ocrResponseFormat: ocrMode ? 'json' : undefined,
+                stream: false,
+                model: modelOverride || undefined,
+                metadata: {
+                  ...(metadataOverride || {}),
+                  criteria_rewrite_pass: true,
+                  response_mode: responseMode,
+                },
+                signal,
+              });
+              return correction?.content || null;
+            }
+          : undefined,
+      });
+      if (criteriaEnforcement.outcome !== 'skipped') {
+        criteriaValidationMeta = {
+          intent_detected: criteriaEnforcement.intentDetected,
+          expected_count: criteriaEnforcement.headings.length,
+          expected_headings: criteriaEnforcement.headings.map((item) => item.heading),
+          outcome: criteriaEnforcement.outcome,
+          rewrite_attempted: criteriaEnforcement.rewriteAttempted,
+          mismatch_reason:
+            criteriaEnforcement.finalValidation?.mismatchReason ||
+            criteriaEnforcement.initialValidation?.mismatchReason ||
+            null,
+          warning_code: criteriaEnforcement.warningCode || null,
+        };
+      }
+      if (criteriaEnforcement.content && criteriaEnforcement.content !== response.content) {
+        response = {
+          ...response,
+          content: criteriaEnforcement.content,
+        };
+      }
+
       const generatedImages = response.metadata?.generated_images || [];
       const generatedAttachments = this.mapGeneratedImagesToAttachments(generatedImages);
+      const toolResults = Array.isArray(response.metadata?.tool_results)
+        ? response.metadata.tool_results
+        : [];
       const responseMetadata: Record<string, unknown> = {};
       const resolvedLocale = resolveResponseLocale({
         explicitOverride: languageOverride,
@@ -709,8 +856,75 @@ export class DashAICore {
         responseMetadata.language_source = requestLanguage.source;
       }
       responseMetadata.response_mode = responseMode;
+      if (criteriaValidationMeta) {
+        responseMetadata.criteria_validation = criteriaValidationMeta;
+        if (criteriaValidationMeta.outcome === 'failed_after_rewrite') {
+          responseMetadata.criteria_warning =
+            criteriaValidationMeta.warning_code || 'criteria_mapping_mismatch';
+        }
+      }
       if (generatedImages.length > 0) {
         responseMetadata.generated_images = generatedImages;
+      }
+      if (response.metadata?.resolution_status) {
+        responseMetadata.resolution_status = response.metadata.resolution_status;
+      }
+      if (typeof response.metadata?.confidence_score === 'number') {
+        responseMetadata.confidence_score = response.metadata.confidence_score;
+      }
+      if (typeof response.metadata?.escalation_offer === 'boolean') {
+        responseMetadata.escalation_offer = response.metadata.escalation_offer;
+      }
+      if (response.metadata?.resolution_meta) {
+        responseMetadata.resolution_meta = response.metadata.resolution_meta as Record<string, unknown>;
+      }
+      if ((response as any).metadata?.ocr) {
+        responseMetadata.ocr = (response as any).metadata.ocr as Record<string, unknown>;
+      }
+      if (toolResults.length > 0) {
+        responseMetadata.tool_results = toolResults;
+        const primaryTool = toolResults[toolResults.length - 1] as Record<string, unknown>;
+        const toolName = String(primaryTool?.name || '').trim();
+        if (toolName) responseMetadata.tool_name = toolName;
+        if (primaryTool?.input && typeof primaryTool.input === 'object') {
+          responseMetadata.tool_args = primaryTool.input as Record<string, unknown>;
+        }
+        responseMetadata.tool_result = {
+          success: primaryTool?.success !== false,
+          result: primaryTool?.output,
+          error: primaryTool?.success === false ? String(primaryTool?.output || 'Tool execution failed') : undefined,
+        };
+      }
+
+      const pdfArtifact = findLastPdfToolArtifact(toolResults);
+      if (pdfArtifact) {
+        const canonicalPdfPayload = {
+          ...pdfArtifact.payload,
+          filename: pdfArtifact.filename || pdfArtifact.payload?.filename || undefined,
+          storagePath: pdfArtifact.storagePath || pdfArtifact.payload?.storagePath || undefined,
+          downloadUrl: pdfArtifact.url || pdfArtifact.payload?.downloadUrl || undefined,
+          signedUrl:
+            pdfArtifact.payload?.signedUrl ||
+            pdfArtifact.payload?.signed_url ||
+            undefined,
+        };
+        responseMetadata.tool_name = pdfArtifact.toolName;
+        responseMetadata.tool_result = {
+          success: true,
+          result: canonicalPdfPayload,
+        };
+        responseMetadata.tool_summary = pdfArtifact.filename
+          ? `PDF ready: ${pdfArtifact.filename}`
+          : 'PDF ready to preview';
+        responseMetadata.pdf_artifact = canonicalPdfPayload;
+
+        const conciseStatus = pdfArtifact.filename
+          ? `Your PDF is ready: ${pdfArtifact.filename}. Tap Preview PDF to open it.`
+          : 'Your PDF is ready. Tap Preview PDF to open it.';
+        response = {
+          ...response,
+          content: conciseStatus,
+        };
       }
 
       return {
