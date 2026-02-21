@@ -9,6 +9,7 @@ import {
   DEFAULT_SCHOOL_SETTINGS,
   type AttendanceLifecyclePolicy,
 } from '@/lib/services/SchoolSettingsService';
+import { resolveFinancePrivacySettings } from '@/lib/finance/privacySettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -47,8 +48,15 @@ export default function SchoolSettingsScreen() {
   const [savingBank, setSavingBank] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
   const [savingUniformFeature, setSavingUniformFeature] = useState(false);
+  const [savingStationeryFeature, setSavingStationeryFeature] = useState(false);
+  const [savingFinancePrivacy, setSavingFinancePrivacy] = useState(false);
   const [number, setNumber] = useState('');
   const [uniformOrdersEnabled, setUniformOrdersEnabled] = useState(false);
+  const [stationeryEnabled, setStationeryEnabled] = useState(false);
+  const [feesPrivateModeEnabled, setFeesPrivateModeEnabled] = useState(false);
+  const [financialReportsSettings, setFinancialReportsSettings] = useState(
+    DEFAULT_SCHOOL_SETTINGS.features.financialReports
+  );
   const [attendanceLifecycle, setAttendanceLifecycle] = useState<AttendanceLifecyclePolicy>(
     DEFAULT_SCHOOL_SETTINGS.attendanceLifecycle
   );
@@ -101,6 +109,12 @@ export default function SchoolSettingsScreen() {
         }
         if (active) {
           setUniformOrdersEnabled(Boolean(mergedSettings?.features?.uniforms?.enabled));
+          setStationeryEnabled(Boolean((mergedSettings as any)?.features?.stationery?.enabled));
+          const financePrivacy = resolveFinancePrivacySettings((mergedSettings as any) || {});
+          setFeesPrivateModeEnabled(financePrivacy.hideFeesOnDashboards && financePrivacy.requireAppPasswordForFees);
+          setFinancialReportsSettings(
+            mergedSettings?.features?.financialReports || DEFAULT_SCHOOL_SETTINGS.features.financialReports
+          );
         }
 
         // Load bank details
@@ -251,6 +265,59 @@ export default function SchoolSettingsScreen() {
       showError('Error', e?.message || 'Failed to save uniform order setting');
     } finally {
       setSavingUniformFeature(false);
+    }
+  };
+
+  const saveFinancePrivacyPolicy = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      setSavingFinancePrivacy(true);
+      await SchoolSettingsService.update(profile.organization_id, {
+        features: {
+          financialReports: {
+            ...financialReportsSettings,
+            hideOnDashboards: feesPrivateModeEnabled,
+            requirePasswordForAccess: feesPrivateModeEnabled,
+            privateModeEnabled: feesPrivateModeEnabled,
+          },
+        },
+      } as any);
+      setSuccessModal({
+        visible: true,
+        title: '✓ Saved',
+        message: feesPrivateModeEnabled
+          ? 'Fees are now hidden on dashboards and protected with app password.'
+          : 'Fees are visible again on dashboards.',
+      });
+    } catch (e: any) {
+      showError('Error', e?.message || 'Failed to save fee privacy setting');
+    } finally {
+      setSavingFinancePrivacy(false);
+    }
+  };
+
+  const saveStationeryFeaturePolicy = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      setSavingStationeryFeature(true);
+      await SchoolSettingsService.update(profile.organization_id, {
+        features: {
+          stationery: {
+            enabled: stationeryEnabled,
+          },
+        },
+      } as any);
+      setSuccessModal({
+        visible: true,
+        title: '✓ Saved',
+        message: stationeryEnabled
+          ? 'Stationery checklists are now visible to parents.'
+          : 'Stationery checklists are now hidden from parents.',
+      });
+    } catch (e: any) {
+      showError('Error', e?.message || 'Failed to save stationery setting');
+    } finally {
+      setSavingStationeryFeature(false);
     }
   };
 
@@ -528,7 +595,73 @@ export default function SchoolSettingsScreen() {
                 </TouchableOpacity>
               </View>
 
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="checkbox-outline" size={24} color={theme.primary} />
+                  <Text style={styles.sectionTitle}>Stationery Checklists</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Allow parents to track stationery items, upload proof photos, and share expected delivery dates.
+                </Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Enable parent stationery tracking</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, stationeryEnabled && styles.switchPillActive]}
+                    onPress={() => setStationeryEnabled((prev) => !prev)}
+                  >
+                    <Text style={[styles.switchPillText, stationeryEnabled && styles.switchPillTextActive]}>
+                      {stationeryEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.btn} onPress={saveStationeryFeaturePolicy} disabled={savingStationeryFeature}>
+                  {savingStationeryFeature ? (
+                    <EduDashSpinner color={theme.onPrimary} />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.btnText}>Save Stationery Setting</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
               {/* WhatsApp Section */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="lock-closed-outline" size={24} color={theme.primary} />
+                  <Text style={styles.sectionTitle}>Fee Privacy</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Hide fees and payment widgets on principal/admin dashboards. Opening fees will require app password.
+                </Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Enable private fees mode</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, feesPrivateModeEnabled && styles.switchPillActive]}
+                    onPress={() => setFeesPrivateModeEnabled((prev) => !prev)}
+                  >
+                    <Text style={[styles.switchPillText, feesPrivateModeEnabled && styles.switchPillTextActive]}>
+                      {feesPrivateModeEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.btn} onPress={saveFinancePrivacyPolicy} disabled={savingFinancePrivacy}>
+                  {savingFinancePrivacy ? (
+                    <EduDashSpinner color={theme.onPrimary} />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.btnText}>Save Fee Privacy Setting</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Ionicons name="logo-whatsapp" size={24} color="#25D366" />

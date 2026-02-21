@@ -3,6 +3,7 @@
  */
 
 import type { CSSProperties } from 'react';
+import type { ResolvedSchoolType } from '@/lib/tenant/schoolTypeResolver';
 
 export interface TeacherShellProps {
   tenantSlug?: string;
@@ -11,6 +12,7 @@ export interface TeacherShellProps {
   preschoolName?: string;
   preschoolId?: string;
   userId?: string;
+  schoolType?: ResolvedSchoolType;
   unreadCount?: number;
   children: React.ReactNode;
   rightSidebar?: React.ReactNode;

@@ -61,6 +61,10 @@ import { useDashTutorSessionPersistence } from '@/hooks/dash-assistant/useDashTu
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 import { handleDashVoiceInputPress, speakDashResponse, stopDashVoiceRecording } from '@/hooks/dash-assistant/voiceHandlers';
 import {
+  resolveAutoSpeakPreference,
+  shouldAutoSpeak,
+} from '@/features/dash-assistant/voiceAutoSpeakPolicy';
+import {
   buildAttachmentContextInternal,
   buildDashContextOverride,
   extractFollowUps,
@@ -107,6 +111,7 @@ import {
   loadVoiceBudget,
   trackVoiceUsage,
 } from '@/lib/dash-ai/voiceBudget';
+import { buildTranscriptModelPrompt } from '@/lib/voice/formatTranscript';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -172,7 +177,10 @@ interface UseDashAssistantReturn {
   
   // Voice input state
   isRecording: boolean;
+  recordingVoiceActivity: boolean;
   partialTranscript: string;
+  voiceAutoSendCountdownActive: boolean;
+  voiceAutoSendCountdownMs: number;
   
   // Alert state for premium modals
   alertState: AlertState;
@@ -194,7 +202,7 @@ interface UseDashAssistantReturn {
   sendTutorAnswer: (answer: string, sourceMessageId?: string) => Promise<void>;
   cancelGeneration: () => void;
   stopAllActivity: () => Promise<void>;
-  speakResponse: (message: DashMessage) => Promise<void>;
+  speakResponse: (message: DashMessage, options?: { preferFastStart?: boolean }) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   scrollToBottom: (opts?: { animated?: boolean; delay?: number; force?: boolean }) => void;
   handleAttachFile: () => Promise<void>;
@@ -205,6 +213,7 @@ interface UseDashAssistantReturn {
   addAttachments: (attachments: DashAttachment[]) => void;
   handleInputMicPress: () => Promise<void>;
   stopVoiceRecording: () => Promise<void>;
+  cancelVoiceAutoSend: () => void;
   startNewConversation: () => Promise<void>;
   runTool: (toolName: string, params: Record<string, any>) => Promise<void>;
   
@@ -308,9 +317,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingVoiceActivity, setRecordingVoiceActivity] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
+  const [voiceAutoSendCountdownActive, setVoiceAutoSendCountdownActive] = useState(false);
+  const [voiceAutoSendCountdownMs, setVoiceAutoSendCountdownMs] = useState(0);
   const [voiceAutoSend, setVoiceAutoSend] = useState(false);
-  const [voiceAutoSendSilenceMs, setVoiceAutoSendSilenceMs] = useState(1500);
+  const [voiceAutoSendSilenceMs, setVoiceAutoSendSilenceMs] = useState(1800);
   const [voiceWhisperFlowEnabled, setVoiceWhisperFlowEnabled] = useState(true);
   const [voiceWhisperFlowSummaryEnabled, setVoiceWhisperFlowSummaryEnabled] = useState(true);
   const [showTypingIndicator, setShowTypingIndicator] = useState(true);
@@ -356,6 +368,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setSelectedModel(availableModels[0].id);
     }
   }, [availableModels, isSuperAdmin, selectedModel, setSelectedModel]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingVoiceActivity(false);
+    }
+  }, [isRecording]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
   const [parentChildren, setParentChildren] = useState<any[]>([]);
@@ -387,6 +405,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const voiceInputStartAtRef = useRef<number | null>(null);
   const lastSpeakStartRef = useRef<number>(0);
   const ttsSessionIdRef = useRef<string | null>(null);
+  const sttFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sttTranscriptBufferRef = useRef('');
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutoScrollAtRef = useRef<number>(0);
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
@@ -400,6 +420,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const inputTextRef = useRef('');
   const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
   const voiceAutoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceAutoSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceAutoSendDeadlineRef = useRef<number | null>(null);
+  const voiceAutoSendExpectedTranscriptRef = useRef('');
 
   const { tutorSessionRef } = useDashTutorSessionPersistence({
     userId: user?.id,
@@ -420,6 +443,31 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     inputTextRef.current = inputText;
   }, [inputText]);
+
+  const cancelVoiceAutoSend = useCallback(() => {
+    if (voiceAutoSendTimeoutRef.current) {
+      clearTimeout(voiceAutoSendTimeoutRef.current);
+      voiceAutoSendTimeoutRef.current = null;
+    }
+    if (voiceAutoSendIntervalRef.current) {
+      clearInterval(voiceAutoSendIntervalRef.current);
+      voiceAutoSendIntervalRef.current = null;
+    }
+    voiceAutoSendDeadlineRef.current = null;
+    voiceAutoSendExpectedTranscriptRef.current = '';
+    setVoiceAutoSendCountdownActive(false);
+    setVoiceAutoSendCountdownMs(0);
+  }, []);
+
+  useEffect(() => {
+    if (!voiceAutoSendCountdownActive) return;
+    const currentInput = inputTextRef.current.trim();
+    const expected = voiceAutoSendExpectedTranscriptRef.current.trim();
+    if (!currentInput || !expected) return;
+    if (currentInput !== expected) {
+      cancelVoiceAutoSend();
+    }
+  }, [inputText, voiceAutoSendCountdownActive, cancelVoiceAutoSend]);
 
   useEffect(() => {
     messagesLengthRef.current = messages.length;
@@ -862,13 +910,31 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } catch (e) {
         if (__DEV__) console.warn('[useDashAssistant] migration warn', e);
       }
-      const [voiceChatPrefs, chatUiPrefs, voiceInputPrefs] = await Promise.all([
+      const [voiceChatPrefs, chatUiPrefs, voiceInputPrefs, rawVoicePrefs] = await Promise.all([
         getVoiceChatPrefs(),
         getChatUIPrefs(),
         getVoiceInputPrefs(profile?.role || null),
+        AsyncStorage.getItem('@dash_voice_prefs'),
       ]);
+      let explicitAutoSpeak: boolean | null = null;
+      if (rawVoicePrefs) {
+        try {
+          const parsedPrefs = JSON.parse(rawVoicePrefs) as { autoSpeak?: unknown };
+          if (typeof parsedPrefs?.autoSpeak === 'boolean') {
+            explicitAutoSpeak = parsedPrefs.autoSpeak;
+          }
+        } catch {
+          // Intentionally ignore parse failures and use role defaults.
+        }
+      }
       setVoiceEnabled(voiceChatPrefs.voiceEnabled ?? true);
-      setAutoSpeakResponses(voiceChatPrefs.autoSpeak ?? true);
+      setAutoSpeakResponses(
+        resolveAutoSpeakPreference({
+          role: profile?.role || null,
+          explicitAutoSpeak,
+          hasExplicitPreference: typeof explicitAutoSpeak === 'boolean',
+        })
+      );
       setShowTypingIndicator(chatUiPrefs.showTypingIndicator ?? true);
       setAutoSuggestQuestions(chatUiPrefs.autoSuggestQuestions ?? true);
       setContextualHelp(chatUiPrefs.contextualHelp ?? true);
@@ -941,7 +1007,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [dashInstance]);
 
   // Speech functions
-  const speakResponse = useCallback(async (message: DashMessage) => {
+  const speakResponse = useCallback(async (message: DashMessage, options?: { preferFastStart?: boolean }) => {
     await speakDashResponse({
       message,
       dashInstance,
@@ -957,6 +1023,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         voiceInputStartAtRef,
         lastSpeakStartRef,
         ttsSessionIdRef,
+        sttFinalizeTimerRef,
+        sttTranscriptBufferRef,
       },
       setIsSpeaking,
       setSpeakingMessageId,
@@ -964,8 +1032,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       hideAlert,
       setVoiceEnabled,
       stopSpeaking,
+      preferFastStart: options?.preferFastStart,
     });
-  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled, stopSpeaking, isFreeTier, consumeVoiceBudget]);
+  }, [
+    dashInstance,
+    speakingMessageId,
+    isSpeaking,
+    hasTTSAccess,
+    showAlert,
+    hideAlert,
+    voiceEnabled,
+    stopSpeaking,
+    isFreeTier,
+    consumeVoiceBudget,
+    sttFinalizeTimerRef,
+    sttTranscriptBufferRef,
+  ]);
 
   // Voice and speaking functions (custom gating + alerts)
 
@@ -1147,7 +1229,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           questionIndex: 0,
           totalQuestions: 0,
           correctCount: 0,
-          maxQuestions: getMaxQuestions(tutorIntent),
+          maxQuestions: getMaxQuestions(tutorIntent, learnerContextRef.current || learnerContext, {
+            difficulty: 1,
+            phonicsMode,
+          }),
           difficulty: 1,
           incorrectStreak: 0,
           correctStreak: 0,
@@ -1530,13 +1615,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             const correctCount = prev.correctCount + (adjustedPayload.is_correct ? 1 : 0);
             const followUp = adjustedPayload.follow_up_question || null;
             const followExpected = adjustedPayload.next_expected_answer || null;
-            const completed = totalQuestions >= prev.maxQuestions && !followUp;
             let nextDifficulty = prev.difficulty || 1;
             if (!isCorrect && nextIncorrectStreak >= 2) {
               nextDifficulty = Math.max(1, nextDifficulty - 1);
             } else if (isCorrect && nextCorrectStreak >= 2) {
               nextDifficulty = Math.min(3, nextDifficulty + 1);
             }
+            const adaptiveMaxQuestions = Math.max(
+              totalQuestions,
+              getMaxQuestions(prev.mode, learnerContextRef.current || learnerContext, {
+                difficulty: nextDifficulty,
+                phonicsMode: prev.phonicsMode,
+              }),
+            );
             const currentPhonicsStage = prev.phonicsStage || 'letter_sounds';
             const advancedPhonicsStage =
               prev.phonicsMode && isCorrect && nextCorrectStreak >= 2
@@ -1547,7 +1638,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             const updatedMastered = prev.phonicsMode && isCorrect && masteredToken
               ? Array.from(new Set([...(prev.phonicsMastered || []), masteredToken])).slice(-24)
               : prev.phonicsMastered;
-            if (completed) {
+            if (totalQuestions >= adaptiveMaxQuestions && !followUp) {
               const summary: DashMessage = {
                 id: `tutor_summary_${Date.now()}`,
                 type: 'assistant',
@@ -1569,6 +1660,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               correctStreak: nextCorrectStreak,
               attemptsOnQuestion,
               difficulty: nextDifficulty,
+              maxQuestions: adaptiveMaxQuestions,
               phonicsStage: prev.phonicsMode ? advancedPhonicsStage : prev.phonicsStage,
               phonicsMastered: updatedMastered,
             };
@@ -1744,8 +1836,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } catch {}
 
       // Auto-speak if enabled
-      if (autoSpeakResponses && voiceEnabled) {
-        speakResponse(response);
+      if (
+        shouldAutoSpeak({
+          role: profile?.role || null,
+          voiceEnabled,
+          autoSpeakEnabled: autoSpeakResponses,
+          responseText: response?.content,
+        })
+      ) {
+        void speakResponse(response, { preferFastStart: true });
       }
 
       track(
@@ -1856,36 +1955,53 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const handleVoiceFinalTranscript = useCallback(
     (transcript: string, options: { autoSend: boolean; delayMs: number }) => {
-      if (voiceAutoSendTimeoutRef.current) {
-        clearTimeout(voiceAutoSendTimeoutRef.current);
-        voiceAutoSendTimeoutRef.current = null;
-      }
+      cancelVoiceAutoSend();
 
       const trimmed = transcript.trim();
       if (!trimmed || !options.autoSend) return;
+      const modelPrompt = buildTranscriptModelPrompt(trimmed, {
+        preschoolMode: learnerContextRef.current?.schoolType === 'preschool',
+      });
+      const outboundPrompt = modelPrompt || trimmed;
 
-      const delayMs = Math.max(400, Math.min(2000, Number(options.delayMs) || 600));
+      const delayMs = Math.max(3000, Math.min(5000, Number(options.delayMs) || 3000));
+      voiceAutoSendExpectedTranscriptRef.current = trimmed;
+      const deadline = Date.now() + delayMs;
+      voiceAutoSendDeadlineRef.current = deadline;
+      setVoiceAutoSendCountdownActive(true);
+      setVoiceAutoSendCountdownMs(delayMs);
+
+      voiceAutoSendIntervalRef.current = setInterval(() => {
+        const remaining = Math.max(
+          0,
+          (voiceAutoSendDeadlineRef.current || 0) - Date.now(),
+        );
+        setVoiceAutoSendCountdownMs(remaining);
+        if (remaining <= 0 && voiceAutoSendIntervalRef.current) {
+          clearInterval(voiceAutoSendIntervalRef.current);
+          voiceAutoSendIntervalRef.current = null;
+        }
+      }, 120);
+
       voiceAutoSendTimeoutRef.current = setTimeout(() => {
+        const expected = voiceAutoSendExpectedTranscriptRef.current.trim();
         const latestInput = inputTextRef.current.trim();
-        if (!latestInput || latestInput !== trimmed) {
-          voiceAutoSendTimeoutRef.current = null;
+        if (!latestInput || !expected || latestInput !== expected) {
+          cancelVoiceAutoSend();
           return;
         }
-        sendMessageRef.current(trimmed).catch((error) => {
+        sendMessageRef.current(outboundPrompt).catch((error) => {
           console.warn('[useDashAssistant] Voice auto-send failed:', error);
         }).finally(() => {
-          voiceAutoSendTimeoutRef.current = null;
+          cancelVoiceAutoSend();
         });
       }, delayMs);
     },
-    []
+    [cancelVoiceAutoSend]
   );
 
   const stopVoiceRecording = useCallback(async () => {
-    if (voiceAutoSendTimeoutRef.current) {
-      clearTimeout(voiceAutoSendTimeoutRef.current);
-      voiceAutoSendTimeoutRef.current = null;
-    }
+    cancelVoiceAutoSend();
     await stopDashVoiceRecording({
       voiceRefs: {
         voiceSessionRef,
@@ -1893,13 +2009,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         voiceInputStartAtRef,
         lastSpeakStartRef,
         ttsSessionIdRef,
+        sttFinalizeTimerRef,
+        sttTranscriptBufferRef,
       },
       isFreeTier,
       consumeVoiceBudget,
       setIsRecording,
       setPartialTranscript,
+      setInputText,
     });
-  }, [consumeVoiceBudget, isFreeTier]);
+    setRecordingVoiceActivity(false);
+  }, [cancelVoiceAutoSend, consumeVoiceBudget, isFreeTier, setInputText]);
 
   const cancelGeneration = useCallback(() => {
     if (abortControllerRef.current) {
@@ -1923,27 +2043,20 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [streamingMessageId, streamingContent]);
 
   const stopAllActivity = useCallback(async () => {
-    if (voiceAutoSendTimeoutRef.current) {
-      clearTimeout(voiceAutoSendTimeoutRef.current);
-      voiceAutoSendTimeoutRef.current = null;
-    }
+    cancelVoiceAutoSend();
     if (isRecording) {
       await stopVoiceRecording();
     }
     cancelGeneration();
     await stopSpeaking();
-  }, [cancelGeneration, isRecording, stopSpeaking, stopVoiceRecording]);
+  }, [cancelVoiceAutoSend, cancelGeneration, isRecording, stopSpeaking, stopVoiceRecording]);
 
   // Public send message
   const sendMessage = useCallback(async (text: string = inputText.trim()) => {
+    cancelVoiceAutoSend();
     // If voice capture is active, stop listening before sending.
     if (isRecording) {
       await stopVoiceRecording();
-    }
-
-    if (voiceAutoSendTimeoutRef.current) {
-      clearTimeout(voiceAutoSendTimeoutRef.current);
-      voiceAutoSendTimeoutRef.current = null;
     }
 
     if ((!text && dashAttachments.selectedAttachments.length === 0) || !dashInstance) return;
@@ -2002,7 +2115,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setInputText('');
     dashAttachments.setSelectedAttachments([]);
     processQueue();
-  }, [inputText, dashAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator, isRecording, stopVoiceRecording]);
+  }, [cancelVoiceAutoSend, inputText, dashAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator, isRecording, stopVoiceRecording]);
 
   useEffect(() => {
     sendMessageRef.current = sendMessage;
@@ -2029,6 +2142,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   // Handle voice input mic press - START/STOP toggle
   const handleInputMicPress = useCallback(async () => {
+    cancelVoiceAutoSend();
     if (isSpeaking) {
       await stopSpeaking();
       return;
@@ -2049,21 +2163,26 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsRecording,
       setPartialTranscript,
       setInputText,
+      existingInputText: inputText,
       voiceAutoSend,
       voiceAutoSendSilenceMs,
       voiceWhisperFlowEnabled,
       voiceWhisperFlowSummaryEnabled,
       isPreschoolMode: learnerContext?.schoolType === 'preschool',
       onFinalTranscript: handleVoiceFinalTranscript,
+      onVoiceActivity: setRecordingVoiceActivity,
       voiceRefs: {
         voiceSessionRef,
         voiceProviderRef,
         voiceInputStartAtRef,
         lastSpeakStartRef,
         ttsSessionIdRef,
+        sttFinalizeTimerRef,
+        sttTranscriptBufferRef,
       },
     });
   }, [
+    cancelVoiceAutoSend,
     isSpeaking,
     stopSpeaking,
     hasTTSAccess,
@@ -2084,6 +2203,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     voiceWhisperFlowSummaryEnabled,
     learnerContext?.schoolType,
     handleVoiceFinalTranscript,
+    inputText,
+    setRecordingVoiceActivity,
+    sttFinalizeTimerRef,
+    sttTranscriptBufferRef,
   ]);
 
   // Voice session cleanup handled locally
@@ -2515,10 +2638,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
-      if (voiceAutoSendTimeoutRef.current) {
-        clearTimeout(voiceAutoSendTimeoutRef.current);
-        voiceAutoSendTimeoutRef.current = null;
+      cancelVoiceAutoSend();
+      if (sttFinalizeTimerRef.current) {
+        clearTimeout(sttFinalizeTimerRef.current);
+        sttFinalizeTimerRef.current = null;
       }
+      sttTranscriptBufferRef.current = '';
+      setRecordingVoiceActivity(false);
       // Abort any in-flight AI request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -2535,7 +2661,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         dashInstance.cleanup();
       }
     };
-  }, [dashInstance, stopSpeaking]);
+  }, [cancelVoiceAutoSend, dashInstance, stopSpeaking]);
 
   // Web beforeunload handler
   useEffect(() => {
@@ -2589,7 +2715,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     
     // Voice input state
     isRecording,
+    recordingVoiceActivity,
     partialTranscript,
+    voiceAutoSendCountdownActive,
+    voiceAutoSendCountdownMs,
     
     // Alert state for premium modals
     alertState,
@@ -2622,6 +2751,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     addAttachments,
     handleInputMicPress,
     stopVoiceRecording,
+    cancelVoiceAutoSend,
     startNewConversation,
     runTool,
     

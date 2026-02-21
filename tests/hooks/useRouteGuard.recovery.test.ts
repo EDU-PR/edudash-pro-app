@@ -7,6 +7,7 @@ let mockSearchParams: Record<string, string | string[] | undefined> = {};
 const mockReplace = jest.fn();
 const mockUseAuth = jest.fn();
 const mockIsSigningOut = jest.fn(() => false);
+const mockIsAccountSwitchInProgress = jest.fn(() => false);
 const mockIsRecoveryFlag = jest.fn(() => false);
 const mockGetDashboardRouteForRole = jest.fn((..._args: any[]) => '/screens/parent-dashboard');
 
@@ -23,6 +24,7 @@ jest.mock('@/contexts/AuthContext', () => ({
 
 jest.mock('@/lib/authActions', () => ({
   isSignOutInProgress: () => mockIsSigningOut(),
+  isAccountSwitchInProgress: () => mockIsAccountSwitchInProgress(),
   isAccountSwitchPending: () => false,
 }));
 
@@ -68,6 +70,7 @@ describe('useAuthGuard recovery routing behavior', () => {
     mockSearchParams = {};
     mockUseAuth.mockReturnValue(authenticatedState);
     mockIsSigningOut.mockReturnValue(false);
+    mockIsAccountSwitchInProgress.mockReturnValue(false);
     mockIsRecoveryFlag.mockReturnValue(false);
     mockGetDashboardRouteForRole.mockReturnValue('/screens/parent-dashboard');
   });

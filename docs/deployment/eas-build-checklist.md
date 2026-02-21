@@ -177,6 +177,9 @@ npm run build:android:apk
 ## ✅ Pre-Build Validation Checklist
 
 ### Critical (Must Pass)
+- [ ] Database migrations applied on target env before OTA/build:
+  - `20260224114000_weekly_program_generation_context.sql`
+  - `20260225090000_weekly_program_generation_context_guard.sql`
 - [ ] `DAILY_API_KEY` secret set in EAS and Supabase
 - [ ] `daily-token` edge function deployed and tested
 - [ ] `daily-rooms` edge function deployed and tested

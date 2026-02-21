@@ -289,7 +289,7 @@ export default function NotificationsScreen() {
         break;
       case 'homework':
         if (notification.data?.assignment_id) {
-          navigateSafe('/screens/homework-details', { assignmentId: notification.data.assignment_id as string });
+          navigateSafe('/screens/homework-detail', { assignmentId: notification.data.assignment_id as string });
         } else {
           navigateSafe('/screens/homework');
         }

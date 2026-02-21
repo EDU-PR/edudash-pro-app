@@ -57,6 +57,9 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
 
     const actions: ParentQuickAction[] = [
       { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
+      { id: 'daily_program', title: t('parent.daily_program', { defaultValue: 'Daily Program' }), icon: 'time-outline', color: '#06B6D4', subtitle: t('parent.daily_program_subtitle', { defaultValue: 'View today\'s school routine and timings' }) },
+      { id: 'weekly_menu', title: t('parent.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', color: '#F59E0B', subtitle: t('parent.weekly_menu_subtitle', { defaultValue: 'See breakfast, lunch, and snack plans.' }) },
+      { id: 'stationery', title: t('parent.stationery', { defaultValue: 'Stationery Checklist' }), icon: 'checkbox-outline', color: '#14B8A6', subtitle: t('parent.stationery_subtitle', { defaultValue: 'Track bought items and what is still needed.' }) },
       { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: 'Assigned Lessons' }), icon: 'library', color: '#10B981' },
       { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
       { id: 'activity_feed', title: t('parent.activity_feed', { defaultValue: 'Activity Feed' }), icon: 'newspaper', color: '#0EA5E9', subtitle: t('parent.activity_feed_subtitle', { defaultValue: "See today's classroom activities & photos" }) },
@@ -161,6 +164,9 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
     };
     const categoryById: Record<string, keyof typeof groupMap> = {
       view_homework: 'learning',
+      daily_program: 'learning',
+      weekly_menu: 'learning',
+      stationery: 'learning',
       assigned_lessons: 'learning',
       check_attendance: 'learning',
       view_grades: 'learning',

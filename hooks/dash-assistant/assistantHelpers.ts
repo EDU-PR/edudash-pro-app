@@ -48,6 +48,12 @@ export const buildDashContextOverride = (params: {
     ...learner,
     ageBand,
   });
+  const normalizedSchoolType = String(schoolType || '').toLowerCase();
+  const gradeNumberMatch = String(gradeLabel || '').match(/(\d{1,2})/);
+  const inferredGradeNumber = gradeNumberMatch ? Number(gradeNumberMatch[1]) : null;
+  const looksLikeK12Grade = typeof inferredGradeNumber === 'number' && Number.isFinite(inferredGradeNumber) && inferredGradeNumber >= 1;
+  const isK12Context = normalizedSchoolType.includes('k12') || normalizedSchoolType.includes('primary') || normalizedSchoolType.includes('secondary') || (!!looksLikeK12Grade && !preschoolMode);
+  const isParentRole = String(learner?.role || '').toLowerCase() === 'parent';
 
   const preschoolRules = preschoolMode
     ? [
@@ -57,6 +63,19 @@ export const buildDashContextOverride = (params: {
         '- Keep instructions short (3-6 steps) and hands-on.',
         '- Include a quick interactive check (e.g., "Point to the letter A" or "Count to 5 with me").',
         '- Avoid formal tests or exam language unless a teacher explicitly asks.',
+      ].join('\n')
+    : null;
+
+  const k12ParentActivityRules = isK12Context && isParentRole
+    ? [
+        'K-12 HOME ACTIVITY QUALITY BAR (for parent support):',
+        '- When a parent asks for activities, provide a clear CAPS-aligned activity pack.',
+        '- Match the learner grade and subject explicitly (if known).',
+        '- Include repetition across activities to reinforce mastery, especially for foundational skills.',
+        '- Prefer practical at-home tasks with everyday materials before digital-only suggestions.',
+        '- For each activity include: Objective, Duration, Materials, Steps, and a quick Success Check.',
+        '- Include 1 remediation option and 1 stretch/challenge option for differentiation.',
+        '- Keep parent instructions actionable so they can run the activity without teacher support.',
       ].join('\n')
     : null;
 
@@ -91,6 +110,14 @@ export const buildDashContextOverride = (params: {
     '- Use numbered steps (1., 2., 3.) for sequences',
     '- Keep paragraphs short (2-3 sentences max)',
     '- Use line breaks between sections',
+    '- When a visual helps, output a renderable visual block (NOT placeholders):',
+    '  • Prefer Mermaid blocks: ```mermaid ... ```',
+    '  • For numeric comparisons, provide a markdown table or chart-friendly list',
+    '  • NEVER output placeholders like [DIAGRAM], [CHART], or [GRAPH]',
+    '- For step-by-step column addition/subtraction visuals, output:',
+    '  • ```column {"type":"column_addition","question":"...","addends":[975,155]} ```',
+    '- For interactive spelling practice, output:',
+    '  • ```spelling {"type":"spelling_practice","word":"because","prompt":"Spell the word because","hint":"Use it in a sentence"} ```',
     '',
     '4. NEVER say: "I need more context", "I cannot see", "Please describe"',
     '   - If image attached: analyze it directly',
@@ -107,6 +134,7 @@ export const buildDashContextOverride = (params: {
     learner?.role ? `User role: ${learner.role}.` : null,
     generalRules,
     preschoolRules,
+    k12ParentActivityRules,
   ].filter(Boolean);
 
   const messageHistory = params.messages.map(msg => ({

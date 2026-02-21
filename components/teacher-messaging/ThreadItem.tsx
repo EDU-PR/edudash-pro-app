@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessageThread } from '@/hooks/useTeacherMessaging';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
-import { formatMessageTime } from '@/app/screens/teacher-message-list.styles';
+import { formatMessageTime } from '@/features/teacher-messaging/teacher-message-list.styles';
 
 interface ThreadItemProps {
   thread: MessageThread;

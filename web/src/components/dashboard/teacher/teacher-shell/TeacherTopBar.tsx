@@ -14,7 +14,6 @@ interface TeacherTopBarProps {
   notificationCount: number;
   activityCount: number;
   hasRightSidebar: boolean;
-  showMenuButton: boolean;
   onMenuClick: () => void;
   onWidgetsClick: () => void;
 }
@@ -25,21 +24,19 @@ export function TeacherTopBar({
   notificationCount,
   activityCount,
   hasRightSidebar,
-  showMenuButton,
   onMenuClick,
   onWidgetsClick,
 }: TeacherTopBarProps) {
   const router = useRouter();
 
   return (
-    <header className="topbar" style={{ paddingTop: 5, paddingBottom: 5 }}>
+    <header className="topbar teacher-topbar" style={{ paddingTop: 5, paddingBottom: 5 }}>
       <div className="topbarRow topbarEdge">
         <div className="leftGroup">
-          <button 
-            className="iconBtn mobile-nav-btn" 
-            aria-label="Menu" 
+          <button
+            className="iconBtn mobile-nav-btn"
+            aria-label="Menu"
             onClick={onMenuClick}
-            style={{ display: showMenuButton ? 'grid' : 'none' }}
           >
             <Menu className="icon20" />
           </button>

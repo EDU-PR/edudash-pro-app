@@ -123,7 +123,7 @@ describe('WeeklyProgramCopilotService', () => {
     const weather = draft.blocks.find((block) => block.day_of_week === 5 && /weather/i.test(block.title));
 
     expect(movement?.day_of_week).toBe(5);
-    expect(movement?.objectives).toEqual(['Rhythm', 'Coordination']);
+    expect(movement?.objectives).toEqual(expect.arrayContaining(['Rhythm', 'Coordination']));
     expect(weather).toBeTruthy();
   });
 

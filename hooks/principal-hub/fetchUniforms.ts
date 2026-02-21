@@ -1,7 +1,8 @@
 /**
  * Principal Hub — Uniform Payment Summary
  *
- * Queries fee_structures, student_fees, payments, and pop_uploads
+ * Queries school_fee_structures (with legacy fee_structures fallback),
+ * student_fees, payments, and pop_uploads
  * to build a UniformPaymentSummary for the principal dashboard.
  *
  * @module hooks/principal-hub/fetchUniforms
@@ -65,15 +66,43 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
   };
 
   let structureIds: string[] = [];
+  let legacyStructureIds: string[] = [];
 
   try {
-    // 1. Identify uniform fee structures
-    const { data: structures } = await supabase
+    // 1. Identify uniform fee structures (canonical table first, legacy fallback second)
+    const { data: canonicalStructures, error: canonicalStructuresError } = await supabase
+      .from('school_fee_structures')
+      .select('id, fee_category, name, description')
+      .eq('preschool_id', preschoolId)
+      .eq('is_active', true);
+
+    if (canonicalStructuresError) {
+      logger.warn('[PrincipalHub] school_fee_structures query failed; falling back to fee_structures', canonicalStructuresError);
+    }
+
+    const canonicalStructureIds = (canonicalStructures || [])
+      .filter(
+        (row: any) =>
+          isUniformLabel(row?.fee_category) ||
+          isUniformLabel(row?.name) ||
+          isUniformLabel(row?.description),
+      )
+      .map((row: any) => row.id)
+      .filter(Boolean);
+
+    const { data: legacyStructures, error: legacyStructuresError } = await supabase
       .from('fee_structures')
       .select('id, fee_type, name, description')
-      .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`);
+      .eq('preschool_id', preschoolId);
 
-    structureIds = (structures || [])
+    if (legacyStructuresError && canonicalStructureIds.length === 0) {
+      throw legacyStructuresError;
+    }
+    if (legacyStructuresError) {
+      logger.warn('[PrincipalHub] fee_structures legacy fallback query failed', legacyStructuresError);
+    }
+
+    legacyStructureIds = (legacyStructures || [])
       .filter(
         (row: any) =>
           isUniformLabel(row?.fee_type) ||
@@ -83,16 +112,19 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
       .map((row: any) => row.id)
       .filter(Boolean);
 
+    structureIds = Array.from(new Set([...legacyStructureIds, ...canonicalStructureIds]));
+
     const paidFeeIds = new Set<string>();
 
-    // 2. Fetch uniform student_fees (when configured)
-    if (structureIds.length > 0) {
+    // 2. Fetch uniform student_fees (legacy student_fees points at fee_structures IDs)
+    const studentFeeStructureIds = legacyStructureIds.length > 0 ? legacyStructureIds : structureIds;
+    if (studentFeeStructureIds.length > 0) {
       const { data: uniformFees } = await supabase
         .from('student_fees')
         .select(
           'id, amount, final_amount, amount_paid, amount_outstanding, status, due_date, paid_date, updated_at, student:students!student_fees_student_id_fkey(first_name, last_name, student_id, preschool_id, organization_id)',
         )
-        .in('fee_structure_id', structureIds)
+        .in('fee_structure_id', studentFeeStructureIds)
         .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`, {
           foreignTable: 'students',
         });

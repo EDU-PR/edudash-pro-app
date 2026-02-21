@@ -142,6 +142,28 @@ export interface WeeklyProgramDraft {
   status?: 'draft' | 'submitted' | 'approved' | 'published' | 'archived';
   published_by?: string | null;
   published_at?: string | null;
+  save_warnings?: string[];
+  generation_context?: {
+    preflight?: {
+      nonNegotiableAnchors: string;
+      fixedWeeklyEvents: string;
+      afterLunchPattern: string;
+      resourceConstraints: string;
+      safetyCompliance: string;
+    };
+    assumptionSummary?: string[];
+    capsCoverage?: {
+      homeLanguageDays: number[];
+      mathematicsDays: number[];
+      lifeSkillsDays: number[];
+      weatherRoutineDays: number[];
+      missingByDay: Array<{
+        day: number;
+        missingStrands: string[];
+      }>;
+      coverageScore: number;
+    };
+  } | null;
   blocks: DailyProgramBlock[];
 }
 

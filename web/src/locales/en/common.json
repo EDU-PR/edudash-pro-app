@@ -122,7 +122,11 @@
     "work": "Work",
     "regions": "Regions",
     "finance": "Finance",
-    "members": "Members"
+    "members": "Members",
+    "enroll": "Enroll",
+    "team": "Team",
+    "fees": "Fees",
+    "grades": "Grades"
   },
   "dashChat": {
     "welcomeTitle": "Hi! I'm Dash",
@@ -233,7 +237,8 @@
     "teacher": "Teacher",
     "principal": "Principal",
     "admin": "Administrator",
-    "superAdmin": "Super Admin"
+    "superAdmin": "Super Admin",
+    "student": "your learner"
   },
   "student": {
     "dashboard_title": "Student Dashboard",
@@ -1310,7 +1315,9 @@
         "homework_history": "Homework History",
         "learning_hub": "Learning Hub",
         "picture_of_progress": "Picture of Progress",
-        "weekly_report": "Weekly Report"
+        "weekly_report": "Weekly Report",
+        "weekly_menu": "Weekly Menu",
+        "documents": "Documents"
       },
       "profile": {
         "menu": "Profile menu",
@@ -1401,7 +1408,19 @@
         "communication": {
           "title": "School Communication",
           "subtitle": "Stay connected with teachers and school updates"
-        }
+        },
+        "grades": "Grades",
+        "tutor_badge": "Tutor Mode",
+        "current_class": "Current Class",
+        "class_overview": "Class Overview",
+        "avg_grade": "Avg Grade",
+        "current_tutor_session": "Current Tutor Session",
+        "current_tutor_hint": "Dash Tutor is ready for {{name}} with guided one-step coaching and revision prompts.",
+        "tutor_cta": "Start Tutor Session",
+        "exam_badge": "Exam Builder",
+        "exam_title": "Build Full Exam (Printable)",
+        "exam_description": "Generate a CAPS-aligned formal test paper for review or print.",
+        "exam_cta": "Generate Formal Test Paper"
       }
     },
     "todays_activities": "Today's Activities",
@@ -1410,7 +1429,55 @@
     "upgrade_value": "Save time with AI homework help",
     "upgrade_value_preschool": "Save time with Dash AI support",
     "view_chart": "View Chart",
-    "upcoming_events_empty": "No upcoming events"
+    "upcoming_events_empty": "No upcoming events",
+    "section": {
+      "start_here": {
+        "title": "Start Here",
+        "hint": "School pulse and setup guidance in one place."
+      },
+      "urgent_queue": {
+        "title": "Urgent Queue",
+        "hint": "Handle priority items first: POPs, unpaid fees, and approvals."
+      },
+      "daily_ops": {
+        "title": "Daily Ops & Compliance",
+        "hint": "Attendance, staffing, and safety checks for today.",
+        "copy": "Keep attendance, staffing, and safety on track for the day."
+      },
+      "admissions_cashflow": {
+        "title": "Admissions & Cashflow",
+        "hint": "Track applications, registrations, fees, POPs, and collections.",
+        "copy": "Track new-family pipeline and payment health month by month."
+      },
+      "learners_families": {
+        "title": "Learners & Families",
+        "hint": "Students in focus, birthdays, and parent link requests.",
+        "copy": "Review learners in focus and stay ahead of parent-facing moments.",
+        "lifecycle_hint": "Review at-risk learners, due-today inactivity cases, and duplicate/mismatch queues."
+      }
+    },
+    "layout_controls": "Dashboard layout",
+    "expand_all": "Expand all",
+    "collapse_all_except_urgent": "Collapse all (except urgent)",
+    "learner_activity_control": "Learner Activity Control",
+    "uniform_orders": "Uniform Orders",
+    "dash_ai_advisor": "Dash AI Advisor",
+    "waitlist": "Waitlist",
+    "staff_leave": "Staff Leave",
+    "petty_cash_request": "Petty Cash Request",
+    "weekly_menu": "Weekly Menu",
+    "daily_program_ai": "AI Daily Routine",
+    "room_display_connect": "Room Display",
+    "timetable": "Timetable",
+    "compliance": "Compliance",
+    "uniform_collections_note_ye": "Young Eagles uniform payments are tracked separately from school revenue.",
+    "uniform_no_order": "No Order Submitted",
+    "uniform_status_paid": "Paid",
+    "uniform_status_pending": "Pending",
+    "uniform_status_unpaid": "Unpaid",
+    "uniform_open_hub": "Open Uniform Hub",
+    "uniform_message_unpaid": "Message Unpaid",
+    "uniform_message_no_order": "Message No Order"
   },
   "announcement": {
     "create_announcement": "Create Announcement",
@@ -2193,7 +2260,9 @@
         "changing": "Changing...",
         "change_button": "Change Password"
       }
-    }
+    },
+    "open_full_settings": "Open Settings",
+    "open_full_settings_desc": "Manage notifications, preferences, billing, and app settings"
   },
   "trends": {
     "up": "Up",
@@ -2230,7 +2299,30 @@
       "strong": "Strong performance - {{classes}} classes, good attendance rates",
       "good": "Good performance - managing {{students}} students effectively",
       "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
-    }
+    },
+    "room_display_connect": "Room Display",
+    "student_insights": "Student Insights",
+    "advanced_tools": "Advanced Tools",
+    "assignment_overdue": "Assignment overdue",
+    "total_students": "Total students",
+    "growth": "Growth",
+    "interactive_tutor_mode": "Interactive Tutor Mode",
+    "tutor_mode_title": "CAPS-aligned tutor sessions for your class",
+    "tutor_mode_description": "Launch guided learning instantly with Diagnose → Teach → Practice.",
+    "start_tutor_session": "Start Tutor Session",
+    "daily_program": "Daily Program",
+    "routine_blocks_count": "{{count}} blocks planned today",
+    "open_planner": "Open Planner",
+    "set_reminders": "Set Reminders",
+    "current_class_overview": "Current Class Overview",
+    "current_class_overview_hint": "Attendance and readiness across your active classes.",
+    "upcoming_assignments": "Upcoming Assignments",
+    "upcoming_assignments_hint": "Review due work and keep submissions on track.",
+    "due": "Due",
+    "submitted": "submitted",
+    "overdue": "Overdue",
+    "recent_activity_hint": "Latest assignment and event timeline.",
+    "pending": "Pending"
   },
   "students": {
     "title": "Students",

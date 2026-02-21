@@ -250,6 +250,18 @@ const SA_COMMON_WORDS: PronunciationEntry[] = [
     alias: 'Rand',
     note: 'South African currency — single syllable',
   },
+  {
+    pattern: /\boranges\b/gi,
+    alias: 'or-in-jiz',
+    ipa: 'ˈɔːrɪndʒɪz',
+    note: 'Stabilize plural pronunciation in K-12 math word problems',
+  },
+  {
+    pattern: /\borange\b/gi,
+    alias: 'or-inj',
+    ipa: 'ˈɔːrɪndʒ',
+    note: 'Stabilize singular pronunciation in K-12 vocabulary and examples',
+  },
 ];
 
 // ---------------------------------------------------------------------------

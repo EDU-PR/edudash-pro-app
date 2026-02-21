@@ -15,6 +15,20 @@ import { storeSession, getStoredSession, clearStoredData } from './storage';
 let sessionRefreshTimer: any = null;
 let pendingRefresh: Promise<UserSession | null> | null = null;
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String((error as any)?.message || error || '');
+}
+
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('invalid refresh token') ||
+    message.includes('refresh token not found') ||
+    message.includes('refresh_token_not_found')
+  );
+}
+
 /**
  * Check if session needs refresh
  */
@@ -34,7 +48,13 @@ async function processRefreshResult(
   const { data, error } = result;
 
   if (error) {
-    console.error('[SessionManager] Supabase refresh error:', error.message);
+    if (isInvalidRefreshTokenError(error)) {
+      if (__DEV__) {
+        console.log('[SessionManager] Supabase refresh rejected with invalid token');
+      }
+    } else {
+      console.error('[SessionManager] Supabase refresh error:', getErrorMessage(error));
+    }
     throw error;
   }
 
@@ -101,31 +121,33 @@ export async function refreshSession(
     const { data, error } = await refreshPromise;
     return await processRefreshResult({ data, error }, attempt);
   } catch (error) {
-    console.error(`Session refresh attempt ${attempt} failed:`, error);
+    const invalidRefresh = isInvalidRefreshTokenError(error);
+    if (!invalidRefresh) {
+      console.error(`Session refresh attempt ${attempt} failed:`, error);
+    } else if (__DEV__) {
+      console.log(`[SessionManager] Refresh attempt ${attempt} ended with invalid token`);
+    }
 
-    if (error instanceof Error) {
-      if (error.message.includes('Already Used')) {
+    const errorMessage = getErrorMessage(error);
+    if (!invalidRefresh && errorMessage.includes('Already Used')) {
         if (__DEV__) console.log('[SessionManager] Refresh token already used (concurrent refresh), fetching current session');
         const currentSession = await getStoredSession();
         if (currentSession) {
           return currentSession;
         }
-      }
+    }
 
-      if (error.message.includes('Invalid Refresh Token') ||
-          error.message.includes('Refresh Token Not Found') ||
-          error.message.includes('refresh_token_not_found')) {
-        if (__DEV__) console.log('[SessionManager] Refresh token is invalid, clearing stored session');
-        await clearStoredData();
+    if (invalidRefresh) {
+      if (__DEV__) console.log('[SessionManager] Refresh token is invalid, clearing stored session');
+      await clearStoredData();
 
-        track('edudash.auth.session_refresh_failed', {
-          attempts: attempt,
-          error: 'invalid_refresh_token',
-          final: true,
-        });
+      track('edudash.auth.session_refresh_failed', {
+        attempts: attempt,
+        error: 'invalid_refresh_token',
+        final: true,
+      });
 
-        return null;
-      }
+      return null;
     }
 
     if (attempt < maxAttempts) {
@@ -137,7 +159,7 @@ export async function refreshSession(
 
     track('edudash.auth.session_refresh_failed', {
       attempts: attempt,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage || 'Unknown error',
       final: true,
     });
 

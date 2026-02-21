@@ -24,6 +24,7 @@ export function TeacherShell({
   userName,
   preschoolName,
   userId,
+  schoolType,
   unreadCount = 0, 
   children,
   rightSidebar,
@@ -38,9 +39,8 @@ export function TeacherShell({
   const [notificationCount, setNotificationCount] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
-  const [isCompactViewport, setIsCompactViewport] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < COMPACT_BREAKPOINT
-  );
+  // Start false to match SSR; sync in useEffect to avoid hydration mismatch
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   useBackButton({ fallbackRoute: '/dashboard/teacher', protectedRoutes: ['/dashboard/teacher'] });
@@ -76,7 +76,7 @@ export function TeacherShell({
   }, [userId, supabase]);
 
   const activityCount = useMemo(() => unreadCount > 0 ? unreadCount : 0, [unreadCount]);
-  const nav = getTeacherNavItems(unreadCount);
+  const nav = getTeacherNavItems(unreadCount, schoolType || null);
 
   return (
     <div className={`app${mobileNavOpen ? ' mobile-nav-open' : ''}`}>
@@ -87,7 +87,6 @@ export function TeacherShell({
           notificationCount={notificationCount}
           activityCount={activityCount}
           hasRightSidebar={!!rightSidebar}
-          showMenuButton={isCompactViewport}
           onMenuClick={() => setMobileNavOpen((prev) => !prev)}
           onWidgetsClick={() => setMobileWidgetsOpen(true)}
         />
@@ -121,8 +120,11 @@ export function TeacherShell({
           .teacher-sidenav { align-self: stretch !important; }
         }
         .frame-no-sidebar { grid-template-columns: 1fr !important; }
+        /* Hamburger: hidden by default (desktop), shown via media query - avoids hydration mismatch */
+        .teacher-topbar .mobile-nav-btn { display: none; }
         @media (max-width: 1199px) {
-          .mobile-nav-btn { display: grid !important; }
+          .teacher-sidenav { display: none !important; }
+          .teacher-topbar .mobile-nav-btn { display: grid !important; }
           .desktop-back-btn { display: none !important; }
           .mobile-nav-overlay, .mobile-widgets-overlay { display: block !important; }
           .mobile-nav-drawer { display: flex !important; flex-direction: column; overflow: hidden; }

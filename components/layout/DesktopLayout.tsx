@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -97,6 +98,7 @@ export function DesktopLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const notificationCount = useNotificationBadgeCount();
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
   const { organizationName: brandingOrgName, isLoading: brandingLoading } = useOrganizationBranding();
   
   // Use window dimensions for responsive behavior on web
@@ -111,7 +113,10 @@ export function DesktopLayout({
   // Filter nav items by role
   const filteredNavItems = NAV_ITEMS.filter(item => 
     !item.roles || item.roles.includes(userRole)
-  );
+  ).filter((item) => {
+    if (!hideFeesOnDashboards) return true;
+    return item.id !== 'financials';
+  });
 
   // Check if current route matches nav item
   const isActive = (route: string) => {

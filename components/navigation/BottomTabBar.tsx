@@ -19,6 +19,7 @@ import {
   ROLES_WITH_CENTER_TAB,
   SCHOOL_ADMIN_DASH_TAB,
 } from '@/lib/navigation/navManifest';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 360;
@@ -468,6 +469,7 @@ const TAB_ITEMS: TabItem[] = [
 export function BottomTabBar() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -582,6 +584,10 @@ export function BottomTabBar() {
     }
     return item;
   });
+
+  if (hideFeesOnDashboards) {
+    visibleTabs = visibleTabs.filter((item) => item.id !== 'principal-reports');
+  }
 
   if (isSchoolAdmin) {
     visibleTabs = visibleTabs.filter(item => item.id !== 'org-admin-settings');

@@ -14,9 +14,9 @@ import { useAlertModal } from '@/components/ui/AlertModal';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { useTeacherPostActivity } from '@/hooks/useTeacherPostActivity';
-import { ACTIVITY_TYPES, TEMPLATES } from './teacher-post-activity.constants';
-import type { Visibility } from './teacher-post-activity.constants';
-import { createStyles } from './teacher-post-activity.styles';
+import { ACTIVITY_TYPES, TEMPLATES } from '@/features/teacher-post-activity/teacher-post-activity.constants';
+import type { Visibility } from '@/features/teacher-post-activity/teacher-post-activity.constants';
+import { createStyles } from '@/features/teacher-post-activity/teacher-post-activity.styles';
 
 export default function TeacherPostActivityScreen() {
   const { theme } = useTheme();

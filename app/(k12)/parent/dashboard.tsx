@@ -304,9 +304,17 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
     pushAction(
       'exam_builder',
-      gradeParam ? { grade: gradeParam, childName: leadChild?.name || '' } : undefined
+      gradeParam
+        ? {
+            grade: gradeParam,
+            childName: leadChild?.name || '',
+            studentId: leadChild?.id || undefined,
+            classId: leadChild?.classId || undefined,
+            schoolId: organizationId || undefined,
+          }
+        : undefined
     );
-  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children, pushAction]);
+  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children, pushAction, organizationId]);
 
   const navItems = useMemo(() => ([
     { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: K12_PARENT_ACTIONS.dashboard_home.route },
@@ -654,6 +662,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         {quickWinsEnabled && (
           <InlineTutorPreview
             childName={dashboardSummary.leadChildName || 'Learner'}
+            childGrade={dashboardSummary.leadChildGrade}
             onOpenFullSession={openTutorSession}
           />
         )}

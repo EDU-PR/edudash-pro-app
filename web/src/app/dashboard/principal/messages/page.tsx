@@ -1453,7 +1453,7 @@ function PrincipalMessagesPage() {
   const isGroupSelected = !!selectedThread && isGroupThread(selectedThread);
   const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
 
-  const findOrSelectDmThread = useCallback((targetUserId: string) => {
+  const findOrSelectDmThread = (targetUserId: string) => {
     const participants = (t: MessageThread) => t.message_participants || t.participants || [];
     const dmThread = threads.find((t) => {
       if (isGroupThread(t)) return false;
@@ -1467,7 +1467,7 @@ function PrincipalMessagesPage() {
       return true;
     }
     return false;
-  }, [threads, userId]);
+  };
   const currentParticipant = selectedParticipants?.find((p: any) => p.user_id === userId);
   const groupDisplayName = selectedThread && isGroupSelected ? getGroupDisplayName(selectedThread) : 'Group Chat';
   // Find the other participant (the contact) for the chat header

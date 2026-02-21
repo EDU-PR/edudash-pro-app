@@ -34,6 +34,8 @@ const VALID_ROUTES = new Set([
   '/index',
   '/(auth)/sign-in',
   '/(auth)/sign-up',
+  '/(auth)/welcome',
+  '/spelling-practice',
   '/register',  // Public registration screen (for new users)
   '/profiles-gate',
   '/pricing',
@@ -102,7 +104,7 @@ const VALID_PATTERNS = [
   /^\/pricing/,  // Allow pricing routes
   /^\/marketing/,  // Allow marketing routes
   /^\/sales/,  // Allow sales routes
-  /^\/(auth)\//,  // Allow all auth routes
+  /^\/\(auth\)\//,  // Allow all auth routes with expo group segment
   // Add more patterns as needed
 ];
 

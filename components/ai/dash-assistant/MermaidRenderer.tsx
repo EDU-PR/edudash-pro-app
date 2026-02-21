@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 
 interface MermaidRendererProps {
   definition: string;
+  height?: number;
 }
 
 function buildMermaidHtml(definition: string): string {
@@ -39,7 +40,7 @@ function buildMermaidHtml(definition: string): string {
 </html>`;
 }
 
-export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ definition }) => {
+export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ definition, height = 190 }) => {
   const cleaned = String(definition || '').trim();
   if (!cleaned) return null;
 
@@ -69,13 +70,13 @@ export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ definition }) 
         borderColor: 'rgba(148,163,184,0.28)',
         borderRadius: 12,
         overflow: 'hidden',
-        minHeight: 190,
+        minHeight: height,
       }}
     >
       <WebView
         originWhitelist={['*']}
         source={{ html: buildMermaidHtml(cleaned) }}
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: 'transparent', minHeight: height }}
         scrollEnabled={false}
       />
     </View>

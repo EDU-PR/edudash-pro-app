@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,29 +15,304 @@ type TutorQuestion = {
 
 interface InlineTutorPreviewProps {
   childName: string;
+  childGrade?: string | null;
   /** Open full tutor session */
   onOpenFullSession: () => void;
 }
 
-const SAMPLE_QUESTIONS: TutorQuestion[] = [
-  {
-    id: 'fraction-simplify',
-    prompt: 'What is 5/10 simplified to its lowest terms?',
-    options: ['1/2', '2/5', '5/5', '3/4'],
-    correctIndex: 0,
-    explanation: 'Great work. Divide top and bottom by 5: 5/10 = 1/2.',
-  },
-  {
-    id: 'fraction-compare',
-    prompt: 'Which fraction is greater?',
-    options: ['1/4', '3/4', '2/8', '1/2'],
-    correctIndex: 1,
-    explanation: 'Correct. 3/4 is larger than 1/2, 1/4, and 2/8.',
-  },
-];
+type GradeBand = 'foundation' | 'intermediate' | 'senior';
+
+const shuffleArray = <T,>(input: T[]): T[] => {
+  const items = [...input];
+  for (let i = items.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+};
+
+const randomInt = (min: number, max: number): number => {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+const gcd = (a: number, b: number): number => {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    const temp = y;
+    y = x % y;
+    x = temp;
+  }
+  return x || 1;
+};
+
+const parseGradeNumber = (value?: string | null): number => {
+  if (!value) return 4;
+  const normalized = value.toLowerCase().trim();
+  if (normalized === 'r' || normalized.includes('grade r')) return 0;
+  const match = normalized.match(/\d{1,2}/);
+  return match ? Number(match[0]) : 4;
+};
+
+const resolveGradeBand = (grade?: string | null): GradeBand => {
+  const gradeNum = parseGradeNumber(grade);
+  if (gradeNum <= 3) return 'foundation';
+  if (gradeNum <= 6) return 'intermediate';
+  return 'senior';
+};
+
+const buildQuestion = ({
+  id,
+  prompt,
+  correctAnswer,
+  distractors,
+  explanation,
+}: {
+  id: string;
+  prompt: string;
+  correctAnswer: string | number;
+  distractors: Array<string | number>;
+  explanation: string;
+}): TutorQuestion => {
+  const normalizedCorrect = String(correctAnswer);
+  const unique: string[] = [];
+
+  [normalizedCorrect, ...distractors.map(String)].forEach((value) => {
+    if (value && !unique.includes(value)) unique.push(value);
+  });
+
+  let guard = 0;
+  while (unique.length < 4 && guard < 16) {
+    const filler = String(randomInt(2, 99));
+    if (!unique.includes(filler)) unique.push(filler);
+    guard += 1;
+  }
+
+  const options = shuffleArray(unique.slice(0, 4));
+  const correctIndex = options.findIndex((value) => value === normalizedCorrect);
+
+  return {
+    id,
+    prompt,
+    options,
+    correctIndex: correctIndex >= 0 ? correctIndex : 0,
+    explanation,
+  };
+};
+
+const createFoundationQuestions = (childName: string): TutorQuestion[] => {
+  const addA = randomInt(4, 16);
+  const addB = randomInt(3, 9);
+  const subtractA = randomInt(11, 20);
+  const subtractB = randomInt(2, 9);
+  const timesA = randomInt(2, 9);
+  const timesB = randomInt(2, 5);
+  const halfHour = 30;
+  const placeNumber = randomInt(120, 980);
+  const tensValue = Math.floor((placeNumber % 100) / 10) * 10;
+
+  const spelling = [
+    { word: 'because', wrong: ['becouse', 'beacause', 'becuase'] },
+    { word: 'friend', wrong: ['freind', 'frend', 'friendd'] },
+    { word: 'school', wrong: ['scool', 'schooll', 'schol'] },
+  ][randomInt(0, 2)];
+
+  return [
+    buildQuestion({
+      id: 'foundation-add',
+      prompt: `${childName}, what is ${addA} + ${addB}?`,
+      correctAnswer: addA + addB,
+      distractors: [addA + addB + 1, addA + addB - 1, addA + addB + 2],
+      explanation: `Great work. ${addA} + ${addB} = ${addA + addB}.`,
+    }),
+    buildQuestion({
+      id: 'foundation-subtract',
+      prompt: `What is ${subtractA} - ${subtractB}?`,
+      correctAnswer: subtractA - subtractB,
+      distractors: [subtractA - subtractB + 1, subtractA - subtractB - 1, subtractA - subtractB + 2],
+      explanation: `Correct. ${subtractA} - ${subtractB} = ${subtractA - subtractB}.`,
+    }),
+    buildQuestion({
+      id: 'foundation-times',
+      prompt: `Multiply: ${timesA} × ${timesB}`,
+      correctAnswer: timesA * timesB,
+      distractors: [timesA * timesB + timesB, timesA * timesB - timesB, timesA * timesB + 1],
+      explanation: `Nice. ${timesA} groups of ${timesB} gives ${timesA * timesB}.`,
+    }),
+    buildQuestion({
+      id: 'foundation-time',
+      prompt: 'How many minutes are in half an hour?',
+      correctAnswer: halfHour,
+      distractors: [20, 45, 60],
+      explanation: 'Half of 60 minutes is 30 minutes.',
+    }),
+    buildQuestion({
+      id: 'foundation-place-value',
+      prompt: `In ${placeNumber}, what is the value of the tens digit?`,
+      correctAnswer: tensValue,
+      distractors: [Math.floor((placeNumber % 100) / 10), tensValue + 10, Math.max(0, tensValue - 10)],
+      explanation: `The tens place value is ${tensValue}.`,
+    }),
+    buildQuestion({
+      id: 'foundation-spelling',
+      prompt: 'Choose the correctly spelled word.',
+      correctAnswer: spelling.word,
+      distractors: spelling.wrong,
+      explanation: `Correct spelling: "${spelling.word}".`,
+    }),
+  ];
+};
+
+const createIntermediateQuestions = (childName: string): TutorQuestion[] => {
+  let numerator = randomInt(6, 18);
+  let denominator = randomInt(10, 24);
+  while (numerator >= denominator || gcd(numerator, denominator) === 1) {
+    numerator = randomInt(6, 18);
+    denominator = randomInt(10, 24);
+  }
+  const divisor = gcd(numerator, denominator);
+  const reduced = `${numerator / divisor}/${denominator / divisor}`;
+
+  const sameDenominator = randomInt(6, 12);
+  const leftFraction = randomInt(1, sameDenominator - 1);
+  let rightFraction = randomInt(1, sameDenominator - 1);
+  while (rightFraction === leftFraction) {
+    rightFraction = randomInt(1, sameDenominator - 1);
+  }
+  const largerFraction = `${Math.max(leftFraction, rightFraction)}/${sameDenominator}`;
+
+  const mulA = randomInt(11, 29);
+  const mulB = randomInt(3, 9);
+  const divB = randomInt(3, 9);
+  const divA = divB * randomInt(3, 12);
+  const perimeterL = randomInt(5, 14);
+  const perimeterW = randomInt(3, 10);
+  const decimal = randomInt(12, 98) / 10;
+  const placeMap: Record<number, string> = { 0: 'ones', 1: 'tenths', 2: 'hundredths' };
+  const placeIndex = 1;
+  const decimalDigits = decimal.toFixed(1).replace('.', '');
+  const placeDigit = Number(decimalDigits[placeIndex]);
+
+  return [
+    buildQuestion({
+      id: 'intermediate-fraction-simplify',
+      prompt: `Simplify ${numerator}/${denominator}.`,
+      correctAnswer: reduced,
+      distractors: [`${numerator}/${denominator}`, `${numerator / divisor}/${denominator}`, `${numerator}/${denominator / divisor}`],
+      explanation: `Great work. Divide top and bottom by ${divisor}: ${numerator}/${denominator} = ${reduced}.`,
+    }),
+    buildQuestion({
+      id: 'intermediate-fraction-compare',
+      prompt: `Which fraction is greater: ${leftFraction}/${sameDenominator} or ${rightFraction}/${sameDenominator}?`,
+      correctAnswer: largerFraction,
+      distractors: [`${Math.min(leftFraction, rightFraction)}/${sameDenominator}`, 'They are equal', `${sameDenominator}/${sameDenominator}`],
+      explanation: `With the same denominator, the larger numerator is greater. So ${largerFraction} is greater.`,
+    }),
+    buildQuestion({
+      id: 'intermediate-multiply',
+      prompt: `${childName}, calculate ${mulA} × ${mulB}.`,
+      correctAnswer: mulA * mulB,
+      distractors: [mulA * mulB + mulB, mulA * mulB - mulB, mulA * mulB + 10],
+      explanation: `Correct. ${mulA} × ${mulB} = ${mulA * mulB}.`,
+    }),
+    buildQuestion({
+      id: 'intermediate-divide',
+      prompt: `What is ${divA} ÷ ${divB}?`,
+      correctAnswer: divA / divB,
+      distractors: [divA / divB + 1, divA / divB - 1, divB],
+      explanation: `Nice. ${divA} divided by ${divB} equals ${divA / divB}.`,
+    }),
+    buildQuestion({
+      id: 'intermediate-perimeter',
+      prompt: `Find the perimeter of a rectangle with length ${perimeterL} cm and width ${perimeterW} cm.`,
+      correctAnswer: 2 * (perimeterL + perimeterW),
+      distractors: [perimeterL * perimeterW, perimeterL + perimeterW, 2 * perimeterL + perimeterW],
+      explanation: `Perimeter = 2 × (length + width) = ${2 * (perimeterL + perimeterW)} cm.`,
+    }),
+    buildQuestion({
+      id: 'intermediate-decimal',
+      prompt: `In ${decimal.toFixed(1)}, which digit is in the ${placeMap[placeIndex]} place?`,
+      correctAnswer: placeDigit,
+      distractors: [placeDigit + 1, Math.max(0, placeDigit - 1), Number(decimal.toFixed(1).split('.')[0])],
+      explanation: `In ${decimal.toFixed(1)}, the ${placeMap[placeIndex]} digit is ${placeDigit}.`,
+    }),
+  ];
+};
+
+const createSeniorQuestions = (childName: string): TutorQuestion[] => {
+  const eqAdd = randomInt(4, 13);
+  const eqResult = randomInt(20, 48);
+  const eqAnswer = eqResult - eqAdd;
+  const percent = randomInt(10, 40);
+  const base = randomInt(8, 25) * 10;
+  const ratioA = randomInt(2, 5);
+  const ratioB = randomInt(3, 8);
+  const ratioScale = randomInt(2, 5);
+  const triangleBase = randomInt(6, 14);
+  const triangleHeight = randomInt(4, 12);
+  const integerA = randomInt(-9, 12);
+  const integerB = randomInt(-9, 12);
+
+  return [
+    buildQuestion({
+      id: 'senior-linear-equation',
+      prompt: `Solve for x: x + ${eqAdd} = ${eqResult}`,
+      correctAnswer: eqAnswer,
+      distractors: [eqAnswer + eqAdd, eqResult, eqAnswer - 2],
+      explanation: `Subtract ${eqAdd} from both sides. x = ${eqAnswer}.`,
+    }),
+    buildQuestion({
+      id: 'senior-percentage',
+      prompt: `What is ${percent}% of ${base}?`,
+      correctAnswer: (percent * base) / 100,
+      distractors: [base / percent, percent + base, (percent * base) / 10],
+      explanation: `${percent}% of ${base} = (${percent}/${100}) × ${base} = ${(percent * base) / 100}.`,
+    }),
+    buildQuestion({
+      id: 'senior-ratio',
+      prompt: `Which ratio is equivalent to ${ratioA}:${ratioB}?`,
+      correctAnswer: `${ratioA * ratioScale}:${ratioB * ratioScale}`,
+      distractors: [
+        `${ratioA + ratioScale}:${ratioB + ratioScale}`,
+        `${ratioA * ratioScale}:${ratioB}`,
+        `${ratioA}:${ratioB * ratioScale}`,
+      ],
+      explanation: `Multiply both terms by the same number (${ratioScale}) to keep ratios equivalent.`,
+    }),
+    buildQuestion({
+      id: 'senior-triangle-area',
+      prompt: `Find the area of a triangle with base ${triangleBase} cm and height ${triangleHeight} cm.`,
+      correctAnswer: (triangleBase * triangleHeight) / 2,
+      distractors: [triangleBase * triangleHeight, triangleBase + triangleHeight, triangleBase * 2 + triangleHeight],
+      explanation: `Area of triangle = 1/2 × base × height = ${(triangleBase * triangleHeight) / 2} cm².`,
+    }),
+    buildQuestion({
+      id: 'senior-integers',
+      prompt: `${childName}, evaluate: ${integerA} + (${integerB})`,
+      correctAnswer: integerA + integerB,
+      distractors: [integerA - integerB, Math.abs(integerA + integerB), integerA + integerB + 2],
+      explanation: `Add signed integers carefully: ${integerA} + (${integerB}) = ${integerA + integerB}.`,
+    }),
+    buildQuestion({
+      id: 'senior-language',
+      prompt: 'Choose the word that is a synonym for "analyze".',
+      correctAnswer: 'examine',
+      distractors: ['ignore', 'forget', 'erase'],
+      explanation: '"Examine" means to inspect closely, which matches "analyze".',
+    }),
+  ];
+};
+
+const buildQuestionPool = (childName: string, childGrade?: string | null): TutorQuestion[] => {
+  const band = resolveGradeBand(childGrade);
+  if (band === 'foundation') return createFoundationQuestions(childName);
+  if (band === 'senior') return createSeniorQuestions(childName);
+  return createIntermediateQuestions(childName);
+};
 
 export default function InlineTutorPreview({
   childName,
+  childGrade,
   onOpenFullSession,
 }: InlineTutorPreviewProps) {
   const [isActive, setIsActive] = useState(true);
@@ -45,10 +320,24 @@ export default function InlineTutorPreview({
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  const question = useMemo(
-    () => SAMPLE_QUESTIONS[questionIndex % SAMPLE_QUESTIONS.length],
-    [questionIndex]
+  const questionPool = useMemo(
+    () => buildQuestionPool(childName, childGrade),
+    [childName, childGrade]
   );
+
+  const questionOrder = useMemo(
+    () => shuffleArray(questionPool.map((_, idx) => idx)),
+    [questionPool]
+  );
+
+  const currentQuestionNumber = (questionIndex % questionPool.length) + 1;
+  const currentQuestionKey = questionOrder[questionIndex % questionOrder.length] ?? 0;
+  const question = questionPool[currentQuestionKey];
+
+  useEffect(() => {
+    setQuestionIndex(0);
+    setSelectedIndex(null);
+  }, [childName, childGrade]);
 
   const handleStop = useCallback(() => {
     setIsActive(false);
@@ -103,7 +392,7 @@ export default function InlineTutorPreview({
         </View>
 
         <Text style={styles.practiceHint}>
-          This is a tutor practice question, not a formal exam.
+          This is a tutor practice question, not a formal exam. Question {currentQuestionNumber} of {questionPool.length}.
         </Text>
 
         <View style={styles.sampleCards}>

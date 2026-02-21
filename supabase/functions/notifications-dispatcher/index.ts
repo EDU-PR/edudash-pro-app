@@ -63,6 +63,9 @@ interface NotificationContext {
   event_date?: string;
   event_type?: string;
   event_location?: string;
+  reminder_offset_days?: number;
+  reminder_label?: string;
+  target_role?: string;
   // Attendance
   attendance_date?: string;
   attendance_status?: string;
@@ -617,12 +620,14 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
     school_event_reminder: {
       title: '🔔 Event Reminder',
       body: context.event_title 
-        ? `Reminder: ${context.event_title}${context.event_date ? ` is ${context.event_date}` : ' is coming up'}`
+        ? `Reminder (${context.reminder_label || 'upcoming'}): ${context.event_title}${context.event_date ? ` is ${context.event_date}` : ' is coming up'}`
         : 'You have an upcoming school event',
       data: {
         type: 'school_event_reminder',
         event_id: context.event_id,
         event_type: context.event_type,
+        reminder_offset_days: context.reminder_offset_days,
+        reminder_label: context.reminder_label,
         screen: 'calendar'
       },
       sound: 'default',
@@ -2224,6 +2229,15 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
       case 'school_event_updated':
       case 'school_event_cancelled':
       case 'school_event_reminder':
+        if (request.context?.reminder_offset_days) {
+          context.reminder_offset_days = Number(request.context.reminder_offset_days) || undefined;
+        }
+        if (request.context?.reminder_label) {
+          context.reminder_label = String(request.context.reminder_label);
+        }
+        if (request.context?.target_role) {
+          context.target_role = String(request.context.target_role);
+        }
         if (request.event_id) {
           const { data: eventData } = await supabase
             .from('school_events')

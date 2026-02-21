@@ -155,6 +155,7 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
             emoji,
             count: data.count,
             hasReacted: data.users.includes(user?.id || ''),
+            reactedByUserIds: data.users,
           }));
           
           return { ...msg, reactions: reactionsArray };

@@ -14,6 +14,13 @@ export interface GenerateWeeklyProgramFromTermInput {
   schoolName?: string;
   ageGroup: string;
   weeklyObjectives?: string[];
+  preflightAnswers?: {
+    nonNegotiableAnchors: string;
+    fixedWeeklyEvents: string;
+    afterLunchPattern: string;
+    resourceConstraints: string;
+    safetyCompliance: string;
+  };
   constraints?: WeeklyProgramGenerationConstraints;
 }
 
@@ -684,6 +691,41 @@ const WEATHER_KEYWORDS = [
   'cloud',
 ];
 
+const CAPS_HOME_LANGUAGE_KEYWORDS = [
+  'home language',
+  'language',
+  'phonics',
+  'story',
+  'vocabulary',
+  'read',
+  'speaking',
+  'listening',
+  'rhyme',
+];
+
+const CAPS_MATHEMATICS_KEYWORDS = [
+  'mathematics',
+  'math',
+  'number',
+  'count',
+  'shape',
+  'pattern',
+  'measurement',
+  'sorting',
+];
+
+const CAPS_LIFE_SKILLS_KEYWORDS = [
+  'life skills',
+  'social',
+  'emotional',
+  'self-help',
+  'hygiene',
+  'movement',
+  'outdoor',
+  'wellness',
+  'creative arts',
+];
+
 const hasWeatherSignal = (block: DailyProgramBlock): boolean => {
   const haystack = [
     block.block_type,
@@ -768,6 +810,147 @@ const ensureDailyWeatherRepetition = (blocks: DailyProgramBlock[]): DailyProgram
   );
 };
 
+type CapsCoverageSummary = {
+  homeLanguageDays: number[];
+  mathematicsDays: number[];
+  lifeSkillsDays: number[];
+  weatherRoutineDays: number[];
+  missingByDay: Array<{
+    day: number;
+    missingStrands: string[];
+  }>;
+  coverageScore: number;
+};
+
+const blockText = (block: DailyProgramBlock): string =>
+  [
+    block.block_type,
+    block.title,
+    block.notes,
+    block.transition_cue,
+    ...(block.objectives || []),
+    ...(block.materials || []),
+  ]
+    .map((value) => String(value || '').toLowerCase())
+    .join(' ');
+
+const hasKeyword = (source: string, keywords: string[]): boolean =>
+  keywords.some((keyword) => source.includes(keyword));
+
+const computeCapsCoverage = (blocks: DailyProgramBlock[]): CapsCoverageSummary => {
+  const grouped = new Map<number, DailyProgramBlock[]>();
+  for (const day of [1, 2, 3, 4, 5]) grouped.set(day, []);
+  for (const block of blocks) {
+    const day = clampDayOfWeek(block.day_of_week);
+    if (day >= 1 && day <= 5) grouped.get(day)?.push(block);
+  }
+
+  const homeLanguageDays: number[] = [];
+  const mathematicsDays: number[] = [];
+  const lifeSkillsDays: number[] = [];
+  const weatherRoutineDays: number[] = [];
+  const missingByDay: CapsCoverageSummary['missingByDay'] = [];
+
+  let passChecks = 0;
+  const totalChecks = 20;
+
+  for (const day of [1, 2, 3, 4, 5]) {
+    const dayBlocks = grouped.get(day) || [];
+    const dayText = dayBlocks.map(blockText).join(' ');
+    const missingStrands: string[] = [];
+
+    const hasHomeLanguage = hasKeyword(dayText, CAPS_HOME_LANGUAGE_KEYWORDS);
+    const hasMathematics = hasKeyword(dayText, CAPS_MATHEMATICS_KEYWORDS);
+    const hasLifeSkills =
+      hasKeyword(dayText, CAPS_LIFE_SKILLS_KEYWORDS)
+      || dayBlocks.some((block) => ['movement', 'outdoor', 'meal', 'nap'].includes(String(block.block_type || '').toLowerCase()));
+    const hasWeather = dayBlocks.some(hasWeatherSignal);
+
+    if (hasHomeLanguage) {
+      homeLanguageDays.push(day);
+      passChecks += 1;
+    } else {
+      missingStrands.push('Home Language');
+    }
+
+    if (hasMathematics) {
+      mathematicsDays.push(day);
+      passChecks += 1;
+    } else {
+      missingStrands.push('Mathematics');
+    }
+
+    if (hasLifeSkills) {
+      lifeSkillsDays.push(day);
+      passChecks += 1;
+    } else {
+      missingStrands.push('Life Skills');
+    }
+
+    if (hasWeather) {
+      weatherRoutineDays.push(day);
+      passChecks += 1;
+    } else {
+      missingStrands.push('Daily Weather');
+    }
+
+    if (missingStrands.length > 0) {
+      missingByDay.push({ day, missingStrands });
+    }
+  }
+
+  return {
+    homeLanguageDays,
+    mathematicsDays,
+    lifeSkillsDays,
+    weatherRoutineDays,
+    missingByDay,
+    coverageScore: Math.round((passChecks / totalChecks) * 100),
+  };
+};
+
+const applyCapsCoverageMetadata = (
+  blocks: DailyProgramBlock[],
+  coverage: CapsCoverageSummary,
+): DailyProgramBlock[] => {
+  if (coverage.missingByDay.length === 0) return blocks;
+
+  const mutable = blocks.map((block) => ({
+    ...block,
+    objectives: [...(block.objectives || [])],
+    materials: [...(block.materials || [])],
+  }));
+
+  for (const gap of coverage.missingByDay) {
+    const dayBlocks = mutable
+      .filter((block) => block.day_of_week === gap.day)
+      .sort((a, b) => a.block_order - b.block_order);
+
+    if (dayBlocks.length === 0) continue;
+    const target = dayBlocks[0];
+    const strandSummary = gap.missingStrands.join(', ');
+    const reinforcementObjective = `CAPS reinforcement: ${strandSummary}`;
+
+    target.objectives = Array.from(new Set([...(target.objectives || []), reinforcementObjective])).slice(0, 4);
+
+    const existingNotes = String(target.notes || '').trim();
+    target.notes = existingNotes
+      ? `${existingNotes} CAPS focus reminder: ${strandSummary}.`
+      : `CAPS focus reminder: ${strandSummary}.`;
+
+    if (gap.missingStrands.includes('Daily Weather')) {
+      const existingTransition = String(target.transition_cue || '').trim();
+      target.transition_cue = existingTransition
+        ? `${existingTransition} Include a weather check-in before transition.`
+        : 'Include a weather check-in before transition.';
+    }
+  }
+
+  return mutable.sort((a, b) =>
+    a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week,
+  );
+};
+
 const normalizeAIResponse = (
   response: WeeklyProgramAIResponse,
   input: GenerateWeeklyProgramFromTermInput,
@@ -783,6 +966,29 @@ const normalizeAIResponse = (
   }
 
   const normalizedBlocks = ensureDailyWeatherRepetition(blocks);
+  const initialCoverage = computeCapsCoverage(normalizedBlocks);
+  const correctedBlocks = applyCapsCoverageMetadata(normalizedBlocks, initialCoverage);
+  const finalCoverage = computeCapsCoverage(correctedBlocks);
+  const assumptionSummary: string[] = input.preflightAnswers
+    ? [
+        `Anchors: ${input.preflightAnswers.nonNegotiableAnchors}`,
+        `Fixed events: ${input.preflightAnswers.fixedWeeklyEvents}`,
+        `After lunch pattern: ${input.preflightAnswers.afterLunchPattern}`,
+        `Resource constraints: ${input.preflightAnswers.resourceConstraints}`,
+        `Safety/compliance: ${input.preflightAnswers.safetyCompliance}`,
+      ]
+    : [];
+
+  assumptionSummary.push(
+    `CAPS strand coverage score: ${finalCoverage.coverageScore}% (HL ${finalCoverage.homeLanguageDays.length}/5, Math ${finalCoverage.mathematicsDays.length}/5, Life Skills ${finalCoverage.lifeSkillsDays.length}/5, Weather ${finalCoverage.weatherRoutineDays.length}/5)`,
+  );
+  if (finalCoverage.missingByDay.length > 0) {
+    assumptionSummary.push(
+      `Coverage gaps flagged for follow-up: ${finalCoverage.missingByDay
+        .map((gap) => `Day ${gap.day} (${gap.missingStrands.join(', ')})`)
+        .join('; ')}`,
+    );
+  }
 
   return {
     preschool_id: input.preschoolId,
@@ -795,13 +1001,42 @@ const normalizeAIResponse = (
     generated_by_ai: true,
     source: 'ai',
     status: 'draft',
-    blocks: normalizedBlocks,
+    generation_context: {
+      preflight: input.preflightAnswers,
+      assumptionSummary,
+      capsCoverage: finalCoverage,
+    },
+    blocks: correctedBlocks,
   };
 };
 
 const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
   const constraints = input.constraints || {};
   const objectivesText = (input.weeklyObjectives || []).join('; ') || 'Age-appropriate learning outcomes';
+  const preflight = input.preflightAnswers;
+  const routineRequirements: string[] = [];
+
+  if (constraints.includeToiletRoutine) {
+    routineRequirements.push('Include a toilet or bathroom routine support moment each day.');
+  }
+  if (constraints.includeNapTime) {
+    routineRequirements.push('Include a nap or quiet-rest block suitable for the age group.');
+  }
+  if (constraints.includeMealBlocks) {
+    routineRequirements.push('Include practical meal/snack windows every day.');
+  }
+  if (constraints.includeOutdoorPlay) {
+    routineRequirements.push('Include an outdoor gross-motor play block each day.');
+  }
+  if (constraints.includeStoryCircle) {
+    routineRequirements.push('Include at least one story, read-aloud, or circle-time literacy block per day.');
+  }
+  if (constraints.includeTransitionCues) {
+    routineRequirements.push('Provide explicit transition cues between blocks.');
+  }
+  if (constraints.includeHygieneChecks) {
+    routineRequirements.push('Include hygiene routines (e.g., handwashing or cleanup) as part of the daily flow.');
+  }
 
   return [
     'Generate a CAPS-aligned preschool weekly school routine from term context.',
@@ -811,9 +1046,24 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     `Week start: ${startOfWeekMonday(input.weekStartDate)}`,
     `Weekly objectives: ${objectivesText}`,
     `Constraints: ${JSON.stringify(constraints)}`,
+    ...(preflight
+      ? [
+          'MANDATORY PREFLIGHT ANSWERS (do not ignore):',
+          `- Non-negotiable anchors: ${preflight.nonNegotiableAnchors}`,
+          `- Fixed weekly events/constraints: ${preflight.fixedWeeklyEvents}`,
+          `- After-lunch pattern + transitions: ${preflight.afterLunchPattern}`,
+          `- Resource/staff constraints: ${preflight.resourceConstraints}`,
+          `- Safety/compliance + fallback rules: ${preflight.safetyCompliance}`,
+        ]
+      : []),
+    ...(routineRequirements.length > 0
+      ? [`Routine essentials to enforce: ${routineRequirements.join(' ')}`]
+      : []),
     'This routine is for in-school use only.',
     'Do not include parent tips, home activities, or parent communication advice.',
     'Ensure activities align to CAPS/ECD outcomes for South African preschool classrooms.',
+    'Each weekday must include visible CAPS/ECD strand coverage for Home Language, Mathematics, and Life Skills.',
+    'Mention strand signals in block titles/objectives/notes so compliance can be machine-checked.',
     ...(input.schoolName
       ? ['If naming the school anywhere, use the exact provided school name only and do not invent alternatives.']
       : []),

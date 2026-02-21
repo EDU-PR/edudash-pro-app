@@ -13,6 +13,7 @@ import { resolveExplicitSchoolTypeFromProfile, type ResolvedSchoolType } from '@
 import { useAdminDashboardPack } from '@/hooks/useAdminDashboardPack';
 import { useAdminDashboardData } from '@/hooks/useAdminDashboardData';
 import { useAdminOperationalSnapshot } from '@/hooks/useAdminOperationalSnapshot';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 import { AdminWorkflowService } from '@/services/AdminWorkflowService';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import {
@@ -62,6 +63,7 @@ export default function AdaptiveAdminDashboardScreen() {
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
 
   const [screeningRequestId, setScreeningRequestId] = useState<string | null>(null);
 
@@ -264,6 +266,41 @@ export default function AdaptiveAdminDashboardScreen() {
     );
   }
 
+  const visibleTasks = hideFeesOnDashboards
+    ? pack.tasks.filter((task) => task.category !== 'finance')
+    : pack.tasks;
+  const visibleWorkflows = hideFeesOnDashboards
+    ? { ...bundle.workflows, finance_ops: [] }
+    : bundle.workflows;
+  const containsFinanceSignal = (value: string | undefined | null) =>
+    /payment|fee|pop|finance|cash|invoice/i.test(String(value || ''));
+  const visibleInbox = hideFeesOnDashboards
+    ? bundle.inbox.filter((item) => !(
+        containsFinanceSignal(item.request_type) ||
+        containsFinanceSignal(item.title) ||
+        containsFinanceSignal(item.subtitle)
+      ))
+    : bundle.inbox;
+  const visibleEscalations = hideFeesOnDashboards
+    ? bundle.escalations.filter((item) => !(
+        containsFinanceSignal(item.request_type) ||
+        containsFinanceSignal(item.title) ||
+        containsFinanceSignal(item.subtitle)
+      ))
+    : bundle.escalations;
+  const visibleActivity = hideFeesOnDashboards
+    ? bundle.activity.filter((item) => !(
+        containsFinanceSignal(item.request_type) ||
+        containsFinanceSignal(item.summary)
+      ))
+    : bundle.activity;
+  const visibleCounters = hideFeesOnDashboards
+    ? {
+        ...bundle.counters,
+        pending_finance: 0,
+      }
+    : bundle.counters;
+
   return (
     <>
       <Stack.Screen options={{ title: 'Adaptive Admin Dashboard', headerShown: false }} />
@@ -273,7 +310,7 @@ export default function AdaptiveAdminDashboardScreen() {
           <AdminDashboardShell
             orgName={organizationName}
             orgTypeLabel={formatOrgTypeLabel(orgType)}
-            counters={bundle?.counters || EMPTY_ADMIN_COUNTERS}
+            counters={visibleCounters || EMPTY_ADMIN_COUNTERS}
             onRefresh={() => {
               refetch();
             }}
@@ -282,19 +319,21 @@ export default function AdaptiveAdminDashboardScreen() {
             <AdminOperationalSnapshot
               metrics={operationalSnapshot}
               loading={operationalSnapshotLoading}
+              hideFinancialMetrics={hideFeesOnDashboards}
             />
-            <AdminOperationalInbox items={bundle.inbox} onOpenItem={handleOpenInboxItem} />
+            <AdminOperationalInbox items={visibleInbox} onOpenItem={handleOpenInboxItem} />
             <AdminWorkflowLanes
-              workflows={bundle.workflows}
+              workflows={visibleWorkflows}
               laneRoutes={pack.laneRoutes}
+              hiddenLanes={hideFeesOnDashboards ? ['finance_ops'] : []}
               screeningRequestId={screeningRequestId}
               onOpenLaneRoute={handleOpenLane}
               onOpenWorkflowItem={handleOpenWorkflowItem}
               onScreenAction={handleScreenAction}
             />
-            <AdminTaskPackGrid tasks={pack.tasks} counters={bundle.counters} onOpenTask={handleOpenTask} />
-            <AdminEscalationPanel items={bundle.escalations} onOpenItem={handleOpenWorkflowItem} />
-            <AdminActivityFeed items={bundle.activity} />
+            <AdminTaskPackGrid tasks={visibleTasks} counters={visibleCounters} onOpenTask={handleOpenTask} />
+            <AdminEscalationPanel items={visibleEscalations} onOpenItem={handleOpenWorkflowItem} />
+            <AdminActivityFeed items={visibleActivity} />
           </AdminDashboardShell>
         </View>
       </DesktopLayout>

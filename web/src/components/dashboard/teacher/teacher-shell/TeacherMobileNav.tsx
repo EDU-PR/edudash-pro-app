@@ -24,12 +24,12 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
   const router = useRouter();
   const pathname = usePathname();
   const lastPathnameRef = useRef(pathname);
-  const [isMobileViewport, setIsMobileViewport] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < COMPACT_BREAKPOINT
-  );
+  // Start false to match SSR; sync in useEffect to avoid hydration mismatch
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     const check = () => setIsMobileViewport(window.innerWidth < COMPACT_BREAKPOINT);
+    check(); // Run on mount (client-only)
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);

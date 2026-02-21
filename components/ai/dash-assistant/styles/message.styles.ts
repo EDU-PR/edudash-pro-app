@@ -434,6 +434,7 @@ export const messageStyles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 96,
+    zIndex: 120,
     width: 44,
     height: 44,
     borderRadius: 22,

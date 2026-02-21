@@ -26,6 +26,8 @@ interface SuperAdminShellProps {
   children: React.ReactNode;
   rightSidebar?: React.ReactNode;
   hideRightSidebar?: boolean;
+  /** Rendered in the topbar right group before the avatar (e.g. RegistrationNotifications) */
+  topBarRight?: React.ReactNode;
 }
 
 export function SuperAdminShell({
@@ -34,6 +36,7 @@ export function SuperAdminShell({
   children,
   rightSidebar,
   hideRightSidebar = false,
+  topBarRight,
 }: SuperAdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,8 +48,9 @@ export function SuperAdminShell({
     { href: '/admin/users', label: 'User Management', icon: Users },
     { href: '/admin/registrations', label: 'Registrations', icon: Users },
     { href: '/admin/promotions', label: 'Promotions', icon: DollarSign },
-    { href: '/admin/ai-config', label: 'AI Configuration', icon: Zap },
+    { href: '/admin/ai-config', label: 'AI Config', icon: Zap },
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
+    { href: '/admin/ai-usage', label: 'AI Usage', icon: TrendingUp },
     { href: '/admin/monitoring', label: 'System Monitoring', icon: Activity },
     { href: '/admin/settings', label: 'Settings', icon: Settings },
   ];
@@ -94,7 +98,8 @@ export function SuperAdminShell({
               }}>Super Admin</span>
             </div>
           </div>
-          <div className="rightGroup" style={{ marginLeft: 'auto' }}>
+          <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            {topBarRight}
             <div className="avatar" style={{ 
               background: 'linear-gradient(135deg, #dc2626 0%, #ea580c 100%)',
               border: '2px solid white'

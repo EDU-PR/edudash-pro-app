@@ -232,6 +232,19 @@ export default function HomeworkPage() {
 
   // Separate homework by status
   const today = new Date().toISOString().split('T')[0];
+  const activeChild = childrenCards.find((child) => child.id === activeChildId) || null;
+  const preschoolGradeLike = (activeChild?.grade || '').toLowerCase().includes('preschool')
+    || (activeChild?.grade || '').toLowerCase().includes('grade r');
+  const isPreschoolContext = preschoolGradeLike || Boolean(activeChild?.preschoolId);
+  const pageTitle = isPreschoolContext ? 'Take-home Activities' : 'Homework';
+  const pageSubtitle = hasOrganization
+    ? (
+      isPreschoolContext
+        ? 'Worksheets and routine-friendly activities for your child at home.'
+        : "Track your child's school assignments and get AI homework help"
+    )
+    : 'AI-powered homework assistance and practice';
+
   const pendingHomework = homework?.filter(hw => 
     !hw.submissions || hw.submissions.length === 0
   ).filter(hw => hw.due_date >= today) || [];
@@ -254,10 +267,8 @@ export default function HomeworkPage() {
     >
       <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
         <SubPageHeader 
-          title="Homework"
-          subtitle={hasOrganization 
-            ? 'Track your child\'s school assignments and get AI homework help' 
-            : 'AI-powered homework assistance and practice'}
+          title={pageTitle}
+          subtitle={pageSubtitle}
           icon={<FileText size={28} color="white" />}
         />
         
@@ -504,9 +515,13 @@ export default function HomeworkPage() {
                 {homework && homework.length === 0 && (
                   <div className="card" style={{ padding: 48, textAlign: 'center' }}>
                     <BookOpen size={64} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
-                    <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No homework assigned yet</h3>
+                    <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+                      {isPreschoolContext ? 'No take-home activities yet' : 'No homework assigned yet'}
+                    </h3>
                     <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-                      When your child's teacher assigns homework, it will appear here.
+                      {isPreschoolContext
+                        ? "When your child's teacher assigns a worksheet or activity, it will appear here."
+                        : "When your child's teacher assigns homework, it will appear here."}
                     </p>
                   </div>
                 )}

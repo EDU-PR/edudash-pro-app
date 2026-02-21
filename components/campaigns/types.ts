@@ -92,6 +92,9 @@ export const INITIAL_FORM_STATE: CampaignFormState = {
   featured: false,
 };
 
+// Base registration fee (R) used for discount breakdown display
+const BASE_REGISTRATION_FEE = 400;
+
 // Helper to get discount display text
 export function getDiscountDisplayText(campaign: Campaign): string {
   switch (campaign.discount_type) {
@@ -106,4 +109,19 @@ export function getDiscountDisplayText(campaign: Campaign): string {
     default:
       return '';
   }
+}
+
+/** Registration fee breakdown for display (e.g. "R400 → R200") when applicable */
+export function getRegistrationDiscountBreakdown(campaign: Campaign): string | null {
+  const pct = campaign.discount_type === 'percentage' ? (campaign.discount_value ?? 0) : 0;
+  const fixed = campaign.discount_type === 'fixed_amount' ? (campaign.discount_value ?? 0) : 0;
+  if (pct > 0 && pct <= 100) {
+    const final = Math.round(BASE_REGISTRATION_FEE * (1 - pct / 100));
+    return `R${BASE_REGISTRATION_FEE} → R${final}`;
+  }
+  if (fixed > 0 && fixed < BASE_REGISTRATION_FEE) {
+    const final = BASE_REGISTRATION_FEE - fixed;
+    return `R${BASE_REGISTRATION_FEE} → R${final}`;
+  }
+  return null;
 }

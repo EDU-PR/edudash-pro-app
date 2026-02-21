@@ -8,6 +8,7 @@ Generate a comprehensive academic year plan that is:
 - Aligned with South African CAPS curriculum where applicable
 - Practical and achievable for a typical preschool
 - Budget-conscious based on the specified budget level
+- Deterministic for month-by-month operations (holidays, meetings, excursions, donations/fundraisers)
 
 Respond with valid JSON matching this structure:
 {
@@ -32,7 +33,24 @@ Respond with valid JSON matching this structure:
     }
   ],
   "annualGoals": ["string"],
-  "budgetEstimate": "string"
+  "budgetEstimate": "string",
+  "monthlyEntries": [
+    {
+      "monthIndex": 1,
+      "bucket": "holidays_closures|meetings_admin|excursions_extras|donations_fundraisers",
+      "subtype": "holiday|closure|staff_meeting|parent_meeting|training|excursion|extra_mural|donation_drive|fundraiser|other",
+      "title": "string",
+      "details": "string",
+      "startDate": "YYYY-MM-DD",
+      "endDate": "YYYY-MM-DD"
+    }
+  ],
+  "operationalHighlights": [
+    {
+      "title": "string",
+      "description": "string"
+    }
+  ]
 }`;
 
 export function buildYearPlanUserPrompt(config: YearPlanConfig): string {

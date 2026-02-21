@@ -35,6 +35,10 @@ export const useTeacherThreads = () => {
             is_archived,
             last_message_at,
             created_at,
+            is_group,
+            group_type,
+            group_name,
+            class_id,
             student:students(id, first_name, last_name),
             message_participants!inner(
               user_id,

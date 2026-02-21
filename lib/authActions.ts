@@ -51,12 +51,25 @@ export function isAccountSwitchPending(): boolean {
 // ── Account switch in progress (biometric restore) ─────────────────────────
 // When true, SIGNED_OUT is ignored (no clear, no redirect) so the next SIGNED_IN can complete the switch.
 let _accountSwitchInProgress = false;
+let _accountSwitchInProgressStartedAt = 0;
+const ACCOUNT_SWITCH_IN_PROGRESS_STALE_MS = 45_000;
 
 export function setAccountSwitchInProgress(value: boolean): void {
   _accountSwitchInProgress = value;
+  _accountSwitchInProgressStartedAt = value ? Date.now() : 0;
 }
 
 export function isAccountSwitchInProgress(): boolean {
+  if (
+    _accountSwitchInProgress &&
+    _accountSwitchInProgressStartedAt > 0 &&
+    Date.now() - _accountSwitchInProgressStartedAt > ACCOUNT_SWITCH_IN_PROGRESS_STALE_MS
+  ) {
+    console.warn('[authActions] accountSwitchInProgress flag became stale, resetting');
+    _accountSwitchInProgress = false;
+    _accountSwitchInProgressStartedAt = 0;
+    return false;
+  }
   return _accountSwitchInProgress;
 }
 
@@ -174,7 +187,9 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
       ? `${targetRoute}${targetRoute.includes('?') ? '&' : '?'}fresh=1`
       : targetRoute;
   const shouldExitApp = Platform.OS === 'android' && options?.exitApp === true;
-  const shouldResetApp = options?.resetApp !== false;
+  // Default OFF: full app reset during sign-out can briefly remount into an empty shell
+  // on slower devices. Keep it opt-in for explicit recovery flows.
+  const shouldResetApp = options?.resetApp === true;
   const preserveOtherSessions =
     options?.preserveOtherSessions !== false; // default: true (local sign-out preserves biometric sessions)
   

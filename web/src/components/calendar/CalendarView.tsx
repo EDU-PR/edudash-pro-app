@@ -52,6 +52,7 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
       sports_day: '#F59E0B',
       graduation: '#EC4899',
       fundraiser: '#14B8A6',
+      donation_drive: '#0EA5A4',
       other: '#6B7280',
     };
     return colors[type] || colors.other;
@@ -138,6 +139,7 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
           sports_day: 'Sports Day',
           graduation: 'Graduation',
           fundraiser: 'Fundraiser',
+          donation_drive: 'Donation Drive',
         }).map(([type, label]) => (
           <div key={type} className="calendar-legend-item">
             <div

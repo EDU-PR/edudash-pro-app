@@ -7,6 +7,10 @@ export interface MessageReaction {
   emoji: string;
   count: number;
   hasReacted: boolean;
+  /** User IDs who reacted (for native long-press to show names) */
+  reactedByUserIds?: string[];
+  /** Resolved names for display (web and native when available) */
+  reactedBy?: { id: string; first_name?: string; last_name?: string }[];
 }
 
 export interface Message {
@@ -20,6 +24,7 @@ export interface Message {
     first_name?: string; 
     last_name?: string; 
     role?: string;
+    avatar_url?: string | null;
   };
   read_by?: string[];
   delivered_at?: string; // Timestamp when message was delivered

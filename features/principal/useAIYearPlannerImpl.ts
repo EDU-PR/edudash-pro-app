@@ -14,6 +14,9 @@ import type {
   WeeklyTheme,
   PlannedExcursion,
   PlannedMeeting,
+  YearPlanMonthlyEntry,
+  YearPlanMonthlyBucket,
+  YearPlanOperationalHighlight,
 } from '@/components/principal/ai-planner/types';
 
 interface UseAIYearPlannerOptions {
@@ -55,6 +58,13 @@ const GENERATED_MARKER = '[AI_YEAR_PLANNER]';
 const DEFAULT_MEETING_START_TIME = '09:00';
 const DEFAULT_MEETING_END_TIME = '10:00';
 const DEFAULT_WEEKLY_THEMES_PER_TERM = 10;
+const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const MONTHLY_BUCKETS: YearPlanMonthlyBucket[] = [
+  'holidays_closures',
+  'meetings_admin',
+  'excursions_extras',
+  'donations_fundraisers',
+];
 
 function toStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -180,6 +190,220 @@ function normalizeMeeting(raw: unknown, fallbackDate: string): PlannedMeeting {
   };
 }
 
+function parseMonthIndex(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = Math.trunc(value);
+    if (parsed >= 1 && parsed <= 12) return parsed;
+  }
+
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+
+  const asNum = Number(text);
+  if (Number.isFinite(asNum)) {
+    const parsed = Math.trunc(asNum);
+    if (parsed >= 1 && parsed <= 12) return parsed;
+  }
+
+  const upper = text.toUpperCase().slice(0, 3);
+  const monthIndex = MONTH_NAMES.indexOf(upper);
+  if (monthIndex >= 0) return monthIndex + 1;
+
+  return fallback;
+}
+
+function inferMonthlySubtype(bucket: YearPlanMonthlyBucket, title: string): string {
+  const haystack = title.toLowerCase();
+  if (bucket === 'holidays_closures') {
+    if (haystack.includes('holiday')) return 'holiday';
+    if (haystack.includes('close') || haystack.includes('break')) return 'closure';
+    return 'other';
+  }
+  if (bucket === 'meetings_admin') {
+    if (haystack.includes('staff')) return 'staff_meeting';
+    if (haystack.includes('parent')) return 'parent_meeting';
+    if (haystack.includes('train')) return 'training';
+    return 'other';
+  }
+  if (bucket === 'excursions_extras') {
+    if (haystack.includes('excursion') || haystack.includes('visit') || haystack.includes('trip')) return 'excursion';
+    if (haystack.includes('extra') || haystack.includes('sports') || haystack.includes('ballet')) return 'extra_mural';
+    return 'other';
+  }
+  if (haystack.includes('donation') || haystack.includes('drive')) return 'donation_drive';
+  if (haystack.includes('fundraiser') || haystack.includes('raffle') || haystack.includes('sale') || haystack.includes('market')) {
+    return 'fundraiser';
+  }
+  return 'other';
+}
+
+function normalizeMonthlyBucket(value: unknown): YearPlanMonthlyBucket {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'holidays_closures';
+  if (MONTHLY_BUCKETS.includes(raw as YearPlanMonthlyBucket)) {
+    return raw as YearPlanMonthlyBucket;
+  }
+  if (raw.includes('holiday') || raw.includes('closure')) return 'holidays_closures';
+  if (raw.includes('meeting') || raw.includes('admin') || raw.includes('staff')) return 'meetings_admin';
+  if (raw.includes('excursion') || raw.includes('extra')) return 'excursions_extras';
+  if (raw.includes('donation') || raw.includes('fundraiser')) return 'donations_fundraisers';
+  return 'holidays_closures';
+}
+
+function normalizeMonthlyEntry(raw: unknown, index: number): YearPlanMonthlyEntry {
+  const item = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const fallbackMonth = ((index % 12) + 1);
+  const monthIndex = parseMonthIndex(
+    item.monthIndex ?? item.month_index ?? item.month ?? item.monthName ?? item.month_name,
+    fallbackMonth,
+  );
+  const bucket = normalizeMonthlyBucket(item.bucket ?? item.category ?? item.column ?? item.type);
+  const title = String(item.title || item.name || '').trim() || `${MONTH_NAMES[monthIndex - 1]} item`;
+  const subtypeRaw = item.subtype ?? item.eventType ?? item.event_type ?? item.kind;
+  const subtype = String(subtypeRaw || '').trim() || inferMonthlySubtype(bucket, title);
+
+  const startDate = String(item.startDate || item.start_date || '').trim();
+  const endDate = String(item.endDate || item.end_date || '').trim();
+
+  return {
+    monthIndex,
+    bucket,
+    subtype,
+    title,
+    details: String(item.details || item.description || '').trim() || null,
+    startDate: isValidDate(startDate) ? startDate : null,
+    endDate: isValidDate(endDate) ? endDate : null,
+    source: 'ai',
+    isPublished: false,
+    publishedToCalendar: false,
+  };
+}
+
+function normalizeMonthlyEntries(source: Record<string, unknown>, terms: GeneratedTerm[]): YearPlanMonthlyEntry[] {
+  const monthlyFromPayload = Array.isArray(source.monthlyEntries)
+    ? source.monthlyEntries
+    : Array.isArray(source.monthly_entries)
+      ? source.monthly_entries
+      : [];
+
+  const normalized = monthlyFromPayload
+    .map((entry, index) => normalizeMonthlyEntry(entry, index))
+    .filter((entry) => entry.title.trim().length > 0);
+
+  if (normalized.length > 0) {
+    return normalized.sort((a, b) => a.monthIndex - b.monthIndex || a.bucket.localeCompare(b.bucket));
+  }
+
+  const derived: YearPlanMonthlyEntry[] = [];
+
+  terms.forEach((term) => {
+    const termMonth = parseMonthIndex(term.startDate.slice(5, 7), 1);
+    derived.push({
+      monthIndex: termMonth,
+      bucket: 'holidays_closures',
+      subtype: 'closure',
+      title: `${term.name} starts`,
+      details: `${term.startDate} to ${term.endDate}`,
+      startDate: term.startDate,
+      endDate: term.endDate,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
+
+    term.meetings.forEach((meeting) => {
+      const monthIndex = parseMonthIndex(meeting.suggestedDate.slice(5, 7), termMonth);
+      derived.push({
+        monthIndex,
+        bucket: 'meetings_admin',
+        subtype: normalizeMeetingType(meeting.type),
+        title: meeting.title,
+        details: meeting.agenda.join('; ') || null,
+        startDate: meeting.suggestedDate,
+        endDate: meeting.suggestedDate,
+        source: 'ai',
+        isPublished: false,
+        publishedToCalendar: false,
+      });
+    });
+
+    term.excursions.forEach((excursion) => {
+      const monthIndex = parseMonthIndex(excursion.suggestedDate.slice(5, 7), termMonth);
+      derived.push({
+        monthIndex,
+        bucket: 'excursions_extras',
+        subtype: 'excursion',
+        title: excursion.title,
+        details: excursion.destination || null,
+        startDate: excursion.suggestedDate,
+        endDate: excursion.suggestedDate,
+        source: 'ai',
+        isPublished: false,
+        publishedToCalendar: false,
+      });
+    });
+  });
+
+  return derived
+    .filter((entry) => entry.title.trim().length > 0)
+    .sort((a, b) => a.monthIndex - b.monthIndex || a.bucket.localeCompare(b.bucket));
+}
+
+function normalizeOperationalHighlights(source: Record<string, unknown>, monthlyEntries: YearPlanMonthlyEntry[]): YearPlanOperationalHighlight[] {
+  const candidate = Array.isArray(source.operationalHighlights)
+    ? source.operationalHighlights
+    : Array.isArray(source.operational_highlights)
+      ? source.operational_highlights
+      : [];
+
+  const explicit = candidate
+    .map((item) => {
+      if (typeof item === 'string') {
+        const text = item.trim();
+        if (!text) return null;
+        return { title: 'Highlight', description: text };
+      }
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const title = String(record.title || 'Highlight').trim();
+      const description = String(record.description || record.details || '').trim();
+      if (!description) return null;
+      return { title, description };
+    })
+    .filter((item): item is YearPlanOperationalHighlight => Boolean(item));
+
+  if (explicit.length > 0) return explicit;
+
+  const byBucket: Record<YearPlanMonthlyBucket, number> = {
+    holidays_closures: 0,
+    meetings_admin: 0,
+    excursions_extras: 0,
+    donations_fundraisers: 0,
+  };
+  monthlyEntries.forEach((entry) => {
+    byBucket[entry.bucket] += 1;
+  });
+
+  return [
+    {
+      title: 'Term Calendar Coverage',
+      description: `${byBucket.holidays_closures} holiday/closure milestones captured across the year.`,
+    },
+    {
+      title: 'Meetings & Governance',
+      description: `${byBucket.meetings_admin} operational meetings/admin checkpoints are planned.`,
+    },
+    {
+      title: 'Experiential Learning',
+      description: `${byBucket.excursions_extras} excursions/extras are spread through the calendar.`,
+    },
+    {
+      title: 'Community Support',
+      description: `${byBucket.donations_fundraisers} donation/fundraising moments are included.`,
+    },
+  ];
+}
+
 function buildFallbackWeeklyThemes(): WeeklyTheme[] {
   return Array.from({ length: DEFAULT_WEEKLY_THEMES_PER_TERM }, (_, index) => ({
     week: index + 1,
@@ -239,6 +463,9 @@ function normalizeGeneratedPlan(raw: unknown, config: YearPlanConfig): Generated
     });
   }
 
+  const monthlyEntries = normalizeMonthlyEntries(source, terms);
+  const operationalHighlights = normalizeOperationalHighlights(source, monthlyEntries);
+
   return {
     academicYear: Number(source.academicYear) || config.academicYear,
     schoolVision:
@@ -247,6 +474,8 @@ function normalizeGeneratedPlan(raw: unknown, config: YearPlanConfig): Generated
     terms,
     annualGoals: toStringArray(source.annualGoals),
     budgetEstimate: String(source.budgetEstimate || 'TBD').trim() || 'TBD',
+    monthlyEntries,
+    operationalHighlights,
   };
 }
 
@@ -318,6 +547,7 @@ function mapPlanToRpcPayload(plan: GeneratedYearPlan, config: YearPlanConfig): R
     school_vision: plan.schoolVision,
     annual_goals: plan.annualGoals,
     budget_estimate: plan.budgetEstimate,
+    operational_highlights: plan.operationalHighlights || [],
     config: {
       number_of_terms: config.numberOfTerms,
       age_groups: config.ageGroups,
@@ -340,6 +570,18 @@ function mapPlanToRpcPayload(plan: GeneratedYearPlan, config: YearPlanConfig): R
         developmental_goals: week.activities,
         focus_area: config.focusAreas[0] || 'General Development',
       })),
+    })),
+    monthly_entries: (plan.monthlyEntries || []).map((entry) => ({
+      month_index: entry.monthIndex,
+      bucket: entry.bucket,
+      subtype: entry.subtype || inferMonthlySubtype(entry.bucket, entry.title || ''),
+      title: entry.title,
+      details: entry.details || null,
+      start_date: entry.startDate || null,
+      end_date: entry.endDate || null,
+      source: entry.source || 'ai',
+      is_published: Boolean(entry.isPublished),
+      published_to_calendar: Boolean(entry.publishedToCalendar),
     })),
   };
 }
@@ -749,13 +991,19 @@ export function useAIYearPlanner({
 
       let termsSaved = 0;
       let themesSaved = 0;
+      let monthlySaved = 0;
       let usedRpc = false;
+      let usedV2 = false;
+      let syncedEvents = 0;
+      let syncedMeetings = 0;
+      let syncedExcursions = 0;
 
       try {
-        const { data, error } = await supabase.rpc('save_ai_year_plan', {
+        const { data, error } = await supabase.rpc('save_ai_year_plan_v2', {
           p_preschool_id: organizationId,
           p_created_by: userId,
           p_plan: mapPlanToRpcPayload(normalizedPlan, config),
+          p_sync_calendar: true,
         });
 
         if (error) {
@@ -763,43 +1011,76 @@ export function useAIYearPlanner({
         }
 
         usedRpc = true;
+        usedV2 = true;
         termsSaved = Number((data as any)?.terms_saved) || normalizedPlan.terms.length;
         themesSaved = Number((data as any)?.themes_saved) || 0;
-      } catch (rpcError) {
-        console.warn('save_ai_year_plan RPC unavailable, using fallback persistence:', rpcError);
-        const fallbackSaved = await persistTermsAndThemesFallback({
+        monthlySaved = Number((data as any)?.monthly_entries_saved) || normalizedPlan.monthlyEntries.length;
+        syncedEvents = Number((data as any)?.events_synced) || 0;
+        syncedMeetings = Number((data as any)?.meetings_synced) || 0;
+        syncedExcursions = Number((data as any)?.excursions_synced) || 0;
+      } catch (v2Error) {
+        try {
+          const { data, error } = await supabase.rpc('save_ai_year_plan', {
+            p_preschool_id: organizationId,
+            p_created_by: userId,
+            p_plan: mapPlanToRpcPayload(normalizedPlan, config),
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          usedRpc = true;
+          termsSaved = Number((data as any)?.terms_saved) || normalizedPlan.terms.length;
+          themesSaved = Number((data as any)?.themes_saved) || 0;
+          monthlySaved = normalizedPlan.monthlyEntries.length;
+        } catch (legacyRpcError) {
+          console.warn('Year plan RPC unavailable, using fallback persistence:', {
+            v2Error,
+            legacyRpcError,
+          });
+          const fallbackSaved = await persistTermsAndThemesFallback({
+            organizationId,
+            userId,
+            plan: normalizedPlan,
+            config,
+          });
+          termsSaved = fallbackSaved.termsSaved;
+          themesSaved = fallbackSaved.themesSaved;
+          monthlySaved = normalizedPlan.monthlyEntries.length;
+        }
+      }
+
+      if (!usedV2) {
+        const termIdMap = await loadTermIdMap({
+          organizationId,
+          academicYear: normalizedPlan.academicYear,
+          termNumbers: normalizedPlan.terms.map((term) => term.termNumber),
+        });
+
+        const extraSaved = await persistExcursionsMeetingsAndEvents({
           organizationId,
           userId,
           plan: normalizedPlan,
           config,
+          termIdMap,
         });
-        termsSaved = fallbackSaved.termsSaved;
-        themesSaved = fallbackSaved.themesSaved;
+
+        syncedExcursions = extraSaved.excursionsSaved;
+        syncedMeetings = extraSaved.meetingsSaved;
+        syncedEvents = extraSaved.specialEventsSaved;
       }
-
-      const termIdMap = await loadTermIdMap({
-        organizationId,
-        academicYear: normalizedPlan.academicYear,
-        termNumbers: normalizedPlan.terms.map((term) => term.termNumber),
-      });
-
-      const extraSaved = await persistExcursionsMeetingsAndEvents({
-        organizationId,
-        userId,
-        plan: normalizedPlan,
-        config,
-        termIdMap,
-      });
 
       showPlannerAlert({
         title: 'Success',
         message: [
-          `Year plan saved successfully (${usedRpc ? 'transactional' : 'fallback'} mode).`,
+          `Year plan saved successfully (${usedV2 ? 'v2 monthly model' : usedRpc ? 'legacy transactional' : 'fallback'} mode).`,
           `Terms: ${termsSaved}`,
           `Weekly themes: ${themesSaved}`,
-          `Excursions: ${extraSaved.excursionsSaved}`,
-          `Meetings: ${extraSaved.meetingsSaved}`,
-          `Special events: ${extraSaved.specialEventsSaved}`,
+          `Monthly items: ${monthlySaved}`,
+          `Calendar sync - events: ${syncedEvents}`,
+          `Calendar sync - meetings: ${syncedMeetings}`,
+          `Calendar sync - excursions: ${syncedExcursions}`,
         ].join('\n'),
         type: 'success',
         buttons: [

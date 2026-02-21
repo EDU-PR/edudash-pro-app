@@ -26,6 +26,16 @@ try { const h = require('@/hooks/useParentMessaging'); useThreadMessages = h.use
 try { const w = require('@/components/messaging/ChatWallpaperPicker'); getStoredWallpaper = w.getStoredWallpaper; WALLPAPER_PRESETS = w.WALLPAPER_PRESETS || []; } catch {}
 try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
 export type ChatRow = { type: 'date'; key: string; label: string } | { type: 'message'; key: string; msg: Message; isFirstInGroup: boolean; isLastInGroup: boolean };
+export type ThreadParticipant = {
+  user_id: string;
+  role: string;
+  user_profile?: {
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string | null;
+    role?: string;
+  } | null;
+};
 
 export function useParentMessageThread(threadId: string, userId: string | undefined, userEmail: string | undefined) {
   const listRef = useRef<FlashListRef<any> | null>(null);
@@ -49,6 +59,7 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
   const [showScrollFab, setShowScrollFab] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [threadParticipantCount, setThreadParticipantCount] = useState<number | null>(null);
+  const [threadParticipants, setThreadParticipants] = useState<ThreadParticipant[]>([]);
   // Keyboard
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -67,21 +78,31 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
 
     if (!threadId) {
       setThreadParticipantCount(null);
+      setThreadParticipants([]);
       return;
     }
 
     (async () => {
       try {
-        const { count, error } = await assertSupabase()
+        const { data, count, error } = await assertSupabase()
           .from('message_participants')
-          .select('user_id', { count: 'exact', head: true })
+          .select(
+            `
+              user_id,
+              role,
+              user_profile:profiles(first_name, last_name, avatar_url, role)
+            `,
+            { count: 'exact' }
+          )
           .eq('thread_id', threadId);
 
         if (!isCancelled) {
+          setThreadParticipants((data || []) as ThreadParticipant[]);
           setThreadParticipantCount(!error && typeof count === 'number' ? count : null);
         }
       } catch {
         if (!isCancelled) {
+          setThreadParticipants([]);
           setThreadParticipantCount(null);
         }
       }
@@ -239,6 +260,7 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
     showOptionsMenu, setShowOptionsMenu, selectedMessage, setSelectedMessage,
     showMessageActions, setShowMessageActions, currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId,
     replyingTo, setReplyingTo, showScrollFab, showScheduler, setShowScheduler,
+    threadParticipantCount, threadParticipants,
     messages, loading, error, refetch, allMessages, voiceMessageIdsAsc, rowsAsc,
     getWallpaperGradient, otherParticipant, showSenderNames,
     handleSend, handleVoiceRecording, handleImageAttach, handleMessageLongPress,

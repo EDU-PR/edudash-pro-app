@@ -8,7 +8,7 @@ import type { VoiceProvider, VoiceSession } from '@/lib/voice/unifiedProvider';
 import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { track } from '@/lib/analytics';
-import { cleanForTTS, splitForTTS, TTS_CHUNK_MAX_LEN } from '@/lib/dash-voice-utils';
+import { buildVoicePlaybackText, cleanForTTS, splitForTTS, TTS_CHUNK_MAX_LEN } from '@/lib/dash-voice-utils';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 type VoiceRefs = {
@@ -17,9 +17,14 @@ type VoiceRefs = {
   voiceInputStartAtRef: React.MutableRefObject<number | null>;
   lastSpeakStartRef: React.MutableRefObject<number | null>;
   ttsSessionIdRef?: React.MutableRefObject<string | null>;
+  sttFinalizeTimerRef?: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  sttTranscriptBufferRef?: React.MutableRefObject<string>;
 };
 
 const DEFAULT_DASH_VOICE_LOCALE = 'en-ZA';
+const TTS_FAST_START_SUMMARY_MAX_CHARS = 260;
+const TTS_FAST_START_SUMMARY_MAX_SENTENCES = 2;
+const TTS_FAST_START_FIRST_CHUNK_MAX_LEN = 220;
 
 function countMatches(input: string, pattern: RegExp): number {
   return (input.match(pattern) || []).length;
@@ -88,12 +93,40 @@ function resolveSpeechLocale(message: DashMessage, responseText: string, fallbac
     : DEFAULT_DASH_VOICE_LOCALE;
 }
 
+function mergeTranscriptFragments(base: string, incoming: string): string {
+  const left = String(base || '').trim();
+  const right = String(incoming || '').trim();
+  if (!left) return right;
+  if (!right) return left;
+
+  const leftLower = left.toLowerCase();
+  const rightLower = right.toLowerCase();
+
+  if (leftLower === rightLower || leftLower.endsWith(rightLower)) return left;
+  if (rightLower.startsWith(leftLower)) return right;
+
+  const leftWords = left.split(/\s+/).filter(Boolean);
+  const rightWords = right.split(/\s+/).filter(Boolean);
+  const maxOverlap = Math.min(8, leftWords.length, rightWords.length);
+
+  for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
+    const leftTail = leftWords.slice(-overlap).join(' ').toLowerCase();
+    const rightHead = rightWords.slice(0, overlap).join(' ').toLowerCase();
+    if (leftTail === rightHead) {
+      return [...leftWords, ...rightWords.slice(overlap)].join(' ');
+    }
+  }
+
+  return `${left} ${right}`.replace(/\s+/g, ' ').trim();
+}
+
 export async function stopDashVoiceRecording(params: {
   voiceRefs: VoiceRefs;
   isFreeTier: boolean;
   consumeVoiceBudget: (deltaMs: number) => Promise<void>;
   setIsRecording: (value: boolean) => void;
   setPartialTranscript: (value: string) => void;
+  setInputText?: (value: string) => void;
 }) {
   const {
     voiceRefs,
@@ -101,7 +134,21 @@ export async function stopDashVoiceRecording(params: {
     consumeVoiceBudget,
     setIsRecording,
     setPartialTranscript,
+    setInputText,
   } = params;
+
+  if (voiceRefs.sttFinalizeTimerRef?.current) {
+    clearTimeout(voiceRefs.sttFinalizeTimerRef.current);
+    voiceRefs.sttFinalizeTimerRef.current = null;
+  }
+
+  const bufferedTranscript = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
+  if (bufferedTranscript) {
+    setInputText?.(bufferedTranscript);
+  }
+  if (voiceRefs.sttTranscriptBufferRef) {
+    voiceRefs.sttTranscriptBufferRef.current = '';
+  }
 
   if (!voiceRefs.voiceSessionRef.current) {
     setIsRecording(false);
@@ -141,6 +188,7 @@ export async function speakDashResponse(params: {
   hideAlert: () => void;
   setVoiceEnabled: (value: boolean) => void;
   stopSpeaking: () => Promise<void>;
+  preferFastStart?: boolean;
 }) {
   const {
     message,
@@ -158,6 +206,7 @@ export async function speakDashResponse(params: {
     hideAlert,
     setVoiceEnabled,
     stopSpeaking,
+    preferFastStart = false,
   } = params;
 
   if (!dashInstance || message.type !== 'assistant') return;
@@ -212,16 +261,26 @@ export async function speakDashResponse(params: {
   try {
     if (isFreeTier && message.content && process.env.NODE_ENV !== 'development') {
       const estimatedMs = Math.max(1500, Math.round((message.content.length / 12.5) * 1000));
-      try {
-        await consumeVoiceBudget(estimatedMs);
-      } catch (budgetError) {
+      void consumeVoiceBudget(estimatedMs).catch((budgetError) => {
         console.warn('[useDashAssistant] Voice budget update failed, continuing with playback:', budgetError);
-      }
+      });
     }
-    const speechInput = stripToolDumpForSpeech(message.content || '');
+    const rawSpeechInput = stripToolDumpForSpeech(message.content || '');
+    const speechInput = preferFastStart
+      ? buildVoicePlaybackText(rawSpeechInput, {
+          maxChars: TTS_FAST_START_SUMMARY_MAX_CHARS,
+          maxSentences: TTS_FAST_START_SUMMARY_MAX_SENTENCES,
+        })
+      : rawSpeechInput;
     const isPhonics = shouldUsePhonicsMode(speechInput || '');
     const cleaned = cleanForTTS(speechInput || '', { phonicsMode: isPhonics });
-    const chunks = splitForTTS(cleaned, TTS_CHUNK_MAX_LEN);
+    const baseChunks = splitForTTS(cleaned, TTS_CHUNK_MAX_LEN);
+    const chunks = preferFastStart && baseChunks.length > 0
+      ? [
+          ...splitForTTS(baseChunks[0], TTS_FAST_START_FIRST_CHUNK_MAX_LEN),
+          ...baseChunks.slice(1),
+        ]
+      : baseChunks;
     if (chunks.length === 0) {
       setIsSpeaking(false);
       setSpeakingMessageId(null);
@@ -409,12 +468,14 @@ export async function handleDashVoiceInputPress(params: {
   setIsRecording: (value: boolean) => void;
   setPartialTranscript: (value: string) => void;
   setInputText: (value: string) => void;
+  existingInputText?: string;
   voiceAutoSend?: boolean;
   voiceAutoSendSilenceMs?: number;
   voiceWhisperFlowEnabled?: boolean;
   voiceWhisperFlowSummaryEnabled?: boolean;
   isPreschoolMode?: boolean;
   onFinalTranscript?: (text: string, options: { autoSend: boolean; delayMs: number }) => void | Promise<void>;
+  onVoiceActivity?: (active: boolean) => void;
   voiceRefs: VoiceRefs;
 }) {
   const {
@@ -433,12 +494,14 @@ export async function handleDashVoiceInputPress(params: {
     setIsRecording,
     setPartialTranscript,
     setInputText,
+    existingInputText = '',
     voiceAutoSend = false,
-    voiceAutoSendSilenceMs = 1500,
+    voiceAutoSendSilenceMs = 3200,
     voiceWhisperFlowEnabled = true,
     voiceWhisperFlowSummaryEnabled = true,
     isPreschoolMode = false,
     onFinalTranscript,
+    onVoiceActivity,
     voiceRefs,
   } = params;
 
@@ -555,12 +618,105 @@ export async function handleDashVoiceInputPress(params: {
 
     const session = provider.createSession();
     voiceRefs.voiceSessionRef.current = session;
+    if (voiceRefs.sttFinalizeTimerRef?.current) {
+      clearTimeout(voiceRefs.sttFinalizeTimerRef.current);
+      voiceRefs.sttFinalizeTimerRef.current = null;
+    }
+    const transcriptSeed = String(existingInputText || '').trim();
+    if (voiceRefs.sttTranscriptBufferRef) {
+      voiceRefs.sttTranscriptBufferRef.current = transcriptSeed;
+    }
+    const finalizeDelayMs = Math.max(1800, Math.min(8000, Number(voiceAutoSendSilenceMs) || 1800));
+    let voiceActivityTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const setVoiceActivity = (active: boolean) => {
+      onVoiceActivity?.(active);
+    };
+
+    const clearVoiceActivityTimeout = () => {
+      if (voiceActivityTimeout) {
+        clearTimeout(voiceActivityTimeout);
+        voiceActivityTimeout = null;
+      }
+    };
+
+    const pulseVoiceActivity = () => {
+      setVoiceActivity(true);
+      clearVoiceActivityTimeout();
+      voiceActivityTimeout = setTimeout(() => {
+        setVoiceActivity(false);
+      }, 900);
+    };
+
+    const clearFinalizeTimer = () => {
+      if (voiceRefs.sttFinalizeTimerRef?.current) {
+        clearTimeout(voiceRefs.sttFinalizeTimerRef.current);
+        voiceRefs.sttFinalizeTimerRef.current = null;
+      }
+    };
+
+    const commitTranscriptAndStop = async () => {
+      clearFinalizeTimer();
+      clearVoiceActivityTimeout();
+      setVoiceActivity(false);
+      const bufferedTranscript = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
+      if (bufferedTranscript) {
+        setInputText(bufferedTranscript);
+      }
+      setPartialTranscript('');
+
+      if (voiceRefs.voiceSessionRef.current?.isActive?.()) {
+        await voiceRefs.voiceSessionRef.current.stop().catch(() => {});
+      }
+      voiceRefs.voiceSessionRef.current = null;
+      setIsRecording(false);
+
+      if (isFreeTier && voiceRefs.voiceInputStartAtRef.current) {
+        const deltaMs = Math.max(0, Date.now() - voiceRefs.voiceInputStartAtRef.current);
+        void consumeVoiceBudget(deltaMs).catch(() => {});
+        voiceRefs.voiceInputStartAtRef.current = null;
+      }
+
+      if (bufferedTranscript) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        track('edudash.voice.input_completed', {
+          transcript_length: bufferedTranscript.length,
+          user_tier: tier || 'free',
+        });
+        onFinalTranscript?.(bufferedTranscript, { autoSend: !!voiceAutoSend, delayMs: finalizeDelayMs });
+      }
+
+      if (voiceRefs.sttTranscriptBufferRef) {
+        voiceRefs.sttTranscriptBufferRef.current = '';
+      }
+    };
+
+    const scheduleFinalize = () => {
+      clearFinalizeTimer();
+      const finalizeTimer = setTimeout(() => {
+        void commitTranscriptAndStop();
+      }, finalizeDelayMs);
+      if (voiceRefs.sttFinalizeTimerRef) {
+        voiceRefs.sttFinalizeTimerRef.current = finalizeTimer;
+      }
+    };
 
     const started = await session.start({
       language: voiceLocale,
       onPartial: (text: string) => {
-        setPartialTranscript(text);
-        setInputText(text);
+        clearFinalizeTimer();
+        const partial = String(text || '').trim();
+        if (!partial) {
+          return;
+        }
+        pulseVoiceActivity();
+        const buffered = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
+        const merged = mergeTranscriptFragments(buffered, partial);
+        if (voiceRefs.sttTranscriptBufferRef) {
+          voiceRefs.sttTranscriptBufferRef.current = merged;
+        }
+        setPartialTranscript(partial);
+        setInputText(merged);
       },
       onFinal: (text: string) => {
         const formatted = formatTranscript(text, voiceLocale, {
@@ -569,25 +725,20 @@ export async function handleDashVoiceInputPress(params: {
           preschoolMode: isPreschoolMode,
           maxSummaryWords: isPreschoolMode ? 16 : 20,
         });
-        setInputText(formatted);
-        setPartialTranscript('');
-        setIsRecording(false);
-        if (isFreeTier && voiceRefs.voiceInputStartAtRef.current) {
-          const deltaMs = Math.max(0, Date.now() - voiceRefs.voiceInputStartAtRef.current);
-          consumeVoiceBudget(deltaMs);
-          voiceRefs.voiceInputStartAtRef.current = null;
+        const chunk = String(formatted || '').trim();
+        if (!chunk) {
+          scheduleFinalize();
+          return;
         }
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-
-        track('edudash.voice.input_completed', {
-          transcript_length: text.length,
-          user_tier: tier || 'free',
-        });
-
-        const autoSend = !!voiceAutoSend;
-        const delayMs = Math.max(400, Math.min(2000, Number(voiceAutoSendSilenceMs) || 600));
-        onFinalTranscript?.(formatted, { autoSend, delayMs });
+        pulseVoiceActivity();
+        const buffered = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
+        const merged = mergeTranscriptFragments(buffered, chunk);
+        if (voiceRefs.sttTranscriptBufferRef) {
+          voiceRefs.sttTranscriptBufferRef.current = merged;
+        }
+        setInputText(merged);
+        setPartialTranscript('');
+        scheduleFinalize();
       },
       onError: (error: string) => {
         const msg = String(error || '');
@@ -595,15 +746,22 @@ export async function handleDashVoiceInputPress(params: {
           setPartialTranscript('I lost connection, retrying...');
           return;
         }
+        clearFinalizeTimer();
+        clearVoiceActivityTimeout();
+        setVoiceActivity(false);
         const isNetwork = /network|internet|offline|timeout|connection/i.test(msg);
         setIsRecording(false);
         setPartialTranscript('');
         if (voiceRefs.voiceSessionRef.current?.isActive?.()) {
           voiceRefs.voiceSessionRef.current.stop().catch(() => {});
         }
+        voiceRefs.voiceSessionRef.current = null;
+        if (voiceRefs.sttTranscriptBufferRef) {
+          voiceRefs.sttTranscriptBufferRef.current = '';
+        }
         if (isFreeTier && voiceRefs.voiceInputStartAtRef.current) {
           const deltaMs = Math.max(0, Date.now() - voiceRefs.voiceInputStartAtRef.current);
-          consumeVoiceBudget(deltaMs);
+          void consumeVoiceBudget(deltaMs).catch(() => {});
           voiceRefs.voiceInputStartAtRef.current = null;
         }
         showAlert({
@@ -621,12 +779,22 @@ export async function handleDashVoiceInputPress(params: {
     if (started) {
       setIsRecording(true);
       setPartialTranscript('');
+      setVoiceActivity(false);
+      if (voiceRefs.sttTranscriptBufferRef) {
+        voiceRefs.sttTranscriptBufferRef.current = transcriptSeed;
+      }
       voiceRefs.voiceInputStartAtRef.current = Date.now();
 
       track('edudash.voice.input_started', {
         user_tier: tier || 'free',
       });
     } else {
+      clearFinalizeTimer();
+      clearVoiceActivityTimeout();
+      setVoiceActivity(false);
+      if (voiceRefs.sttTranscriptBufferRef) {
+        voiceRefs.sttTranscriptBufferRef.current = '';
+      }
       showAlert({
         title: 'Voice Error',
         message: 'Failed to start voice recognition. Please check microphone permissions and try again.',
@@ -637,6 +805,14 @@ export async function handleDashVoiceInputPress(params: {
     }
   } catch (error) {
     console.error('[useDashAssistant] Voice recognition error:', error);
+    if (voiceRefs.sttFinalizeTimerRef?.current) {
+      clearTimeout(voiceRefs.sttFinalizeTimerRef.current);
+      voiceRefs.sttFinalizeTimerRef.current = null;
+    }
+    if (voiceRefs.sttTranscriptBufferRef) {
+      voiceRefs.sttTranscriptBufferRef.current = '';
+    }
+    onVoiceActivity?.(false);
     setIsRecording(false);
     setPartialTranscript('');
 

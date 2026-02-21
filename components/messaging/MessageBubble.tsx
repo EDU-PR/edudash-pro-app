@@ -26,6 +26,7 @@ interface MessageBubbleProps {
   msg: Message;
   isOwn: boolean;
   showSenderName?: boolean;
+  showSenderAvatar?: boolean;
   onLongPress: () => void;
   onPlaybackFinished?: () => void;
   onPlayNext?: () => void;
@@ -35,6 +36,7 @@ interface MessageBubbleProps {
   autoPlayVoice?: boolean;
   otherParticipantIds?: string[];
   onReactionPress?: (messageId: string, emoji: string) => void;
+  onReactionLongPress?: (messageId: string, emoji: string, reactedByUserIds: string[]) => void;
   onReplyPress?: (messageId: string) => void;
   onCallEventPress?: (event: CallEventContent) => void;
   isFirstInGroup?: boolean;
@@ -45,6 +47,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   msg, 
   isOwn, 
   showSenderName = true,
+  showSenderAvatar = false,
   onLongPress,
   onPlaybackFinished,
   onPlayNext,
@@ -54,12 +57,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   autoPlayVoice = false,
   otherParticipantIds = [],
   onReactionPress,
+  onReactionLongPress,
   onReplyPress,
   onCallEventPress,
   isFirstInGroup = true,
   isLastInGroup = true,
 }) => {
   const name = getSenderName(msg.sender);
+  const avatarInitials = React.useMemo(() => {
+    const first = String(msg.sender?.first_name || '').trim();
+    const last = String(msg.sender?.last_name || '').trim();
+    const initials = `${first.charAt(0)}${last.charAt(0)}`.trim().toUpperCase();
+    if (initials) return initials;
+    return name ? name.charAt(0).toUpperCase() : '?';
+  }, [msg.sender?.first_name, msg.sender?.last_name, name]);
+  const avatarUrl = String(msg.sender?.avatar_url || '').trim();
   const callEvent = parseCallEventContent(msg.content);
 
   // Determine message status for ticks
@@ -96,6 +108,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
     return (
       <View style={[styles.container, isOwn ? styles.own : styles.other]}>
         <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
+          {!isOwn && showSenderAvatar && (
+            isFirstInGroup ? (
+              <View style={styles.senderAvatar}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.senderAvatarImage} />
+                ) : (
+                  <Text style={styles.senderAvatarText}>{avatarInitials}</Text>
+                )}
+              </View>
+            ) : (
+              <View style={styles.senderAvatarSpacer} />
+            )
+          )}
           <View style={styles.voiceBubbleWrapper}>
             <VoiceMessageBubble
               audioUrl={msg.voice_url}
@@ -118,6 +143,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               reactions={msg.reactions}
               messageId={msg.id}
               onReactionPress={onReactionPress}
+              onReactionLongPress={onReactionLongPress ? (emoji, ids) => onReactionLongPress(msg.id, emoji, ids) : undefined}
             />
           </View>
         </View>
@@ -145,6 +171,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         </View>
       )}
       <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
+        {!isOwn && showSenderAvatar && (
+          isFirstInGroup ? (
+            <View style={styles.senderAvatar}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.senderAvatarImage} />
+              ) : (
+                <Text style={styles.senderAvatarText}>{avatarInitials}</Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.senderAvatarSpacer} />
+          )
+        )}
         <Pressable
           style={styles.pressableBubble}
           onLongPress={onLongPress}
@@ -287,7 +326,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                 styles.reactionPill,
                 reaction.hasReacted && styles.reactionPillActive
               ]}
-              onPress={() => onReactionPress?.(msg.id, reaction.emoji)}
+              onPress={() => {
+                const ids = reaction.reactedByUserIds ?? [];
+                if (ids.length > 0 && onReactionLongPress && reaction.count > 1) {
+                  onReactionLongPress(msg.id, reaction.emoji, ids);
+                  return;
+                }
+                onReactionPress?.(msg.id, reaction.emoji);
+              }}
+              onLongPress={() => {
+                const ids = reaction.reactedByUserIds ?? [];
+                if (ids.length > 0 && onReactionLongPress) onReactionLongPress(msg.id, reaction.emoji, ids);
+              }}
               activeOpacity={0.7}
             >
               <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
@@ -304,6 +354,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
          prevProps.showSenderName === nextProps.showSenderName &&
+         prevProps.showSenderAvatar === nextProps.showSenderAvatar &&
          prevProps.msg.content === nextProps.msg.content &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
          prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
@@ -359,6 +410,31 @@ const styles = StyleSheet.create({
   },
   bubbleRowOther: {
     justifyContent: 'flex-start',
+  },
+  senderAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+    marginBottom: 2,
+  },
+  senderAvatarText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#cbd5e1',
+  },
+  senderAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+  },
+  senderAvatarSpacer: {
+    width: 34,
   },
   voiceBubbleWrapper: {
     maxWidth: '84%',

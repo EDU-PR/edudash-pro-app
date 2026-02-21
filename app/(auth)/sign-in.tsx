@@ -1,7 +1,7 @@
 // Sign-in screen — slimmed to comply with WARP.md (≤500 lines excl. StyleSheet)
 // Heavy logic extracted to:
 //   hooks/auth/useSignInHandlers.ts
-//   app/(auth)/sign-in.styles.ts
+//   features/auth/sign-in.styles.ts
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView, RefreshControl, Keyboard } from "react-native";
@@ -23,7 +23,7 @@ import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-import { createSignInStyles } from './sign-in.styles';
+import { createSignInStyles } from '@/features/auth/sign-in.styles';
 import { useSignInHandlers } from '@/hooks/auth/useSignInHandlers';
 
 export default function SignIn() {

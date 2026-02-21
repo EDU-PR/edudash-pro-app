@@ -61,8 +61,14 @@ export interface SchoolSettings {
       allowExport: boolean;
       showDetailedBreakdown: boolean;
       requireApprovalLimit: number;
+      hideOnDashboards: boolean;
+      requirePasswordForAccess: boolean;
+      privateModeEnabled: boolean;
     };
     uniforms: {
+      enabled: boolean;
+    };
+    stationery: {
       enabled: boolean;
     };
     pettyCash: {
@@ -148,8 +154,14 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
       allowExport: true,
       showDetailedBreakdown: true,
       requireApprovalLimit: 1000,
+      hideOnDashboards: false,
+      requirePasswordForAccess: false,
+      privateModeEnabled: false,
     },
     uniforms: {
+      enabled: false,
+    },
+    stationery: {
       enabled: false,
     },
     pettyCash: {

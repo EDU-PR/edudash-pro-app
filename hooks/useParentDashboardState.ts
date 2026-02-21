@@ -25,7 +25,7 @@ import type { SearchBarSuggestion } from '@/components/dashboard/shared';
 import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 const DEFAULT_COLLAPSED_SECTIONS = [
   'overview', 'mission-control', 'uniform-sizes', 'live-classes',
-  'teacher-notes', 'progress', 'insights', 'birthdays', 'daily-activities',
+  'upcoming-reminders', 'teacher-notes', 'progress', 'insights', 'birthdays', 'daily-activities',
 ];
 const getGradeNumber = (value?: string | null): number => {
   if (!value) return 0;
@@ -114,6 +114,8 @@ export function useParentDashboardState(focusSection?: string) {
   const searchSuggestions: SearchBarSuggestion[] = useMemo(() => {
     const base: SearchBarSuggestion[] = [
       { id: 'view_homework', label: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book' },
+      { id: 'daily_program', label: t('parent.daily_program', { defaultValue: 'Daily Program' }), icon: 'time-outline' },
+      { id: 'weekly_menu', label: t('parent.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline' },
       { id: 'messages', label: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles' },
       { id: 'check_attendance', label: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar' },
       { id: 'activity_feed', label: t('parent.activity_feed', { defaultValue: 'Activity Feed' }), icon: 'newspaper' },

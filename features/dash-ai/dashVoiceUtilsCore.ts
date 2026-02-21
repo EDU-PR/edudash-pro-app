@@ -15,6 +15,7 @@ import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVo
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { SHARED_PHONICS_PROMPT_BLOCK } from '@/lib/dash-ai/phonicsPrompt';
 import { dashAiDevLogVoiceResponse } from '@/lib/dash-ai/dashAiDevLogger';
+import { getTutorChallengePlan } from '@/features/dash-assistant/tutorChallengePolicy';
 
 // ── Quick Actions ────────────────────────────────────────────────────
 
@@ -38,6 +39,13 @@ export function getQuickActions(orgType: string, role: string): QuickAction[] {
     'manager',
     'staff',
   ].includes(normalizedRole);
+  const quizChallengeTarget = getTutorChallengePlan({
+    mode: 'quiz',
+    difficulty: 2,
+    learnerContext: {
+      schoolType: isPreschool ? 'preschool' : orgType || null,
+    },
+  }).maxQuestions;
 
   if (isStaff && isPreschool) {
     return [
@@ -57,13 +65,13 @@ export function getQuickActions(orgType: string, role: string): QuickAction[] {
     return [
       { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Use a short story and ask one simple question to get started.' },
       { id: 'practice', label: 'Practice', icon: 'pencil-outline', prompt: 'Give one playful practice question. Wait for the answer before continuing.' },
-      { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: 'Quiz with 3 very easy questions using colors, shapes, or counting.' },
+      { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: `Quiz with about ${quizChallengeTarget} very easy questions using colors, shapes, or counting.` },
     ];
   }
   return [
     { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Ask me one short diagnostic question first, then explain step-by-step in simple language.' },
     { id: 'solve', label: 'Help solve', icon: 'pencil-outline', prompt: 'Give me one practice question to diagnose my level. Wait for my answer before continuing.' },
-    { id: 'quiz', label: 'Test me', icon: 'school-outline', prompt: 'Quiz me with 5 questions, starting easy and getting harder.' },
+    { id: 'quiz', label: 'Test me', icon: 'school-outline', prompt: `Quiz me with about ${quizChallengeTarget} questions, starting easy and getting harder.` },
   ];
 }
 

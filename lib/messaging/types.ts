@@ -67,6 +67,7 @@ export interface MessageParticipant {
     first_name: string;
     last_name: string;
     role: string;
+    avatar_url?: string | null;
   };
 }
 
@@ -101,6 +102,7 @@ export interface Message {
     first_name: string;
     last_name: string;
     role: string;
+    avatar_url?: string | null;
   };
   reactions?: MessageReaction[];
   reply_to?: Message | null;

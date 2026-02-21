@@ -184,6 +184,7 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
           emoji,
           count: data.count,
           hasReacted: data.users.includes(user.id),
+          reactedByUserIds: data.users,
         }));
 
         queryClient.setQueryData(['messages', threadId], (old: Message[] | undefined) => {

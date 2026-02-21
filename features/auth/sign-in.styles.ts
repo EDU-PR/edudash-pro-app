@@ -2,7 +2,7 @@
  * Styles for the sign-in screen.
  * Extracted from sign-in.tsx to comply with WARP.md.
  *
- * @module app/(auth)/sign-in.styles
+ * @module features/auth/sign-in.styles
  */
 
 import { StyleSheet, Platform } from 'react-native';

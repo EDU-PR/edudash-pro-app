@@ -110,6 +110,21 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
     systemPrompt += `\n\n**Additional User Requirements:**\n${config.customPrompt}`;
   }
 
+  if (config.useTeacherContext !== false && config.contextSummary) {
+    const focusTopics = config.contextSummary.focusTopics?.slice(0, 8) || [];
+    const weakTopics = config.contextSummary.weakTopics?.slice(0, 8) || [];
+    const focusBlock = focusTopics.length > 0 ? focusTopics.join(', ') : 'No explicit focus topics found';
+    const weakBlock = weakTopics.length > 0 ? weakTopics.join(', ') : 'No weak-topic signals available';
+
+    systemPrompt += `\n\n**Teacher Artifact Context (Prioritize This):**
+- Homework assignments found: ${config.contextSummary.assignmentCount}
+- Lesson assignments found: ${config.contextSummary.lessonCount}
+- Focus topics from teacher artifacts: ${focusBlock}
+- Weak topics from learner performance: ${weakBlock}
+
+Use this context to prioritize what has already been taught and assigned before introducing new material.`;
+  }
+
   return { prompt: systemPrompt, systemPrompt, displayTitle };
 }
 

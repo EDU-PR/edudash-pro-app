@@ -1,12 +1,12 @@
 // Generated Year Plan View Component
 // Displays the AI-generated year plan overview
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { GeneratedYearPlan } from './types';
+import type { GeneratedYearPlan, YearPlanMonthlyBucket } from './types';
 import { TermCard } from './TermCard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -19,6 +19,20 @@ interface GeneratedPlanViewProps {
   onRegenerate: () => void;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const BUCKET_ORDER: YearPlanMonthlyBucket[] = [
+  'holidays_closures',
+  'meetings_admin',
+  'excursions_extras',
+  'donations_fundraisers',
+];
+const BUCKET_LABELS: Record<YearPlanMonthlyBucket, string> = {
+  holidays_closures: 'Holidays & Closures',
+  meetings_admin: 'Meetings & Admin',
+  excursions_extras: 'Excursions & Extras',
+  donations_fundraisers: 'Donations & Fundraisers',
+};
+
 export function GeneratedPlanView({
   plan,
   expandedTerm,
@@ -30,6 +44,29 @@ export function GeneratedPlanView({
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = createStyles(theme, insets.bottom);
+  const [mode, setMode] = useState<'terms' | 'monthly'>('monthly');
+
+  const monthlyByMonth = useMemo(() => {
+    const map = new Map<number, Record<YearPlanMonthlyBucket, string[]>>();
+    for (let i = 1; i <= 12; i += 1) {
+      map.set(i, {
+        holidays_closures: [],
+        meetings_admin: [],
+        excursions_extras: [],
+        donations_fundraisers: [],
+      });
+    }
+
+    (plan.monthlyEntries || []).forEach((entry) => {
+      const month = Math.min(12, Math.max(1, Number(entry.monthIndex) || 1));
+      const target = map.get(month);
+      if (!target) return;
+      const label = entry.details ? `${entry.title}: ${entry.details}` : entry.title;
+      target[entry.bucket].push(label);
+    });
+
+    return map;
+  }, [plan.monthlyEntries]);
 
   return (
     <ScrollView style={styles.planContainer} contentContainerStyle={styles.planContent}>
@@ -62,6 +99,21 @@ export function GeneratedPlanView({
           <Text style={styles.budgetText}>Estimated Budget: {plan.budgetEstimate}</Text>
         </View>
       </View>
+
+      <View style={styles.modeRow}>
+        <TouchableOpacity
+          style={[styles.modeBtn, mode === 'monthly' && styles.modeBtnActive]}
+          onPress={() => setMode('monthly')}
+        >
+          <Text style={[styles.modeBtnText, mode === 'monthly' && styles.modeBtnTextActive]}>Month Matrix</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeBtn, mode === 'terms' && styles.modeBtnActive]}
+          onPress={() => setMode('terms')}
+        >
+          <Text style={[styles.modeBtnText, mode === 'terms' && styles.modeBtnTextActive]}>Term Details</Text>
+        </TouchableOpacity>
+      </View>
       
       {/* Annual Goals */}
       <View style={styles.goalsCard}>
@@ -73,19 +125,58 @@ export function GeneratedPlanView({
           </View>
         ))}
       </View>
-      
-      {/* Terms */}
-      <Text style={styles.termsHeader}>Term Details</Text>
-      {plan.terms.map((term) => (
-        <TermCard
-          key={term.termNumber}
-          term={term}
-          isExpanded={expandedTerm === term.termNumber}
-          onToggleExpand={() => onToggleExpandTerm(
-            expandedTerm === term.termNumber ? null : term.termNumber
-          )}
-        />
-      ))}
+
+      {mode === 'monthly' ? (
+        <>
+          <Text style={styles.termsHeader}>{plan.academicYear} Month Matrix Preview</Text>
+          <View style={styles.monthlyGrid}>
+            {Array.from({ length: 12 }, (_, idx) => {
+              const month = idx + 1;
+              const grouped = monthlyByMonth.get(month)!;
+              return (
+                <View key={month} style={styles.monthCard}>
+                  <Text style={styles.monthTitle}>{MONTH_NAMES[idx]}</Text>
+                  {BUCKET_ORDER.map((bucket) => (
+                    <View key={bucket} style={styles.monthBucket}>
+                      <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
+                      {(grouped[bucket].length > 0 ? grouped[bucket] : ['—']).slice(0, 2).map((item, itemIndex) => (
+                        <Text key={`${bucket}-${itemIndex}`} style={styles.monthItem}>• {item}</Text>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.goalsCard}>
+            <Text style={styles.goalsTitle}>Operational Highlights</Text>
+            {(plan.operationalHighlights || []).slice(0, 6).map((highlight, idx) => (
+              <View key={idx} style={styles.goalItem}>
+                <Ionicons name="flash" size={18} color="#8B5CF6" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.goalText}>{highlight.title}</Text>
+                  <Text style={styles.monthItem}>{highlight.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <Text style={styles.termsHeader}>Term Details</Text>
+          {plan.terms.map((term) => (
+            <TermCard
+              key={term.termNumber}
+              term={term}
+              isExpanded={expandedTerm === term.termNumber}
+              onToggleExpand={() => onToggleExpandTerm(
+                expandedTerm === term.termNumber ? null : term.termNumber
+              )}
+            />
+          ))}
+        </>
+      )}
       
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
@@ -176,6 +267,33 @@ const createStyles = (theme: any, insetBottom: number) =>
       fontSize: 14,
       color: theme.textSecondary,
     },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 12,
+    },
+    modeBtn: {
+      flex: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.card,
+    },
+    modeBtnActive: {
+      borderColor: theme.primary,
+      backgroundColor: `${theme.primary}22`,
+    },
+    modeBtnText: {
+      color: theme.textSecondary,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    modeBtnTextActive: {
+      color: theme.primary,
+    },
     goalsCard: {
       backgroundColor: theme.card,
       borderRadius: 16,
@@ -208,6 +326,36 @@ const createStyles = (theme: any, insetBottom: number) =>
       color: theme.text,
       marginBottom: 12,
       marginTop: 8,
+    },
+    monthlyGrid: {
+      gap: 10,
+      marginBottom: 14,
+    },
+    monthCard: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      padding: 12,
+      gap: 8,
+    },
+    monthTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    monthBucket: {
+      gap: 2,
+    },
+    monthBucketLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textSecondary,
+    },
+    monthItem: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 18,
     },
     actionButtons: {
       flexDirection: 'row',

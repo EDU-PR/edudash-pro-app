@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { toast } from '@/components/ui/ToastProvider';
 import { type Message } from '@/components/messaging';
-import { COMPOSER_OVERLAY_HEIGHT } from '@/app/screens/teacher-message-thread.styles';
+import { COMPOSER_OVERLAY_HEIGHT } from '@/features/teacher-messaging/teacher-message-thread.styles';
 import type { useMessageThreadState } from './useMessageThreadState';
 
 // Safe import for voice upload

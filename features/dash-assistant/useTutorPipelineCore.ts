@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { logger } from '@/lib/logger';
+import { getTutorChallengePlan } from './tutorChallengePolicy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,17 +62,27 @@ export interface UseTutorPipelineReturn {
 }
 
 // ─── Phase prompt injections ─────────────────────────────────────────────────
+const pluralize = (count: number, singular: string, plural?: string) => (
+  `${count} ${count === 1 ? singular : (plural || `${singular}s`)}`
+);
 
 const PHASE_PROMPTS: Record<Exclude<TutorPhase, 'IDLE'>, (cfg: TutorPipelineConfig) => string> = {
-  DIAGNOSE: (cfg) => `
+  DIAGNOSE: (cfg) => {
+    const plan = getTutorChallengePlan({
+      mode: 'diagnostic',
+      learnerContext: { grade: cfg.grade },
+      difficulty: cfg.difficulty,
+    });
+    return `
 [TUTOR PHASE: DIAGNOSE]
 You are assessing the student's current knowledge of ${cfg.topic} (${cfg.subject}, ${cfg.grade}).
-- Ask 2-3 SHORT diagnostic questions — each one DIFFERENT. Never repeat the same question.
+- Ask ${pluralize(plan.diagnosticQuestions, 'SHORT diagnostic question')} — each one DIFFERENT. Never repeat the same question.
 - Vary question types: recall, application, and one slightly harder.
 - Do NOT teach yet — only assess. Keep it conversational.
 - After each answer, acknowledge briefly and ask a DIFFERENT question.
-- CRITICAL: After 2 diagnostic questions, advance. Do NOT get stuck asking the same two.
-- When ready, say: "Great, I have a good picture of where you are!"`,
+- CRITICAL: After ${plan.diagnosticQuestions} diagnostic questions, advance. Do NOT get stuck repeating prompts.
+- When ready, say: "Great, I have a good picture of where you are!"`;
+  },
 
   TEACH: (cfg) => `
 [TUTOR PHASE: TEACH]
@@ -83,7 +94,13 @@ Based on the diagnostic results, teach ${cfg.topic} (${cfg.subject}, ${cfg.grade
 - Include one worked example showing the full solution process.
 - End with: "Ready to try some practice?" to transition.`,
 
-  PRACTICE: (cfg) => `
+  PRACTICE: (cfg) => {
+    const plan = getTutorChallengePlan({
+      mode: 'practice',
+      learnerContext: { grade: cfg.grade },
+      difficulty: cfg.difficulty,
+    });
+    return `
 [TUTOR PHASE: PRACTICE]
 Give the student practice problems on ${cfg.topic} (${cfg.subject}, ${cfg.grade}).
 - Present ONE question at a time and WAIT for their answer.
@@ -93,17 +110,25 @@ Give the student practice problems on ${cfg.topic} (${cfg.subject}, ${cfg.grade}
 \`\`\`
 - After they answer, give immediate feedback (correct/incorrect + brief explanation).
 - If incorrect, explain the misconception and offer a hint before the next question.
-- Give 3-5 practice questions total, increasing difficulty if they're doing well.
-- Track their score mentally.`,
+- Give about ${plan.practiceQuestions} practice questions total, increasing difficulty if they're doing well.
+- Track their score mentally.`;
+  },
 
-  CHECK: (cfg) => `
+  CHECK: (cfg) => {
+    const plan = getTutorChallengePlan({
+      mode: 'quiz',
+      learnerContext: { grade: cfg.grade },
+      difficulty: cfg.difficulty,
+    });
+    return `
 [TUTOR PHASE: CHECK]
 Final comprehension check for ${cfg.topic} (${cfg.subject}, ${cfg.grade}).
-- Ask 1-2 synthesis questions that combine concepts from the lesson.
+- Ask ${pluralize(plan.synthesisQuestions, 'synthesis question')} that combine concepts from the lesson.
 - These should be slightly harder than practice questions.
 - If they get it right: celebrate and summarize what they learned.
 - If they struggle: briefly re-explain and offer to practice more.
-- End with a confidence check: "How do you feel about ${cfg.topic} now? Rate 1-5."`,
+- End with a confidence check: "How do you feel about ${cfg.topic} now? Rate 1-5."`;
+  },
 
   COMPLETE: (cfg) => `
 [TUTOR PHASE: COMPLETE]

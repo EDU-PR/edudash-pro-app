@@ -114,8 +114,31 @@ export default function K12StudentDashboardScreen() {
 
   const openExamBuilder = useCallback(() => {
     track('k12.student.exam_builder_open', { user_id: user?.id, grade });
-    router.push('/screens/exam-prep' as any);
-  }, [grade, user?.id]);
+    const inferredStudentId =
+      (profile as any)?.student_id ||
+      (profile as any)?.linked_student_id ||
+      (profile as any)?.studentId ||
+      profile?.id ||
+      '';
+    const inferredClassId = (profile as any)?.class_id || (profile as any)?.classId || '';
+    const inferredSchoolId =
+      (profile as any)?.organization_membership?.organization_id ||
+      (profile as any)?.organization_id ||
+      (profile as any)?.preschool_id ||
+      '';
+    const gradeParam = gradeNumber >= 4 ? `grade_${gradeNumber}` : '';
+
+    router.push({
+      pathname: '/screens/exam-prep',
+      params: {
+        grade: gradeParam || undefined,
+        studentId: inferredStudentId || undefined,
+        classId: inferredClassId || undefined,
+        schoolId: inferredSchoolId || undefined,
+        childName: userName,
+      },
+    } as any);
+  }, [grade, gradeNumber, user?.id, profile, userName]);
 
   // Track dashboard view
   useEffect(() => {

@@ -7,6 +7,11 @@ export interface TranscriptFormatOptions {
   maxSummaryWords?: number;
 }
 
+export interface TranscriptModelPromptOptions {
+  locale?: string | null;
+  preschoolMode?: boolean;
+}
+
 const detectLanguage = (locale?: string | null): SupportedLang => {
   const short = (locale || 'en').toLowerCase();
   if (short.startsWith('af')) return 'af';
@@ -176,6 +181,13 @@ export const formatTranscriptWithOptions = (
     result = applyWhisperFlowAutoEdits(result, lang, preschoolMode);
   }
 
+  // Preserve common education/domain acronyms and names.
+  result = result
+    .replace(/\bfnb\b/gi, 'FNB')
+    .replace(/\bcaps\b/gi, 'CAPS')
+    .replace(/\bedudash\b/gi, 'EduDash')
+    .replace(/\bdash ai\b/gi, 'Dash AI');
+
   result = result.charAt(0).toUpperCase() + result.slice(1);
 
   const hasTerminalPunctuation = /[.?!]$/.test(result);
@@ -196,3 +208,37 @@ export const formatTranscriptWithOptions = (
 };
 
 export const formatTranscriptSmart = formatTranscriptWithOptions;
+
+const ACTION_INTENT_PATTERN =
+  /\b(explain|help|show|solve|teach|quiz|test|practice|summari[sz]e|compare|create|write|mark|review|check|calculate|draw|generate)\b/i;
+
+export const buildTranscriptModelPrompt = (
+  rawText: string,
+  options: TranscriptModelPromptOptions = {},
+): string => {
+  const locale = options.locale || null;
+  const polished = formatTranscriptWithOptions(rawText, locale, {
+    whisperFlow: true,
+    summarize: true,
+    preschoolMode: options.preschoolMode || false,
+    maxSummaryWords: options.preschoolMode ? 16 : 28,
+  });
+
+  const cleaned = polished
+    .replace(/^dash[,:\s-]+/i, '')
+    .replace(/^okay[,:\s-]+/i, '')
+    .trim();
+  if (!cleaned) return '';
+
+  const lang = detectLanguage(locale);
+  const lower = cleaned.toLowerCase();
+  const looksActionable = ACTION_INTENT_PATTERN.test(lower) || looksLikeQuestion(cleaned, lang) || /\?$/.test(cleaned);
+
+  if (looksActionable) return cleaned;
+
+  if (cleaned.split(/\s+/).length <= 6) {
+    return `Please help me with this topic: ${cleaned}`;
+  }
+
+  return `Please help me with this request: ${cleaned}`;
+};

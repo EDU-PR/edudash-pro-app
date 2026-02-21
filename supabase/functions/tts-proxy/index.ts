@@ -214,6 +214,8 @@ const PRONUNCIATION_DICT: PronEntry[] = [
   { pattern: /\bNkosi\b/gi, ipa: 'ˈŋkoːsi', lang: 'zu-ZA' },
   { pattern: /\bGogo\b/gi, ipa: 'ˈɡoːɡo', lang: 'zu-ZA' },
   { pattern: /\bMadiba\b/gi, ipa: 'mɑˈdiːbɑ' },
+  { pattern: /\boranges\b/gi, alias: 'or-in-jiz', ipa: 'ˈɔːrɪndʒɪz' },
+  { pattern: /\borange\b/gi, alias: 'or-inj', ipa: 'ˈɔːrɪndʒ' },
   // Educational terms
   { pattern: /\bCAPS\b/g, alias: 'caps' },
   { pattern: /\bSTEM\b/g, alias: 'stem' },

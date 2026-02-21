@@ -110,18 +110,93 @@ export const inputStyles = StyleSheet.create({
 
   // Voice Status Row
   voiceStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 10,
   },
+  voiceStatusTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  voiceStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
+  voiceWaveformRail: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
+    minWidth: 70,
+    height: 24,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.24)',
+  },
+  voiceWaveformBar: {
+    width: 3,
+    height: 14,
+    borderRadius: 999,
+    opacity: 0.95,
+  },
   voiceStatusContent: {
+    marginTop: 8,
+    gap: 5,
+  },
+  autoSendCountdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 2,
+  },
+  autoSendCountdownCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoSendCountdownValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  autoSendCountdownMeta: {
     flex: 1,
     gap: 4,
+  },
+  autoSendCountdownTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  autoSendProgressTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  autoSendProgressFill: {
+    height: 4,
+    borderRadius: 999,
+  },
+  autoSendCancelButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  autoSendCancelText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   voiceStatusText: {
     fontSize: 12,

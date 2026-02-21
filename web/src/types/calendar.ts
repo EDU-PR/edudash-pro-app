@@ -8,7 +8,7 @@ export interface SchoolEvent {
   title: string;
   description?: string;
   event_type: 'holiday' | 'parent_meeting' | 'field_trip' | 'assembly' | 
-    'sports_day' | 'graduation' | 'fundraiser' | 'workshop' | 
+    'sports_day' | 'graduation' | 'fundraiser' | 'donation_drive' | 'workshop' | 
     'staff_meeting' | 'open_house' | 'other';
   
   // Date and time

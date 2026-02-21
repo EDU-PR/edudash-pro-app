@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { 
   Campaign, 
   CAMPAIGN_TYPE_LABELS, 
-  getDiscountDisplayText 
+  getDiscountDisplayText,
+  getRegistrationDiscountBreakdown,
 } from './types';
 
 interface CampaignCardProps {
@@ -34,6 +35,7 @@ export function CampaignCard({
 }: CampaignCardProps) {
   const typeInfo = CAMPAIGN_TYPE_LABELS[campaign.campaign_type];
   const isExpired = new Date(campaign.end_date) < new Date();
+  const breakdown = getRegistrationDiscountBreakdown(campaign);
 
   return (
     <TouchableOpacity
@@ -74,9 +76,16 @@ export function CampaignCard({
       {/* Discount Info */}
       <View style={styles.discountInfo}>
         <Ionicons name="pricetag" size={16} color={theme.primary} />
-        <Text style={[styles.discountText, { color: theme.text }]}>
-          {getDiscountDisplayText(campaign)}
-        </Text>
+        <View style={styles.discountColumn}>
+          <Text style={[styles.discountText, { color: theme.text }]}>
+            {getDiscountDisplayText(campaign)}
+          </Text>
+          {breakdown && (
+            <Text style={[styles.breakdownText, { color: theme.muted }]}>
+              {breakdown}
+            </Text>
+          )}
+        </View>
         {campaign.promo_code && (
           <View style={[styles.promoCodeBadge, { backgroundColor: theme.primary + '20' }]}>
             <Text style={[styles.promoCodeText, { color: theme.primary }]}>
@@ -219,10 +228,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(128,128,128,0.2)',
   },
+  discountColumn: {
+    marginLeft: 8,
+  },
   discountText: {
     fontSize: 15,
     fontWeight: '600',
-    marginLeft: 8,
+  },
+  breakdownText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
   },
   promoCodeBadge: {
     marginLeft: 'auto',

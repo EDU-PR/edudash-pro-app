@@ -37,7 +37,16 @@ const SUBJECTS = [
 export default function ExamPrepPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { profile, userName, preschoolName, hasOrganization, unreadCount, loading, childrenCards, activeChildId } = useParentDashboardData();
+  const {
+    profile,
+    userName,
+    preschoolName,
+    hasOrganization,
+    unreadCount,
+    loading,
+    childrenCards,
+    activeChildId,
+  } = useParentDashboardData();
 
   const activeChild = useMemo(
     () => childrenCards.find((child) => child.id === activeChildId),
@@ -58,11 +67,18 @@ export default function ExamPrepPage() {
       return;
     }
 
-    const params = new URLSearchParams({
-      grade: selectedGrade,
-      subject: selectedSubject,
-      type: examType
-    });
+    const params = new URLSearchParams();
+    params.set('grade', selectedGrade);
+    params.set('subject', selectedSubject);
+    params.set('type', examType);
+
+    if (activeChild?.id) params.set('studentId', activeChild.id);
+    if (activeChild?.classId) params.set('classId', activeChild.classId);
+    if (profile?.organizationId || profile?.preschoolId) {
+      params.set('schoolId', profile.organizationId || profile.preschoolId || '');
+    }
+    const childName = [activeChild?.firstName, activeChild?.lastName].filter(Boolean).join(' ').trim();
+    if (childName) params.set('childName', childName);
     
     router.push(`/dashboard/parent/generate-exam?${params.toString()}`);
   };

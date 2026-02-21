@@ -37,6 +37,15 @@ export function useParentDashboardNavigation({ activeChild, children, showAlert 
       case 'view_homework':
         router.push('/screens/homework');
         break;
+      case 'daily_program':
+        router.push('/screens/parent-daily-program');
+        break;
+      case 'weekly_menu':
+        router.push('/screens/parent-menu');
+        break;
+      case 'stationery':
+        router.push('/screens/parent-stationery');
+        break;
       case 'assigned_lessons':
         router.push('/screens/parent-assigned-lessons');
         break;

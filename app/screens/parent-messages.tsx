@@ -113,13 +113,25 @@ export default function ParentMessagesScreen() {
       toggleThreadSelection(thread.id);
       return;
     }
+    const isGroupThread = Boolean(
+      thread.is_group ||
+      ['class_group', 'parent_group', 'teacher_group', 'announcement'].includes(String(thread.type || ''))
+    );
     const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
     const participantName = otherParticipant?.user_profile
       ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
       : 'Teacher';
+    const groupName = (thread as any).group_name || thread.subject || 'Group';
     router.push({
       pathname: '/screens/parent-message-thread',
-      params: { threadId: thread.id, title: participantName, teacherId: otherParticipant?.user_id || '', teacherName: participantName },
+      params: {
+        threadId: thread.id,
+        title: isGroupThread ? groupName : participantName,
+        teacherId: otherParticipant?.user_id || '',
+        teacherName: participantName,
+        isGroup: isGroupThread ? '1' : '0',
+        threadType: String((thread as any).group_type || thread.type || ''),
+      },
     });
   }, [selectionMode, toggleThreadSelection]);
 

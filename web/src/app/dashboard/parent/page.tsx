@@ -32,6 +32,7 @@ import { DashOrbButton } from '@/components/dashboard/parent/DashOrbButton';
 import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck, Video, Cake } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
+import { StationeryChecklistWidget } from '@/components/dashboard/parent/StationeryChecklistWidget';
 import { ParentInsightsSection } from '@/components/dashboard/parent/ParentInsightsSection';
 import { PracticeAtHomeSection } from '@/components/dashboard/parent/PracticeAtHomeSection';
 import { ParentDashboardContentSections } from '@/components/dashboard/parent/ParentDashboardContentSections';
@@ -76,6 +77,8 @@ export default function ParentDashboard() {
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [uniformEnabled, setUniformEnabled] = useState(false);
   const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
+  const [stationeryEnabled, setStationeryEnabled] = useState(false);
+  const [stationerySchoolIds, setStationerySchoolIds] = useState<string[]>([]);
   const toggleSection = (sectionId: string) => {
     setOpenSection((prev) => (prev === sectionId ? null : sectionId));
   };
@@ -120,23 +123,32 @@ export default function ParentDashboard() {
         if (organizationError) throw organizationError;
 
         const enabledIds = new Set<string>();
+        const stationeryIds = new Set<string>();
         (preschoolSettings || []).forEach((row: any) => {
           const enabled = row?.settings?.features?.uniforms?.enabled;
+          const stationery = row?.settings?.features?.stationery?.enabled;
           if (enabled) enabledIds.add(row.id);
+          if (stationery) stationeryIds.add(row.id);
         });
         (organizationSettings || []).forEach((row: any) => {
           const enabled = row?.settings?.features?.uniforms?.enabled;
+          const stationery = row?.settings?.features?.stationery?.enabled;
           if (enabled) enabledIds.add(row.id);
+          if (stationery) stationeryIds.add(row.id);
         });
 
         if (!cancelled) {
           setUniformSchoolIds(Array.from(enabledIds));
           setUniformEnabled(enabledIds.size > 0);
+          setStationerySchoolIds(Array.from(stationeryIds));
+          setStationeryEnabled(stationeryIds.size > 0);
         }
       } catch {
         if (!cancelled) {
           setUniformEnabled(false);
           setUniformSchoolIds([]);
+          setStationeryEnabled(false);
+          setStationerySchoolIds([]);
         }
       }
     };
@@ -365,6 +377,14 @@ export default function ParentDashboard() {
                 >
                   View Homework
                 </button>
+                {hasOrganization && (
+                  <button
+                    className="btn btnSecondary"
+                    onClick={() => router.push(`/dashboard/parent/daily-program?childId=${featuredChild.id}`)}
+                  >
+                    View Daily Program
+                  </button>
+                )}
               </div>
             </div>
 
@@ -490,6 +510,32 @@ export default function ParentDashboard() {
               <SectionEmptyState
                 title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
                 description={t('dashboard.parent.empty.uniform_sizes.description', { defaultValue: 'Link a child to a school to see uniform sizes and sizing updates.' })}
+                actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+                onAction={() => router.push('/dashboard/parent/register-child')}
+              />
+            )}
+          </CollapsibleSection>
+        )}
+
+        {/* Stationery Checklist (enabled by school) */}
+        {stationeryEnabled && (
+          <CollapsibleSection
+            title={t('dashboard.parent.stationery.title', { defaultValue: 'Stationery Checklist' })}
+            description={t('dashboard.parent.stationery.hint', { defaultValue: 'Track what is bought, what is still needed, and expected delivery dates.' })}
+            icon={BookOpen}
+            isOpen={openSection === 'stationery'}
+            onToggle={() => toggleSection('stationery')}
+          >
+            {hasOrganization && hasChildren ? (
+              <StationeryChecklistWidget
+                childrenCards={childrenCards.filter((child) =>
+                  child.preschoolId ? stationerySchoolIds.includes(child.preschoolId) : false
+                )}
+              />
+            ) : (
+              <SectionEmptyState
+                title={t('dashboard.parent.empty.stationery.title', { defaultValue: 'Stationery checklist preview' })}
+                description={t('dashboard.parent.empty.stationery.description', { defaultValue: 'Link a child to a school to track stationery items.' })}
                 actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
                 onAction={() => router.push('/dashboard/parent/register-child')}
               />

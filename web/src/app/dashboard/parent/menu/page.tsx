@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, ChefHat, RefreshCw } from 'lucide-react';
+import { CalendarDays, ChefHat, Cookie, RefreshCw, StickyNote, Sun, UtensilsCrossed } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SchoolMenuService } from '@/lib/services/schoolMenuService';
@@ -12,6 +12,22 @@ import { isWeeklyMenuBridgeEnabled, isWeeklyMenuDedicatedEnabled } from '@/lib/s
 interface ParentSchool {
   id: string;
   name: string;
+}
+
+function renderMealChips(items: string[]) {
+  if (!items.length) {
+    return <span style={{ fontSize: 13, color: 'var(--textLight)' }}>Not provided</span>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {items.map((item, index) => (
+        <span key={`${item}-${index}`} className="chip" style={{ fontSize: 12 }}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export default function ParentMenuPage() {
@@ -130,7 +146,7 @@ export default function ParentMenuPage() {
         <div>
           <h1 className="h1" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ChefHat className="icon24" style={{ color: 'var(--primary)' }} />
-            Daily Menu
+            Weekly Menu
           </h1>
           <p style={{ margin: '8px 0 0 0', color: 'var(--textLight)' }}>
             See what your children are eating this week.
@@ -216,31 +232,54 @@ export default function ParentMenuPage() {
             {weekDraft.days.map((day) => {
               const date = new Date(`${day.date}T00:00:00.000Z`);
               return (
-                <div key={day.date} className="card" style={{ border: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 700, marginBottom: 10 }}>
+                <div key={day.date} className="card" style={{ border: '1px solid var(--border)', padding: 14 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 10, fontSize: 16 }}>
                     {date.toLocaleDateString('en-ZA', {
                       weekday: 'long',
                       day: 'numeric',
                       month: 'short',
                     })}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: 'var(--textLight)' }}>Breakfast</div>
-                      <div style={{ fontSize: 14 }}>{day.breakfast.length ? day.breakfast.join(', ') : 'Not provided'}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                    <div className="card" style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 10, display: 'grid', gap: 8 }}>
+                      <div style={{ fontSize: 12, color: 'var(--textLight)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Sun className="icon14" />
+                        Breakfast
+                      </div>
+                      {renderMealChips(day.breakfast)}
                     </div>
-                    <div>
-                      <div style={{ fontSize: 12, color: 'var(--textLight)' }}>Lunch</div>
-                      <div style={{ fontSize: 14 }}>{day.lunch.length ? day.lunch.join(', ') : 'Not provided'}</div>
+                    <div className="card" style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 10, display: 'grid', gap: 8 }}>
+                      <div style={{ fontSize: 12, color: 'var(--textLight)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <UtensilsCrossed className="icon14" />
+                        Lunch
+                      </div>
+                      {renderMealChips(day.lunch)}
                     </div>
-                    <div>
-                      <div style={{ fontSize: 12, color: 'var(--textLight)' }}>Snack</div>
-                      <div style={{ fontSize: 14 }}>{day.snack.length ? day.snack.join(', ') : 'Not provided'}</div>
+                    <div className="card" style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 10, display: 'grid', gap: 8 }}>
+                      <div style={{ fontSize: 12, color: 'var(--textLight)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Cookie className="icon14" />
+                        Snack
+                      </div>
+                      {renderMealChips(day.snack)}
                     </div>
                   </div>
                   {day.notes && (
-                    <div style={{ marginTop: 10, fontSize: 13, color: 'var(--textLight)' }}>
-                      Notes: {day.notes}
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 13,
+                        color: 'var(--textLight)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        padding: '8px 10px',
+                        background: 'var(--surface)',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 6,
+                      }}
+                    >
+                      <StickyNote className="icon14" />
+                      <span>Notes: {day.notes}</span>
                     </div>
                   )}
                 </div>

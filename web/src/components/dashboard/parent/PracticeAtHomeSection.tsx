@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
-import { BookOpen, Sparkles, Lightbulb, Brain, Cpu, Laptop } from 'lucide-react';
+import { BookOpen, Sparkles, Lightbulb, Brain, Cpu, Laptop, PenTool } from 'lucide-react';
 import type { ParentDashboardCopy } from '@/app/dashboard/parent/parentDashboardCopy';
 
 interface SectionEmptyStateProps {
@@ -38,6 +38,7 @@ function SectionEmptyState({ title, description, actionLabel, onAction }: Sectio
 }
 
 interface ActiveChild {
+  id: string;
   firstName: string;
   grade?: string;
 }
@@ -121,6 +122,16 @@ export function PracticeAtHomeSection({
                       t('dashboard.parent.practice.preschool_math.display', { defaultValue: 'Numbers & Shapes Practice' })
                     )
                   }
+                />
+                <PracticeCard
+                  gradient="linear-gradient(135deg, #2563eb 0%, #14b8a6 100%)"
+                  icon={<PenTool className="icon24" style={{ marginBottom: 8 }} />}
+                  title={t('dashboard.parent.practice.name_writing.title', { defaultValue: 'Name Writing Practice' })}
+                  description={t('dashboard.parent.practice.name_writing.description', { defaultValue: 'Daily guided tracing and phonics cues to build name-writing confidence.' })}
+                  onClick={() => {
+                    const childName = activeChild?.firstName || '';
+                    router.push(`/dashboard/parent/name-practice?studentId=${activeChild?.id || ''}&name=${encodeURIComponent(childName)}`);
+                  }}
                 />
               </>
             ) : (

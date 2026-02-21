@@ -8,13 +8,19 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { track } from '@/lib/analytics';
 
 import { CollapsibleSection, GlowContainer, type SectionAttention } from '../shared';
-import { DailyActivityFeed, TeacherQuickNotes, ChildProgressBadges, UniformSizesSection } from '../parent';
+import {
+  DailyActivityFeed,
+  TeacherQuickNotes,
+  ChildProgressBadges,
+  UniformSizesSection,
+  StationeryChecklistSection,
+} from '../parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -36,6 +42,8 @@ export interface ParentDashboardContentSectionsProps {
   children: any[];
   uniformEnabled: boolean;
   uniformSchoolIds: string[];
+  stationeryEnabled: boolean;
+  stationerySchoolIds: string[];
   hasOrganization: boolean;
   preschoolId?: string | null;
   // Dashboard data
@@ -70,6 +78,8 @@ export const ParentDashboardContentSections: React.FC<ParentDashboardContentSect
   children,
   uniformEnabled,
   uniformSchoolIds,
+  stationeryEnabled,
+  stationerySchoolIds,
   hasOrganization,
   preschoolId,
   dashboardData,
@@ -117,6 +127,28 @@ export const ParentDashboardContentSections: React.FC<ParentDashboardContentSect
         </CollapsibleSection>
       )}
 
+      {/* Stationery Checklist (enabled by school) */}
+      {hasOrganization && children.length > 0 && stationeryEnabled && (
+        <CollapsibleSection
+          title={t('dashboard.parent.stationery.title', { defaultValue: 'Stationery Checklist' })}
+          sectionId="stationery-checklist"
+          icon="checkbox-outline"
+          hint={t('dashboard.parent.stationery.hint', {
+            defaultValue: 'Track bought items, quantities, proof photos, and expected delivery dates.',
+          })}
+          defaultCollapsed={collapsedSections.has('stationery-checklist')}
+          onToggle={toggleSection}
+        >
+          <StationeryChecklistSection
+            children={children.filter((child) =>
+              (child.preschoolId || child.preschool_id)
+                ? stationerySchoolIds.includes(child.preschoolId || child.preschool_id)
+                : false
+            )}
+          />
+        </CollapsibleSection>
+      )}
+
       {/* Live Classes */}
       <CollapsibleSection
         title={t('calls.live_classes', { defaultValue: 'Live Classes' })}
@@ -148,6 +180,46 @@ export const ParentDashboardContentSections: React.FC<ParentDashboardContentSect
             })}
             actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
             onActionPress={() => router.push('/screens/parent-child-registration' as any)}
+            size="small"
+            secondary
+          />
+        )}
+      </CollapsibleSection>
+
+      {/* Upcoming Reminder Timeline */}
+      <CollapsibleSection
+        title={t('dashboard.parent.section.upcoming_reminders', { defaultValue: 'Upcoming Reminders' })}
+        sectionId="upcoming-reminders"
+        icon="time-outline"
+        hint={t('dashboard.hints.upcoming_reminders', { defaultValue: '7/3/1 reminder timeline for upcoming school events.' })}
+        defaultCollapsed={collapsedSections.has('upcoming-reminders')}
+        onToggle={toggleSection}
+      >
+        {Array.isArray(dashboardData?.upcomingEvents) && dashboardData.upcomingEvents.length > 0 ? (
+          <View style={{ gap: 10 }}>
+            {dashboardData.upcomingEvents.slice(0, 5).map((event: any) => (
+              <View key={event.id} style={{ borderWidth: 1, borderColor: 'rgba(148,163,184,0.25)', borderRadius: 12, padding: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 }}>{event.title}</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(139,92,246,0.2)' }}>
+                    <Text style={{ color: '#c4b5fd', fontSize: 12, fontWeight: '700' }}>
+                      {typeof event.daysUntil === 'number' ? `${event.daysUntil}d` : 'Soon'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ color: 'rgba(203,213,225,0.85)', fontSize: 12, marginTop: 6 }}>
+                  {event.time || 'Upcoming event'} • Next reminder: {event.reminderLabel || 'complete'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <EmptyState
+            icon="time-outline"
+            title={t('dashboard.parent.empty.reminders.title', { defaultValue: 'No reminders queued yet' })}
+            description={t('dashboard.parent.empty.reminders.description', {
+              defaultValue: 'Scheduled school events will appear here with 7/3/1 reminder markers.',
+            })}
             size="small"
             secondary
           />
