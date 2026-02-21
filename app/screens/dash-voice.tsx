@@ -50,14 +50,26 @@ import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
 import { shouldGreetToday, buildDynamicGreeting } from '@/lib/ai/greetingManager';
 import {
   buildSystemPrompt,
-  buildVoicePlaybackText,
   cleanForTTS,
   cleanRawJSON,
   createStreamingRequest,
 } from '@/lib/dash-voice-utils';
 
 import { shouldUsePhonicsMode, detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
-import { detectOCRTask, isOCRIntent, getOCRPromptForTask } from '@/lib/dash-ai/ocrPrompts';
+import {
+  buildCriteriaHeadingTemplate,
+  detectOCRTask,
+  extractCriteriaHeadings,
+  getCriteriaResponsePrompt,
+  isOCRIntent,
+  getOCRPromptForTask,
+  isShortOrAttachmentOnlyPrompt,
+} from '@/lib/dash-ai/ocrPrompts';
+import { enforceCriteriaResponseWithSingleRewrite } from '@/features/dash-ai/criteriaEnforcement';
+import {
+  loadAutoScanBudget,
+  trackAutoScanUsage,
+} from '@/lib/dash-ai/imageBudget';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ORB_SIZE = Math.min(SCREEN_WIDTH * 0.78, 320);
@@ -104,10 +116,12 @@ export default function DashVoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [restartBlocked, setRestartBlocked] = useState(false);
   const [voiceErrorBanner, setVoiceErrorBanner] = useState<string | null>(null);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage>('en-ZA');
   const [attachedImage, setAttachedImage] = useState<{ uri: string; base64: string } | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [remainingScans, setRemainingScans] = useState<number | null>(null);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [isGreetingLoading, setIsGreetingLoading] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -138,6 +152,26 @@ export default function DashVoiceScreen() {
     if (!DASH_TRACE_ENABLED) return;
     console.log(`[DashVoiceTrace] ${event}`, payload || {});
   }, [DASH_TRACE_ENABLED]);
+
+  const activeTier = useMemo(
+    () =>
+      String(
+        (profile as any)?.subscription_tier ||
+        (profile as any)?.tier ||
+        (profile as any)?.current_tier ||
+        'free'
+      ).toLowerCase(),
+    [profile]
+  );
+
+  const refreshAutoScanBudget = useCallback(async () => {
+    const budget = await loadAutoScanBudget(activeTier || 'free');
+    setRemainingScans(budget.remainingCount);
+  }, [activeTier]);
+
+  useEffect(() => {
+    void refreshAutoScanBudget();
+  }, [refreshAutoScanBudget]);
 
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
@@ -348,8 +382,9 @@ export default function DashVoiceScreen() {
       uri: result.uri,
       base64: result.base64,
     });
+    void trackAutoScanUsage(activeTier || 'free', 1).then(() => refreshAutoScanBudget());
     setScannerVisible(false);
-  }, []);
+  }, [activeTier, refreshAutoScanBudget]);
 
   // ── Persist ORB messages to AsyncStorage for handoff to full chat ──
   const persistOrbMessages = useCallback(async (msgs: Array<{ role: 'user' | 'assistant'; content: string }>) => {
@@ -377,6 +412,10 @@ export default function DashVoiceScreen() {
         source: 'dash_voice',
         role,
       });
+      setRestartBlocked(true);
+      activeRequestRef.current?.abort();
+      voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
+      voiceOrbRef.current?.stopListening?.().catch(() => {});
       router.push({
         pathname: '/screens/dash-assistant',
         params: {
@@ -438,10 +477,19 @@ export default function DashVoiceScreen() {
         dashPolicy.systemPromptAddendum;
       const hasImage = !!attachedImage?.base64;
       const ocrTask = hasImage ? detectOCRTask(trimmed) : null;
-      const ocrMode = hasImage && (isOCRIntent(trimmed) || ocrTask !== null);
+      const ocrMode = hasImage && (
+        isOCRIntent(trimmed) ||
+        ocrTask !== null ||
+        isShortOrAttachmentOnlyPrompt(trimmed)
+      );
       const imageContext = hasImage
         ? '\n\nIMAGE PROCESSING: The user attached an image. Describe what you see and provide educational insights.'
         : '';
+      const criteriaContext = getCriteriaResponsePrompt(trimmed);
+      const criteriaContextBlock = criteriaContext ? `\n\n${criteriaContext}` : '';
+      const criteriaHeadings = extractCriteriaHeadings(trimmed);
+      const criteriaTemplate = buildCriteriaHeadingTemplate(criteriaHeadings);
+      const criteriaTemplateBlock = criteriaTemplate ? `\n\n${criteriaTemplate}` : '';
       const ocrContext = ocrMode
         ? `\n\n${getOCRPromptForTask(ocrTask || 'document')}`
         : '';
@@ -449,7 +497,7 @@ export default function DashVoiceScreen() {
       const recentHistory = updatedHistory.slice(-20);
       const payload: Record<string, any> = {
         messages: recentHistory,
-        context: systemPrompt + imageContext + ocrContext,
+        context: systemPrompt + imageContext + criteriaContextBlock + criteriaTemplateBlock + ocrContext,
       };
       if (hasImage) {
         payload.images = [{ data: attachedImage.base64, media_type: 'image/jpeg' }];
@@ -480,6 +528,63 @@ export default function DashVoiceScreen() {
       const body = JSON.stringify(bodyPayload);
       if (attachedImage) setAttachedImage(null);
 
+      const applyCriteriaGuardrails = async (candidateText: string): Promise<{
+        text: string;
+        warningCode?: string;
+      }> => {
+        const enforcement = await enforceCriteriaResponseWithSingleRewrite({
+          userInput: trimmed,
+          responseContent: candidateText,
+          extractedHeadings: criteriaHeadings,
+          rewriteAttempt: async (rewritePrompt) => {
+            const rewriteBody = JSON.stringify({
+              scope: aiScope,
+              service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
+              payload: {
+                messages: [
+                  ...recentHistory.slice(-10),
+                  { role: 'assistant', content: candidateText },
+                  { role: 'user', content: rewritePrompt },
+                ],
+                context: payload.context,
+              },
+              stream: false,
+              enable_tools: true,
+              metadata: {
+                role,
+                source: 'dash_voice_orb.criteria_rewrite',
+                criteria_rewrite_pass: true,
+              },
+            });
+            const rewriteResponse = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: rewriteBody,
+            });
+            const rewriteData = await rewriteResponse.json().catch(() => ({} as Record<string, any>));
+            if (!rewriteResponse.ok) {
+              throw new Error(String(rewriteData?.error || rewriteData?.message || `Request failed (${rewriteResponse.status})`));
+            }
+            return cleanRawJSON(String(rewriteData?.content || ''));
+          },
+        });
+
+        if (enforcement.outcome === 'failed_after_rewrite') {
+          return {
+            text: `${String(enforcement.content || candidateText).trim()}\n\nNote: Please verify criterion headings before submission.`,
+            warningCode: enforcement.warningCode || 'criteria_mapping_mismatch',
+          };
+        }
+
+        return {
+          text: String(enforcement.content || candidateText).trim(),
+          warningCode: enforcement.warningCode || undefined,
+        };
+      };
+
       if (ocrMode) {
         const response = await fetch(url, {
           method: 'POST',
@@ -495,29 +600,40 @@ export default function DashVoiceScreen() {
         }
 
         const ocr = data?.ocr;
+        const confidence = typeof data?.confidence_score === 'number'
+          ? data.confidence_score
+          : typeof ocr?.confidence === 'number'
+            ? ocr.confidence
+            : null;
         const content = typeof data?.content === 'string'
           ? data.content
           : typeof ocr?.analysis === 'string'
             ? ocr.analysis
             : '';
         const cleaned = cleanRawJSON(content);
-        const displayText = cleaned || 'I analyzed the image but did not find readable text.';
+        const lowConfidenceHint =
+          typeof confidence === 'number' && confidence <= 0.75
+            ? `\n\nScan clarity: ${Math.round(confidence * 100)}%. For better accuracy, retake with clearer lighting and a flatter page.`
+            : '';
+        const displayText = (cleaned || 'I analyzed the image but did not find readable text.') + lowConfidenceHint;
+        const criteriaGuard = await applyCriteriaGuardrails(displayText);
+        const finalDisplayText = criteriaGuard.text || displayText;
         logDashTrace('ocr_response', {
           turnId,
-          responseChars: displayText.length,
-          responsePreview: displayText.slice(0, 160),
+          responseChars: finalDisplayText.length,
+          responsePreview: finalDisplayText.slice(0, 160),
           ocrTask: ocrTask || 'document',
+          criteriaWarning: criteriaGuard.warningCode || null,
         });
-        setLastResponse(displayText);
+        setLastResponse(finalDisplayText);
         setStreamingText('');
         setIsProcessing(false);
-        if (displayText) {
-          const withResponse = [...updatedHistory, { role: 'assistant' as const, content: displayText }];
+        if (finalDisplayText) {
+          const withResponse = [...updatedHistory, { role: 'assistant' as const, content: finalDisplayText }];
           conversationHistoryRef.current = withResponse;
           setConversationHistory(withResponse);
           persistOrbMessages(withResponse);
-          const spoken = buildVoicePlaybackText(displayText, { maxChars: 220, maxSentences: 2 });
-          enqueueSpeech(spoken || displayText);
+          enqueueSpeech(finalDisplayText);
         }
         track(
           'dash.turn.completed',
@@ -557,52 +673,62 @@ export default function DashVoiceScreen() {
           }
         },
         (finalText) => {
-          const cleaned = cleanRawJSON(finalText);
-          // Guard: if nothing meaningful was returned, show a friendly fallback
-          const isSseArtifact = !cleaned || /^\s*(data:\s*\[DONE\]|data:\s*$)/i.test(cleaned);
-          const displayText = isSseArtifact
-            ? 'I couldn\'t get a response. Please try again.'
-            : cleaned;
-          logDashTrace('stream_done', {
-            turnId,
-            latencyMs: Date.now() - turnStartedAt,
-            chars: displayText.length,
-            preview: displayText.slice(0, 160),
-            artifact: isSseArtifact,
-          });
-          setLastResponse(displayText);
-          setStreamingText('');
-          setIsProcessing(false);
-          // Add assistant response to history + persist
-          if (displayText && !isSseArtifact) {
-            const withResponse = [...updatedHistory, { role: 'assistant' as const, content: cleaned }];
-            conversationHistoryRef.current = withResponse;
-            setConversationHistory(withResponse);
-            persistOrbMessages(withResponse);
-            if (STREAMING_TTS_ENABLED) {
-              const lcp = longestCommonPrefixLen(cleaned, streamedPrefixQueuedRef.current);
-              const remaining = cleaned.slice(lcp).trim();
-              if (remaining) enqueueSpeech(remaining);
-            } else {
-              const spoken = buildVoicePlaybackText(cleaned, { maxChars: 220, maxSentences: 2 });
-              if (spoken.length < cleaned.length) {
-                logDashTrace('tts_compact_playback', {
-                  turnId,
-                  fullChars: cleaned.length,
-                  spokenChars: spoken.length,
-                });
-              }
-              enqueueSpeech(spoken || cleaned);
-            }
-          }
-          track(
-            'dash.turn.completed',
-            buildDashTurnTelemetry({
-              ...turnTelemetryBase,
+          void (async () => {
+            const cleaned = cleanRawJSON(finalText);
+            // Guard: if nothing meaningful was returned, show a friendly fallback
+            const isSseArtifact = !cleaned || /^\s*(data:\s*\[DONE\]|data:\s*$)/i.test(cleaned);
+            const displayText = isSseArtifact
+              ? 'I couldn\'t get a response. Please try again.'
+              : cleaned;
+            const criteriaGuard = isSseArtifact
+              ? { text: displayText }
+              : await applyCriteriaGuardrails(displayText);
+            const finalDisplayText = criteriaGuard.text || displayText;
+            logDashTrace('stream_done', {
+              turnId,
               latencyMs: Date.now() - turnStartedAt,
-            })
-          );
-          activeRequestRef.current = null;
+              chars: finalDisplayText.length,
+              preview: finalDisplayText.slice(0, 160),
+              artifact: isSseArtifact,
+              criteriaWarning: criteriaGuard.warningCode || null,
+            });
+            setLastResponse(finalDisplayText);
+            setStreamingText('');
+            setIsProcessing(false);
+            // Add assistant response to history + persist
+            if (finalDisplayText && !isSseArtifact) {
+              const withResponse = [...updatedHistory, { role: 'assistant' as const, content: finalDisplayText }];
+              conversationHistoryRef.current = withResponse;
+              setConversationHistory(withResponse);
+              persistOrbMessages(withResponse);
+              if (STREAMING_TTS_ENABLED) {
+                const lcp = longestCommonPrefixLen(finalDisplayText, streamedPrefixQueuedRef.current);
+                const remaining = finalDisplayText.slice(lcp).trim();
+                if (remaining) enqueueSpeech(remaining);
+              } else {
+                enqueueSpeech(finalDisplayText);
+              }
+            }
+            track(
+              'dash.turn.completed',
+              buildDashTurnTelemetry({
+                ...turnTelemetryBase,
+                latencyMs: Date.now() - turnStartedAt,
+              })
+            );
+            activeRequestRef.current = null;
+          })().catch((error) => {
+            const message = error instanceof Error ? error.message : 'Unknown stream finalization error';
+            logDashTrace('stream_error', {
+              turnId,
+              latencyMs: Date.now() - turnStartedAt,
+              message,
+            });
+            setLastResponse(`Sorry, ${message}. Please try again.`);
+            setStreamingText('');
+            setIsProcessing(false);
+            activeRequestRef.current = null;
+          });
         },
         (error) => {
           logDashTrace('stream_error', {
@@ -664,29 +790,36 @@ export default function DashVoiceScreen() {
   ]);
 
   // Stop Dash (TTS + request + queue) when leaving screen or on unmount
-  const stopDashActivity = useCallback(() => {
+  const stopDashActivity = useCallback((reason: string = 'manual_stop', blockRestart: boolean = false) => {
+    logDashTrace('dash_stop', { reason, blockRestart });
+    if (blockRestart) {
+      setRestartBlocked(true);
+    }
     activeRequestRef.current?.abort();
     activeRequestRef.current = null;
     speechQueueRef.current = [];
     resetStreamingSpeech();
     isSpeakingRef.current = false;
     setIsSpeaking(false);
+    setIsListening(false);
     setIsProcessing(false);
     setStreamingText('');
     voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
-  }, [resetStreamingSpeech]);
+    voiceOrbRef.current?.stopListening?.().catch(() => {});
+  }, [logDashTrace, resetStreamingSpeech]);
 
   useFocusEffect(
     useCallback(() => {
+      setRestartBlocked(false);
       return () => {
-        stopDashActivity();
+        stopDashActivity('navigation_blur', true);
       };
     }, [stopDashActivity])
   );
 
   useEffect(() => () => {
     activeRequestRef.current?.abort();
-    stopDashActivity();
+    stopDashActivity('unmount', true);
   }, [stopDashActivity]);
 
   // ── Handlers ──────────────────────────────────────────────────────
@@ -728,12 +861,14 @@ export default function DashVoiceScreen() {
   const handleInputFocus = useCallback(() => {
     if (isSpeakingRef.current || isSpeaking) {
       voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
+      logDashTrace('dash_stop', { reason: 'input_focus_stop_speaking' });
     }
     if (isListening) {
       voiceOrbRef.current?.stopListening?.().catch(() => {});
       setIsListening(false);
+      logDashTrace('dash_stop', { reason: 'input_focus_stop_listening' });
     }
-  }, [isListening, isSpeaking]);
+  }, [isListening, isSpeaking, logDashTrace]);
 
   // ── Derived ───────────────────────────────────────────────────────
   const greeting = useMemo(() => {
@@ -762,6 +897,7 @@ export default function DashVoiceScreen() {
         onOpenFullChat={async () => {
           const history = conversationHistoryRef.current;
           await persistOrbMessages(history);
+          stopDashActivity('open_full_chat', true);
           router.push({
             pathname: '/screens/dash-assistant',
             params: { source: 'orb' },
@@ -772,7 +908,13 @@ export default function DashVoiceScreen() {
 
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 4 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.headerBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            stopDashActivity('navigation_back', true);
+            router.back();
+          }}
+          style={s.headerBtn}
+        >
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
@@ -782,7 +924,7 @@ export default function DashVoiceScreen() {
         <View style={s.headerRight}>
           {(isSpeaking || isProcessing) && (
             <TouchableOpacity
-              onPress={stopDashActivity}
+              onPress={() => stopDashActivity('header_stop_button')}
               style={[s.headerIconBtn, { borderColor: theme.error || '#ef4444', backgroundColor: (theme as any).error || '#ef4444' }]}
               accessibilityLabel="Stop Dash speaking"
             >
@@ -790,7 +932,10 @@ export default function DashVoiceScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            onPress={() => router.push('/screens/app-search?scope=dash&q=dash')}
+            onPress={() => {
+              stopDashActivity('open_search', true);
+              router.push('/screens/app-search?scope=dash&q=dash');
+            }}
             style={[s.headerIconBtn, { borderColor: theme.border }]}
             accessibilityLabel="Find Dash features"
           >
@@ -845,6 +990,7 @@ export default function DashVoiceScreen() {
                 size={orbRenderSize}
                 autoStartListening
                 autoRestartAfterTTS
+                restartBlocked={restartBlocked}
                 preschoolMode={orgType === 'preschool'}
                 showLiveTranscript={false}
               />
@@ -981,6 +1127,7 @@ export default function DashVoiceScreen() {
           <TouchableOpacity style={s.fullChatLink} onPress={async () => {
             const history = conversationHistoryRef.current;
             await persistOrbMessages(history);
+            stopDashActivity('continue_full_chat', true);
             router.push({
               pathname: '/screens/dash-assistant',
               params: { source: 'orb' },
@@ -1037,6 +1184,8 @@ export default function DashVoiceScreen() {
       onClose={() => setScannerVisible(false)}
       onScanned={handleScannerScanned}
       title="Scan Homework"
+      tier={activeTier}
+      remainingScans={remainingScans}
     />
     </>
   );

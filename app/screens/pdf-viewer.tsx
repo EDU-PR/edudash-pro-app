@@ -13,8 +13,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { logger } from '@/lib/logger';
+import {
+  extractGeneratedPdfStoragePathFromUrl,
+  isGeneratedPdfPublicUrl,
+  isSupportedPdfContentType,
+} from '@/app/screens/pdf-viewer.utils';
 
 const TAG = 'PDFViewer';
+const GENERATED_PDF_BUCKET = 'generated-pdfs';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for react-native-pdf (requires native module)
@@ -28,7 +34,8 @@ try {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PDFViewerParams {
-  url: string;
+  url?: string;
+  storagePath?: string;
   title: string;
   bookId?: string;
 }
@@ -47,39 +54,158 @@ export default function PDFViewerScreen() {
   
   const pdfRef = useRef<any>(null);
 
-  const { url, title, bookId } = params;
+  const rawUrl = Array.isArray(params.url) ? params.url[0] : params.url;
+  const rawStoragePath = Array.isArray(params.storagePath) ? params.storagePath[0] : params.storagePath;
+  const rawTitle = Array.isArray(params.title) ? params.title[0] : params.title;
+  const rawBookId = Array.isArray(params.bookId) ? params.bookId[0] : params.bookId;
+  const url = typeof rawUrl === 'string' ? rawUrl : '';
+  const storagePath = typeof rawStoragePath === 'string' ? rawStoragePath : '';
+  const title = typeof rawTitle === 'string' ? rawTitle : '';
+  const bookId = typeof rawBookId === 'string' ? rawBookId : undefined;
+
+  const getFilenameFromSource = useCallback((targetUrl: string, targetStoragePath?: string) => {
+    const fromStoragePath = String(targetStoragePath || '').trim();
+    const source = fromStoragePath || String(targetUrl || '').trim();
+    if (!source) return 'book.pdf';
+    const withoutQuery = source.split('?')[0].split('#')[0];
+    const baseName = withoutQuery.split('/').pop() || 'book.pdf';
+    const decoded = decodeURIComponent(baseName);
+    return decoded.endsWith('.pdf') ? decoded : `${decoded || 'book'}.pdf`;
+  }, []);
+
+  const removeLocalFileIfExists = useCallback(async (targetPath: string) => {
+    try {
+      const info = await FileSystem.getInfoAsync(targetPath);
+      if (info.exists) {
+        await FileSystem.deleteAsync(targetPath, { idempotent: true });
+      }
+    } catch {
+      // Ignore cleanup failures.
+    }
+  }, []);
+
+  const hasPdfMagicHeader = useCallback(async (targetPath: string): Promise<boolean> => {
+    try {
+      const info = await FileSystem.getInfoAsync(targetPath);
+      if (!info.exists || (typeof info.size === 'number' && info.size <= 0)) return false;
+
+      const headerBase64 = await FileSystem.readAsStringAsync(targetPath, {
+        encoding: FileSystem.EncodingType.Base64,
+        position: 0,
+        length: 8,
+      } as any);
+
+      return /^JVBERi0/i.test(String(headerBase64 || ''));
+    } catch (inspectError) {
+      logger.warn(TAG, 'Failed to inspect PDF header:', inspectError);
+      return false;
+    }
+  }, []);
+
+  const formatPdfLoadError = useCallback((rawError: unknown): string => {
+    const message = String((rawError as any)?.message || rawError || '').toLowerCase();
+    if (message.includes('expired') || message.includes('regenerate')) {
+      return 'This PDF preview link expired. Return to Dash and regenerate the PDF preview.';
+    }
+    if (message.includes('http 404') || message.includes('404')) {
+      return 'This PDF link is invalid or expired. Please regenerate the PDF and try again.';
+    }
+    if (
+      message.includes('expected a pdf') ||
+      message.includes('not a valid pdf') ||
+      message.includes('not in pdf format')
+    ) {
+      return 'The link did not return a valid PDF file. Please regenerate the PDF and try again.';
+    }
+    if (message.includes('network') || message.includes('timeout') || message.includes('fetch')) {
+      return 'Unable to download the PDF right now. Check your connection and retry.';
+    }
+    return 'Unable to open this PDF preview. Please regenerate the PDF and try again.';
+  }, []);
+
+  const resolveDownloadTarget = useCallback(async (): Promise<{
+    downloadUrl: string;
+    resolvedStoragePath: string | null;
+  }> => {
+    const explicitStoragePath = String(storagePath || '').trim();
+    const urlStoragePath = extractGeneratedPdfStoragePathFromUrl(url);
+    const resolvedStoragePath = explicitStoragePath || urlStoragePath || null;
+    const isLegacyGeneratedPublicUrl = isGeneratedPdfPublicUrl(url);
+
+    if (resolvedStoragePath) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(GENERATED_PDF_BUCKET)
+          .createSignedUrl(resolvedStoragePath, 60 * 60);
+        if (error) throw error;
+        const signedUrl = String(data?.signedUrl || '').trim();
+        if (signedUrl) {
+          return { downloadUrl: signedUrl, resolvedStoragePath };
+        }
+      } catch (error) {
+        logger.warn(TAG, 'Failed to refresh signed URL from storage path', {
+          storagePath: resolvedStoragePath,
+          error: String((error as any)?.message || error || 'unknown_error'),
+        });
+        if (!url || isLegacyGeneratedPublicUrl) {
+          throw new Error('This preview link has expired. Please regenerate the PDF and try again.');
+        }
+      }
+    }
+
+    const fallbackUrl = String(url || '').trim();
+    if (!fallbackUrl) {
+      throw new Error('No PDF URL provided');
+    }
+
+    if (isLegacyGeneratedPublicUrl) {
+      throw new Error('This preview link has expired. Please regenerate the PDF and try again.');
+    }
+
+    return {
+      downloadUrl: fallbackUrl,
+      resolvedStoragePath,
+    };
+  }, [storagePath, url]);
 
   // Check if PDF is available locally
-  const checkLocalCache = useCallback(async () => {
-    if (!url) return null;
-    
+  const checkLocalCache = useCallback(async (targetUrl: string, targetStoragePath?: string | null) => {
+    if (!targetUrl && !targetStoragePath) return null;
+
     try {
-      const filename = url.split('/').pop() || 'book.pdf';
+      const filename = getFilenameFromSource(targetUrl, targetStoragePath || undefined);
       const localPath = `${FileSystem.cacheDirectory}ebooks/${filename}`;
       
       const info = await FileSystem.getInfoAsync(localPath);
       if (info.exists) {
-        logger.debug(TAG, 'Using cached PDF:', localPath);
-        return localPath;
+        const cachedFileIsValid = await hasPdfMagicHeader(localPath);
+        if (cachedFileIsValid) {
+          logger.debug(TAG, 'Using cached PDF:', localPath);
+          return localPath;
+        }
+        logger.warn(TAG, 'Removing invalid cached PDF:', localPath);
+        await removeLocalFileIfExists(localPath);
       }
     } catch (error) {
       console.warn('[PDFViewer] Cache check error:', error);
     }
     
     return null;
-  }, [url]);
+  }, [getFilenameFromSource, hasPdfMagicHeader, removeLocalFileIfExists]);
 
   // Download and cache PDF
   const downloadPdf = useCallback(async () => {
-    if (!url) {
-      setError('No PDF URL provided');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
+    setError(null);
+    setDownloadProgress(0);
 
     try {
+      const resolved = await resolveDownloadTarget();
+      const targetUrl = resolved.downloadUrl;
+      const resolvedStoragePath = resolved.resolvedStoragePath;
+
       // First check cache
-      const cached = await checkLocalCache();
+      const cached = await checkLocalCache(targetUrl, resolvedStoragePath);
       if (cached) {
         setLocalUri(cached);
         setLoading(false);
@@ -94,23 +220,47 @@ export default function PDFViewerScreen() {
       }
 
       // Download with progress
-      const filename = url.split('/').pop() || 'book.pdf';
+      const filename = getFilenameFromSource(targetUrl, resolvedStoragePath || undefined);
       const localPath = `${cacheDir}/${filename}`;
 
       const downloadResumable = FileSystem.createDownloadResumable(
-        url,
+        targetUrl,
         localPath,
         {},
         (downloadProgress) => {
-          const progress =
-            downloadProgress.totalBytesWritten /
-            downloadProgress.totalBytesExpectedToWrite;
-          setDownloadProgress(Math.round(progress * 100));
+          const expectedBytes = downloadProgress.totalBytesExpectedToWrite;
+          if (expectedBytes > 0) {
+            const progress = downloadProgress.totalBytesWritten / expectedBytes;
+            setDownloadProgress(Math.round(progress * 100));
+          }
         }
       );
 
       const result = await downloadResumable.downloadAsync();
       if (result?.uri) {
+        const status = Number((result as any)?.status || 0);
+        if (status && (status < 200 || status >= 300)) {
+          await removeLocalFileIfExists(result.uri);
+          throw new Error(`Download failed with HTTP ${status}`);
+        }
+
+        const responseHeaders = ((result as any)?.headers || {}) as Record<string, unknown>;
+        const contentType = String(
+          responseHeaders['content-type'] ||
+            responseHeaders['Content-Type'] ||
+            '',
+        ).toLowerCase();
+        if (!isSupportedPdfContentType(contentType)) {
+          await removeLocalFileIfExists(result.uri);
+          throw new Error(`Expected a PDF file but received ${contentType}`);
+        }
+
+        const isPdfDocument = await hasPdfMagicHeader(result.uri);
+        if (!isPdfDocument) {
+          await removeLocalFileIfExists(result.uri);
+          throw new Error('Downloaded file is not a valid PDF');
+        }
+
         setLocalUri(result.uri);
         logger.debug(TAG, 'Downloaded PDF to:', result.uri);
       } else {
@@ -118,12 +268,19 @@ export default function PDFViewerScreen() {
       }
     } catch (error) {
       console.error('[PDFViewer] Download error:', error);
-      // Fallback to remote URL if download fails
-      setLocalUri(url);
+      setLocalUri(null);
+      setError(formatPdfLoadError(error));
     } finally {
       setLoading(false);
     }
-  }, [url, checkLocalCache]);
+  }, [
+    resolveDownloadTarget,
+    checkLocalCache,
+    getFilenameFromSource,
+    removeLocalFileIfExists,
+    hasPdfMagicHeader,
+    formatPdfLoadError,
+  ]);
 
   useEffect(() => {
     downloadPdf();
@@ -266,7 +423,7 @@ export default function PDFViewerScreen() {
           }}
           onError={(error: any) => {
             console.error('[PDFViewer] Error:', error);
-            setError('Failed to load PDF');
+            setError(formatPdfLoadError(error));
           }}
           trustAllCerts={false}
         />

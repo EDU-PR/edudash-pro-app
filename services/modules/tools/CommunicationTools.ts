@@ -14,6 +14,106 @@ const CHART_MAX_LABEL_LENGTH = 48;
 const CHART_MAX_TITLE_LENGTH = 96;
 const CHART_MAX_SUMMARY_LENGTH = 800;
 const CHART_ABS_VALUE_LIMIT = 1_000_000;
+const GENERATED_PDF_BUCKET = 'generated-pdfs';
+const GENERATED_PDF_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24;
+
+type ResolvedGeneratedPdfLink = {
+  downloadUrl?: string;
+  signedUrl?: string;
+  linkType: 'signed' | 'local' | 'none';
+  warning?: string;
+  warningReason?: 'signed_url_failed' | 'no_storage_path' | 'no_local_fallback';
+};
+
+async function resolveGeneratedPdfLink(
+  supabase: any,
+  storagePath?: string,
+  fallbackUri?: string
+): Promise<ResolvedGeneratedPdfLink> {
+  let signedUrl: string | undefined;
+  let warning: string | undefined;
+  let warningReason: ResolvedGeneratedPdfLink['warningReason'];
+  const safeStoragePath = typeof storagePath === 'string' ? storagePath.trim() : '';
+  const safeFallbackUri = typeof fallbackUri === 'string' ? fallbackUri.trim() : '';
+
+  if (safeStoragePath) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(GENERATED_PDF_BUCKET)
+        .createSignedUrl(safeStoragePath, GENERATED_PDF_SIGNED_URL_TTL_SECONDS);
+      if (error) throw error;
+      signedUrl = data?.signedUrl || undefined;
+    } catch (err: any) {
+      warningReason = 'signed_url_failed';
+      warning = String(err?.message || 'Failed to create signed PDF URL');
+      logger.warn('[CommunicationTools] Signed PDF URL generation failed:', {
+        warning,
+        storagePath: safeStoragePath,
+        warningReason,
+      });
+    }
+  }
+
+  if (signedUrl) {
+    return {
+      downloadUrl: signedUrl,
+      signedUrl,
+      linkType: 'signed',
+      warning,
+      warningReason,
+    };
+  }
+
+  if (safeFallbackUri) {
+    return {
+      downloadUrl: safeFallbackUri,
+      linkType: 'local',
+      warning,
+      warningReason: warningReason || (safeStoragePath ? 'signed_url_failed' : 'no_storage_path'),
+    };
+  }
+
+  if (!safeStoragePath) {
+    return {
+      linkType: 'none',
+      warning: warning || 'No storage path provided for generated PDF and no local fallback is available.',
+      warningReason: 'no_storage_path',
+    };
+  }
+
+  return {
+    linkType: 'none',
+    warning: warning || 'Signed URL generation failed and no local fallback URI is available.',
+    warningReason: 'no_local_fallback',
+  };
+}
+
+function buildPdfToolPayload(
+  toolName: string,
+  input: {
+    filename?: string;
+    storagePath?: string;
+    pageCount?: number;
+  },
+  linkInfo: ResolvedGeneratedPdfLink,
+  localFallbackLabel: string,
+) {
+  const hasPreview = !!linkInfo.downloadUrl;
+  return {
+    tool: toolName,
+    filename: input.filename,
+    storagePath: input.storagePath,
+    downloadUrl: linkInfo.downloadUrl,
+    signedUrl: linkInfo.signedUrl,
+    linkType: linkInfo.linkType,
+    warning: linkInfo.warning,
+    warningReason: linkInfo.warningReason,
+    ...(typeof input.pageCount === 'number' ? { pageCount: input.pageCount } : {}),
+    message: hasPreview
+      ? 'PDF ready to open.'
+      : localFallbackLabel,
+  };
+}
 
 export function registerCommunicationTools(register: (tool: AgentTool) => void): void {
   
@@ -101,32 +201,34 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           return { success: false, error: result.error || 'PDF generation failed' };
         }
 
-        let publicUrl: string | undefined;
-        if (result.storagePath) {
-          try {
-            const { data } = supabase.storage
-              .from('generated-pdfs')
-              .getPublicUrl(result.storagePath);
-            publicUrl = data?.publicUrl || undefined;
-          } catch {}
-        }
+        const linkInfo = await resolveGeneratedPdfLink(supabase, result.storagePath, result.uri);
+        const toolResultPayload = buildPdfToolPayload(
+          'export_pdf',
+          {
+            filename: result.filename,
+            storagePath: result.storagePath,
+          },
+          linkInfo,
+          'PDF generated locally, but no preview link is available.',
+        );
 
         // Post a friendly assistant message into the current Dash Chat conversation
         try {
           const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
           const dash = DashAIAssistant.getInstance();
           const convId = dash.getCurrentConversationId?.();
-          const link = publicUrl || result.uri;
-          if (convId && link) {
+          if (convId) {
             const msg = {
               id: `pdf_${Date.now()}`,
               type: 'assistant',
-              content: `Your PDF is ready: [Open PDF](${link})`,
+              content: toolResultPayload.message,
               timestamp: Date.now(),
               metadata: {
                 suggested_actions: ['export_pdf'],
                 dashboard_action: { type: 'export_pdf', title: args.title, content: args.content },
-                tool_results: { tool: 'export_pdf', filename: result.filename, storagePath: result.storagePath, publicUrl: publicUrl }
+                tool_name: 'export_pdf',
+                tool_result: { success: true, result: toolResultPayload },
+                tool_results: toolResultPayload,
               }
             } as any;
             await dash.addMessageToConversation(convId, msg);
@@ -138,9 +240,7 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         return {
           success: true,
           uri: result.uri,
-          filename: result.filename,
-          storagePath: result.storagePath,
-          publicUrl,
+          ...toolResultPayload,
           message: 'PDF generated successfully',
         };
       } catch (e: any) {
@@ -375,30 +475,32 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           return { success: false, error: result.error || 'Worksheet generation failed' };
         }
 
-        let publicUrl: string | undefined;
-        if (result.storagePath) {
-          try {
-            const { data } = supabase.storage
-              .from('generated-pdfs')
-              .getPublicUrl(result.storagePath);
-            publicUrl = data?.publicUrl || undefined;
-          } catch {}
-        }
+        const linkInfo = await resolveGeneratedPdfLink(supabase, result.storagePath, result.uri);
+        const toolResultPayload = buildPdfToolPayload(
+          'generate_worksheet',
+          {
+            filename: result.filename,
+            storagePath: result.storagePath,
+          },
+          linkInfo,
+          'Worksheet PDF generated locally, but no preview link is available.',
+        );
 
         // Post link into Dash chat
         try {
           const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
           const dash = DashAIAssistant.getInstance();
           const convId = dash.getCurrentConversationId?.();
-          const link = publicUrl || result.uri;
-          if (convId && link) {
+          if (convId) {
             await dash.addMessageToConversation(convId, {
               id: `ws_${Date.now()}`,
               type: 'assistant',
-              content: `📝 Your worksheet is ready: [Open PDF](${link})`,
+              content: toolResultPayload.message,
               timestamp: Date.now(),
               metadata: {
-                tool_results: { tool: 'generate_worksheet', filename: result.filename, storagePath: result.storagePath, publicUrl },
+                tool_name: 'generate_worksheet',
+                tool_result: { success: true, result: toolResultPayload },
+                tool_results: toolResultPayload,
               },
             } as any);
           }
@@ -409,9 +511,7 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         return {
           success: true,
           uri: result.uri,
-          filename: result.filename,
-          storagePath: result.storagePath,
-          publicUrl,
+          ...toolResultPayload,
           message: 'Worksheet generated successfully',
         };
       } catch (e: any) {
@@ -580,30 +680,32 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           return { success: false, error: result.error || 'Chart generation failed' };
         }
 
-        let publicUrl: string | undefined;
-        if (result.storagePath) {
-          try {
-            const { data } = supabase.storage
-              .from('generated-pdfs')
-              .getPublicUrl(result.storagePath);
-            publicUrl = data?.publicUrl || undefined;
-          } catch {}
-        }
+        const linkInfo = await resolveGeneratedPdfLink(supabase, result.storagePath, result.uri);
+        const toolResultPayload = buildPdfToolPayload(
+          'generate_chart',
+          {
+            filename: result.filename,
+            storagePath: result.storagePath,
+          },
+          linkInfo,
+          'Chart PDF generated locally, but no preview link is available.',
+        );
 
         // Post link into Dash chat
         try {
           const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
           const dash = DashAIAssistant.getInstance();
           const convId = dash.getCurrentConversationId?.();
-          const link = publicUrl || result.uri;
-          if (convId && link) {
+          if (convId) {
             await dash.addMessageToConversation(convId, {
               id: `chart_${Date.now()}`,
               type: 'assistant',
-              content: `📊 Your chart is ready: [Open PDF](${link})`,
+              content: toolResultPayload.message,
               timestamp: Date.now(),
               metadata: {
-                tool_results: { tool: 'generate_chart', filename: result.filename, storagePath: result.storagePath, publicUrl },
+                tool_name: 'generate_chart',
+                tool_result: { success: true, result: toolResultPayload },
+                tool_results: toolResultPayload,
               },
             } as any);
           }
@@ -623,9 +725,7 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         return {
           success: true,
           uri: result.uri,
-          filename: result.filename,
-          storagePath: result.storagePath,
-          publicUrl,
+          ...toolResultPayload,
           message: 'Chart generated successfully',
         };
       } catch (e: any) {
@@ -676,30 +776,33 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           return { success: false, error: result.error || 'PDF generation from prompt failed' };
         }
 
-        let publicUrl: string | undefined;
-        if (result.storagePath) {
-          try {
-            const { data } = supabase.storage
-              .from('generated-pdfs')
-              .getPublicUrl(result.storagePath);
-            publicUrl = data?.publicUrl || undefined;
-          } catch {}
-        }
+        const linkInfo = await resolveGeneratedPdfLink(supabase, result.storagePath, result.uri);
+        const toolResultPayload = buildPdfToolPayload(
+          'generate_pdf_from_prompt',
+          {
+            filename: result.filename,
+            storagePath: result.storagePath,
+            pageCount: result.pageCount,
+          },
+          linkInfo,
+          'Document PDF generated locally, but no preview link is available.',
+        );
 
         // Post link into Dash chat
         try {
           const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
           const dash = DashAIAssistant.getInstance();
           const convId = dash.getCurrentConversationId?.();
-          const link = publicUrl || result.uri;
-          if (convId && link) {
+          if (convId) {
             await dash.addMessageToConversation(convId, {
               id: `pdfprompt_${Date.now()}`,
               type: 'assistant',
-              content: `📄 Your document is ready: [Open PDF](${link})`,
+              content: toolResultPayload.message,
               timestamp: Date.now(),
               metadata: {
-                tool_results: { tool: 'generate_pdf_from_prompt', filename: result.filename, storagePath: result.storagePath, publicUrl },
+                tool_name: 'generate_pdf_from_prompt',
+                tool_result: { success: true, result: toolResultPayload },
+                tool_results: toolResultPayload,
               },
             } as any);
           }
@@ -710,10 +813,7 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         return {
           success: true,
           uri: result.uri,
-          filename: result.filename,
-          storagePath: result.storagePath,
-          publicUrl,
-          pageCount: result.pageCount,
+          ...toolResultPayload,
           message: 'PDF generated from prompt successfully',
         };
       } catch (e: any) {

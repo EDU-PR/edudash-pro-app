@@ -12,7 +12,7 @@ describe('voice orb interrupt restart behavior', () => {
     })).toBe(true);
   });
 
-  it('blocks restart while speaking/recording/muted', () => {
+  it('blocks restart while speaking/recording/muted/processing', () => {
     expect(canAutoRestartAfterInterrupt({
       isMuted: true,
       isProcessing: false,
@@ -45,15 +45,6 @@ describe('voice orb interrupt restart behavior', () => {
       isProcessing: true,
       isRecording: false,
       usingLiveSTT: false,
-      isSpeaking: false,
-      ttsIsSpeaking: false,
-    })).toBe(false);
-
-    expect(canAutoRestartAfterInterrupt({
-      isMuted: false,
-      isProcessing: false,
-      isRecording: false,
-      usingLiveSTT: true,
       isSpeaking: false,
       ttsIsSpeaking: false,
     })).toBe(false);

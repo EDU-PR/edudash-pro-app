@@ -38,6 +38,7 @@ import { setPreferredModel } from '@/lib/ai/preferences';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
+import { loadAutoScanBudget, trackAutoScanUsage } from '@/lib/dash-ai/imageBudget';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -113,6 +114,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_MIN_HEIGHT);
   const [lastSpokenMessageId, setLastSpokenMessageId] = useState<string | null>(null);
   const [speechSegmentIndex, setSpeechSegmentIndex] = useState(0);
+  const [remainingScans, setRemainingScans] = useState<number | null>(null);
 
   // Keyboard listeners
   useEffect(() => {
@@ -154,6 +156,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     isRecording,
     recordingVoiceActivity,
     partialTranscript,
+    speechChunkProgress,
     voiceAutoSendCountdownActive,
     voiceAutoSendCountdownMs,
     tutorSession,
@@ -210,6 +213,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setSpeechSegmentIndex(0);
   }, [speakingMessageId]);
 
+  useEffect(() => {
+    if (!speechChunkProgress || speechChunkProgress.chunkCount <= 0) return;
+    const boundedIndex = Math.max(
+      0,
+      Math.min(speechChunkProgress.chunkIndex, speechChunkProgress.chunkCount - 1),
+    );
+    setSpeechSegmentIndex((prev) => (prev === boundedIndex ? prev : boundedIndex));
+  }, [speechChunkProgress]);
+
   const activeSpeechMessageId = speakingMessageId || lastSpokenMessageId;
   const activeSpeechMessage = useMemo(() => {
     if (!activeSpeechMessageId) return null;
@@ -221,14 +233,28 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     () => splitSpeechSegments(activeSpeechMessage?.content || ''),
     [activeSpeechMessage?.content],
   );
-  const canSeekBack = speechSegmentIndex > 0 && speechSegments.length > 0;
-  const canSeekForward = speechSegmentIndex < speechSegments.length - 1;
-  const speechProgress = speechSegments.length > 0
-    ? Math.min(1, Math.max(0, (speechSegmentIndex + 1) / speechSegments.length))
+  const chunkCount = speechChunkProgress?.chunkCount || speechSegments.length;
+  const chunkIndex = typeof speechChunkProgress?.chunkIndex === 'number'
+    ? speechChunkProgress.chunkIndex
+    : speechSegmentIndex;
+  const displaySpeechIndex = Math.max(0, Math.min(chunkIndex, Math.max(0, chunkCount - 1)));
+  const canSeekBack = displaySpeechIndex > 0 && speechSegments.length > 0;
+  const canSeekForward = displaySpeechIndex < speechSegments.length - 1;
+  const speechProgress = chunkCount > 0
+    ? Math.min(1, Math.max(0, (displaySpeechIndex + 1) / chunkCount))
     : 0;
   const showSpeakingTransport = Boolean(activeSpeechMessage) && (isSpeaking || speechSegments.length > 0);
   const bottomThinkingLabel = getBottomThinkingLabel(loadingStatus);
   const showBottomThinkingDock = isTypingActive && !isRecording;
+
+  const refreshScanBudget = useCallback(async () => {
+    const budget = await loadAutoScanBudget(tier || 'free');
+    setRemainingScans(budget.remainingCount);
+  }, [tier]);
+
+  useEffect(() => {
+    void refreshScanBudget();
+  }, [refreshScanBudget]);
 
   const handleNewChat = useCallback(async () => {
     await stopAllActivity();
@@ -258,7 +284,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       timestamp: Date.now(),
     };
     await stopSpeaking();
-    await speakResponse(replayMessage, { preferFastStart: true });
+    await speakResponse(replayMessage);
   }, [activeSpeechMessage, speechSegments, speakResponse, stopSpeaking]);
 
   const handleSpeechToggle = useCallback(() => {
@@ -266,8 +292,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       void stopSpeaking();
       return;
     }
-    void speakFromSegment(speechSegmentIndex);
-  }, [isSpeaking, speakFromSegment, speechSegmentIndex, stopSpeaking]);
+    void speakFromSegment(displaySpeechIndex);
+  }, [displaySpeechIndex, isSpeaking, speakFromSegment, stopSpeaking]);
 
   const openAttachmentSheet = useCallback(() => {
     if (isRecording) {
@@ -316,12 +342,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   );
 
   const openScanner = useCallback(() => {
-    if (Platform.OS === 'web') {
-      void handleTakePhoto();
-      return;
-    }
     setScannerVisible(true);
-  }, [handleTakePhoto]);
+  }, []);
 
   const handleAttachmentTakePhoto = useCallback(() => {
     openScanner();
@@ -378,8 +400,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       },
     };
     addAttachments([attachment]);
+    void trackAutoScanUsage(tier || 'free', 1).then(() => refreshScanBudget());
     setScannerVisible(false);
-  }, [addAttachments]);
+  }, [addAttachments, refreshScanBudget, tier]);
 
   // Scroll to bottom on keyboard show
   useEffect(() => {
@@ -407,8 +430,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       onSendFollowUp={(text) => sendMessage(text)}
       extractFollowUps={extractFollowUps}
       assistantLabel={roleCopy.assistantLabel}
+      onRetakeForClarity={openScanner}
     />
-  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
+  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, openScanner]);
 
   const renderTypingIndicator = useCallback(() => {
     if (streamingMessageId) return null;
@@ -529,7 +553,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                       <TouchableOpacity
                         style={[headerStyles.iconButton, { backgroundColor: theme.error, borderColor: 'transparent', borderWidth: 0 }]}
                         accessibilityLabel="Stop Dash activity"
-                        onPress={stopAllActivity}
+                        onPress={() => {
+                          void stopAllActivity('header_stop_button');
+                        }}
                       >
                         <Ionicons name="stop" size={18} color={theme.onError || theme.background} />
                       </TouchableOpacity>
@@ -615,7 +641,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                       {isSpeaking ? 'Dash speaking' : 'Speech controls'}
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '600' }}>
-                      {speechSegments.length > 0 ? `${speechSegmentIndex + 1}/${speechSegments.length}` : '0/0'}
+                      {chunkCount > 0 ? `${displaySpeechIndex + 1}/${chunkCount}` : '0/0'}
                     </Text>
                   </View>
                   <View
@@ -637,7 +663,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <TouchableOpacity
                       style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                      onPress={() => void speakFromSegment(speechSegmentIndex - 1)}
+                      onPress={() => void speakFromSegment(displaySpeechIndex - 1)}
                       disabled={!canSeekBack}
                       accessibilityLabel="Rewind spoken content"
                     >
@@ -660,7 +686,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                      onPress={() => void speakFromSegment(speechSegmentIndex + 1)}
+                      onPress={() => void speakFromSegment(displaySpeechIndex + 1)}
                       disabled={!canSeekForward}
                       accessibilityLabel="Fast forward spoken content"
                     >
@@ -838,6 +864,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             onClose={() => setScannerVisible(false)}
             onScanned={handleScannerScanned}
             title="Scan Image"
+            tier={tier || 'free'}
+            remainingScans={remainingScans}
           />
         </View>
       </KeyboardAvoidingView>
