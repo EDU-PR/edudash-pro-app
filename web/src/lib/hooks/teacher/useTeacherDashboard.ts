@@ -86,14 +86,23 @@ export function useTeacherDashboard(userId?: string) {
       }
 
       // Fetch pending homework submissions (ungraded) for this teacher
+      // homework_submissions has assignment_id, not class_id; class_id is on homework_assignments
       let pendingGradingCount = 0;
       if (classIds.length > 0) {
-        const { count } = await supabase
-          .from('homework_submissions')
-          .select('*', { count: 'exact', head: true })
-          .in('class_id', classIds)
-          .eq('status', 'submitted');
-        pendingGradingCount = count || 0;
+        const { data: assignmentIds } = await supabase
+          .from('homework_assignments')
+          .select('id')
+          .eq('preschool_id', preschoolId)
+          .in('class_id', classIds);
+        const ids = (assignmentIds || []).map((a: { id: string }) => a.id);
+        if (ids.length > 0) {
+          const { count } = await supabase
+            .from('homework_submissions')
+            .select('*', { count: 'exact', head: true })
+            .in('assignment_id', ids)
+            .eq('status', 'submitted');
+          pendingGradingCount = count || 0;
+        }
       }
 
       // Fetch upcoming lessons count

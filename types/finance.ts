@@ -1,10 +1,18 @@
 export type FeeCategoryCode =
   | 'tuition'
   | 'registration'
+  | 'deposit'
   | 'uniform'
   | 'aftercare'
   | 'transport'
   | 'meal'
+  | 'meals'
+  | 'activities'
+  | 'excursion'
+  | 'fundraiser'
+  | 'donation_drive'
+  | 'books'
+  | 'other'
   | 'ad_hoc';
 
 export type FeeStatus =

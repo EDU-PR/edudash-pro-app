@@ -11,6 +11,43 @@ export interface YearPlanConfig {
   specialConsiderations: string;
 }
 
+export type YearPlanMonthlyBucket =
+  | 'holidays_closures'
+  | 'meetings_admin'
+  | 'excursions_extras'
+  | 'donations_fundraisers';
+
+export type YearPlanMonthlySubtype =
+  | 'holiday'
+  | 'closure'
+  | 'staff_meeting'
+  | 'parent_meeting'
+  | 'training'
+  | 'excursion'
+  | 'extra_mural'
+  | 'donation_drive'
+  | 'fundraiser'
+  | 'other';
+
+export interface YearPlanMonthlyEntry {
+  id?: string;
+  monthIndex: number; // 1..12
+  bucket: YearPlanMonthlyBucket;
+  subtype?: YearPlanMonthlySubtype | string | null;
+  title: string;
+  details?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  source?: 'ai' | 'manual' | 'synced';
+  isPublished?: boolean;
+  publishedToCalendar?: boolean;
+}
+
+export interface YearPlanOperationalHighlight {
+  title: string;
+  description: string;
+}
+
 export interface WeeklyTheme {
   week: number;
   theme: string;
@@ -50,6 +87,8 @@ export interface GeneratedYearPlan {
   terms: GeneratedTerm[];
   annualGoals: string[];
   budgetEstimate: string;
+  monthlyEntries: YearPlanMonthlyEntry[];
+  operationalHighlights: YearPlanOperationalHighlight[];
 }
 
 export const AGE_GROUPS = ['0-1', '1-2', '2-3', '3-4', '4-5', '5-6'];

@@ -45,6 +45,9 @@ interface ThreadOptionsMenuProps {
   isBlocked?: boolean;
   disappearingLabel?: string;
   contactName?: string;
+  isGroup?: boolean;
+  participantCount?: number;
+  onGroupInfo?: () => void;
 }
 
 interface OptionItemProps {
@@ -126,6 +129,9 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
   isBlocked = false,
   disappearingLabel,
   contactName,
+  isGroup = false,
+  participantCount,
+  onGroupInfo,
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -247,10 +253,14 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
             >
               <View style={styles.handle} />
               
-              {contactName && (
+              {(contactName || isGroup) && (
                 <View style={styles.header}>
-                  <Text style={styles.headerTitle}>Chat Options</Text>
-                  <Text style={styles.headerSubtitle}>{contactName}</Text>
+                  <Text style={styles.headerTitle}>{isGroup ? 'Group Options' : 'Chat Options'}</Text>
+                  <Text style={styles.headerSubtitle}>
+                    {isGroup && participantCount != null
+                      ? `${contactName || 'Group'} • ${participantCount} participant${participantCount !== 1 ? 's' : ''}`
+                      : contactName}
+                  </Text>
                 </View>
               )}
               
@@ -260,7 +270,15 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                 bounces={false}
               >
                 <View style={styles.optionsContainer}>
-                {onViewContact && (
+                {isGroup && (onGroupInfo || participantCount != null) && (
+                  <OptionItem
+                    icon="people-outline"
+                    label={participantCount != null ? `Group info (${participantCount} participants)` : 'Group info'}
+                    onPress={() => handleOptionPress(onGroupInfo ?? (() => {}))}
+                    theme={theme}
+                  />
+                )}
+                {onViewContact && !isGroup && (
                   <OptionItem
                     icon="person-outline"
                     label="View Contact"

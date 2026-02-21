@@ -10,6 +10,9 @@ const POLICY: PolicyMap = {
   preschool: {
     parent: makeSet([
       'view_homework',
+      'daily_program',
+      'weekly_menu',
+      'stationery',
       'assigned_lessons',
       'check_attendance',
       'activity_feed',
@@ -40,6 +43,7 @@ const POLICY: PolicyMap = {
       'my_class',
       'room_display_connect',
       'birthday_chart',
+      'weekly_menu',
       'messages',
       'manage_groups',
       'request_petty_cash',
@@ -62,6 +66,7 @@ const POLICY: PolicyMap = {
       'registrations',
       'payments',
       'uniform-orders',
+      'stationery',
       'unpaid-fees',
       'fee-management',
       'log-expense',
@@ -98,6 +103,9 @@ const POLICY: PolicyMap = {
     // Keep default parent dashboard on a preschool-safe action set.
     parent: makeSet([
       'view_homework',
+      'daily_program',
+      'weekly_menu',
+      'stationery',
       'assigned_lessons',
       'check_attendance',
       'activity_feed',
@@ -142,6 +150,7 @@ const POLICY: PolicyMap = {
       'registrations',
       'payments',
       'uniform-orders',
+      'stationery',
       'unpaid-fees',
       'fee-management',
       'log-expense',

@@ -371,6 +371,44 @@ export interface ExamPrepConfig {
   term?: 1 | 2 | 3 | 4;
   /** Specific topics to focus on within the subject */
   topics?: string[];
+  contextSummary?: ExamContextSummary | null;
+  useTeacherContext?: boolean;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
+  lookbackDays?: number;
+}
+
+export interface ExamContextSummary {
+  assignmentCount: number;
+  lessonCount: number;
+  focusTopics: string[];
+  weakTopics: string[];
+  sourceAssignmentIds?: string[];
+  sourceLessonIds?: string[];
+}
+
+export interface ExamGenerationRequest {
+  grade: string;
+  subject: string;
+  examType: string;
+  customPrompt?: string;
+  language?: SouthAfricanLanguage;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
+  useTeacherContext?: boolean;
+  lookbackDays?: number;
+  previewContext?: boolean;
+}
+
+export interface ExamGenerationResponse {
+  success: boolean;
+  examId: string;
+  exam?: unknown;
+  contextSummary?: ExamContextSummary;
+  persistenceWarning?: string;
+  error?: string;
 }
 
 export interface GeneratedExam {

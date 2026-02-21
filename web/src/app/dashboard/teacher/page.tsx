@@ -58,6 +58,7 @@ export default function TeacherDashboard() {
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Teacher';
   const subscriptionTier = profile?.subscription_tier || 'starter';
   const isPreschool = profile?.usageType === 'preschool' || profile?.schoolType === 'preschool';
+  const teacherSchoolType: 'preschool' | 'k12_school' = isPreschool ? 'preschool' : 'k12_school';
   const teacherSeatStatus = profile?.seat_status;
   const isTeacherSeatActive = profile?.has_active_seat === true || teacherSeatStatus === 'active';
 
@@ -140,6 +141,7 @@ export default function TeacherDashboard() {
         preschoolName={preschoolName}
         preschoolId={preschoolId}
         userId={userId}
+        schoolType={teacherSchoolType}
         unreadCount={unreadCount}
       >
         <div className="flex items-center justify-center min-h-[400px]" role="status" aria-label="Loading teacher dashboard">
@@ -171,6 +173,7 @@ export default function TeacherDashboard() {
         preschoolName={preschoolName}
         preschoolId={preschoolId}
         userId={userId}
+        schoolType={teacherSchoolType}
         unreadCount={unreadCount}
       >
       {/* Search Bar */}

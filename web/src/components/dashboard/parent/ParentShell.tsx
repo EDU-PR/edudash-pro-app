@@ -38,6 +38,7 @@ import {
   Newspaper,
   ChefHat,
   FileText,
+  CalendarDays,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
@@ -219,11 +220,20 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: Megaphone },
+        { href: '/dashboard/parent/daily-program', label: t('dashboard.parent.nav.daily_program', { defaultValue: 'Daily Program' }), icon: CalendarDays },
         { href: '/dashboard/parent/menu', label: t('dashboard.parent.nav.menu_plan', { defaultValue: 'Menu' }), icon: ChefHat },
         { href: '/dashboard/parent/activities', label: t('dashboard.parent.nav.activities', { defaultValue: 'Activity Feed' }), icon: Newspaper },
         { href: '/dashboard/parent/messages', label: t('dashboard.parent.nav.messages', { defaultValue: 'Messages' }), icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/calls', label: t('dashboard.parent.nav.calls', { defaultValue: 'Calls' }), icon: Phone },
-        { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        {
+          href: '/dashboard/parent/homework',
+          label: isPreschoolChild
+            ? t('dashboard.parent.nav.take_home_activities', { defaultValue: 'Take-home Activities' })
+            : t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }),
+          icon: Clipboard,
+          badge: homeworkCount,
+        },
+        { href: '/dashboard/parent/stationery', label: t('dashboard.parent.nav.stationery', { defaultValue: 'Stationery' }), icon: FileText },
         { href: '/dashboard/parent/homework-history', label: t('dashboard.parent.nav.homework_history', { defaultValue: 'Homework History' }), icon: GraduationCap },
         { href: '/dashboard/parent/attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: CheckCircle2 },
         { href: '/dashboard/parent/weekly-report', label: t('dashboard.parent.nav.weekly_report', { defaultValue: 'Weekly Report' }), icon: BarChart3 },
@@ -244,7 +254,14 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), icon: Sparkles },
-        { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        {
+          href: '/dashboard/parent/homework',
+          label: isPreschoolChild
+            ? t('dashboard.parent.nav.take_home_activities', { defaultValue: 'Take-home Activities' })
+            : t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }),
+          icon: Clipboard,
+          badge: homeworkCount,
+        },
         { href: '/dashboard/parent/homework-history', label: t('dashboard.parent.nav.homework_history', { defaultValue: 'Homework History' }), icon: GraduationCap },
         ...(hasExamEligibleChild && !isPreschoolChild
           ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]

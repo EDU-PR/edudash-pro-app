@@ -198,13 +198,27 @@ export function parseExamMarkdown(content: string): ParsedExam | null {
  * Normalize question structure
  */
 function normalizeQuestion(partial: Partial<ExamQuestion>, id: number): ExamQuestion {
+  const raw = partial as Record<string, any>;
+  const rawType = String(partial.type || raw.type || 'short_answer');
+  const normalizedType: ExamQuestion['type'] =
+    rawType === 'multiple_choice' ||
+    rawType === 'short_answer' ||
+    rawType === 'essay' ||
+    rawType === 'true_false' ||
+    rawType === 'matching'
+      ? (rawType as ExamQuestion['type'])
+      : rawType === 'fill_in_blank' || rawType === 'fill_blank'
+      ? 'fill_blank'
+      : 'short_answer';
+  const normalizedMarks = Number(partial.marks ?? raw.points ?? 1);
+
   return {
     id: partial.id || `q_${id}`,
-    type: partial.type || 'short_answer',
-    question: (partial.question || '').trim(),
-    marks: partial.marks || 1,
-    options: partial.options,
-    correctAnswer: partial.correctAnswer,
+    type: normalizedType,
+    question: String(partial.question ?? raw.text ?? '').trim(),
+    marks: Number.isFinite(normalizedMarks) ? normalizedMarks : 1,
+    options: partial.options ?? raw.options,
+    correctAnswer: partial.correctAnswer ?? raw.correct_answer ?? raw.answer,
     rubric: partial.rubric,
     explanation: partial.explanation,
     difficulty: partial.difficulty,
@@ -228,7 +242,7 @@ function normalizeExamStructure(data: any): ParsedExam {
       instructions: data.instructions,
       sections: data.sections.map((s: any, i: number) => ({
         id: s.id || `section_${i + 1}`,
-        title: s.title || `Section ${i + 1}`,
+        title: s.title || s.name || `Section ${i + 1}`,
         instructions: s.instructions,
         questions: s.questions?.map((q: any, j: number) => normalizeQuestion(q, j + 1)) || [],
         totalMarks: s.totalMarks || calculateSectionMarks(s.questions || []),

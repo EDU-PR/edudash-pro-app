@@ -1326,7 +1326,7 @@ function ParentMessagesContent() {
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
   const isGroupThread = !isDashAISelected && (currentThread?.is_group || ((currentThread?.message_participants?.length || 0) > 2));
 
-  const findOrSelectDmThread = useCallback((targetUserId: string) => {
+  const findOrSelectDmThread = (targetUserId: string) => {
     const participants = (t: MessageThread) => t.message_participants || t.participants || [];
     const dmThread = threads.find((t) => {
       const p = participants(t);
@@ -1339,7 +1339,7 @@ function ParentMessagesContent() {
       return true;
     }
     return false;
-  }, [threads, userId]);
+  };
 
   const handleSelectThread = (threadId: string) => {
     if (threadId === DASH_AI_THREAD_ID) {

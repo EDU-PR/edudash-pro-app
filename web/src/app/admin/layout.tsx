@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { signOutEverywhere } from '@/lib/auth/signOut';
-import Link from 'next/link';
-import { Settings, BookMarked, LogOut, Loader2, FileText, Activity } from 'lucide-react';
+import { SuperAdminShell } from '@/components/dashboard/superadmin/SuperAdminShell';
 import RegistrationNotifications from '@/components/admin/RegistrationNotifications';
 
 export default function AdminLayout({
@@ -15,6 +13,7 @@ export default function AdminLayout({
 }) {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [profile, setProfile] = useState<{ email?: string; first_name?: string } | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -25,35 +24,31 @@ export default function AdminLayout({
   const checkAuth = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      console.log('[Admin] Checking auth, session:', !!session);
-      
+
       if (!session) {
-        console.log('[Admin] No session, redirecting to sign-in');
         router.push('/sign-in');
         return;
       }
 
-      // Check if user is superadmin
-      const { data: profile, error } = await supabase
+      const { data: profileData, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, email, first_name')
         .eq('id', session.user.id)
         .single();
 
-      console.log('[Admin] Profile:', profile, 'Error:', error);
-
-      if (error || profile?.role !== 'superadmin') {
-        console.log('[Admin] Not superadmin, redirecting to dashboard');
-        alert(`Access Denied: You need superadmin role. Current role: ${profile?.role || 'none'}`);
+      if (error || profileData?.role !== 'superadmin') {
+        alert(`Access Denied: You need superadmin role. Current role: ${profileData?.role || 'none'}`);
         router.push('/dashboard');
         return;
       }
 
-      console.log('[Admin] Authorized as superadmin!');
+      setProfile({
+        email: profileData?.email ?? session.user.email ?? undefined,
+        first_name: profileData?.first_name ?? undefined,
+      });
       setAuthorized(true);
-    } catch (error) {
-      console.error('[Admin] Auth check error:', error);
+    } catch (err) {
+      console.error('[Admin] Auth check error:', err);
       alert('Error checking authorization');
       router.push('/sign-in');
     } finally {
@@ -61,14 +56,9 @@ export default function AdminLayout({
     }
   };
 
-  const handleSignOut = async () => {
-    await signOutEverywhere({ timeoutMs: 2500 });
-    router.push('/sign-in');
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--surface-0)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{
             width: 120,
@@ -80,24 +70,11 @@ export default function AdminLayout({
             justifyContent: 'center',
             margin: '0 auto 24px',
             boxShadow: '0 0 60px rgba(124, 58, 237, 0.6)',
-            animation: 'pulse-glow 2s ease-in-out infinite'
           }}>
             <span style={{ fontSize: 48, fontWeight: 'bold', color: 'white' }}>📚</span>
           </div>
-          <h2 style={{ color: 'white', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>EduDash Pro</h2>
-          <p style={{ color: '#9ca3af', fontSize: 14 }}>Loading your dashboard...</p>
-          <style jsx>{`
-            @keyframes pulse-glow {
-              0%, 100% { 
-                transform: scale(1);
-                boxShadow: 0 0 60px rgba(124, 58, 237, 0.6);
-              }
-              50% { 
-                transform: scale(1.05);
-                boxShadow: 0 0 80px rgba(236, 72, 153, 0.8);
-              }
-            }
-          `}</style>
+          <h2 style={{ color: 'var(--text)', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>EduDash Pro</h2>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -108,71 +85,13 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Top Navigation */}
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-8">
-              <Link href="/admin" className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">SA</span>
-                </div>
-                <span className="text-xl font-bold text-gray-900 dark:text-white">
-                  Superadmin
-                </span>
-              </Link>
-
-              {/* Navigation Links */}
-              <div className="hidden md:flex items-center gap-4">
-                <Link
-                  href="/admin/registrations"
-                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <FileText className="w-5 h-5" />
-                  <span>Registrations</span>
-                </Link>
-                <Link
-                  href="/admin/ai-config"
-                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <Settings className="w-5 h-5" />
-                  <span>AI Config</span>
-                </Link>
-                <Link
-                  href="/admin/caps-mapping"
-                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <BookMarked className="w-5 h-5" />
-                  <span>CAPS Mapping</span>
-                </Link>
-                <Link
-                  href="/admin/ai-usage"
-                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <Activity className="w-5 h-5" />
-                  <span>AI Usage</span>
-                </Link>
-              </div>
-            </div>
-
-            {/* Right Side - Notifications & Sign Out */}
-            <div className="flex items-center gap-4">
-              <RegistrationNotifications />
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                <span className="hidden md:inline">Sign Out</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main>{children}</main>
-    </div>
+    <SuperAdminShell
+      userEmail={profile?.email}
+      userName={profile?.first_name}
+      hideRightSidebar
+      topBarRight={<RegistrationNotifications />}
+    >
+      {children}
+    </SuperAdminShell>
   );
 }

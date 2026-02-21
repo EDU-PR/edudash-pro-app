@@ -82,6 +82,22 @@ export default function ParentMessageThreadScreen() {
   const recipientId = h.otherParticipant?.sender_id || params.recipientId || params.parentId;
   const recipientName = h.otherParticipant?.sender?.first_name || displayName;
   const recipientRole = h.otherParticipant?.sender?.role || null;
+  // Call context
+  const callContext = useCallSafe();
+
+  const groupParticipants = useMemo(() => h.threadParticipants || [], [h.threadParticipants]);
+  const groupMemberCount = useMemo(() => {
+    if (!isGroup) return 0;
+    if (typeof h.threadParticipantCount === 'number') return h.threadParticipantCount;
+    return groupParticipants.length;
+  }, [groupParticipants.length, h.threadParticipantCount, isGroup]);
+  const groupOnlineCount = useMemo(() => {
+    if (!isGroup || !callContext) return 0;
+    return groupParticipants.reduce((count, participant) => {
+      if (!participant?.user_id || participant.user_id === user?.id) return count;
+      return callContext.isUserOnline(participant.user_id) ? count + 1 : count;
+    }, 0);
+  }, [callContext, groupParticipants, isGroup, user?.id]);
 
   const opts = useThreadOptions({
     threadId, userId: user?.id, otherUserId: recipientId,
@@ -89,12 +105,47 @@ export default function ParentMessageThreadScreen() {
     setOptimisticMsgs: h.setOptimisticMsgs, displayName,
   });
 
-  // Call context
-  const callContext = useCallSafe();
   const isOnline = recipientId && callContext ? callContext.isUserOnline(recipientId) : false;
+  const groupTypeLabel = isGroup
+    ? (
+      threadType === 'class_group'
+        ? 'Class group'
+        : threadType === 'announcement'
+          ? 'Announcement channel'
+          : threadType === 'parent_group'
+            ? 'Parent group'
+            : threadType === 'teacher_group'
+              ? 'Teacher group'
+              : 'Group'
+    )
+    : '';
   const lastSeenText = isGroup
-    ? (threadType === 'class_group' ? 'Class group' : threadType === 'announcement' ? 'Announcement channel' : 'Group')
+    ? [
+      groupTypeLabel,
+      `${groupOnlineCount} online`,
+      groupMemberCount > 0 ? `${groupMemberCount} member${groupMemberCount === 1 ? '' : 's'}` : null,
+    ].filter(Boolean).join(' • ')
     : (recipientId && callContext ? callContext.getLastSeenText(recipientId) : 'Offline');
+
+  const handleOpenGroupInfo = useCallback(() => {
+    if (!isGroup) return;
+    const rows = groupParticipants.map((participant, index) => {
+      const first = participant.user_profile?.first_name || '';
+      const last = participant.user_profile?.last_name || '';
+      const fullName = `${first} ${last}`.trim() || `Member ${index + 1}`;
+      const role = participant.user_profile?.role || participant.role || 'member';
+      const onlineLabel = callContext?.isUserOnline(participant.user_id) ? 'online' : 'offline';
+      return `• ${fullName} (${role}) — ${onlineLabel}`;
+    });
+    const body = rows.length > 0
+      ? rows.join('\n')
+      : 'No participant details available yet.';
+    showThreadAlert(
+      'Group info',
+      `${displayName}\n${groupOnlineCount} online • ${groupMemberCount} members\n\n${body}`,
+      [{ text: 'OK' }]
+    );
+  }, [callContext, displayName, groupMemberCount, groupOnlineCount, groupParticipants, isGroup, showThreadAlert]);
 
   const handleReactionLongPress = useCallback(async (_messageId: string, emoji: string, reactedByUserIds: string[]) => {
     if (reactedByUserIds.length === 0) return;
@@ -102,14 +153,36 @@ export default function ParentMessageThreadScreen() {
       const { assertSupabase } = require('@/lib/supabase');
       const client = assertSupabase?.();
       if (!client) return;
-      const { data: profiles } = await client.from('profiles').select('id, first_name, last_name').in('id', reactedByUserIds);
-      const names = (profiles || []).map((p: { first_name?: string; last_name?: string }) => [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'Someone');
+      const uniqueUserIds = Array.from(new Set(reactedByUserIds));
+      const participantNameMap = new Map<string, string>();
+      groupParticipants.forEach((participant) => {
+        const first = participant.user_profile?.first_name || '';
+        const last = participant.user_profile?.last_name || '';
+        const fullName = `${first} ${last}`.trim();
+        if (participant.user_id && fullName) {
+          participantNameMap.set(participant.user_id, fullName);
+        }
+      });
+      const missingUserIds = uniqueUserIds.filter((id) => !participantNameMap.has(id));
+      if (missingUserIds.length > 0) {
+        const { data: profiles } = await client
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', missingUserIds);
+        (profiles || []).forEach((p: { id: string; first_name?: string; last_name?: string }) => {
+          const fullName = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+          if (fullName) {
+            participantNameMap.set(p.id, fullName);
+          }
+        });
+      }
+      const names = uniqueUserIds.map((id) => participantNameMap.get(id) || 'Someone');
       const message = names.length > 0 ? `${names.join(', ')} reacted with ${emoji}` : `${emoji}`;
       showThreadAlert(t('messaging.whoReacted', { defaultValue: 'Who reacted' }), message, [{ text: 'OK' }]);
     } catch {
       showThreadAlert(t('messaging.whoReacted', { defaultValue: 'Who reacted' }), `${emoji}`, [{ text: 'OK' }]);
     }
-  }, [showThreadAlert, t]);
+  }, [groupParticipants, showThreadAlert, t]);
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available.', 'Voice Call'); return; }
@@ -161,6 +234,7 @@ export default function ParentMessageThreadScreen() {
         <MessageBubble
           msg={msg} isOwn={msg.sender_id === user?.id}
           showSenderName={h.showSenderNames}
+          showSenderAvatar={h.showSenderNames}
           onLongPress={() => h.handleMessageLongPress(msg)}
           onPlaybackFinished={msg.voice_url ? () => { if (hasNextVoice) h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]); else h.setCurrentlyPlayingVoiceId(null); } : undefined}
           onPlayNext={hasNextVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
@@ -206,7 +280,11 @@ export default function ParentMessageThreadScreen() {
       <ChatHeader
         displayName={displayName} isOnline={isOnline} lastSeenText={lastSeenText}
         isLoading={h.loading} isTyping={h.isOtherTyping} typingText={h.typingText}
-        recipientRole={recipientRole}
+        recipientRole={isGroup ? null : recipientRole}
+        isGroup={isGroup}
+        participantCount={isGroup ? groupMemberCount : undefined}
+        onlineCount={isGroup ? groupOnlineCount : undefined}
+        onHeaderPress={isGroup ? handleOpenGroupInfo : undefined}
         onVoiceCall={handleVoiceCall} onVideoCall={handleVideoCall}
         onOptionsPress={() => h.setShowOptionsMenu(true)}
       />
@@ -290,7 +368,8 @@ export default function ParentMessageThreadScreen() {
           onDisappearingMessages={opts.handleDisappearingMessages} onAddShortcut={opts.handleAddShortcut}
           onReport={opts.handleReport} onBlockUser={opts.handleBlockUser} onViewContact={opts.handleViewContact}
           isMuted={opts.isMuted} isBlocked={opts.isUserBlocked} disappearingLabel={opts.disappearingStatusLabel}
-          contactName={displayName} isGroup={isGroup} />
+          contactName={displayName} isGroup={isGroup} participantCount={groupMemberCount || undefined}
+          onGroupInfo={isGroup ? handleOpenGroupInfo : undefined} />
       )}
       {ChatWallpaperPicker && (
         <ChatWallpaperPicker isOpen={h.showWallpaperPicker} onClose={() => h.setShowWallpaperPicker(false)}

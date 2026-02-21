@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { assertSupabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 
 // Extracted components
 import {
@@ -53,6 +54,7 @@ export function K12AdminDashboard() {
   const [gradeBreakdown, setGradeBreakdown] = useState<GradeCount[]>([]);
   const [recentRegistrations, setRecentRegistrations] = useState<Registration[]>([]);
   const [schoolName, setSchoolName] = useState<string>('Loading...');
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
   
   const styles = useMemo(() => createStyles(theme, insets.top), [theme, insets.top]);
   
@@ -162,13 +164,14 @@ export function K12AdminDashboard() {
     const flags = getFeatureFlagsSync();
     const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
 
+    const paymentCount = hideFeesOnDashboards ? 0 : stats.pendingPayment;
     return [
       {
         id: 'aftercare',
         title: 'Aftercare Registrations',
         icon: 'time-outline',
         color: '#8B5CF6',
-        badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
+        badge: paymentCount > 0 ? paymentCount : undefined,
         onPress: () => router.push('/screens/aftercare-admin'),
       },
       {
@@ -186,14 +189,14 @@ export function K12AdminDashboard() {
         color: '#10B981',
         onPress: () => router.push('/screens/attendance'),
       },
-      {
+      ...(!hideFeesOnDashboards ? [{
         id: 'payments',
         title: 'Payments',
         icon: 'card-outline',
         color: '#F59E0B',
         badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
         onPress: () => router.push('/screens/financial-transactions'),
-      },
+      }] : []),
       {
         id: 'uniform-orders',
         title: 'Uniform Orders',
@@ -258,7 +261,15 @@ export function K12AdminDashboard() {
         onPress: () => router.push('/screens/school-settings'),
       },
     ];
-  }, [stats.pendingPayment, stats.enrolled]);
+  }, [hideFeesOnDashboards, stats.pendingPayment, stats.enrolled]);
+
+  const visibleStats = useMemo(
+    () => ({
+      ...stats,
+      pendingPayment: hideFeesOnDashboards ? 0 : stats.pendingPayment,
+    }),
+    [hideFeesOnDashboards, stats]
+  );
 
   if (loading) {
     return (
@@ -315,7 +326,7 @@ export function K12AdminDashboard() {
       </View>
 
       {/* 5. Stats Overview - Summary metrics */}
-      <K12StatsOverview stats={stats} theme={theme} />
+      <K12StatsOverview stats={visibleStats} theme={theme} />
 
       {/* 6. Grade Breakdown - Reference data */}
       <K12GradeBreakdown gradeBreakdown={gradeBreakdown} theme={theme} />

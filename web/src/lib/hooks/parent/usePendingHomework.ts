@@ -77,6 +77,10 @@ export function usePendingHomework(userId: string | undefined) {
           return;
         }
 
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayIsoDate = today.toISOString().split('T')[0];
+
         // Get pending homework for all children
         let homeworkQuery = supabase
           .from('homework_assignments')
@@ -90,7 +94,7 @@ export function usePendingHomework(userId: string | undefined) {
           `)
           .in('class_id', classIds)
           .eq('is_published', true)
-          .gte('due_date', new Date().toISOString())
+          .gte('due_date', todayIsoDate)
           .order('due_date', { ascending: true });
 
         if (schoolIds.length > 0) {

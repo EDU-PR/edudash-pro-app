@@ -7,6 +7,7 @@ import type {
   PhonicsStage,
 } from '@/hooks/dash-assistant/tutorTypes';
 import { getMascotPersonality } from '@/lib/dash-ai/tutorTheme';
+import { getTutorChallengePlan } from './tutorChallengePolicy';
 
 const PHONICS_STAGE_ORDER: PhonicsStage[] = ['letter_sounds', 'cvc_blending', 'rhyming', 'segmenting'];
 
@@ -71,19 +72,17 @@ export const isTutorStopIntent = (text: string) => {
   return /(stop|end\s+session|exit\s+tutor|cancel\s+quiz|new\s+topic)/i.test(text || '');
 };
 
-export const getMaxQuestions = (mode: TutorMode) => {
-  switch (mode) {
-    case 'diagnostic':
-    case 'quiz':
-      return 5;
-    case 'practice':
-      return 3;
-    case 'play':
-      return 5;
-    case 'explain':
-    default:
-      return 1;
-  }
+export const getMaxQuestions = (
+  mode: TutorMode,
+  learnerContext?: LearnerContext | null,
+  options?: { difficulty?: number | null; phonicsMode?: boolean },
+) => {
+  return getTutorChallengePlan({
+    mode,
+    learnerContext,
+    difficulty: options?.difficulty,
+    phonicsMode: options?.phonicsMode,
+  }).maxQuestions;
 };
 
 export const getTutorPhaseLabel = (mode: TutorMode) => {
@@ -148,6 +147,12 @@ export const buildTutorSystemContext = (
   const phonicsMode = session.phonicsMode === true;
   const phonicsStage = session.phonicsStage || 'letter_sounds';
   const isTeacherDashboardTutor = options.tutorEntrySource === 'teacher_dashboard';
+  const challengePlan = getTutorChallengePlan({
+    mode: session.mode,
+    learnerContext: learner,
+    difficulty: session.difficulty,
+    phonicsMode,
+  });
 
   const levelGuidance = isPlayMode
     ? [
@@ -212,6 +217,7 @@ export const buildTutorSystemContext = (
     ? [
         'PHONICS PROGRESSION MODE:',
         `- Current stage: ${phonicsStage.replace(/_/g, ' ')}.`,
+        `- Run about ${challengePlan.spellingChallenges} short sound/spelling rounds before switching topics.`,
         '- Use sounds, not letter names.',
         '- CRITICAL: Wrap ALL letter sounds in slash markers: /s/, /m/, /f/, /b/, /a/, etc.',
         '- Example: "This letter makes the sound /s/. Can you hiss like a snake? /s/!"',
@@ -248,6 +254,11 @@ export const buildTutorSystemContext = (
     '- For math: Show visual representations (use emoji grids for counting, simple ASCII diagrams for shapes)',
     '- For reading: Highlight key vocabulary with **bold** and explain in context',
     '- For science: Use cause-and-effect chains and simple diagrams',
+    '- If you include a diagram, output an actual renderable block (Mermaid/ASCII), never [DIAGRAM] placeholders.',
+    '- If you include a chart, provide a markdown table or chart-ready labels/values (never [CHART]/[GRAPH]).',
+    '- For column-method arithmetic, emit a fenced `column` JSON block with addends for interactive rendering.',
+    '- For spelling drills, emit a fenced `spelling` JSON block with target word + hint for interactive practice.',
+    `- Target around ${challengePlan.spellingChallenges} spelling challenge(s) this session, then recap weak letters/sounds.`,
     '- Use progress encouragement: "Great work! You got 3/5 correct so far!"',
     '- Adapt difficulty dynamically: if 2+ wrong in a row, simplify; if 3+ right, increase challenge',
     '- When the learner is stuck, offer multiple scaffolding strategies:',
@@ -258,10 +269,10 @@ export const buildTutorSystemContext = (
     '',
     'DIAGNOSE → TEACH → PRACTICE → CHECK FLOW:',
     '- Follow this pedagogical cycle for every topic:',
-    '  DIAGNOSE: Ask 2-3 short diagnostic questions to assess current understanding.',
+    `  DIAGNOSE: Ask ${challengePlan.diagnosticQuestions} short diagnostic question(s) to assess current understanding.`,
     '  TEACH: Based on gaps found, explain the concept with worked examples and CAPS alignment.',
-    '  PRACTICE: Present practice questions one at a time using structured quiz format (see below).',
-    '  CHECK: Ask 1-2 synthesis questions, then summarize and celebrate progress.',
+    `  PRACTICE: Present around ${challengePlan.practiceQuestions} practice question(s) one at a time using structured quiz format (see below).`,
+    `  CHECK: Ask ${challengePlan.synthesisQuestions} synthesis question(s), then summarize and celebrate progress.`,
     '- Transition between phases naturally — don\'t announce phase names to the student.',
     '- Always start with DIAGNOSE unless the student explicitly asks "just explain" or "just quiz me".',
     '',

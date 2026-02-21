@@ -25,6 +25,7 @@ import { track } from '@/lib/analytics';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useOnboardingHint } from '@/components/ui/OnboardingHint';
 import { useUniformEnabled } from '@/hooks/useUniformEnabled';
+import { useStationeryEnabled } from '@/hooks/useStationeryEnabled';
 
 // Shared dashboard components
 import { MetricCard, CollapsibleSection, SearchBar, GlowContainer } from './shared';
@@ -72,6 +73,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [creatingTempLessonId, setCreatingTempLessonId] = useState<string | null>(null);
   const flags = getFeatureFlagsSync();
   const { uniformEnabled, uniformSchoolIds } = useUniformEnabled(ds.children);
+  const { stationeryEnabled, stationerySchoolIds } = useStationeryEnabled(ds.children);
   const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
   const [showLiveClassesHint, dismissLiveClassesHint] = useOnboardingHint('parent_live_classes');
 
@@ -228,6 +230,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         <ParentDashboardContentSections
           activeChildId={ds.activeChildId} children={ds.children}
           uniformEnabled={uniformEnabled} uniformSchoolIds={uniformSchoolIds}
+          stationeryEnabled={stationeryEnabled} stationerySchoolIds={stationerySchoolIds}
           hasOrganization={ds.hasOrganization} preschoolId={ds.resolvedOrganizationId}
           dashboardData={ds.dashboardData} collapsedSections={ds.collapsedSections}
           toggleSection={ds.toggleSection} sectionAttention={sectionAttention}

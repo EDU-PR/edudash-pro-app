@@ -53,6 +53,31 @@ const COMPOSER_FLOAT_GAP = 2;
 const COMPOSER_OVERLAY_MIN_HEIGHT = 64;
 const COMPOSER_ANDROID_NAV_LIFT = 14;
 
+const splitSpeechSegments = (content: string): string[] => {
+  const cleaned = String(content || '').trim();
+  if (!cleaned) return [];
+  return cleaned
+    .split(/(?<=[.?!])\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+};
+
+const getBottomThinkingLabel = (
+  loadingStatus: 'uploading' | 'analyzing' | 'thinking' | 'responding' | null,
+): string => {
+  switch (loadingStatus) {
+    case 'uploading':
+      return 'Dash is uploading your files...';
+    case 'analyzing':
+      return 'Dash is analyzing your content...';
+    case 'responding':
+      return 'Dash is preparing the final response...';
+    case 'thinking':
+    default:
+      return 'Dash is thinking...';
+  }
+};
+
 interface DashAssistantProps {
   conversationId?: string;
   onClose?: () => void;
@@ -86,6 +111,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_MIN_HEIGHT);
+  const [lastSpokenMessageId, setLastSpokenMessageId] = useState<string | null>(null);
+  const [speechSegmentIndex, setSpeechSegmentIndex] = useState(0);
 
   // Keyboard listeners
   useEffect(() => {
@@ -125,7 +152,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     unreadCount,
     setUnreadCount,
     isRecording,
+    recordingVoiceActivity,
     partialTranscript,
+    voiceAutoSendCountdownActive,
+    voiceAutoSendCountdownMs,
     tutorSession,
     alertState,
     hideAlert,
@@ -141,6 +171,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     handlePickImages,
     handlePickDocuments,
     handleInputMicPress,
+    cancelVoiceAutoSend,
     handleRemoveAttachment,
     addAttachments,
     runTool,
@@ -173,6 +204,32 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         ? 'Orb Companion Mode'
         : 'Your AI assistant';
 
+  useEffect(() => {
+    if (!speakingMessageId) return;
+    setLastSpokenMessageId(speakingMessageId);
+    setSpeechSegmentIndex(0);
+  }, [speakingMessageId]);
+
+  const activeSpeechMessageId = speakingMessageId || lastSpokenMessageId;
+  const activeSpeechMessage = useMemo(() => {
+    if (!activeSpeechMessageId) return null;
+    const match = messages.find((msg) => msg.id === activeSpeechMessageId);
+    if (!match || match.type !== 'assistant') return null;
+    return match;
+  }, [messages, activeSpeechMessageId]);
+  const speechSegments = useMemo(
+    () => splitSpeechSegments(activeSpeechMessage?.content || ''),
+    [activeSpeechMessage?.content],
+  );
+  const canSeekBack = speechSegmentIndex > 0 && speechSegments.length > 0;
+  const canSeekForward = speechSegmentIndex < speechSegments.length - 1;
+  const speechProgress = speechSegments.length > 0
+    ? Math.min(1, Math.max(0, (speechSegmentIndex + 1) / speechSegments.length))
+    : 0;
+  const showSpeakingTransport = Boolean(activeSpeechMessage) && (isSpeaking || speechSegments.length > 0);
+  const bottomThinkingLabel = getBottomThinkingLabel(loadingStatus);
+  const showBottomThinkingDock = isTypingActive && !isRecording;
+
   const handleNewChat = useCallback(async () => {
     await stopAllActivity();
     await startNewConversation();
@@ -186,6 +243,31 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       void stopSpeaking();
     }
   }, [isRecording, handleInputMicPress, isSpeaking, stopSpeaking]);
+
+  const speakFromSegment = useCallback(async (requestedIndex: number) => {
+    if (!activeSpeechMessage || speechSegments.length === 0) return;
+    const nextIndex = Math.max(0, Math.min(requestedIndex, speechSegments.length - 1));
+    const remainingText = speechSegments.slice(nextIndex).join(' ').trim();
+    if (!remainingText) return;
+
+    setSpeechSegmentIndex(nextIndex);
+    const replayMessage: DashMessage = {
+      ...activeSpeechMessage,
+      id: `${activeSpeechMessage.id}_segment_${nextIndex}`,
+      content: remainingText,
+      timestamp: Date.now(),
+    };
+    await stopSpeaking();
+    await speakResponse(replayMessage, { preferFastStart: true });
+  }, [activeSpeechMessage, speechSegments, speakResponse, stopSpeaking]);
+
+  const handleSpeechToggle = useCallback(() => {
+    if (isSpeaking) {
+      void stopSpeaking();
+      return;
+    }
+    void speakFromSegment(speechSegmentIndex);
+  }, [isSpeaking, speakFromSegment, speechSegmentIndex, stopSpeaking]);
 
   const openAttachmentSheet = useCallback(() => {
     if (isRecording) {
@@ -512,6 +594,85 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </View>
                 </View>
               )}
+              {showSpeakingTransport && (
+                <View
+                  style={{
+                    marginTop: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 12,
+                    backgroundColor: theme.surfaceVariant + 'CC',
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    gap: 8,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <Text
+                      style={{ color: theme.text, fontSize: 12, fontWeight: '700', flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {isSpeaking ? 'Dash speaking' : 'Speech controls'}
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '600' }}>
+                      {speechSegments.length > 0 ? `${speechSegmentIndex + 1}/${speechSegments.length}` : '0/0'}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      height: 6,
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      backgroundColor: theme.surface,
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: '100%',
+                        width: `${Math.round(speechProgress * 100)}%`,
+                        backgroundColor: theme.primary,
+                      }}
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                      onPress={() => void speakFromSegment(speechSegmentIndex - 1)}
+                      disabled={!canSeekBack}
+                      accessibilityLabel="Rewind spoken content"
+                    >
+                      <Ionicons
+                        name="play-back"
+                        size={16}
+                        color={canSeekBack ? theme.text : theme.textTertiary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.primary + '22', borderColor: theme.primary + '44' }]}
+                      onPress={handleSpeechToggle}
+                      accessibilityLabel={isSpeaking ? 'Stop speech' : 'Play speech'}
+                    >
+                      <Ionicons
+                        name={isSpeaking ? 'stop' : 'play'}
+                        size={16}
+                        color={theme.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                      onPress={() => void speakFromSegment(speechSegmentIndex + 1)}
+                      disabled={!canSeekForward}
+                      accessibilityLabel="Fast forward spoken content"
+                    >
+                      <Ionicons
+                        name="play-forward"
+                        size={16}
+                        color={canSeekForward ? theme.text : theme.textTertiary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 
@@ -543,10 +704,19 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           {/* Jump to bottom FAB */}
           {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
             <TouchableOpacity
-              style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: messageViewportInset + 12 }]}
+              style={[
+                messageStyles.scrollToBottomFab,
+                {
+                  backgroundColor: theme.primary,
+                  bottom: messageViewportInset + 12,
+                  zIndex: 220,
+                  elevation: 16,
+                },
+              ]}
               onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0, force: true }); }}
               accessibilityLabel="Jump to bottom"
               activeOpacity={0.8}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
             >
               <Ionicons name="chevron-down" size={20} color={theme.onPrimary || '#fff'} />
               {unreadCount > 0 && (
@@ -559,6 +729,25 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             </TouchableOpacity>
           )}
 
+          {showBottomThinkingDock && (
+            <View
+              style={[
+                layoutStyles.bottomThinkingDock,
+                {
+                  bottom: keyboardHeight + safeComposerHeight + COMPOSER_FLOAT_GAP + composerExtraBottom + 10,
+                  backgroundColor: theme.surface + 'EE',
+                  borderColor: theme.border,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <EduDashSpinner size="small" color={theme.primary} />
+              <Text style={[layoutStyles.bottomThinkingText, { color: theme.text }]}>
+                {bottomThinkingLabel}
+              </Text>
+            </View>
+          )}
+
           {/* Input */}
           <View
             style={[
@@ -568,6 +757,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                 paddingBottom: keyboardUp ? 0 : composerBottomInset,
               },
             ]}
+            pointerEvents="box-none"
             onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           >
             <DashInputBar
@@ -580,12 +770,16 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               isLoading={isLoading}
               isUploading={isUploading}
               isRecording={isRecording}
+              recordingVoiceActivity={recordingVoiceActivity}
               isSpeaking={isSpeaking}
               partialTranscript={partialTranscript}
+              voiceAutoSendCountdownActive={voiceAutoSendCountdownActive}
+              voiceAutoSendCountdownMs={voiceAutoSendCountdownMs}
               placeholder="Message Dash..."
               messages={messages}
               onSend={() => sendMessage()}
               onMicPress={handleInputMicPress}
+              onCancelVoiceAutoSend={cancelVoiceAutoSend}
               onInterrupt={stopAllActivity}
               onTakePhoto={openScanner}
               onAttachFile={openAttachmentSheet}
@@ -594,7 +788,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onCancel={cancelGeneration}
               bottomInset={0}
               hideQuickChips={useMinimalNextGenLayout}
-              showAttachmentDropzone={!useMinimalNextGenLayout}
               onInputFocus={handleComposerFocus}
               onPasteImage={handlePasteImage}
             />

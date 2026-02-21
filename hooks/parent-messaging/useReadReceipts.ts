@@ -29,6 +29,7 @@ const aggregateReactions = (
       emoji,
       count: data.count,
       hasReacted: data.users.includes(currentUserId || ''),
+      reactedByUserIds: data.users,
     }));
   };
 };
@@ -105,7 +106,7 @@ export const useThreadMessages = (threadId: string | null) => {
       const senderIds = [...new Set(baseMessages.map((message) => message.sender_id))];
       const { data: senderProfiles } = await client
         .from('profiles')
-        .select('id, first_name, last_name, role')
+        .select('id, first_name, last_name, role, avatar_url')
         .in('id', senderIds);
 
       const profileMap = new Map((senderProfiles || []).map((profile: any) => [profile.id, profile]));
@@ -134,7 +135,7 @@ export const useThreadMessages = (threadId: string | null) => {
           if (missingReplySenderIds.length > 0) {
             const { data: extraProfiles } = await client
               .from('profiles')
-              .select('id, first_name, last_name, role')
+              .select('id, first_name, last_name, role, avatar_url')
               .in('id', [...new Set(missingReplySenderIds)]);
 
             (extraProfiles || []).forEach((profile: any) => profileMap.set(profile.id, profile));

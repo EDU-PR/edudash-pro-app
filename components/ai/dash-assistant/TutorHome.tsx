@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { getAgeBandsForOrgType, normalizeSchoolType } from '@/lib/tenant/compat';
+import { getTutorChallengePlan } from '@/features/dash-assistant/tutorChallengePolicy';
 
 interface TutorHomeProps {
   styles: any;
@@ -289,6 +290,25 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
       : 'Ask me one short diagnostic question first, then explain step-by-step in simple language.'
   ), [isPreschool]);
 
+  const quizChallengeTarget = useMemo(() => {
+    const effectiveAgeBand =
+      lockAgeBand
+        ? learnerContext?.ageBand
+        : ageBand !== 'auto'
+          ? ageBand
+          : learnerContext?.ageBand;
+    const plan = getTutorChallengePlan({
+      mode: 'quiz',
+      difficulty: 2,
+      learnerContext: {
+        ageBand: effectiveAgeBand || null,
+        grade: learnerContext?.grade || null,
+        schoolType: learnerContext?.schoolType || null,
+      },
+    });
+    return plan.maxQuestions;
+  }, [ageBand, lockAgeBand, learnerContext?.ageBand, learnerContext?.grade, learnerContext?.schoolType]);
+
   const staffActions = useMemo(() => {
     if (!isStaff) return [];
     const base = isPreschool
@@ -538,8 +558,8 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
             activeOpacity={0.8}
             onPress={() => sendTutorIntent(
               isPreschool
-                ? 'Quiz with 3 very easy questions using colors, shapes, or counting.'
-                : 'Quiz me with 5 questions, starting easy and getting harder.'
+                ? `Quiz with about ${quizChallengeTarget} very easy questions using colors, shapes, or counting.`
+                : `Quiz me with about ${quizChallengeTarget} questions, starting easy and getting harder.`
             )}
           >
             <LinearGradient

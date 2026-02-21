@@ -7,6 +7,7 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AdminOperationalSnapshotProps {
   metrics?: AdminOperationalSnapshotData | null;
   loading?: boolean;
+  hideFinancialMetrics?: boolean;
 }
 
 function formatMoney(value: number): string {
@@ -51,7 +52,11 @@ function MetricCard({
   );
 }
 
-export function AdminOperationalSnapshot({ metrics, loading = false }: AdminOperationalSnapshotProps) {
+export function AdminOperationalSnapshot({
+  metrics,
+  loading = false,
+  hideFinancialMetrics = false,
+}: AdminOperationalSnapshotProps) {
   const { theme } = useTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -88,9 +93,15 @@ export function AdminOperationalSnapshot({ metrics, loading = false }: AdminOper
         <MetricCard label="Open Applications" value={String(safe.openApplications)} />
         <MetricCard label="Students" value={String(safe.students)} />
         <MetricCard label="Classes" value={String(safe.classes)} />
-        <MetricCard label="Fees Due" value={formatMoney(safe.feesDueThisMonth)} tone="warning" />
-        <MetricCard label="Fees Collected" value={formatMoney(safe.feesCollectedThisMonth)} tone="success" />
-        <MetricCard label="Fees Outstanding" value={formatMoney(safe.feesOutstandingThisMonth)} tone="warning" />
+        {!hideFinancialMetrics ? (
+          <MetricCard label="Fees Due" value={formatMoney(safe.feesDueThisMonth)} tone="warning" />
+        ) : null}
+        {!hideFinancialMetrics ? (
+          <MetricCard label="Fees Collected" value={formatMoney(safe.feesCollectedThisMonth)} tone="success" />
+        ) : null}
+        {!hideFinancialMetrics ? (
+          <MetricCard label="Fees Outstanding" value={formatMoney(safe.feesOutstandingThisMonth)} tone="warning" />
+        ) : null}
       </View>
     </View>
   );
@@ -169,4 +180,3 @@ const createStyles = (theme: any) =>
       fontWeight: '600',
     },
   });
-

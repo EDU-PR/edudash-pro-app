@@ -185,11 +185,13 @@ export default function ParentMenuScreen() {
         <Text style={[styles.mealLabel, { color: theme.textSecondary }]}>{label}</Text>
       </View>
       {items.length > 0 ? (
-        items.map((item, idx) => (
-          <Text key={idx} style={[styles.mealItem, { color: theme.text }]}>
-            • {item}
-          </Text>
-        ))
+        <View style={styles.mealChipRow}>
+          {items.map((item, idx) => (
+            <View key={idx} style={[styles.mealChip, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              <Text style={[styles.mealChipText, { color: theme.text }]}>{item}</Text>
+            </View>
+          ))}
+        </View>
       ) : (
         <Text style={[styles.mealEmpty, { color: theme.textSecondary }]}>
           Not provided
@@ -372,7 +374,14 @@ const createStyles = (theme: any) =>
     mealSection: { gap: 2 },
     mealHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
     mealLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
-    mealItem: { fontSize: 14, paddingLeft: 4 },
+    mealChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    mealChip: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    mealChipText: { fontSize: 13, fontWeight: '600' },
     mealEmpty: { fontSize: 13, fontStyle: 'italic', paddingLeft: 4 },
     notesBar: {
       flexDirection: 'row', alignItems: 'center', gap: 6,

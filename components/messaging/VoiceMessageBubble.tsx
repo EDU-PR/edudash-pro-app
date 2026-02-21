@@ -60,6 +60,8 @@ interface VoiceMessageBubbleProps {
   messageId?: string;
   /** Handler for clicking on reaction to delete it */
   onReactionPress?: (messageId: string, emoji: string) => void;
+  /** Handler for long-press on reaction to show who reacted */
+  onReactionLongPress?: (emoji: string, reactedByUserIds: string[]) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,6 +170,7 @@ export default function VoiceMessageBubble({
   reactions,
   messageId,
   onReactionPress,
+  onReactionLongPress,
 }: VoiceMessageBubbleProps) {
   const theme = { ...DEFAULT_THEME, ...customTheme };
   
@@ -611,7 +614,18 @@ export default function VoiceMessageBubble({
                 styles.reactionPill,
                 reaction.hasReacted && styles.reactionPillActive
               ]}
-              onPress={() => messageId && onReactionPress?.(messageId, reaction.emoji)}
+              onPress={() => {
+                const ids = reaction.reactedByUserIds ?? [];
+                if (ids.length > 0 && onReactionLongPress && reaction.count > 1) {
+                  onReactionLongPress(reaction.emoji, ids);
+                  return;
+                }
+                if (messageId) onReactionPress?.(messageId, reaction.emoji);
+              }}
+              onLongPress={() => {
+                const ids = reaction.reactedByUserIds ?? [];
+                if (ids.length > 0 && onReactionLongPress) onReactionLongPress(reaction.emoji, ids);
+              }}
               activeOpacity={0.7}
             >
               <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>

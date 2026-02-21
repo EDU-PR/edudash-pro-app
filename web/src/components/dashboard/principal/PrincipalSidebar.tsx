@@ -9,6 +9,7 @@ import {
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
 import { UniformOrdersWidget } from '@/components/dashboard/principal/UniformOrdersWidget';
+import { StationeryReadinessWidget } from '@/components/dashboard/principal/StationeryReadinessWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 
 interface RecentActivity {
@@ -67,6 +68,9 @@ export function PrincipalSidebar({
 
       {/* Uniform Sizes */}
       <UniformOrdersWidget schoolId={preschoolId} />
+
+      {/* Stationery Readiness */}
+      <StationeryReadinessWidget schoolId={preschoolId} />
 
       {/* Recent Activity */}
       <div className="card">

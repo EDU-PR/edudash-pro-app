@@ -86,7 +86,9 @@ export const useOrgMembers = (roleFilter?: string[]) => {
 
 export const useOrgClasses = () => {
   const { profile } = useAuth();
-  const orgId = (profile as any)?.preschool_id || (profile as any)?.organization_id;
+  const preschoolId = (profile as any)?.preschool_id;
+  const organizationId = (profile as any)?.organization_id;
+  const orgId = preschoolId || organizationId;
 
   return useQuery({
     queryKey: ['org-classes', orgId],
@@ -94,12 +96,21 @@ export const useOrgClasses = () => {
       if (!orgId) return [];
       const client = assertSupabase();
 
-      const { data, error } = await client
+      let query = client
         .from('classes')
         .select('id, name, teacher_id')
-        .eq('preschool_id', orgId)
-        .eq('is_active', true)
+        .or('active.eq.true,active.is.null')
         .order('name');
+
+      if (preschoolId) {
+        query = query.eq('preschool_id', preschoolId);
+      } else if (organizationId) {
+        query = query.eq('organization_id', organizationId);
+      } else {
+        return [];
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         logger.warn('useOrgClasses', 'Error:', error.message);

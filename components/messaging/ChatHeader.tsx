@@ -16,6 +16,9 @@ interface ChatHeaderProps {
   isOnline: boolean;
   lastSeenText: string;
   isLoading: boolean;
+  isGroup?: boolean;
+  participantCount?: number;
+  onlineCount?: number;
   isTyping?: boolean;
   typingName?: string;
   typingText?: string | null;
@@ -23,6 +26,7 @@ interface ChatHeaderProps {
   onVoiceCall: () => void;
   onVideoCall: () => void;
   onOptionsPress: () => void;
+  onHeaderPress?: () => void;
   borderColor?: string;
 }
 
@@ -31,6 +35,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isOnline,
   lastSeenText,
   isLoading,
+  isGroup = false,
+  participantCount,
+  onlineCount = 0,
   isTyping,
   typingName,
   typingText,
@@ -38,6 +45,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onVoiceCall,
   onVideoCall,
   onOptionsPress,
+  onHeaderPress,
   borderColor = 'rgba(148, 163, 184, 0.15)',
 }) => {
   const insets = useSafeAreaInsets();
@@ -45,11 +53,21 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const isAway = !isOnline && lastSeenText === 'Away';
   const statusColor = isTyping
     ? '#fbbf24'
+    : isGroup
+      ? '#60a5fa'
     : isOnline
       ? '#22c55e'
       : isAway
         ? '#f59e0b'
         : '#94a3b8';
+  const groupSubtitle = isGroup
+    ? `${onlineCount} online${typeof participantCount === 'number' ? ` • ${participantCount} member${participantCount === 1 ? '' : 's'}` : ''}`
+    : null;
+  const subtitle = isLoading
+    ? 'Loading...'
+    : isTyping
+      ? typingLabel
+      : groupSubtitle || (isOnline ? 'Online' : lastSeenText);
 
   return (
     <LinearGradient
@@ -60,12 +78,21 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         <Ionicons name="arrow-back" size={24} color="#e2e8f0" />
       </TouchableOpacity>
       
-      <TouchableOpacity style={styles.headerInfo} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={styles.headerInfo}
+        activeOpacity={onHeaderPress ? 0.7 : 1}
+        onPress={onHeaderPress}
+        disabled={!onHeaderPress}
+      >
         <LinearGradient
           colors={['#3b82f6', '#6366f1']}
           style={styles.avatar}
         >
-          <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+          {isGroup ? (
+            <Ionicons name="people" size={20} color="#fff" />
+          ) : (
+            <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+          )}
         </LinearGradient>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -74,13 +101,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <View style={styles.onlineStatus}>
             <View style={[
               styles.onlineDot,
-              (!isOnline || isTyping) && styles.offlineDot,
-              isAway && styles.awayDot,
+              isGroup && styles.groupDot,
+              !isGroup && (!isOnline || isTyping) && styles.offlineDot,
+              !isGroup && isAway && styles.awayDot,
             ]} />
             <Text style={[styles.headerSub, { color: statusColor }]}>
-              {isLoading ? 'Loading...' : isTyping ? typingLabel : isOnline ? 'Online' : lastSeenText}
+              {subtitle}
             </Text>
-            {recipientRole && !isTyping && (
+            {recipientRole && !isTyping && !isGroup && (
               <Text style={styles.roleInline}> · {recipientRole}</Text>
             )}
           </View>
@@ -162,6 +190,9 @@ const styles = StyleSheet.create({
   },
   awayDot: {
     backgroundColor: '#f59e0b',
+  },
+  groupDot: {
+    backgroundColor: '#60a5fa',
   },
   headerSub: { 
     fontSize: 13,

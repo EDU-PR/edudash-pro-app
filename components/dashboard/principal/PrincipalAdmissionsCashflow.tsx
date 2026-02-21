@@ -40,6 +40,7 @@ export interface PrincipalAdmissionsCashflowProps {
   onOpenUniforms?: () => void;
   onMessageUnpaid?: () => void;
   onMessageNoOrder?: () => void;
+  hideFinancialData?: boolean;
 }
 
 export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowProps> = ({
@@ -58,6 +59,7 @@ export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowPr
   onOpenUniforms,
   onMessageUnpaid,
   onMessageNoOrder,
+  hideFinancialData = false,
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -88,47 +90,59 @@ export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowPr
           color={theme.warning}
           theme={theme}
         />
-        <MetricTile
-          icon="cash"
-          label={t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' })}
-          value={`${pendingPayments}`}
-          sublabel={t('dashboard.overdue', { defaultValue: 'Overdue' })}
-          color={theme.error}
-          theme={theme}
-        />
-        <MetricTile
-          icon="card"
-          label={t('dashboard.payment_proofs', { defaultValue: 'POPs' })}
-          value={`${pendingPOPs}`}
-          sublabel={t('dashboard.to_verify', { defaultValue: 'To verify' })}
-          color={theme.info}
-          theme={theme}
-        />
+        {!hideFinancialData ? (
+          <MetricTile
+            icon="cash"
+            label={t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' })}
+            value={`${pendingPayments}`}
+            sublabel={t('dashboard.overdue', { defaultValue: 'Overdue' })}
+            color={theme.error}
+            theme={theme}
+          />
+        ) : null}
+        {!hideFinancialData ? (
+          <MetricTile
+            icon="card"
+            label={t('dashboard.payment_proofs', { defaultValue: 'POPs' })}
+            value={`${pendingPOPs}`}
+            sublabel={t('dashboard.to_verify', { defaultValue: 'To verify' })}
+            color={theme.info}
+            theme={theme}
+          />
+        ) : null}
       </View>
 
       <View style={styles.card}>
         <Text style={styles.inlineSectionTitle}>
-          {t('dashboard.money_summary', { defaultValue: 'Finance Snapshot' })}
+          {hideFinancialData
+            ? t('dashboard.admissions_snapshot', { defaultValue: 'Admissions Snapshot' })
+            : t('dashboard.money_summary', { defaultValue: 'Finance Snapshot' })}
         </Text>
-        <MetricInline
-          label={t('dashboard.money_received', { defaultValue: 'Collected' })}
-          value={formatCurrency(monthlyRevenue)}
-          theme={theme}
-        />
-        <MetricInline
-          label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })}
-          value={
-            pendingPaymentsAmount > 0
-              ? `${formatCurrency(pendingPaymentsAmount)} • ${pendingPayments}`
-              : `${pendingPayments}`
-          }
-          theme={theme}
-        />
-        <MetricInline
-          label={t('dashboard.overdue', { defaultValue: 'Overdue' })}
-          value={formatCurrency(pendingPaymentsOverdueAmount)}
-          theme={theme}
-        />
+        {!hideFinancialData ? (
+          <MetricInline
+            label={t('dashboard.money_received', { defaultValue: 'Collected' })}
+            value={formatCurrency(monthlyRevenue)}
+            theme={theme}
+          />
+        ) : null}
+        {!hideFinancialData ? (
+          <MetricInline
+            label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })}
+            value={
+              pendingPaymentsAmount > 0
+                ? `${formatCurrency(pendingPaymentsAmount)} • ${pendingPayments}`
+                : `${pendingPayments}`
+            }
+            theme={theme}
+          />
+        ) : null}
+        {!hideFinancialData ? (
+          <MetricInline
+            label={t('dashboard.overdue', { defaultValue: 'Overdue' })}
+            value={formatCurrency(pendingPaymentsOverdueAmount)}
+            theme={theme}
+          />
+        ) : null}
         <MetricInline
           label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })}
           value={`${pendingApprovalsTotal}`}

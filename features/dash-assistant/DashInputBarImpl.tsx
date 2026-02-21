@@ -6,9 +6,8 @@
  */
 
 import React from 'react';
-import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image } from 'react-native';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 import { inputStyles as styles } from '@/components/ai/dash-assistant/styles/input.styles';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -29,13 +28,17 @@ interface DashInputBarProps {
   isLoading: boolean;
   isUploading: boolean;
   isRecording?: boolean;
+  recordingVoiceActivity?: boolean;
   isSpeaking?: boolean;
   partialTranscript?: string;
+  voiceAutoSendCountdownActive?: boolean;
+  voiceAutoSendCountdownMs?: number;
   bottomInset?: number;
   placeholder?: string;
   messages?: any[];
   onSend: () => void;
   onMicPress: () => void;
+  onCancelVoiceAutoSend?: () => void;
   onTakePhoto: () => void;
   onAttachFile: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -44,10 +47,72 @@ interface DashInputBarProps {
   onInterrupt?: () => void | Promise<void>;
   onInputFocus?: () => void;
   hideQuickChips?: boolean;
-  showAttachmentDropzone?: boolean;
   /** Web: paste image from clipboard (receives File). Optional. */
   onPasteImage?: (file: File) => void;
 }
+
+const WAVE_BARS = 7;
+
+const RecordingWaveform: React.FC<{ active: boolean; color: string; mutedColor: string }> = ({
+  active,
+  color,
+  mutedColor,
+}) => {
+  const bars = React.useMemo(
+    () => Array.from({ length: WAVE_BARS }, () => new Animated.Value(0.26)),
+    []
+  );
+
+  React.useEffect(() => {
+    if (!active) {
+      bars.forEach((bar) => bar.setValue(0.26));
+      return;
+    }
+
+    const loops = bars.map((bar, index) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 55),
+          Animated.timing(bar, {
+            toValue: 1,
+            duration: 240,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(bar, {
+            toValue: 0.26,
+            duration: 260,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    );
+
+    loops.forEach((loop) => loop.start());
+    return () => {
+      loops.forEach((loop) => loop.stop());
+      bars.forEach((bar) => bar.setValue(0.26));
+    };
+  }, [active, bars]);
+
+  return (
+    <View style={styles.voiceWaveformRail}>
+      {bars.map((bar, index) => (
+        <Animated.View
+          key={`wave_${index}`}
+          style={[
+            styles.voiceWaveformBar,
+            {
+              backgroundColor: active ? color : mutedColor,
+              transform: [{ scaleY: bar }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+};
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
   inputRef,
@@ -59,13 +124,17 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   isLoading,
   isUploading,
   isRecording = false,
+  recordingVoiceActivity = false,
   isSpeaking = false,
   partialTranscript = '',
+  voiceAutoSendCountdownActive = false,
+  voiceAutoSendCountdownMs = 0,
   bottomInset = 0,
   placeholder,
   messages = [],
   onSend,
   onMicPress,
+  onCancelVoiceAutoSend,
   onTakePhoto,
   onAttachFile,
   onRemoveAttachment,
@@ -74,60 +143,29 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onInterrupt,
   onInputFocus,
   hideQuickChips = false,
-  showAttachmentDropzone = true,
   onPasteImage,
 }) => {
-  const { t } = useTranslation();
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
   const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
   const orbRingSize = orbSize + 14;
 
   const renderAttachmentStrip = () => (
-    <>
-      {selectedAttachments.length === 0 ? (
-        showAttachmentDropzone ? (
-          <TouchableOpacity
-            style={[
-              styles.attachmentStrip,
-              {
-                backgroundColor: theme.surfaceVariant + '40',
-                borderColor: theme.border,
-              },
-            ]}
-            onPress={() => {
-              try {
-                Haptics.selectionAsync?.();
-              } catch {}
-              onAttachFile();
-            }}
-            activeOpacity={0.7}
-            accessibilityLabel={t('common.ai_drop_files_or_tap')}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.attachmentDropZoneText, { color: theme.textSecondary }]}>
-              {t('common.ai_drop_files_or_tap')}
-            </Text>
-            <Text style={[styles.attachmentDropZoneSubtext, { color: theme.textTertiary }]}>
-              {t('common.ai_drop_files_subtext')}
-            </Text>
-          </TouchableOpacity>
-        ) : null
-        ) : (
-        <View
-          style={[
-            styles.attachmentChipsContainer,
-            {
-              backgroundColor: theme.surfaceVariant + '66',
-              borderColor: theme.border,
-            },
-          ]}
+    selectedAttachments.length === 0 ? null : (
+      <View
+        style={[
+          styles.attachmentChipsContainer,
+          {
+            backgroundColor: theme.surfaceVariant + '66',
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.attachmentChipsScroll}
         >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.attachmentChipsScroll}
-          >
           {selectedAttachments.map((attachment) => {
             // Get real-time progress from the hook
             const progress = attachmentProgress?.get(attachment.id);
@@ -259,14 +297,50 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             </View>
             );
           })}
-          </ScrollView>
-        </View>
-      )}
-    </>
+        </ScrollView>
+      </View>
+    )
   );
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const hasMessages = messages && messages.length > 0;
+  const hasPartialTranscript = partialTranscript.trim().length > 0;
+  const normalizeTranscript = (value: string) =>
+    value.trim().replace(/\s+/g, ' ').toLowerCase();
+  const showTranscriptPreview =
+    hasPartialTranscript &&
+    normalizeTranscript(partialTranscript) !== normalizeTranscript(inputText);
+  const showAutoSendCountdown = voiceAutoSendCountdownActive && voiceAutoSendCountdownMs > 0;
+  const autoSendTotalMs = 3000;
+  const autoSendRemainingSeconds = showAutoSendCountdown
+    ? Math.max(1, Math.ceil(voiceAutoSendCountdownMs / 1000))
+    : 0;
+  const autoSendProgress = showAutoSendCountdown
+    ? Math.max(0, Math.min(1, voiceAutoSendCountdownMs / autoSendTotalMs))
+    : 0;
+  const showVoiceStatus = isRecording || hasPartialTranscript || isLoading || isSpeaking || showAutoSendCountdown;
+  const waveformActive = isRecording && recordingVoiceActivity;
+  const statusToneColor = isRecording ? theme.error : (isLoading ? theme.primary : theme.textSecondary);
+  const voiceStatusLabel = isRecording
+    ? 'Recording live'
+    : showAutoSendCountdown
+      ? 'Auto-send armed'
+    : isLoading
+      ? 'Dash is thinking'
+      : isSpeaking
+        ? 'Dash is speaking'
+        : 'Transcript ready';
+  const voiceStatusHint = isRecording
+    ? (hasPartialTranscript
+      ? 'Keep speaking. Brief pauses are okay, Dash will keep listening.'
+      : 'Speak naturally. Dash will finalize after a longer pause.')
+    : showAutoSendCountdown
+      ? `Auto-send in ${autoSendRemainingSeconds}s. Tap cancel if you still want to continue talking.`
+    : isLoading
+      ? 'Analyzing your request and preparing a response...'
+      : isSpeaking
+        ? 'Reading the latest answer aloud.'
+        : 'Tap send to submit or continue dictating.';
   // Show conversation starters when chat is empty
   const canShowQuickChips = !hideQuickChips && !hasContent && !isRecording && !isLoading && !hasMessages;
 
@@ -290,24 +364,71 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
       {/* Attachment strip: drop zone when empty, thumbnails when present */}
       {renderAttachmentStrip()}
 
-      {(isRecording || partialTranscript) && (
+      {showVoiceStatus && (
         <View style={[styles.voiceStatusRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
-          <Ionicons
-            name={isRecording ? 'mic' : 'chatbubble-ellipses-outline'}
-            size={16}
-            color={isRecording ? theme.error : theme.primary}
-          />
+          <View style={styles.voiceStatusTopRow}>
+            <View style={styles.voiceStatusHeader}>
+              {isLoading && !isRecording ? (
+                <EduDashSpinner size="small" color={theme.primary} />
+              ) : (
+                <Ionicons
+                  name={isRecording ? 'mic' : isSpeaking ? 'volume-high-outline' : 'chatbubble-ellipses-outline'}
+                  size={16}
+                  color={statusToneColor}
+                />
+              )}
+              <Text style={[styles.voiceStatusText, { color: statusToneColor }]}>
+                {voiceStatusLabel}
+              </Text>
+            </View>
+            <RecordingWaveform active={waveformActive} color={theme.error} mutedColor={theme.border} />
+          </View>
           <View style={styles.voiceStatusContent}>
-            <Text style={[styles.voiceStatusText, { color: theme.textSecondary }]}>
-              {isRecording ? 'Listening' : 'Transcript ready'}
-            </Text>
-            {!!partialTranscript && (
+            {showAutoSendCountdown && (
+              <View style={styles.autoSendCountdownRow}>
+                <View
+                  style={[
+                    styles.autoSendCountdownCircle,
+                    {
+                      borderColor: theme.primary,
+                      backgroundColor: theme.primary + '16',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.autoSendCountdownValue, { color: theme.primary }]}>
+                    {autoSendRemainingSeconds}
+                  </Text>
+                </View>
+                <View style={styles.autoSendCountdownMeta}>
+                  <Text style={[styles.autoSendCountdownTitle, { color: theme.text }]}>
+                    Sending soon
+                  </Text>
+                  <View style={[styles.autoSendProgressTrack, { backgroundColor: theme.border + '66' }]}>
+                    <View
+                      style={[
+                        styles.autoSendProgressFill,
+                        { backgroundColor: theme.primary, width: `${autoSendProgress * 100}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={[styles.autoSendCancelButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                  onPress={onCancelVoiceAutoSend}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel auto send"
+                >
+                  <Text style={[styles.autoSendCancelText, { color: theme.text }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {showTranscriptPreview && (
               <Text style={[styles.voiceTranscript, { color: theme.text }]} numberOfLines={3}>
                 {partialTranscript}
               </Text>
             )}
             <Text style={[styles.voiceHint, { color: theme.textTertiary }]}>
-              Keep speaking naturally. Dash will prepare your response as soon as you finish.
+              {voiceStatusHint}
             </Text>
           </View>
         </View>
@@ -341,12 +462,14 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             {/* Attach files button */}
             <TouchableOpacity
               style={styles.inputIconButton}
-              onPress={async () => {
-                try {
-                  await Haptics.selectionAsync();
-                } catch {}
-                onAttachFile();
-              }}
+                onPress={async () => {
+                  try {
+                    await Haptics.selectionAsync();
+                  } catch {
+                    // No-op: haptics are optional.
+                  }
+                  onAttachFile();
+                }}
               disabled={isLoading || isUploading}
               accessibilityLabel="Attach files"
               accessibilityRole="button"
@@ -372,7 +495,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                 onPress={async () => {
                   try {
                     await Haptics.selectionAsync();
-                  } catch {}
+                  } catch {
+                    // No-op: haptics are optional.
+                  }
                   onTakePhoto();
                 }}
                 disabled={isLoading || isUploading}
@@ -473,7 +598,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             onPress={async () => {
               try {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              } catch {}
+              } catch {
+                // No-op: haptics are optional.
+              }
               onCancel();
             }}
             accessibilityLabel="Stop generating"
@@ -491,7 +618,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             onPress={async () => {
               try {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              } catch {}
+              } catch {
+                // No-op: haptics are optional.
+              }
               onSend();
             }}
             disabled={isLoading || isUploading}

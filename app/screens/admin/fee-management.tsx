@@ -17,8 +17,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { normalizeSchoolFeeCategoryCode } from '@/lib/utils/feeUtils';
 import * as Clipboard from 'expo-clipboard';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
+import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface FeeStructure {
@@ -26,9 +29,26 @@ interface FeeStructure {
   name: string;
   description?: string;
   amount: number;
-  fee_type: 'registration' | 'tuition' | 'materials' | 'transport' | 'meals' | 'uniform_tshirt' | 'uniform_shorts' | 'uniform' | 'other';
+  fee_type:
+    | 'registration'
+    | 'tuition'
+    | 'deposit'
+    | 'transport'
+    | 'meals'
+    | 'activities'
+    | 'aftercare'
+    | 'excursion'
+    | 'fundraiser'
+    | 'donation_drive'
+    | 'uniform'
+    | 'books'
+    | 'materials'
+    | 'uniform_tshirt'
+    | 'uniform_shorts'
+    | 'other';
   frequency: 'one_time' | 'monthly' | 'quarterly' | 'yearly';
   is_active: boolean;
+  source?: 'school_fee_structures' | 'fee_structures';
 }
 
 interface PromoCampaign {
@@ -47,10 +67,17 @@ interface PromoCampaign {
 const FEE_TYPES = [
   { value: 'registration', label: '📋 Registration', icon: 'document-text' },
   { value: 'tuition', label: '📚 Tuition', icon: 'school' },
-  { value: 'materials', label: '🎨 Materials', icon: 'color-palette' },
+  { value: 'deposit', label: '🪪 Deposit', icon: 'card' },
   { value: 'transport', label: '🚌 Transport', icon: 'bus' },
   { value: 'meals', label: '🍽️ Meals', icon: 'restaurant' },
+  { value: 'activities', label: '🎯 Activities', icon: 'game-controller' },
+  { value: 'aftercare', label: '🌙 Aftercare', icon: 'moon' },
+  { value: 'excursion', label: '🧭 Excursion', icon: 'map' },
+  { value: 'fundraiser', label: '💸 Fundraiser', icon: 'cash' },
+  { value: 'donation_drive', label: '🤝 Donation Drive', icon: 'heart' },
   { value: 'uniform', label: '🎽 Uniform (Full set)', icon: 'shirt' },
+  { value: 'books', label: '📚 Books & Stationery', icon: 'library' },
+  { value: 'materials', label: '🎨 Materials', icon: 'color-palette' },
   { value: 'uniform_tshirt', label: '👕 Uniform (T-shirt)', icon: 'shirt' },
   { value: 'uniform_shorts', label: '🩳 Uniform (Shorts)', icon: 'shirt' },
   { value: 'other', label: '📦 Other', icon: 'cube' },
@@ -69,6 +96,7 @@ export default function FeeManagementScreen() {
   const { showAlert, alertProps } = useAlertModal();
   const insets = useSafeAreaInsets();
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  const financeAccess = useFinanceAccessGuard();
   const modalPaddingBottom = Platform.OS === 'android'
     ? Math.max(insets.bottom, 32)
     : Math.max(insets.bottom, 12);
@@ -112,20 +140,57 @@ export default function FeeManagementScreen() {
 
   // Fetch data
   const fetchData = useCallback(async () => {
+    if (financeAccess.needsPassword) return;
     if (!organizationId) return;
     
     try {
       const supabase = assertSupabase();
       
-      // Fetch fee structures
-      const { data: feesData, error: feesError } = await supabase
-        .from('fee_structures')
-        .select('*')
+      // Fetch fee structures (canonical first: school_fee_structures)
+      const { data: schoolFeesData, error: schoolFeesError } = await supabase
+        .from('school_fee_structures')
+        .select('id, name, description, amount_cents, fee_category, billing_frequency, is_active')
         .eq('preschool_id', organizationId)
-        .order('fee_type', { ascending: true });
-      
-      if (feesError) throw feesError;
-      setFees(feesData || []);
+        .order('fee_category', { ascending: true });
+
+      if (!schoolFeesError && Array.isArray(schoolFeesData) && schoolFeesData.length > 0) {
+        setFees(
+          schoolFeesData.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            description: row.description || '',
+            amount: Number(row.amount_cents || 0) / 100,
+            fee_type: (row.fee_category || 'other') as FeeStructure['fee_type'],
+            frequency: (row.billing_frequency || 'monthly') as FeeStructure['frequency'],
+            is_active: row.is_active !== false,
+            source: 'school_fee_structures' as const,
+          })),
+        );
+      } else {
+        if (schoolFeesError) {
+          console.warn('school_fee_structures fetch failed. Falling back to fee_structures:', schoolFeesError);
+        }
+
+        const { data: legacyFeesData, error: legacyFeesError } = await supabase
+          .from('fee_structures')
+          .select('id, name, description, amount, fee_type, frequency, is_active')
+          .eq('preschool_id', organizationId)
+          .order('fee_type', { ascending: true });
+
+        if (legacyFeesError) throw legacyFeesError;
+        setFees(
+          (legacyFeesData || []).map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            description: row.description || '',
+            amount: Number(row.amount || 0),
+            fee_type: (row.fee_type || 'other') as FeeStructure['fee_type'],
+            frequency: (row.frequency || 'monthly') as FeeStructure['frequency'],
+            is_active: row.is_active !== false,
+            source: 'fee_structures' as const,
+          })),
+        );
+      }
       
       // Fetch promo campaigns from marketing_campaigns (source of truth)
       const { data: promosData, error: promosError } = await supabase
@@ -177,11 +242,13 @@ export default function FeeManagementScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [organizationId]);
+  }, [financeAccess.needsPassword, organizationId, showAlert]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!financeAccess.needsPassword) {
+      fetchData();
+    }
+  }, [fetchData, financeAccess.needsPassword]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -198,53 +265,85 @@ export default function FeeManagementScreen() {
     setSaving(true);
     try {
       const supabase = assertSupabase();
-      const buildPayload = (overrideFeeType?: string) => ({
+      const amountValue = Math.max(0, Number.parseFloat(feeForm.amount) || 0);
+      const canonicalFeeCategory = normalizeSchoolFeeCategoryCode(feeForm.fee_type);
+      const canonicalPayload = {
         name: feeForm.name.trim(),
         description: feeForm.description.trim() || null,
-        amount: parseFloat(feeForm.amount),
-        fee_type: overrideFeeType || feeForm.fee_type,
+        amount_cents: Math.round(amountValue * 100),
+        fee_category: canonicalFeeCategory,
+        billing_frequency: feeForm.frequency,
+        is_active: feeForm.is_active,
+        preschool_id: organizationId,
+        created_by: profile?.id || user?.id || null,
+      };
+      const legacyPayload = {
+        name: feeForm.name.trim(),
+        description: feeForm.description.trim() || null,
+        amount: amountValue,
+        fee_type: feeForm.fee_type,
         frequency: feeForm.frequency,
         is_active: feeForm.is_active,
         preschool_id: organizationId,
-        created_by: profile?.id,
-      });
-      const payload = buildPayload();
-      const fallbackPayload = () => {
-        if (!['uniform_tshirt', 'uniform_shorts'].includes(feeForm.fee_type)) return null;
-        return buildPayload('uniform');
-      };
-      
-      const saveFee = async (data: typeof payload) => {
-        if (editingFee) {
-          const { error } = await supabase
-            .from('fee_structures')
-            .update(data)
-            .eq('id', editingFee.id);
-          if (error) throw error;
-          return 'updated';
-        }
-        const { error } = await supabase.from('fee_structures').insert(data);
-        if (error) throw error;
-        return 'created';
+        created_by: profile?.id || user?.id || null,
       };
 
       let action: 'created' | 'updated' = 'created';
+      let usedLegacyFallback = false;
+
+      const saveCanonical = async () => {
+        if (editingFee?.source === 'school_fee_structures') {
+          const { error } = await supabase
+            .from('school_fee_structures')
+            .update(canonicalPayload)
+            .eq('id', editingFee.id);
+          if (error) throw error;
+          action = 'updated';
+          return;
+        }
+
+        const { error } = await supabase.from('school_fee_structures').insert(canonicalPayload);
+        if (error) throw error;
+        action = editingFee ? 'updated' : 'created';
+
+        // If we edited a legacy fee, soft-retire it once canonical copy is created.
+        if (editingFee?.source === 'fee_structures') {
+          await supabase
+            .from('fee_structures')
+            .update({ is_active: false })
+            .eq('id', editingFee.id);
+        }
+      };
+
       try {
-        action = await saveFee(payload);
-      } catch (error: any) {
-        const message = error?.message?.toLowerCase() || '';
-        const code = error?.code;
-        const fallback = fallbackPayload();
-        if ((code === '23514' || message.includes('fee_type_check')) && fallback) {
-          action = await saveFee(fallback);
+        await saveCanonical();
+      } catch (canonicalError: any) {
+        console.warn('Canonical fee save failed. Falling back to legacy fee_structures:', canonicalError);
+        usedLegacyFallback = true;
+        if (editingFee) {
+          const { error } = await supabase
+            .from('fee_structures')
+            .update(legacyPayload)
+            .eq('id', editingFee.id);
+          if (error) throw error;
+          action = 'updated';
         } else {
-          throw error;
+          const { error } = await supabase.from('fee_structures').insert(legacyPayload);
+          if (error) throw error;
+          action = 'created';
         }
       }
 
       showAlert({
         title: 'Success',
-        message: action === 'updated' ? 'Fee updated successfully' : 'Fee created successfully',
+        message:
+          action === 'updated'
+            ? usedLegacyFallback
+              ? 'Fee updated via legacy table. Canonical migration will continue on next save.'
+              : 'Fee updated successfully'
+            : usedLegacyFallback
+              ? 'Fee created via legacy table. Canonical migration will continue on next save.'
+              : 'Fee created successfully',
         type: 'success',
       });
       
@@ -272,8 +371,9 @@ export default function FeeManagementScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const table = fee.source === 'school_fee_structures' ? 'school_fee_structures' : 'fee_structures';
               const { error } = await assertSupabase()
-                .from('fee_structures')
+                .from(table)
                 .delete()
                 .eq('id', fee.id);
 
@@ -927,6 +1027,18 @@ export default function FeeManagementScreen() {
         </View>
       </Modal>
       <AlertModal {...alertProps} />
+      <FinancePasswordPrompt
+        visible={financeAccess.promptVisible}
+        onSuccess={financeAccess.markUnlocked}
+        onCancel={() => {
+          financeAccess.dismissPrompt();
+          try {
+            router.back();
+          } catch {
+            router.replace('/screens/admin-dashboard' as any);
+          }
+        }}
+      />
     </View>
   );
 }

@@ -120,6 +120,10 @@ export const STT_CORRECTIONS: Array<[RegExp, string]> = [
   [/\bjunks\b/gi, 'chunks'],
   [/\bhi dish\b/gi, 'Hi Dash'],
   [/\bhey dish\b/gi, 'Hey Dash'],
+  [/\bfootball station\b/gi, 'football stadium'],
+  [/\bf\s*n\s*b\b/gi, 'FNB'],
+  [/\bonges\b/gi, 'oranges'],
+  [/\bstadiums?\s+at\s+fnb\b/gi, 'stadium at FNB'],
 
   // ── "superadmin" — the #1 misrecognised domain term ──
   [/\bsuper\s*8[\s-]*mon\b/gi, 'superadmin'],

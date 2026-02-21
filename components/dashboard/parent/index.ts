@@ -21,3 +21,4 @@ export { TodayHighlights, type TodayHighlight } from './TodayHighlights';
 export { UpgradeBanner } from './UpgradeBanner';
 export { WelcomeSection } from './WelcomeSection';
 export { UniformSizesSection } from './UniformSizesSection';
+export { StationeryChecklistSection } from './StationeryChecklistSection';

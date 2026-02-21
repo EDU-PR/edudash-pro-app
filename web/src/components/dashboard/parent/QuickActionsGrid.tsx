@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import {
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
   Users, Sparkles, Target, Library, FileCheck, Bot, Phone, Video, ChevronDown, Settings,
-  CheckCircle2
+  CheckCircle2, Clock3
 } from 'lucide-react';
 import { QuickCallModal } from '@/components/calls/QuickCallModal';
 import type { ResolvedSchoolType } from '@/lib/tenant/schoolTypeResolver';
@@ -108,6 +108,8 @@ export function QuickActionsGrid({
     const organizationActions: QuickAction[] = hasOrganization ? [
       { id: 'messages', icon: MessageCircle, label: t('navigation.messages', { defaultValue: 'Messages' }), href: '/dashboard/parent/messages', color: '#8b5cf6' },
       { id: 'homework', icon: FileText, label: t('homework.title', { defaultValue: 'Homework' }), href: '/dashboard/parent/homework', color: '#f59e0b' },
+      { id: 'stationery', icon: Clipboard, label: t('dashboard.parent.quick_actions.stationery', { defaultValue: 'Stationery' }), href: '/dashboard/parent/stationery', color: '#14b8a6' },
+      { id: 'daily_program', icon: Clock3, label: t('dashboard.parent.quick_actions.daily_program', { defaultValue: 'Daily Program' }), href: '/dashboard/parent/daily-program', color: '#6366f1' },
       { id: 'calendar', icon: Calendar, label: t('navigation.calendar', { defaultValue: 'Calendar' }), href: '/dashboard/parent/calendar', color: '#06b6d4' },
       { id: 'progress', icon: BarChart3, label: t('dashboard.progress', { defaultValue: 'Progress' }), href: '/dashboard/parent/progress', color: '#10b981' },
       { id: 'attendance', icon: CheckCircle2, label: t('parent.attendance', { defaultValue: 'Attendance' }), href: '/dashboard/parent/attendance', color: '#22c55e' },

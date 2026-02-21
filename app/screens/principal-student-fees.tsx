@@ -23,12 +23,15 @@ import { AdjustFeeModal } from '@/components/principal/AdjustFeeModal';
 import { ChangeClassModal } from '@/components/principal/ChangeClassModal';
 import { useStudentFeeData, useStudentFeeActions, formatCurrency, formatDate } from '@/hooks/student-fees';
 import { createStyles } from '@/lib/screen-styles/principal-student-fees.styles';
+import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
+import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
 
 export default function StudentFeeManagementScreen() {
   const router = useRouter();
   const { studentId } = useLocalSearchParams<{ studentId?: string }>();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
+  const financeAccess = useFinanceAccessGuard();
   const { showAlert: showAlertConfig, alertProps } = useAlertModal();
   const showAlert = useCallback(
     (
@@ -66,6 +69,26 @@ export default function StudentFeeManagementScreen() {
       default: return theme.textSecondary;
     }
   };
+
+  if (financeAccess.needsPassword) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <Stack.Screen options={{ title: 'Fee Management' }} />
+        <FinancePasswordPrompt
+          visible={financeAccess.promptVisible}
+          onSuccess={financeAccess.markUnlocked}
+          onCancel={() => {
+            financeAccess.dismissPrompt();
+            try {
+              router.back();
+            } catch {
+              router.replace('/screens/finance-control-center?tab=receivables' as any);
+            }
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (data.loading) {
     return (

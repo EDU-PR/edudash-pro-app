@@ -23,6 +23,8 @@ import {
   Home,
   MonitorPlay,
 } from 'lucide-react';
+import type { ResolvedSchoolType } from '@/lib/tenant/schoolTypeResolver';
+import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
 import type { NavItem } from './types';
 
 export interface NavSection {
@@ -30,15 +32,54 @@ export interface NavSection {
   items: NavItem[];
 }
 
-export function getTeacherNavItems(unreadCount: number = 0): NavItem[] {
+const NAV_ACTION_MAP: Record<string, string> = {
+  '/dashboard/teacher/lessons': 'browse_lessons',
+  '/dashboard/teacher/activities': 'create_activity',
+  '/dashboard/teacher/interactive-activities': 'create_activity',
+  '/dashboard/teacher/weekly-plans': 'browse_lessons',
+  '/dashboard/teacher/assignments': 'assign_lesson',
+  '/dashboard/teacher/homework': 'assign_homework',
+  '/dashboard/teacher/classes': 'my_class',
+  '/dashboard/teacher/attendance': 'take_attendance',
+  '/dashboard/teacher/live-lesson': 'start_live_lesson',
+  '/dashboard/teacher/birthdays': 'birthday_chart',
+  '/dashboard/teacher/menu': 'weekly_menu',
+  '/dashboard/teacher/messages': 'messages',
+  '/dashboard/teacher/groups': 'manage_groups',
+  '/dashboard/teacher/calls': 'call_parent',
+  '/dashboard/teacher/ai-assistant': 'ai_assistant',
+  '/dashboard/teacher/ai-grader': 'assign_homework',
+  '/dashboard/teacher/reports': 'student_reports',
+  '/dashboard/teacher/tutor-analytics': 'student_reports',
+  '/dashboard/teacher/family-review': 'family_activity_review',
+  '/dashboard/teacher/reputation': 'reputation',
+  '/display': 'room_display_connect',
+};
+
+function filterBySchoolType(items: NavItem[], schoolType?: ResolvedSchoolType | null): NavItem[] {
+  if (!schoolType) return items;
+  return items.filter((item) => {
+    const actionId = NAV_ACTION_MAP[item.href];
+    if (!actionId) return true;
+    return isDashboardActionAllowed('teacher', schoolType, actionId);
+  });
+}
+
+export function getTeacherNavItems(
+  unreadCount: number = 0,
+  schoolType?: ResolvedSchoolType | null,
+): NavItem[] {
   // Flat list for backward compatibility — used by sidebar/mobile nav
-  return getTeacherNavSections(unreadCount).flatMap((s) => s.items);
+  return getTeacherNavSections(unreadCount, schoolType).flatMap((s) => s.items);
 }
 
 /**
  * Grouped nav sections — mirrors mobile category grouping
  */
-export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
+export function getTeacherNavSections(
+  unreadCount: number = 0,
+  schoolType?: ResolvedSchoolType | null,
+): NavSection[] {
   return [
     {
       label: 'Overview',
@@ -103,5 +144,10 @@ export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
         { href: '/dashboard/teacher/settings', label: 'Settings', icon: Settings },
       ],
     },
-  ];
+  ]
+    .map((section) => ({
+      ...section,
+      items: filterBySchoolType(section.items, schoolType),
+    }))
+    .filter((section) => section.items.length > 0);
 }

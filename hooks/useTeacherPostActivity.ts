@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { uploadMultipleImages } from '@/lib/ai/simple-image-upload';
-import type { Student, Class, ActivityType, Visibility } from '@/app/screens/teacher-post-activity.constants';
+import type { Student, Class, ActivityType, Visibility } from '@/features/teacher-post-activity/teacher-post-activity.constants';
 
 const TAG = 'TeacherPostActivity';
 

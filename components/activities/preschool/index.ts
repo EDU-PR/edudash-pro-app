@@ -8,6 +8,7 @@ export { MatchingGame } from './MatchingGame';
 export { DrawingCanvas } from './DrawingCanvas';
 export { CountingGame } from './CountingGame';
 export { StickerBoard } from './StickerBoard';
+export { NamePracticePad } from './NamePracticePad';
 
 // Re-export types
 export type { default as MatchingGameProps } from './MatchingGame';

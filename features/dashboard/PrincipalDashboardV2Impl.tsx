@@ -18,6 +18,7 @@ import { usePrincipalHub } from '@/hooks/usePrincipalHub';
 import { useRecentStudents } from '@/hooks/useRecentStudents';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 import { usePrincipalDashboardSections } from '@/hooks/principal/usePrincipalDashboardSections';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 import { normalizePersonName } from '@/lib/utils/nameUtils';
 import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 import { CollapsibleSection } from '@/components/dashboard/shared';
@@ -71,6 +72,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
 
   const { data, loading, refresh } = usePrincipalHub();
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
   const organizationId = profile?.organization_id || profile?.preschool_id || null;
 
   const {
@@ -107,10 +109,14 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
 
   const pendingApplications = stats?.pendingApplications?.total ?? 0;
   const pendingRegistrations = stats?.pendingRegistrations?.total ?? 0;
-  const pendingPayments = stats?.pendingPayments?.total ?? 0;
-  const pendingPaymentsAmount = stats?.pendingPayments?.amount ?? 0;
-  const pendingPaymentsOverdueAmount = stats?.pendingPayments?.overdueAmount ?? 0;
-  const pendingPOPs = stats?.pendingPOPUploads?.total ?? 0;
+  const pendingPaymentsRaw = stats?.pendingPayments?.total ?? 0;
+  const pendingPaymentsAmountRaw = stats?.pendingPayments?.amount ?? 0;
+  const pendingPaymentsOverdueAmountRaw = stats?.pendingPayments?.overdueAmount ?? 0;
+  const pendingPOPsRaw = stats?.pendingPOPUploads?.total ?? 0;
+  const pendingPayments = hideFeesOnDashboards ? 0 : pendingPaymentsRaw;
+  const pendingPaymentsAmount = hideFeesOnDashboards ? 0 : pendingPaymentsAmountRaw;
+  const pendingPaymentsOverdueAmount = hideFeesOnDashboards ? 0 : pendingPaymentsOverdueAmountRaw;
+  const pendingPOPs = hideFeesOnDashboards ? 0 : pendingPOPsRaw;
   const pendingReports = data.pendingReportApprovals ?? 0;
   const pendingActivities = data.pendingActivityApprovals ?? 0;
   const pendingHomework = data.pendingHomeworkApprovals ?? 0;
@@ -225,7 +231,9 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
       'admissions-cashflow': {
         id: 'admissions-cashflow',
         title: t('dashboard.section.admissions_cashflow.title', { defaultValue: 'Admissions & Cashflow' }),
-        hint: t('dashboard.section.admissions_cashflow.hint', { defaultValue: 'Track applications, registrations, fees, POPs, and collections.' }),
+        hint: hideFeesOnDashboards
+          ? t('dashboard.section.admissions_cashflow.hint_private', { defaultValue: 'Track applications and registrations while fees stay private.' })
+          : t('dashboard.section.admissions_cashflow.hint', { defaultValue: 'Track applications, registrations, fees, POPs, and collections.' }),
         icon: 'wallet-outline',
         defaultCollapsed: collapsedSections.has('admissions-cashflow'),
         attentionPriority: getAttentionPriority(admissionsQueueCount, 8, 1),
@@ -250,7 +258,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
         attentionCount: urgentQueueCount,
       },
     }),
-    [admissionsQueueCount, collapsedSections, pendingReports, t, upcomingBirthdaysCount, urgentQueueCount]
+    [admissionsQueueCount, collapsedSections, hideFeesOnDashboards, pendingReports, t, upcomingBirthdaysCount, urgentQueueCount]
   );
 
   const handleSectionToggle = useCallback(
@@ -325,7 +333,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
                   onPress={() => router.push('/screens/subscription-upgrade-post')}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.manageButtonText}>Manage</Text>
+                  <Text style={styles.manageButtonText}>{t('common.manage', { defaultValue: 'Manage' })}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -368,7 +376,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
         {/* Start Here */}
         {renderSection('start-here', (
           <View style={styles.sectionBody}>
-            <PrincipalSchoolPulse stats={stats} />
+            <PrincipalSchoolPulse stats={stats} hideFinanceTiles={hideFeesOnDashboards} />
             <PrincipalGettingStartedCard stats={stats} />
           </View>
         ))}
@@ -383,6 +391,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
                 pendingUnpaidFees: pendingPayments,
                 pendingApprovals: pendingApprovalsTotal,
               }}
+              hideFinanceItems={hideFeesOnDashboards}
             />
           </View>
         ))}
@@ -420,6 +429,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             onOpenUniforms={openUniformHub}
             onMessageUnpaid={messageUnpaidUniformParents}
             onMessageNoOrder={messageNoOrderParents}
+            hideFinancialData={hideFeesOnDashboards}
           />
         ))}
 
@@ -446,6 +456,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             onToggleSection={handleQuickActionsToggle}
             resolvedSchoolType={resolvedSchoolType}
             organizationId={organizationId}
+            hideFinancialActions={hideFeesOnDashboards}
           />
         </View>
 

@@ -49,6 +49,10 @@ export interface UpcomingEvent {
   title: string;
   time: string;
   type?: string;
+  eventDate?: string | null;
+  daysUntil?: number | null;
+  reminderOffsetDays?: 7 | 3 | 1 | null;
+  reminderLabel?: string | null;
 }
 
 export interface ChildData {
@@ -134,6 +138,10 @@ export interface TeacherDashboardData {
     title: string;
     time: string;
     type: 'meeting' | 'activity' | 'assessment';
+    eventDate?: string | null;
+    daysUntil?: number | null;
+    reminderOffsetDays?: 7 | 3 | 1 | null;
+    reminderLabel?: string | null;
   }>;
   todayRoutine?: {
     weeklyProgramId: string;
@@ -186,8 +194,15 @@ export interface ParentDashboardData {
     id: string;
     title: string;
     dueDate: string;
+    due_date: string;
     status: 'submitted' | 'graded' | 'not_submitted';
     studentName: string;
+    child_name?: string;
+    student_id?: string;
+    subject?: string;
+    description?: string | null;
+    class_id?: string | null;
+    preschool_id?: string | null;
   }>;
   upcomingEvents: Array<{
     id: string;

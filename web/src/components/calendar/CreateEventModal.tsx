@@ -205,6 +205,7 @@ export function CreateEventModal({ preschoolId, onClose, onEventCreated }: Creat
               <option value="sports_day">Sports Day</option>
               <option value="graduation">Graduation</option>
               <option value="fundraiser">Fundraiser</option>
+              <option value="donation_drive">Donation Drive</option>
               <option value="other">Other</option>
             </select>
           </div>

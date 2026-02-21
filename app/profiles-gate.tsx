@@ -8,7 +8,7 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { validateUserAccess, routeAfterLogin, isNavigationLocked } from '@/lib/routeAfterLogin';
-import { createProfilesGateStyles } from './_profiles-gate.styles';
+import { createProfilesGateStyles } from '@/features/auth/profiles-gate.styles';
 import { fetchEnhancedUserProfile, type Role } from '@/lib/rbac';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';

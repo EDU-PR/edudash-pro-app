@@ -9,6 +9,12 @@ import { ExamInteractiveView } from '@/components/dashboard/exam-prep/ExamIntera
 import { createClient } from '@/lib/supabase/client';
 import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { Loader2, AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
+type ExamContextSummary = {
+  assignmentCount: number;
+  lessonCount: number;
+  focusTopics: string[];
+  weakTopics: string[];
+};
 
 /**
  * Generate Exam Page - Simplified Version
@@ -48,6 +54,8 @@ function GenerateExamContent() {
   const [exam, setExam] = useState<any>(null);
   const [examId, setExamId] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('Initializing...');
+  const [contextSummary, setContextSummary] = useState<ExamContextSummary | null>(null);
+  const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const hasStartedRef = useRef(false);
   
   // Get params from URL
@@ -55,6 +63,11 @@ function GenerateExamContent() {
   const subject = searchParams.get('subject');
   const examType = searchParams.get('type');
   const customPrompt = searchParams.get('prompt');
+  const studentId = searchParams.get('studentId');
+  const classId = searchParams.get('classId');
+  const schoolId = searchParams.get('schoolId');
+  const language = searchParams.get('language');
+  const useTeacherContext = searchParams.get('useTeacherContext');
   
   // Check for existing exam in URL
   const existingExamId = searchParams.get('genId');
@@ -150,7 +163,12 @@ function GenerateExamContent() {
           grade,
           subject,
           examType,
-          customPrompt
+          customPrompt,
+          studentId,
+          classId,
+          schoolId,
+          language: language || 'en-ZA',
+          useTeacherContext: useTeacherContext ? useTeacherContext === '1' || useTeacherContext === 'true' : true,
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -169,6 +187,8 @@ function GenerateExamContent() {
       // Set state - that's it!
       setExam(data.exam);
       setExamId(data.examId);
+      setContextSummary(data.contextSummary || null);
+      setPersistenceWarning(data.persistenceWarning || null);
       setStatus('success');
       setProgress('Ready!');
       
@@ -316,6 +336,9 @@ function GenerateExamContent() {
                 <br />
                 This may take a minute or two.
               </p>
+              <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
+                Mode: {(useTeacherContext ? useTeacherContext === '1' || useTeacherContext === 'true' : true) ? 'Teacher context + CAPS' : 'CAPS baseline'}
+              </p>
             </div>
             
             <div style={{
@@ -407,21 +430,37 @@ function GenerateExamContent() {
         
         {/* Success State - Show Exam */}
         {status === 'success' && exam && (
-          <ExamInteractiveView
-            exam={exam}
-            generationId={examId}
-            userId={userId}
-            onClose={handleClose}
-            onSubmitted={() => {
-              if (activeKey) {
-                try {
-                  localStorage.removeItem(activeKey);
-                } catch (e) {
-                  console.warn('[GenerateExam] Could not clear localStorage:', e);
+          <>
+            {(contextSummary || persistenceWarning) && (
+              <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+                {contextSummary && (
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+                    Teacher context used: {contextSummary.assignmentCount} assignments, {contextSummary.lessonCount} lessons
+                  </p>
+                )}
+                {persistenceWarning && (
+                  <p style={{ margin: '8px 0 0 0', fontSize: 13, color: 'var(--warning)' }}>
+                    {persistenceWarning}
+                  </p>
+                )}
+              </div>
+            )}
+            <ExamInteractiveView
+              exam={exam}
+              generationId={examId}
+              userId={userId}
+              onClose={handleClose}
+              onSubmitted={() => {
+                if (activeKey) {
+                  try {
+                    localStorage.removeItem(activeKey);
+                  } catch (e) {
+                    console.warn('[GenerateExam] Could not clear localStorage:', e);
+                  }
                 }
-              }
-            }}
-          />
+              }}
+            />
+          </>
         )}
       </div>
     </ParentShell>

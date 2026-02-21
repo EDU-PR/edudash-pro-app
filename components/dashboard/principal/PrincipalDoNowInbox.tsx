@@ -25,6 +25,7 @@ interface PrincipalDoNowInboxProps {
   counts: DoNowInboxCounts;
   /** Optional override to change default navigation targets */
   routes?: Partial<Record<DoNowItemId, string>>;
+  hideFinanceItems?: boolean;
 }
 
 const DEFAULT_ROUTES: Record<DoNowItemId, string> = {
@@ -34,7 +35,7 @@ const DEFAULT_ROUTES: Record<DoNowItemId, string> = {
   approvals: '/screens/principal-approval-dashboard',
 };
 
-export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts, routes }) => {
+export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts, routes, hideFinanceItems = false }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -43,24 +44,26 @@ export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts
 
   const items = useMemo(() => {
     const all = [
-      {
-        id: 'payment_proofs' as const,
-        title: t('dashboard.do_now.payment_proofs', { defaultValue: 'Check proof of payment' }),
-        subtitle: t('dashboard.do_now.payment_proofs_hint', { defaultValue: 'Approve or reject uploads from parents' }),
-        count: counts.pendingPaymentProofs,
-        icon: 'document-text',
-        color: '#F59E0B',
-        priority: 'urgent' as const,
-      },
-      {
-        id: 'unpaid_fees' as const,
-        title: t('dashboard.do_now.unpaid_fees', { defaultValue: 'Follow up unpaid fees' }),
-        subtitle: t('dashboard.do_now.unpaid_fees_hint', { defaultValue: 'See who has not paid and send reminders' }),
-        count: counts.pendingUnpaidFees,
-        icon: 'alert-circle',
-        color: '#EF4444',
-        priority: 'urgent' as const,
-      },
+      ...(!hideFinanceItems ? [
+        {
+          id: 'payment_proofs' as const,
+          title: t('dashboard.do_now.payment_proofs', { defaultValue: 'Check proof of payment' }),
+          subtitle: t('dashboard.do_now.payment_proofs_hint', { defaultValue: 'Approve or reject uploads from parents' }),
+          count: counts.pendingPaymentProofs,
+          icon: 'document-text',
+          color: '#F59E0B',
+          priority: 'urgent' as const,
+        },
+        {
+          id: 'unpaid_fees' as const,
+          title: t('dashboard.do_now.unpaid_fees', { defaultValue: 'Follow up unpaid fees' }),
+          subtitle: t('dashboard.do_now.unpaid_fees_hint', { defaultValue: 'See who has not paid and send reminders' }),
+          count: counts.pendingUnpaidFees,
+          icon: 'alert-circle',
+          color: '#EF4444',
+          priority: 'urgent' as const,
+        },
+      ] : []),
       {
         id: 'registrations' as const,
         title: t('dashboard.do_now.registrations', { defaultValue: 'Review registrations' }),
@@ -85,7 +88,7 @@ export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts
     const nonZero = all.filter((x) => x.count > 0);
     const zero = all.filter((x) => x.count <= 0);
     return [...nonZero, ...zero];
-  }, [counts.pendingApprovals, counts.pendingPaymentProofs, counts.pendingRegistrations, counts.pendingUnpaidFees, t]);
+  }, [counts.pendingApprovals, counts.pendingPaymentProofs, counts.pendingRegistrations, counts.pendingUnpaidFees, hideFinanceItems, t]);
 
   const totalPending =
     counts.pendingRegistrations +

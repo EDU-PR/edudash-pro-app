@@ -353,6 +353,7 @@ export class WeeklyProgramService {
       status: program.status || 'draft',
       published_by: program.published_by,
       published_at: program.published_at,
+      generation_context: (program as any).generation_context || null,
       blocks: groupedBlocks.get(program.id) || [],
     }));
   }
@@ -381,68 +382,132 @@ export class WeeklyProgramService {
       status: weeklyProgram.status || 'draft',
     };
 
-    let savedProgram: any = null;
+    const generationContextValue = weeklyProgram.generation_context || {};
+    const withGenerationContext = {
+      ...basePayload,
+      generation_context: generationContextValue,
+    };
 
-    if (weeklyProgram.id) {
-      const { data, error } = await supabase
-        .from('weekly_programs')
-        .update(basePayload)
-        .eq('id', weeklyProgram.id)
-        .select('*')
-        .single();
+    const withoutGenerationContext = {
+      ...basePayload,
+    };
 
-      if (error || !data) {
-        throw new Error(error?.message || 'Failed to update weekly program');
-      }
-      savedProgram = data;
-    } else {
-      const inserted = await supabase
-        .from('weekly_programs')
-        .insert(basePayload)
-        .select('*')
-        .single();
+    const isMissingGenerationContextColumn = (error: unknown): boolean => {
+      const message = String((error as any)?.message || '').toLowerCase();
+      const details = String((error as any)?.details || '').toLowerCase();
+      return (
+        (message.includes('generation_context') || details.includes('generation_context')) &&
+        (
+          message.includes('schema cache')
+          || message.includes('could not find')
+          || message.includes('column')
+          || details.includes('schema cache')
+          || details.includes('column')
+        )
+      );
+    };
 
-      if (inserted.error) {
-        const isConflict = inserted.error.code === '23505';
+    const persistWeeklyProgram = async (payload: Record<string, unknown>): Promise<any> => {
+      let saved: any = null;
 
-        if (!isConflict) {
-          throw new Error(inserted.error.message || 'Failed to create weekly program');
-        }
-
-        let existingQuery = supabase
+      if (weeklyProgram.id) {
+        const { data, error } = await supabase
           .from('weekly_programs')
-          .select('*')
-          .eq('preschool_id', weeklyProgram.preschool_id)
-          .eq('week_start_date', weekStartDate)
-          .limit(1);
-
-        if (weeklyProgram.class_id) {
-          existingQuery = existingQuery.eq('class_id', weeklyProgram.class_id);
-        } else {
-          existingQuery = existingQuery.is('class_id', null);
-        }
-
-        const { data: existingRows, error: existingError } = await existingQuery;
-        const existing = Array.isArray(existingRows) ? existingRows[0] : null;
-
-        if (existingError || !existing?.id) {
-          throw new Error(existingError?.message || inserted.error.message || 'Failed to resolve existing weekly program');
-        }
-
-        const { data: updatedExisting, error: updateError } = await supabase
-          .from('weekly_programs')
-          .update(basePayload)
-          .eq('id', existing.id)
+          .update(payload)
+          .eq('id', weeklyProgram.id)
           .select('*')
           .single();
 
-        if (updateError || !updatedExisting) {
-          throw new Error(updateError?.message || 'Failed to update existing weekly program');
+        if (error || !data) {
+          throw error || new Error('Failed to update weekly program');
         }
-
-        savedProgram = updatedExisting;
+        saved = data;
       } else {
-        savedProgram = inserted.data;
+        const inserted = await supabase
+          .from('weekly_programs')
+          .insert(payload)
+          .select('*')
+          .single();
+
+        if (inserted.error) {
+          const isConflict = inserted.error.code === '23505';
+
+          if (!isConflict) {
+            throw inserted.error;
+          }
+
+          let existingQuery = supabase
+            .from('weekly_programs')
+            .select('*')
+            .eq('preschool_id', weeklyProgram.preschool_id)
+            .eq('week_start_date', weekStartDate)
+            .limit(1);
+
+          if (weeklyProgram.class_id) {
+            existingQuery = existingQuery.eq('class_id', weeklyProgram.class_id);
+          } else {
+            existingQuery = existingQuery.is('class_id', null);
+          }
+
+          const { data: existingRows, error: existingError } = await existingQuery;
+          const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+
+          if (existingError || !existing?.id) {
+            throw existingError || inserted.error;
+          }
+
+          const { data: updatedExisting, error: updateError } = await supabase
+            .from('weekly_programs')
+            .update(payload)
+            .eq('id', existing.id)
+            .select('*')
+            .single();
+
+          if (updateError || !updatedExisting) {
+            throw updateError || new Error('Failed to update existing weekly program');
+          }
+
+          saved = updatedExisting;
+        } else {
+          saved = inserted.data;
+        }
+      }
+
+      return saved;
+    };
+
+    let savedProgram: any = null;
+    let saveWarning: string | null = null;
+    let usedFallbackWithoutGenerationContext = false;
+
+    try {
+      savedProgram = await persistWeeklyProgram(withGenerationContext);
+    } catch (error) {
+      if (!isMissingGenerationContextColumn(error)) {
+        throw new Error((error as any)?.message || 'Failed to save weekly program');
+      }
+
+      console.warn('[weekly_program.save.retry_without_generation_context]', {
+        weeklyProgramId: weeklyProgram.id || null,
+        preschoolId: weeklyProgram.preschool_id,
+      });
+
+      try {
+        savedProgram = await persistWeeklyProgram(withoutGenerationContext);
+        usedFallbackWithoutGenerationContext = true;
+        saveWarning =
+          'Saved without preflight metadata because generation_context is not available in this database yet.';
+        console.info('[weekly_program.save.retry_success]', {
+          weeklyProgramId: savedProgram?.id || weeklyProgram.id || null,
+          preschoolId: weeklyProgram.preschool_id,
+        });
+      } catch (retryError) {
+        console.error('[weekly_program.save.retry_failed]', {
+          weeklyProgramId: weeklyProgram.id || null,
+          preschoolId: weeklyProgram.preschool_id,
+          error: (retryError as any)?.message || 'retry_failed',
+        });
+        throw new Error((retryError as any)?.message || 'Failed to save weekly program');
       }
     }
 
@@ -494,6 +559,8 @@ export class WeeklyProgramService {
       status: savedProgram.status || 'draft',
       published_by: savedProgram.published_by,
       published_at: savedProgram.published_at,
+      generation_context: usedFallbackWithoutGenerationContext ? null : (savedProgram.generation_context || null),
+      save_warnings: saveWarning ? [saveWarning] : undefined,
       blocks,
     };
   }

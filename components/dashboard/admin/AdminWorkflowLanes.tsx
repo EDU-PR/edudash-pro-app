@@ -7,6 +7,7 @@ import type { AdminWorkflowItem, AdminWorkflowLane } from '@/lib/dashboard/admin
 interface AdminWorkflowLanesProps {
   workflows: Record<AdminWorkflowLane, AdminWorkflowItem[]>;
   laneRoutes: Record<AdminWorkflowLane, string>;
+  hiddenLanes?: AdminWorkflowLane[];
   screeningRequestId?: string | null;
   onOpenLaneRoute: (lane: AdminWorkflowLane) => void;
   onOpenWorkflowItem: (item: AdminWorkflowItem) => void;
@@ -47,6 +48,7 @@ function canScreen(item: AdminWorkflowItem): boolean {
 export function AdminWorkflowLanes({
   workflows,
   laneRoutes,
+  hiddenLanes = [],
   screeningRequestId,
   onOpenLaneRoute,
   onOpenWorkflowItem,
@@ -58,6 +60,7 @@ export function AdminWorkflowLanes({
   return (
     <View style={styles.wrapper}>
       {(Object.keys(LANE_META) as AdminWorkflowLane[]).map((lane) => {
+        if (hiddenLanes.includes(lane)) return null;
         const laneMeta = LANE_META[lane];
         const items = workflows[lane] || [];
 

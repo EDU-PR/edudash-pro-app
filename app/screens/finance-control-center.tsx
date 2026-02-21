@@ -30,6 +30,8 @@ import { PayrollService } from '@/services/PayrollService';
 import { ExportService } from '@/lib/services/finance/ExportService';
 import { PayrollPaymentHistory } from '@/components/principal/PayrollPaymentHistory';
 import { PayrollAdvanceModal } from '@/components/principal/PayrollAdvanceModal';
+import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
+import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
 import type {
   FeeCategoryCode,
   FinanceControlCenterBundle,
@@ -41,10 +43,18 @@ import { CenterTab, TAB_ITEMS, formatCurrency } from '@/lib/screen-data/finance-
 const CATEGORY_LABELS: Record<string, string> = {
   tuition: 'Tuition',
   registration: 'Registration',
+  deposit: 'Deposit',
   uniform: 'Uniform',
   aftercare: 'Aftercare',
   transport: 'Transport',
   meal: 'Meals',
+  meals: 'Meals',
+  activities: 'Activities',
+  excursion: 'Excursion',
+  fundraiser: 'Fundraiser',
+  donation_drive: 'Donation Drive',
+  books: 'Books & Stationery',
+  other: 'Other',
   ad_hoc: 'Other',
 };
 
@@ -55,16 +65,32 @@ const CATEGORY_COLORS: Record<FeeCategoryCode, string> = {
   aftercare: '#22C55E',
   transport: '#06B6D4',
   meal: '#EF4444',
+  meals: '#EF4444',
+  deposit: '#A855F7',
+  activities: '#0EA5E9',
+  excursion: '#0891B2',
+  fundraiser: '#14B8A6',
+  donation_drive: '#10B981',
+  books: '#F97316',
+  other: '#64748B',
   ad_hoc: '#64748B',
 };
 
 const CATEGORY_OPTIONS: FeeCategoryCode[] = [
   'tuition',
   'registration',
+  'deposit',
   'uniform',
   'aftercare',
   'transport',
+  'meals',
   'meal',
+  'activities',
+  'excursion',
+  'fundraiser',
+  'donation_drive',
+  'books',
+  'other',
   'ad_hoc',
 ];
 
@@ -120,6 +146,7 @@ export default function FinanceControlCenterScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   const orgId = derivePreschoolId(profile);
+  const financeAccess = useFinanceAccessGuard();
   const [activeTab, setActiveTab] = React.useState<CenterTab>(() => getTabFromParam(params.tab));
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -232,6 +259,7 @@ export default function FinanceControlCenterScreen() {
   }, [snapshot, receivables, expenses, pendingPOPs.length]);
 
   const loadData = React.useCallback(async (force = false) => {
+    if (financeAccess.needsPassword) return;
     if (!orgId) return;
     if (force) setRefreshing(true);
     else setLoading(true);
@@ -253,10 +281,10 @@ export default function FinanceControlCenterScreen() {
         type: 'error',
       });
     } finally {
-      setLoading(false);
+      setLoading(financeAccess.needsPassword ? true : false);
       setRefreshing(false);
     }
-  }, [orgId, monthIso, showAlert]);
+  }, [financeAccess.needsPassword, orgId, monthIso, showAlert]);
 
   React.useEffect(() => {
     loadData();
@@ -1009,6 +1037,19 @@ export default function FinanceControlCenterScreen() {
           <View style={{ height: 36 }} />
         </ScrollView>
       )}
+
+      <FinancePasswordPrompt
+        visible={financeAccess.promptVisible}
+        onSuccess={financeAccess.markUnlocked}
+        onCancel={() => {
+          financeAccess.dismissPrompt();
+          try {
+            router.back();
+          } catch {
+            router.replace('/screens/principal-dashboard' as any);
+          }
+        }}
+      />
 
       {showMonthPicker && (
         <DateTimePicker

@@ -39,6 +39,12 @@ export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ t
   const participantRole = isGroup
     ? (thread.type === 'announcement' ? 'announcement' : 'group')
     : otherParticipant?.user_profile?.role || (isParentDM ? 'parent' : 'teacher');
+  const groupMemberCount = isGroup
+    ? Number((thread as any).member_count ?? thread.participant_count ?? thread.participants?.length ?? 0)
+    : 0;
+  const groupOnlineCount = isGroup
+    ? Number((thread as any).online_count ?? 0)
+    : 0;
 
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`.trim()
@@ -109,6 +115,12 @@ export const ParentThreadItem: React.FC<ParentThreadItemProps> = React.memo(({ t
             <View style={s.roleBadge}>
               <Text style={s.roleText}>{participantRole}</Text>
             </View>
+            {isGroup && groupMemberCount > 0 && (
+              <Text style={s.studentText}>
+                • {groupOnlineCount > 0 ? `${groupOnlineCount} online • ` : ''}
+                {groupMemberCount} member{groupMemberCount === 1 ? '' : 's'}
+              </Text>
+            )}
             {studentName && <Text style={s.studentText}>• {studentName}</Text>}
           </View>
           <View style={s.bottomRow}>

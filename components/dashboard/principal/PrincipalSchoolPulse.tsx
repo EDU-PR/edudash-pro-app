@@ -60,9 +60,10 @@ function isDarkHex(hex: string): boolean {
 
 export interface PrincipalSchoolPulseProps {
   stats?: SchoolStats | null;
+  hideFinanceTiles?: boolean;
 }
 
-export const PrincipalSchoolPulse: React.FC<PrincipalSchoolPulseProps> = ({ stats }) => {
+export const PrincipalSchoolPulse: React.FC<PrincipalSchoolPulseProps> = ({ stats, hideFinanceTiles = false }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const counts = useNotificationCounts();
@@ -106,28 +107,31 @@ export const PrincipalSchoolPulse: React.FC<PrincipalSchoolPulseProps> = ({ stat
         tone: toneForCount(unreadMessages),
         route: '/screens/principal-messages',
       },
-      {
-        id: 'fees',
-        icon: 'cash',
-        label: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }),
-        value: unpaidFees > 0 ? String(unpaidFees) : t('common.none', { defaultValue: 'None' }),
-        caption: t('dashboard.review_fees', { defaultValue: 'Review fees' }),
-        tone: toneForCount(unpaidFees),
-        route: '/screens/finance-control-center?tab=receivables',
-      },
-      {
-        id: 'pops',
-        icon: 'document-text',
-        label: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }),
-        value: popPending > 0 ? String(popPending) : t('common.none', { defaultValue: 'None' }),
-        caption: t('dashboard.verify_pops', { defaultValue: 'Verify uploads' }),
-        tone: toneForCount(popPending),
-        route: '/screens/pop-review',
-      },
+      ...(!hideFinanceTiles ? [
+        {
+          id: 'fees',
+          icon: 'cash',
+          label: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }),
+          value: unpaidFees > 0 ? String(unpaidFees) : t('common.none', { defaultValue: 'None' }),
+          caption: t('dashboard.review_fees', { defaultValue: 'Review fees' }),
+          tone: toneForCount(unpaidFees),
+          route: '/screens/finance-control-center?tab=receivables',
+        },
+        {
+          id: 'pops',
+          icon: 'document-text',
+          label: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }),
+          value: popPending > 0 ? String(popPending) : t('common.none', { defaultValue: 'None' }),
+          caption: t('dashboard.verify_pops', { defaultValue: 'Verify uploads' }),
+          tone: toneForCount(popPending),
+          route: '/screens/pop-review',
+        },
+      ] : []),
     ],
     [
       attendancePresent,
       attendanceRate,
+      hideFinanceTiles,
       popPending,
       t,
       totalStudents,

@@ -12,7 +12,7 @@ import { useThreadOptions } from '@/hooks/useThreadOptions';
 import { type Message, getDateKey, getDateSeparatorLabel } from '@/components/messaging';
 import {
   COMPOSER_OVERLAY_HEIGHT, COMPOSER_FLOAT_GAP,
-} from '@/app/screens/teacher-message-thread.styles';
+} from '@/features/teacher-messaging/teacher-message-thread.styles';
 
 let useTheme: () => { theme: any; isDark: boolean };
 let useAuth: () => { user: any; profile: any };

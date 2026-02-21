@@ -31,6 +31,7 @@ const ROUTE_MAP: Record<string, string> = {
   'teacher-approval': '/screens/teacher-approval',
   'learner-activity-control': '/screens/principal-learner-activity-control',
   'uniform-orders': '/screens/principal-uniforms',
+  stationery: '/screens/principal-stationery',
   'dash-advisor': '/screens/dash-voice?mode=advisor',
   'dash-tutor': '/screens/dash-tutor',
   teachers: '/screens/teacher-management',
@@ -86,6 +87,7 @@ interface PrincipalQuickActionsProps {
   onAction?: (actionId: string) => void;
   resolvedSchoolType?: ResolvedSchoolType;
   organizationId?: string | null;
+  hideFinancialActions?: boolean;
 }
 
 export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
@@ -99,6 +101,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   onAction,
   resolvedSchoolType = 'preschool',
   organizationId,
+  hideFinancialActions = false,
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -134,11 +137,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   // Core shortcuts — badged/high-urgency items. Each appears ONLY here.
   const coreShortcuts = useMemo<ActionItem[]>(() => [
     { id: 'registrations', title: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', color: '#6366F1', badge: registrationsBadge },
-    { id: 'payments', title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }), icon: 'document-text', color: '#F59E0B', badge: popBadge },
+    ...(!hideFinancialActions ? [{ id: 'payments', title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }), icon: 'document-text', color: '#F59E0B', badge: popBadge }] : []),
     { id: 'teacher-approval', title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }), icon: 'checkmark-circle', color: '#06B6D4', badge: pendingTeacherApprovalsCount },
     { id: 'uniform-orders', title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }), icon: 'shirt', color: '#0EA5E9' },
+    { id: 'stationery', title: t('dashboard.stationery', { defaultValue: 'Stationery' }), icon: 'checkbox', color: '#14B8A6' },
     { id: 'dash-advisor', title: t('dashboard.dash_ai_advisor', { defaultValue: 'Dash AI Advisor' }), icon: 'sparkles', color: '#7C3AED' },
-  ], [pendingTeacherApprovalsCount, popBadge, registrationsBadge, t]);
+  ], [hideFinancialActions, pendingTeacherApprovalsCount, popBadge, registrationsBadge, t]);
 
   // Tabbed groups — NO overlap with core shortcuts
   const actionsByGroup = useMemo(() => {
@@ -155,8 +159,10 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'staff-leave', title: t('dashboard.staff_leave', { defaultValue: 'Staff Leave' }), icon: 'calendar-outline', color: '#F59E0B' },
       ],
       money: [
-        { id: 'unpaid-fees', title: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }), icon: 'alert-circle', color: '#EF4444', badge: unpaidBadge },
-        { id: 'fee-management', title: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', color: '#10B981' },
+        ...(!hideFinancialActions ? [
+          { id: 'unpaid-fees', title: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }), icon: 'alert-circle', color: '#EF4444', badge: unpaidBadge },
+          { id: 'fee-management', title: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', color: '#10B981' },
+        ] : []),
         { id: 'log-expense', title: t('dashboard.log_expense', { defaultValue: 'Log Expense' }), icon: 'add-circle', color: '#6366F1' },
         { id: 'petty-cash-request', title: t('dashboard.petty_cash_request', { defaultValue: 'Petty Cash Request' }), icon: 'wallet-outline', color: '#14B8A6' },
         { id: 'aftercare', title: t('dashboard.aftercare_registrations', { defaultValue: 'Aftercare' }), icon: 'school', color: '#8B5CF6' },
@@ -186,6 +192,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'excursions', title: t('dashboard.excursions', { defaultValue: 'Excursions' }), icon: 'bus', color: '#10B981' },
         { id: 'meetings', title: t('dashboard.meetings', { defaultValue: 'Meetings' }), icon: 'people', color: '#F59E0B' },
         { id: 'settings', title: t('dashboard.school_settings', { defaultValue: 'School Settings' }), icon: 'settings', color: '#64748B' },
+        { id: 'stationery', title: t('dashboard.stationery', { defaultValue: 'Stationery' }), icon: 'checkbox', color: '#14B8A6' },
         { id: 'compliance', title: t('dashboard.compliance', { defaultValue: 'Compliance' }), icon: 'shield-checkmark', color: '#10B981' },
         { id: 'curriculum-themes', title: t('dashboard.curriculum_themes', { defaultValue: 'Curriculum Themes' }), icon: 'book', color: '#6366F1' },
         { id: 'lesson-templates', title: t('dashboard.lesson_templates', { defaultValue: 'Lesson Templates' }), icon: 'document-text', color: '#14B8A6' },
@@ -199,7 +206,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       });
     }
     return groups;
-  }, [applyNextGenPolicy, canLiveLessons, lifecycleEnabled, resolvedSchoolType, t, unpaidBadge]);
+  }, [applyNextGenPolicy, canLiveLessons, hideFinancialActions, lifecycleEnabled, resolvedSchoolType, t, unpaidBadge]);
 
   const handleActionPress = (actionId: string) => {
     onAction?.(actionId);

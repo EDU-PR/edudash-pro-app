@@ -1340,7 +1340,7 @@ function TeacherMessagesPage() {
   };
 
   // Find existing 1:1 thread with a user (for "Message" from group-chat avatar modal)
-  const findOrSelectDmThread = useCallback((targetUserId: string) => {
+  const findOrSelectDmThread = (targetUserId: string) => {
     const participants = (t: MessageThread) => t.message_participants || t.participants || [];
     const dmThread = threads.find((t) => {
       const p = participants(t);
@@ -1353,7 +1353,7 @@ function TeacherMessagesPage() {
       return true;
     }
     return false;
-  }, [threads, userId]);
+  };
 
   // Message action handlers
   const handleMessageContextMenu = (e: React.MouseEvent | React.TouchEvent, messageId: string) => {

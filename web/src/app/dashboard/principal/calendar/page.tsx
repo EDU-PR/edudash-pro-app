@@ -201,6 +201,7 @@ export default function PrincipalCalendarPage() {
                 <option value="sports_day">Sports Days</option>
                 <option value="graduation">Graduations</option>
                 <option value="fundraiser">Fundraisers</option>
+                <option value="donation_drive">Donation Drives</option>
                 <option value="other">Other</option>
               </select>
             </div>

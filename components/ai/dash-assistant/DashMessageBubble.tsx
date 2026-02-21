@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, Linking, Alert, ScrollView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Linking, Alert, ScrollView, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { messageStyles as styles } from './styles/message.styles';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -16,6 +16,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MathRenderer } from './MathRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
 import InlineQuizCard, { parseQuizPayload, type QuizQuestionPayload } from './InlineQuizCard';
+import InlineColumnMethodCard, {
+  parseColumnMethodPayload,
+  type ColumnMethodPayload,
+} from './InlineColumnMethodCard';
+import InlineSpellingPracticeCard, {
+  parseSpellingPayload,
+  type SpellingPracticePayload,
+} from './InlineSpellingPracticeCard';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -155,6 +163,11 @@ type ToolChartPreview = {
   points: ToolChartPoint[];
 };
 
+type ExpandedVisualState =
+  | { type: 'mermaid'; title: string; definition: string }
+  | { type: 'chart'; title: string; chart: ToolChartPreview }
+  | { type: 'image'; title: string; uri: string };
+
 const TOOL_CHART_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#f97316', '#6366f1', '#10b981', '#ef4444', '#8b5cf6'];
 
 const toFiniteNumber = (value: unknown): number => {
@@ -195,6 +208,55 @@ const buildToolChartPreview = (
     type,
     points,
   };
+};
+
+const VISUAL_PLACEHOLDER_REGEX = /\[(diagram|chart|graph)\]/gi;
+
+const parseNumberToken = (token: string): number => {
+  const parsed = Number(String(token || '').replace(/,/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : NaN;
+};
+
+const buildAdditionMermaidFallback = (content: string): string | null => {
+  const text = String(content || '');
+  if (!/(more|plus|add|added|bought|altogether|total|sum)/i.test(text)) return null;
+  const numberTokens = [...text.matchAll(/\b\d{1,3}(?:,\d{3})*\b/g)].map((match) => match[0]);
+  if (numberTokens.length < 2) return null;
+
+  const first = parseNumberToken(numberTokens[0]);
+  const second = parseNumberToken(numberTokens[1]);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+
+  const total = first + second;
+  const unitMatch = text.match(/\b\d{1,3}(?:,\d{3})*\s+([A-Za-z]{3,20})/);
+  const unit = unitMatch?.[1] ? ` ${unitMatch[1].toLowerCase()}` : '';
+
+  return [
+    'flowchart LR',
+    `  A["Start: ${first.toLocaleString()}${unit}"]`,
+    `  B["+ ${second.toLocaleString()}${unit}"]`,
+    `  C["Total: ${total.toLocaleString()}${unit}"]`,
+    '  A --> B --> C',
+  ].join('\n');
+};
+
+const replaceVisualPlaceholders = (content: string): string => {
+  const input = String(content || '');
+  if (!VISUAL_PLACEHOLDER_REGEX.test(input)) return input;
+  VISUAL_PLACEHOLDER_REGEX.lastIndex = 0;
+
+  const autoMermaid = buildAdditionMermaidFallback(input);
+  if (autoMermaid) {
+    return input.replace(
+      VISUAL_PLACEHOLDER_REGEX,
+      `\n\`\`\`mermaid\n${autoMermaid}\n\`\`\`\n`
+    );
+  }
+
+  return input.replace(
+    VISUAL_PLACEHOLDER_REGEX,
+    '\n```text\nVisual guide:\n- Draw a quick labeled sketch for each quantity.\n- Show the operation before solving.\n```\n'
+  );
 };
 
 const AttachmentImagePreview: React.FC<{
@@ -269,6 +331,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
   const [showRawToolPayload, setShowRawToolPayload] = React.useState(false);
+  const [expandedVisual, setExpandedVisual] = React.useState<ExpandedVisualState | null>(null);
   
   // Enhanced gradients for better visual appeal
   const userGradient = isDark
@@ -277,6 +340,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 
   React.useEffect(() => {
     setShowRawToolPayload(false);
+    setExpandedVisual(null);
   }, [message.id]);
 
   // Check if this is the last user message (for retry button)
@@ -305,7 +369,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   );
 
   const sanitizeAssistantContent = (content: string) => {
-    return (content || '').trim();
+    return replaceVisualPlaceholders(content || '').trim();
   };
 
   const assistantContent = sanitizeAssistantContent(message.content || '');
@@ -407,6 +471,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     | { type: 'math'; content: string }
     | { type: 'inlineMath'; content: string }
     | { type: 'mermaid'; content: string }
+    | { type: 'column'; content: string }
+    | { type: 'spelling'; content: string }
     | { type: 'quiz'; content: string };
 
   const parseRichSegments = (content: string): RichSegment[] => {
@@ -448,7 +514,15 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       type: 'quiz' as const,
       content: value,
     }));
-    const withMermaid = splitByPattern(withQuiz, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
+    const withColumn = splitByPattern(withQuiz, /```column(?:[_-]?method)?\s*([\s\S]*?)```/gi, (value) => ({
+      type: 'column' as const,
+      content: value,
+    }));
+    const withSpelling = splitByPattern(withColumn, /```spelling\s*([\s\S]*?)```/gi, (value) => ({
+      type: 'spelling' as const,
+      content: value,
+    }));
+    const withMermaid = splitByPattern(withSpelling, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
       type: 'mermaid',
       content: value,
     }));
@@ -487,6 +561,70 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
         typeof (direct as any).correct === 'string'
       ) {
         return direct as QuizQuestionPayload;
+      }
+    } catch {
+      // Keep null fallback to fenced markdown render below.
+    }
+
+    return null;
+  };
+
+  const safeParseColumnJson = (raw: string): ColumnMethodPayload | null => {
+    const cleaned = String(raw || '').trim();
+    if (!cleaned) return null;
+
+    const wrapped = `\`\`\`column\n${cleaned}\n\`\`\``;
+    const parsed = parseColumnMethodPayload(wrapped);
+    if (parsed) return parsed;
+
+    try {
+      const direct = JSON.parse(cleaned);
+      const addends = Array.isArray((direct as any)?.addends)
+        ? (direct as any).addends
+            .map((entry: unknown) => Number(String(entry).replace(/,/g, '').trim()))
+            .filter((entry: number) => Number.isFinite(entry))
+            .map((entry: number) => Math.abs(Math.trunc(entry)))
+        : [];
+      if (
+        direct &&
+        typeof direct === 'object' &&
+        addends.length >= 2
+      ) {
+        return {
+          type: 'column_addition',
+          addends,
+          question: typeof (direct as any).question === 'string' ? (direct as any).question : undefined,
+          expression: typeof (direct as any).expression === 'string' ? (direct as any).expression : undefined,
+          result: Number.isFinite(Number((direct as any).result))
+            ? Math.abs(Math.trunc(Number((direct as any).result)))
+            : undefined,
+          show_carry: (direct as any).show_carry !== false,
+        };
+      }
+    } catch {
+      // Keep null fallback to fenced markdown render below.
+    }
+
+    return null;
+  };
+
+  const safeParseSpellingJson = (raw: string): SpellingPracticePayload | null => {
+    const cleaned = String(raw || '').trim();
+    if (!cleaned) return null;
+
+    const wrapped = `\`\`\`spelling\n${cleaned}\n\`\`\``;
+    const parsed = parseSpellingPayload(wrapped);
+    if (parsed) return parsed;
+
+    try {
+      const direct = JSON.parse(cleaned);
+      if (
+        direct &&
+        typeof direct === 'object' &&
+        (direct as any).type === 'spelling_practice' &&
+        typeof (direct as any).word === 'string'
+      ) {
+        return direct as SpellingPracticePayload;
       }
     } catch {
       // Keep null fallback to fenced markdown render below.
@@ -765,6 +903,30 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       </View>
                     </ScrollView>
                   )}
+
+                  <TouchableOpacity
+                    onPress={() => setExpandedVisual({
+                      type: 'chart',
+                      title: toolChartPreview.title,
+                      chart: toolChartPreview,
+                    })}
+                    style={{
+                      alignSelf: 'flex-start',
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderWidth: 1,
+                      borderColor: theme.primary + '55',
+                      backgroundColor: theme.primary + '16',
+                    }}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Expand chart for easier viewing"
+                  >
+                    <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700' }}>
+                      Expand chart
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -862,7 +1024,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </Text>
               )}
             </View>
-          ) : isUser || !Markdown ? (
+          ) : isUser ? (
             <Text
               style={[
                 styles.messageText,
@@ -896,10 +1058,33 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 }
                 if (segment.type === 'mermaid') {
                   return (
-                    <MermaidRenderer
-                      key={`mermaid-${message.id}-${segmentIndex}`}
-                      definition={segment.content}
-                    />
+                    <View key={`mermaid-${message.id}-${segmentIndex}`}>
+                      <MermaidRenderer definition={segment.content} />
+                      <TouchableOpacity
+                        onPress={() => setExpandedVisual({
+                          type: 'mermaid',
+                          title: 'Diagram',
+                          definition: segment.content,
+                        })}
+                        style={{
+                          alignSelf: 'flex-start',
+                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderWidth: 1,
+                          borderColor: theme.primary + '55',
+                          backgroundColor: theme.primary + '16',
+                          marginBottom: 6,
+                        }}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel="Expand diagram for easier viewing"
+                      >
+                        <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700' }}>
+                          Expand diagram
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   );
                 }
                 if (segment.type === 'quiz') {
@@ -913,16 +1098,94 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       />
                     );
                   }
-                  return (
+                  return Markdown ? (
                     <Markdown key={`quiz-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
                       {'```quiz\n' + segment.content + '\n```'}
                     </Markdown>
+                  ) : (
+                    <Text
+                      key={`quiz-fallback-text-${message.id}-${segmentIndex}`}
+                      style={[
+                        styles.messageText,
+                        { color: theme.text },
+                      ]}
+                      selectable={true}
+                    >
+                      {`Quiz:\n${segment.content}`}
+                    </Text>
+                  );
+                }
+                if (segment.type === 'column') {
+                  const payload = safeParseColumnJson(segment.content);
+                  if (payload) {
+                    return (
+                      <InlineColumnMethodCard
+                        key={`column-${message.id}-${segmentIndex}`}
+                        payload={payload}
+                      />
+                    );
+                  }
+                  return Markdown ? (
+                    <Markdown key={`column-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                      {'```column\n' + segment.content + '\n```'}
+                    </Markdown>
+                  ) : (
+                    <Text
+                      key={`column-fallback-text-${message.id}-${segmentIndex}`}
+                      style={[
+                        styles.messageText,
+                        { color: theme.text },
+                      ]}
+                      selectable={true}
+                    >
+                      {`Column Method:\n${segment.content}`}
+                    </Text>
+                  );
+                }
+                if (segment.type === 'spelling') {
+                  const payload = safeParseSpellingJson(segment.content);
+                  if (payload) {
+                    return (
+                      <InlineSpellingPracticeCard
+                        key={`spelling-${message.id}-${segmentIndex}`}
+                        payload={payload}
+                      />
+                    );
+                  }
+                  return Markdown ? (
+                    <Markdown key={`spelling-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                      {'```spelling\n' + segment.content + '\n```'}
+                    </Markdown>
+                  ) : (
+                    <Text
+                      key={`spelling-fallback-text-${message.id}-${segmentIndex}`}
+                      style={[
+                        styles.messageText,
+                        { color: theme.text },
+                      ]}
+                      selectable={true}
+                    >
+                      {`Spelling Practice:\n${segment.content}`}
+                    </Text>
                   );
                 }
                 return (
-                  <Markdown key={`md-${message.id}-${segmentIndex}`} style={markdownStyles}>
-                    {segment.content}
-                  </Markdown>
+                  Markdown ? (
+                    <Markdown key={`md-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                      {segment.content}
+                    </Markdown>
+                  ) : (
+                    <Text
+                      key={`md-fallback-${message.id}-${segmentIndex}`}
+                      style={[
+                        styles.messageText,
+                        { color: theme.text },
+                      ]}
+                      selectable={true}
+                    >
+                      {segment.content}
+                    </Text>
+                  )
                 );
               })}
             </View>
@@ -980,15 +1243,23 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             contentContainerStyle={styles.imagePreviewRow}
           >
             {generatedImages.map((image, idx) => (
-              <View
+              <TouchableOpacity
                 key={`generated-${message.id}-${idx}`}
                 style={[
                   styles.imagePreviewCard,
                   { borderColor: isUser ? 'rgba(255,255,255,0.2)' : theme.border },
                 ]}
+                onPress={() => setExpandedVisual({
+                  type: 'image',
+                  title: 'Generated image',
+                  uri: String(image.signed_url),
+                })}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Expand generated image"
               >
                 <Image source={{ uri: String(image.signed_url) }} style={styles.imagePreview} />
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}
@@ -1103,10 +1374,10 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 onPress={() => onSpeak(message)}
                 disabled={!voiceEnabled}
                 activeOpacity={0.7}
-                accessibilityLabel={speakingMessageId === message.id ? "Stop speaking" : "Speak message"}
+                accessibilityLabel={speakingMessageId === message.id ? "Stop audio" : "Play audio"}
               >
                 <Ionicons 
-                  name={speakingMessageId === message.id ? "stop" : "volume-high"} 
+                  name={speakingMessageId === message.id ? "stop" : "play"} 
                   size={12} 
                   color={speakingMessageId === message.id ? theme.onError || theme.background : theme.onAccent} 
                 />
@@ -1127,6 +1398,106 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </Text>
         </View>
       </BubbleSurface>
+
+      <Modal
+        visible={!!expandedVisual}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExpandedVisual(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(2,6,23,0.84)',
+            justifyContent: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 24,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.background,
+              padding: 12,
+              maxHeight: '92%',
+              gap: 10,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <Text style={{ color: theme.text, fontSize: 15, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                {expandedVisual?.title || 'Expanded view'}
+              </Text>
+              <TouchableOpacity
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.surfaceVariant,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}
+                onPress={() => setExpandedVisual(null)}
+                accessibilityLabel="Close expanded visual"
+              >
+                <Ionicons name="close" size={18} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {expandedVisual?.type === 'image' && (
+              <Image
+                source={{ uri: expandedVisual.uri }}
+                style={{ width: '100%', minHeight: 260, maxHeight: 540, borderRadius: 12 }}
+                resizeMode="contain"
+              />
+            )}
+
+            {expandedVisual?.type === 'mermaid' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <MermaidRenderer definition={expandedVisual.definition} height={420} />
+                <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 8 }}>
+                  Pinch zoom is supported in the system image viewer if you need larger detail.
+                </Text>
+              </ScrollView>
+            )}
+
+            {expandedVisual?.type === 'chart' && (
+              <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: 10 }}>
+                <View
+                  style={{
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                    padding: 10,
+                    gap: 8,
+                  }}
+                >
+                  {expandedVisual.chart.points.map((point, idx) => (
+                    <View
+                      key={`expanded-chart-${idx}`}
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: point.color }} />
+                        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', flexShrink: 1 }}>
+                          {point.label}
+                        </Text>
+                      </View>
+                      <Text style={{ color: theme.textSecondary, fontSize: 14, fontWeight: '700' }}>
+                        {point.value}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

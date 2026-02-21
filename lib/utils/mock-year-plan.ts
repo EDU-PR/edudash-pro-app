@@ -23,6 +23,7 @@ const EXCURSION_DESTINATIONS = ['Local Fire Station', 'Community Farm', 'Public 
 
 export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan {
   const terms: GeneratedTerm[] = [];
+  const monthlyEntries: GeneratedYearPlan['monthlyEntries'] = [];
 
   for (let i = 0; i < config.numberOfTerms; i++) {
     const weeklyThemes = THEMES.slice(0, 10).map((t, idx) => ({
@@ -67,6 +68,59 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       ] : [],
       specialEvents: [`Term ${i + 1} Concert`, i === 3 ? 'Graduation Ceremony' : 'Sports Day'],
     });
+
+    const startMonth = Number(TERM_START_DATES[i].split('-')[0]);
+    monthlyEntries.push({
+      monthIndex: startMonth,
+      bucket: 'holidays_closures',
+      subtype: 'closure',
+      title: `Term ${i + 1} starts`,
+      details: `Welcome and orientation for Term ${i + 1}`,
+      startDate: `${config.academicYear}-${TERM_START_DATES[i]}`,
+      endDate: `${config.academicYear}-${TERM_START_DATES[i]}`,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
+
+    monthlyEntries.push({
+      monthIndex: startMonth,
+      bucket: 'meetings_admin',
+      subtype: 'staff_meeting',
+      title: 'Staff Planning Meeting',
+      details: 'Term readiness and resource alignment',
+      startDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-10`,
+      endDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-10`,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
+
+    monthlyEntries.push({
+      monthIndex: startMonth,
+      bucket: 'excursions_extras',
+      subtype: 'excursion',
+      title: EXCURSION_TITLES[i],
+      details: EXCURSION_DESTINATIONS[i],
+      startDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-20`,
+      endDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-20`,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
+
+    monthlyEntries.push({
+      monthIndex: startMonth + 1 <= 12 ? startMonth + 1 : startMonth,
+      bucket: 'donations_fundraisers',
+      subtype: i % 2 === 0 ? 'fundraiser' : 'donation_drive',
+      title: i % 2 === 0 ? 'Community Bake Sale' : 'Seasonal Donation Drive',
+      details: 'Family and community participation campaign',
+      startDate: `${config.academicYear}-${String(Math.min(12, startMonth + 1)).padStart(2, '0')}-15`,
+      endDate: `${config.academicYear}-${String(Math.min(12, startMonth + 1)).padStart(2, '0')}-15`,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
   }
 
   const budgetEstimate = config.budgetLevel === 'low'
@@ -86,5 +140,16 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       'Build strong school-home partnerships',
     ],
     budgetEstimate,
+    monthlyEntries,
+    operationalHighlights: [
+      {
+        title: 'Fundraising Mix',
+        description: 'Combines quick-win fundraisers with seasonal donation drives.',
+      },
+      {
+        title: 'Monthly Operational Rhythm',
+        description: 'Each term includes closures, meetings, excursions, and community support events.',
+      },
+    ],
   };
 }

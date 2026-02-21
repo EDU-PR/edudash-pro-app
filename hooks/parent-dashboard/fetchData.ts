@@ -1,7 +1,7 @@
 /** Standalone data-fetching function for the parent dashboard */
 import { assertSupabase } from '@/lib/supabase';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
-import { log, logError } from '@/lib/debug';
+import { log, logError, warn } from '@/lib/debug';
 import { sanitizeAvatarUrl } from '@/lib/utils/avatar';
 import type { ParentDashboardData } from '@/types/dashboard';
 import { formatDueDate, formatEventTime, createEmptyParentData } from '@/lib/dashboard/utils';
@@ -30,7 +30,19 @@ export async function fetchParentDashboardData(
   }
   const supabase = assertSupabase();
   const { data: authCheck } = await supabase.auth.getUser();
-  if (!authCheck.user) throw new Error('Authentication session invalid');
+  if (!authCheck.user) {
+    // During account switch, auth can transiently be unavailable.
+    // Return null so the caller can retry without crashing the dashboard.
+    warn('Parent dashboard auth check returned no user (transient)');
+    return null;
+  }
+  if (authCheck.user.id !== userId) {
+    warn('Parent dashboard user mismatch during switch transition', {
+      requestedUserId: userId,
+      activeUserId: authCheck.user.id,
+    });
+    return null;
+  }
 
   // Fetch parent profile (dual lookup)
   let parentUser = await fetchParentProfile(supabase, userId);
@@ -89,10 +101,27 @@ export async function fetchParentDashboardData(
 async function fetchParentProfile(supabase: any, userId: string) {
   const fields = 'id, preschool_id, first_name, last_name, role, organization_id';
   let { data, error } = await supabase.from('profiles').select(fields).eq('auth_user_id', userId).maybeSingle();
-  if (error) logError('Parent user fetch error:', error);
+  if (error) {
+    const msg = String((error as any)?.message || error);
+    const code = String((error as any)?.code || '');
+    // Treat transient auth races as warnings to avoid noisy Sentry spam.
+    if (code.startsWith('PGRST') || msg.toLowerCase().includes('jwt') || msg.toLowerCase().includes('session')) {
+      warn('Parent user fetch warning:', { code, message: msg });
+    } else {
+      logError('Parent user fetch error:', { code, message: msg });
+    }
+  }
   if (!data) {
     const r = await supabase.from('profiles').select(fields).eq('id', userId).maybeSingle();
-    if (r.error) logError('Parent user fetch (id) error:', r.error);
+    if (r.error) {
+      const msg = String((r.error as any)?.message || r.error);
+      const code = String((r.error as any)?.code || '');
+      if (code.startsWith('PGRST') || msg.toLowerCase().includes('jwt') || msg.toLowerCase().includes('session')) {
+        warn('Parent user fetch (id) warning:', { code, message: msg });
+      } else {
+        logError('Parent user fetch (id) error:', { code, message: msg });
+      }
+    }
     data = r.data;
   }
   return data;
@@ -146,17 +175,84 @@ async function fetchTodayAttendance(supabase: any, childIds: string[], today: st
 
 async function fetchAssignments(supabase: any) {
   const { data } = await supabase.from('homework_assignments')
-    .select('id, title, due_date, homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)')
+    .select(`
+      id,
+      title,
+      due_date,
+      subject,
+      description,
+      class_id,
+      preschool_id,
+      homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)
+    `)
     .eq('is_published', true).order('due_date', { ascending: false }).limit(10);
   return data || [];
 }
 
 async function fetchEvents(supabase: any, schoolId: string | null) {
   if (!schoolId) return [];
-  const { data } = await supabase.from('events').select('id, title, event_date, event_type, description')
-    .eq('preschool_id', schoolId).gte('event_date', new Date().toISOString())
-    .order('event_date', { ascending: true }).limit(5);
-  return data || [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const schoolEventsQuery = await supabase
+    .from('school_events')
+    .select('id, title, start_date, end_date, event_type, description')
+    .eq('preschool_id', schoolId)
+    .gte('start_date', today)
+    .order('start_date', { ascending: true })
+    .limit(10);
+
+  let rows = (schoolEventsQuery.data || []).map((event: any) => ({
+    id: event.id,
+    title: event.title,
+    event_date: event.start_date,
+    event_type: event.event_type,
+    description: event.description || '',
+    source: 'school_events',
+  }));
+
+  if ((schoolEventsQuery.error || rows.length === 0) && !rows.length) {
+    const legacyEventsQuery = await supabase
+      .from('events')
+      .select('id, title, event_date, event_type, description')
+      .eq('preschool_id', schoolId)
+      .gte('event_date', new Date().toISOString())
+      .order('event_date', { ascending: true })
+      .limit(10);
+
+    rows = (legacyEventsQuery.data || []).map((event: any) => ({
+      ...event,
+      source: 'events',
+    }));
+  }
+
+  const schoolEventIds = rows
+    .filter((event: any) => event.source === 'school_events')
+    .map((event: any) => event.id);
+
+  if (schoolEventIds.length === 0) {
+    return rows;
+  }
+
+  const { data: reminderLogs } = await supabase
+    .from('school_event_reminder_logs')
+    .select('event_id, reminder_offset_days, target_role')
+    .in('event_id', schoolEventIds)
+    .eq('target_role', 'parent');
+
+  const sentThresholdsByEvent = new Map<string, Set<number>>();
+  (reminderLogs || []).forEach((log: any) => {
+    const eventId = String(log.event_id || '');
+    if (!eventId) return;
+    if (!sentThresholdsByEvent.has(eventId)) {
+      sentThresholdsByEvent.set(eventId, new Set<number>());
+    }
+    sentThresholdsByEvent.get(eventId)?.add(Number(log.reminder_offset_days) || 0);
+  });
+
+  return rows.map((row: any) => ({
+    ...row,
+    sent_thresholds: Array.from(sentThresholdsByEvent.get(String(row.id)) || []),
+  }));
 }
 
 function buildFeesDueSoon(fees: any[], children: any[], today: string): ParentDashboardData['feesDueSoon'] {
@@ -179,17 +275,63 @@ function buildRecentHomework(assignments: any[], childIds: string[], children: a
     const subs = a.homework_submissions || [];
     const sub = subs.find((s: any) => childIds.includes(s.student_id));
     if (!sub) return null;
+    const child = children.find(c => c.id === sub.student_id);
+    const dueDateRaw = a.due_date || new Date().toISOString().split('T')[0];
     return {
-      id: a.id, title: a.title, dueDate: formatDueDate(a.due_date),
+      id: a.id,
+      title: a.title,
+      dueDate: formatDueDate(dueDateRaw),
+      due_date: dueDateRaw,
       status: (sub.status || 'not_submitted') as 'submitted' | 'graded' | 'not_submitted',
-      studentName: children.find(c => c.id === sub.student_id)?.firstName || 'Unknown',
+      studentName: child?.firstName || 'Unknown',
+      child_name: child ? `${child.firstName} ${child.lastName}`.trim() : undefined,
+      student_id: sub.student_id,
+      subject: a.subject || 'Take-home',
+      description: a.description || null,
+      class_id: a.class_id || null,
+      preschool_id: a.preschool_id || null,
     };
   }).filter(Boolean).slice(0, 5);
 }
 
 function buildUpcomingEvents(events: any[]) {
+  const thresholdSteps: Array<7 | 3 | 1> = [7, 3, 1];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   return events.map((e: any) => ({
-    id: e.id, title: e.title, time: formatEventTime(new Date(e.event_date)),
-    type: (e.event_type || 'event') as 'meeting' | 'activity' | 'assessment',
+    id: e.id,
+    title: e.title,
+    time: formatEventTime(new Date(e.event_date)),
+    type: (String(e.event_type || '').includes('meeting') ? 'meeting' : 'activity') as 'meeting' | 'activity' | 'assessment',
+    eventDate: e.event_date || null,
+    daysUntil: (() => {
+      const date = new Date(String(e.event_date || '').slice(0, 10));
+      if (Number.isNaN(date.getTime())) return null;
+      date.setHours(0, 0, 0, 0);
+      return Math.max(0, Math.ceil((date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)));
+    })(),
+    reminderOffsetDays: (() => {
+      const sentSet = new Set<number>(
+        Array.isArray(e.sent_thresholds) ? e.sent_thresholds.map((item: any) => Number(item) || 0) : []
+      );
+      const date = new Date(String(e.event_date || '').slice(0, 10));
+      if (Number.isNaN(date.getTime())) return null;
+      date.setHours(0, 0, 0, 0);
+      const daysUntil = Math.max(0, Math.ceil((date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)));
+      const nextThreshold = thresholdSteps.find((threshold) => threshold <= daysUntil && !sentSet.has(threshold));
+      return nextThreshold || null;
+    })(),
+    reminderLabel: (() => {
+      const sentSet = new Set<number>(
+        Array.isArray(e.sent_thresholds) ? e.sent_thresholds.map((item: any) => Number(item) || 0) : []
+      );
+      const date = new Date(String(e.event_date || '').slice(0, 10));
+      if (Number.isNaN(date.getTime())) return null;
+      date.setHours(0, 0, 0, 0);
+      const daysUntil = Math.max(0, Math.ceil((date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)));
+      const nextThreshold = thresholdSteps.find((threshold) => threshold <= daysUntil && !sentSet.has(threshold));
+      return nextThreshold ? `${nextThreshold} day${nextThreshold === 1 ? '' : 's'}` : null;
+    })(),
   }));
 }

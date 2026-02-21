@@ -417,7 +417,9 @@ export async function getCurrentSession(): Promise<UserSession | null> {
       setupAutoRefresh(refreshedSession);
       return refreshedSession;
     }
-    console.warn('Session refresh failed, using current session');
+    console.warn('Session refresh failed, clearing stale session');
+    await clearStoredData();
+    return null;
   }
 
   return session;

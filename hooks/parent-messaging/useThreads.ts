@@ -51,7 +51,7 @@ export const useParentThreads = () => {
             student:students(id, first_name, last_name),
             participants:message_participants(
               *,
-              user_profile:profiles(first_name, last_name, role)
+              user_profile:profiles(first_name, last_name, role, avatar_url)
             )
           `)
           .in('id', threadIds)

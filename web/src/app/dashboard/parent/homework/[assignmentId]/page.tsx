@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, type ChangeEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
+import { NamePracticePad } from '@/components/dashboard/parent/NamePracticePad';
+import { usePhonicsClips } from '@/lib/audio/usePhonicsClips';
 import type { ChildCard } from '@/lib/hooks/parent/useChildrenData';
 import {
   ArrowLeft,
@@ -20,6 +22,10 @@ import {
   X,
   Paperclip,
   BookOpen,
+  Volume2,
+  ExternalLink,
+  Printer,
+  PencilLine,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +58,60 @@ const describeDueDate = (dueDateStr: string | null) => {
 
   return { label: dueDate.toLocaleDateString([], { month: 'short', day: 'numeric' }), tone: 'muted' };
 };
+
+interface TakeHomeExtension {
+  version?: number;
+  worksheet_type?: string;
+  age_band?: string;
+  at_home_steps?: string[];
+  repetition_plan?: {
+    weather_daily?: boolean;
+    weekdays?: Record<string, boolean>;
+  };
+  parent_prompt?: string;
+  name_practice?: {
+    enabled?: boolean;
+    mode?: string;
+  };
+  phonics_pack?: {
+    id?: string;
+    locale?: string;
+    mode?: string;
+  };
+}
+
+function extractStoragePathFromUrl(url: string, bucket = 'homework-files'): string | null {
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) {
+    return url.replace(/^\/+/, '');
+  }
+
+  try {
+    const parsed = new URL(url);
+    const patterns = [
+      `/storage/v1/object/public/${bucket}/`,
+      `/storage/v1/object/sign/${bucket}/`,
+      `/storage/v1/object/authenticated/${bucket}/`,
+    ];
+
+    for (const pattern of patterns) {
+      const index = parsed.pathname.indexOf(pattern);
+      if (index >= 0) {
+        const path = parsed.pathname.slice(index + pattern.length);
+        return decodeURIComponent(path.replace(/^\/+/, ''));
+      }
+    }
+  } catch {
+    // no-op
+  }
+
+  return null;
+}
+
+function isImageUrl(url: string): boolean {
+  const clean = url.split('?')[0].toLowerCase();
+  return ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'].some((ext) => clean.endsWith(ext));
+}
 
 const ChildSelector = ({
   childrenCards,
@@ -161,7 +221,13 @@ export default function ParentHomeworkDetailPage() {
   const [submissionText, setSubmissionText] = useState('');
   const [submissionFiles, setSubmissionFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resolvedAttachments, setResolvedAttachments] = useState<string[]>([]);
+  const [resolvingAttachments, setResolvingAttachments] = useState(false);
+  const [showNamePractice, setShowNamePractice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { clips, activeClipId, playClip } = usePhonicsClips();
+  const starterPhonics = useMemo(() => clips.slice(0, 6), [clips]);
 
   useEffect(() => {
     if (!assignmentParam || !hasOrganization || !activeChildId) {
@@ -232,8 +298,72 @@ export default function ParentHomeworkDetailPage() {
   const attachments = Array.isArray(assignment?.attachment_urls)
     ? (assignment?.attachment_urls as string[])
     : [];
+  const takeHomeExtension = useMemo(() => {
+    const extension = assignment?.metadata?.take_home_extension;
+    if (!extension || typeof extension !== 'object') return null;
+    return extension as TakeHomeExtension;
+  }, [assignment?.metadata]);
+  const hasNamePractice = Boolean(takeHomeExtension?.name_practice?.enabled);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const attachmentItems = useMemo(
+    () =>
+      resolvedAttachments.map((url, index) => ({
+        url,
+        label: `Attachment ${index + 1}`,
+        isImage: isImageUrl(url),
+      })),
+    [resolvedAttachments],
+  );
+
+  const imageAttachments = useMemo(
+    () => attachmentItems.filter((item) => item.isImage),
+    [attachmentItems],
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    const resolveAttachments = async () => {
+      if (attachments.length === 0) {
+        setResolvedAttachments([]);
+        return;
+      }
+
+      setResolvingAttachments(true);
+      try {
+        const urls = await Promise.all(
+          attachments.map(async (url) => {
+            if (!url) return null;
+            if (!url.includes('/storage/v1/object/')) return url;
+
+            const path = extractStoragePathFromUrl(url, 'homework-files');
+            if (!path) return url;
+
+            const { data, error } = await supabase.storage
+              .from('homework-files')
+              .createSignedUrl(path, 60 * 60 * 12);
+
+            if (error) return url;
+            return data?.signedUrl || url;
+          }),
+        );
+
+        if (active) {
+          setResolvedAttachments(urls.filter((entry): entry is string => Boolean(entry)));
+        }
+      } finally {
+        if (active) setResolvingAttachments(false);
+      }
+    };
+
+    void resolveAttachments();
+
+    return () => {
+      active = false;
+    };
+  }, [attachments, supabase]);
+
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setSubmissionFiles((prev) => [...prev, ...newFiles]);
@@ -472,16 +602,93 @@ export default function ParentHomeworkDetailPage() {
                     </p>
                   </div>
                 )}
+
+                {takeHomeExtension && (
+                  <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 16, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <BookOpen size={16} /> Worksheet companion
+                    </h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {takeHomeExtension.worksheet_type && (
+                        <span className="badge">{takeHomeExtension.worksheet_type.replace(/-/g, ' ')}</span>
+                      )}
+                      {takeHomeExtension.age_band && <span className="badge">{takeHomeExtension.age_band}</span>}
+                      {takeHomeExtension.phonics_pack?.id && <span className="badge">{takeHomeExtension.phonics_pack.id}</span>}
+                    </div>
+                    {Array.isArray(takeHomeExtension.at_home_steps) && takeHomeExtension.at_home_steps.length > 0 && (
+                      <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--muted)', display: 'grid', gap: 6 }}>
+                        {takeHomeExtension.at_home_steps.map((step, index) => (
+                          <li key={`step-${index}`}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {takeHomeExtension.repetition_plan && (
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+                        Repetition:
+                        {takeHomeExtension.repetition_plan.weather_daily ? ' daily weather check, ' : ' '}
+                        {Object.entries(takeHomeExtension.repetition_plan.weekdays || {})
+                          .filter(([, enabled]) => Boolean(enabled))
+                          .map(([day]) => day)
+                          .join(', ') || 'custom weekdays'}
+                      </p>
+                    )}
+                    {takeHomeExtension.parent_prompt && (
+                      <p style={{ margin: 0, padding: 10, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--muted)' }}>
+                        {takeHomeExtension.parent_prompt}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {attachments.length > 0 && (
-                  <div style={{ marginTop: 20 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Resources</p>
-                    <ul style={{ listStyle: 'disc', paddingLeft: 20, color: 'var(--muted)' }}>
-                      {attachments.map((url) => (
-                        <li key={url}>
-                          <a href={url} target="_blank" rel="noreferrer" className="link">Open attachment</a>
-                        </li>
+                  <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 16 }}>Worksheet files</h4>
+                    {resolvingAttachments && (
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>Loading attachment links...</p>
+                    )}
+                    {imageAttachments.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                        {imageAttachments.map((item) => (
+                          <a
+                            key={`preview-${item.url}`}
+                            href={item.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', display: 'block' }}
+                          >
+                            <img src={item.url} alt={item.label} style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {attachmentItems.map((item, index) => (
+                        <div
+                          key={`attachment-${index}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            padding: 10,
+                            borderRadius: 10,
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface-1)',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span style={{ color: 'var(--muted)', fontSize: 13 }}>{item.label}</span>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <a href={item.url} target="_blank" rel="noreferrer" className="btn">
+                              <ExternalLink size={14} /> Open
+                            </a>
+                            <a href={item.url} target="_blank" rel="noreferrer" className="btn">
+                              <Printer size={14} /> Print
+                            </a>
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
               </div>
@@ -493,41 +700,90 @@ export default function ParentHomeworkDetailPage() {
                     <BookOpen size={20} /> Practice Before Submitting
                   </h3>
                   <p style={{ color: 'var(--muted)', marginBottom: 16, fontSize: 14 }}>
-                    Review related lessons and practice activities before submitting your homework.
+                    Review related lessons and use worksheet companion tools before submitting.
                   </p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'grid', gap: 8 }}>
                     <button
                       className="btn"
                       onClick={() => router.push(`/dashboard/parent/lessons?studentId=${activeChild.id}`)}
-                      style={{ 
-                        background: 'white', 
+                      style={{
+                        background: 'white',
                         border: '1px solid #0ea5e9',
                         color: '#0ea5e9',
-                        justifyContent: 'flex-start'
+                        justifyContent: 'flex-start',
                       }}
                     >
                       <BookOpen size={16} />
                       View Assigned Lessons
                     </button>
+                    {hasNamePractice && (
+                      <button
+                        className="btn"
+                        onClick={() => setShowNamePractice((prev) => !prev)}
+                        style={{
+                          background: 'white',
+                          border: '1px solid #2563eb',
+                          color: '#2563eb',
+                          justifyContent: 'flex-start',
+                        }}
+                      >
+                        <PencilLine size={16} />
+                        {showNamePractice ? 'Hide Name Practice' : 'Start Name Practice'}
+                      </button>
+                    )}
                     <button
                       className="btn"
                       onClick={() => {
-                        // Open AI helper with homework context
                         const prompt = `Help my child with this homework: ${assignment.title}. ${assignment.description || ''}`;
                         window.open(`/dashboard/parent?aiPrompt=${encodeURIComponent(prompt)}`, '_blank');
                       }}
-                      style={{ 
-                        background: 'white', 
+                      style={{
+                        background: 'white',
                         border: '1px solid #8b5cf6',
                         color: '#8b5cf6',
-                        justifyContent: 'flex-start'
+                        justifyContent: 'flex-start',
                       }}
                     >
                       <Sparkles size={16} />
                       Get AI Homework Help
                     </button>
                   </div>
+
+                  {starterPhonics.length > 0 && (
+                    <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                        <Volume2 size={14} style={{ verticalAlign: 'text-bottom' }} /> Phonics clips
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {starterPhonics.map((clip) => (
+                          <button
+                            key={clip.id}
+                            className="btn"
+                            onClick={() => playClip(clip.id)}
+                            style={{
+                              background: activeClipId === clip.id ? '#312e81' : 'white',
+                              color: activeClipId === clip.id ? 'white' : '#1e1b4b',
+                              border: '1px solid #a5b4fc',
+                            }}
+                          >
+                            {clip.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {showNamePractice && activeChild && (
+                <NamePracticePad
+                  studentId={activeChild.id}
+                  preschoolId={assignment?.preschool_id || activeChild.preschoolId}
+                  assignmentId={assignment.id}
+                  childName={`${activeChild.firstName} ${activeChild.lastName}`.trim()}
+                  targetName={activeChild.firstName}
+                  compact
+                />
               )}
 
               <div className="card" style={{ padding: 24 }}>

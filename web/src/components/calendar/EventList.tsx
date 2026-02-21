@@ -17,6 +17,7 @@ export function EventList({ events, onEventClick }: EventListProps) {
       sports_day: '#F59E0B',
       graduation: '#EC4899',
       fundraiser: '#14B8A6',
+      donation_drive: '#0EA5A4',
       other: '#6B7280',
     };
     return colors[type] || colors.other;

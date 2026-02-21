@@ -20,7 +20,7 @@ import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import ThreadItem from '@/components/teacher-messaging/ThreadItem';
 import DashAIItem from '@/components/teacher-messaging/DashAIItem';
-import { createStyles } from './teacher-message-list.styles';
+import { createStyles } from '@/features/teacher-messaging/teacher-message-list.styles';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import { toast } from '@/components/ui/ToastProvider';
@@ -68,7 +68,7 @@ export default function TeacherMessageListScreen() {
       thread.participants?.find((p: any) => p.role !== 'teacher') ||
       thread.participants?.find((p: any) => p.role === 'teacher');
     const participantName = isGroupThread
-      ? thread.group_name || thread.subject || 'Group'
+      ? (thread.group_name || thread.subject || 'Group')
       : (otherParticipant?.user_profile
         ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
         : thread.subject || 'Contact');
@@ -80,6 +80,8 @@ export default function TeacherMessageListScreen() {
         title: participantName,
         parentId: isGroupThread ? '' : (otherParticipant?.user_id || ''),
         parentName: participantName,
+        isGroup: isGroupThread ? '1' : '0',
+        threadType: (thread.type || thread.group_type || '') as string,
       },
     });
   }, [selectionMode]);
@@ -236,7 +238,7 @@ export default function TeacherMessageListScreen() {
     );
   }
 
-  // ── Empty state (still shows Dash AI) ─────────────────────────────────────────
+  // ── Empty state (still shows Dash AI + FABs) ───────────────────────────────────
 
   if (!filteredThreads || filteredThreads.length === 0) {
     return (
@@ -262,6 +264,20 @@ export default function TeacherMessageListScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Create Group FAB - visible in empty state too */}
+        <TouchableOpacity
+          style={[styles.fab, { bottom: insets.bottom + 90 }]}
+          onPress={() => router.push('/screens/create-group')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="people-circle" size={24} color={theme.onPrimary} />
+        </TouchableOpacity>
+
+        {/* Compose FAB */}
+        <TouchableOpacity style={styles.fab} onPress={handleStartNewMessage} activeOpacity={0.8}>
+          <Ionicons name="create" size={24} color={theme.onPrimary} />
+        </TouchableOpacity>
       </View>
     );
   }

@@ -59,6 +59,8 @@ export interface ChatMessage {
     emoji: string;
     count: number;
     hasReacted: boolean;
+    reactedByUserIds?: string[];
+    reactedBy?: { id: string; first_name?: string; last_name?: string }[];
   }>;
 }
 
@@ -74,6 +76,9 @@ interface ChatMessageBubbleProps {
   showSenderName?: boolean;
   otherParticipantIds?: string[];
   hideAvatars?: boolean;
+  /** In group chats, show avatars and allow opening contact-actions modal on click */
+  isGroupChat?: boolean;
+  onAvatarClick?: (senderId: string, senderName: string) => void;
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
   isDashAI?: boolean;
   onReactionClick?: (messageId: string, emoji: string) => void;
@@ -143,6 +148,8 @@ export const ChatMessageBubble = ({
   showSenderName = true,
   otherParticipantIds = [],
   hideAvatars = false,
+  isGroupChat = false,
+  onAvatarClick,
   onContextMenu,
   isDashAI = false,
   onReactionClick,
@@ -346,33 +353,72 @@ export const ChatMessageBubble = ({
         alignItems: 'flex-end',
       }}
     >
-      {/* Avatar for received messages */}
-      {!hideAvatars && !isOwn && (
+      {/* Avatar for received messages; in group chats avatar is clickable and opens contact-actions modal */}
+      {(!hideAvatars || isGroupChat) && !isOwn && (
         isDashAI ? (
           <DashAIAvatar size={isDesktop ? 36 : 32} showStars={true} animated={false} />
         ) : (
-          <div
-            style={{
-              width: isDesktop ? 36 : 32,
-              height: isDesktop ? 36 : 32,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
-              marginBottom: 2,
-            }}
-          >
-            {senderName ? (
-              <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
-                {getInitials(senderName)}
-              </span>
-            ) : (
-              <User size={isDesktop ? 18 : 16} color="#fff" />
-            )}
-          </div>
+          (isGroupChat && onAvatarClick ? (
+            <button
+              type="button"
+              onClick={() => onAvatarClick(message.sender_id, senderName || '')}
+              aria-label={`Open options for ${senderName || 'contact'}`}
+              style={{
+                width: isDesktop ? 36 : 32,
+                height: isDesktop ? 36 : 32,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                marginBottom: 2,
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = '';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.3)';
+              }}
+            >
+              {senderName ? (
+                <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
+                  {getInitials(senderName)}
+                </span>
+              ) : (
+                <User size={isDesktop ? 18 : 16} color="#fff" />
+              )}
+            </button>
+          ) : (
+            <div
+              style={{
+                width: isDesktop ? 36 : 32,
+                height: isDesktop ? 36 : 32,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                marginBottom: 2,
+              }}
+            >
+              {senderName ? (
+                <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
+                  {getInitials(senderName)}
+                </span>
+              ) : (
+                <User size={isDesktop ? 18 : 16} color="#fff" />
+              )}
+            </div>
+          ))
         )
       )}
       
@@ -525,29 +571,38 @@ export const ChatMessageBubble = ({
               gap: 3,
               justifyContent: isOwn ? 'flex-start' : 'flex-end',
             }}>
-              {message.reactions.map((reaction, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => onReactionClick?.(message.id, reaction.emoji)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    padding: '1px 5px',
-                    background: reaction.hasReacted ? 'rgba(59, 130, 246, 0.25)' : 'rgba(100, 116, 139, 0.2)',
-                    border: reaction.hasReacted ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(148, 163, 184, 0.15)',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    lineHeight: 1,
-                  }}
-                >
-                  <span>{reaction.emoji}</span>
-                  {reaction.count > 1 && (
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{reaction.count}</span>
-                  )}
-                </button>
-              ))}
+              {message.reactions.map((reaction, idx) => {
+                const names = reaction.reactedBy?.map((u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Someone').filter(Boolean) ?? [];
+                const whoReactedLabel = names.length > 0
+                  ? `${names.join(', ')} reacted with ${reaction.emoji}`
+                  : reaction.count > 1
+                    ? `${reaction.count} people reacted with ${reaction.emoji}`
+                    : `Reacted with ${reaction.emoji}`;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => onReactionClick?.(message.id, reaction.emoji)}
+                    title={whoReactedLabel}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      padding: '1px 5px',
+                      background: reaction.hasReacted ? 'rgba(59, 130, 246, 0.25)' : 'rgba(100, 116, 139, 0.2)',
+                      border: reaction.hasReacted ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(148, 163, 184, 0.15)',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      lineHeight: 1,
+                    }}
+                  >
+                    <span>{reaction.emoji}</span>
+                    {reaction.count > 1 && (
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>{reaction.count}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

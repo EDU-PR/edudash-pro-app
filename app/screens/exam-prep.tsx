@@ -1,12 +1,24 @@
 /**
  * Exam Prep Screen (React Native)
- * 
- * CAPS-aligned exam preparation with AI-powered question generation.
- * Features: Grade selection, subject selection, exam type selection.
+ *
+ * Incremental Exam Prep V2 upgrade:
+ * - 4-step wizard (grade -> subject -> type -> review)
+ * - Mobile-safe two-column subject cards
+ * - Teacher-context preview summary before generation
+ * - Routes to structured exam generation screen
  */
 
-import React, { useCallback, useState } from 'react';
-import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Dimensions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -14,99 +26,271 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
+import { assertSupabase } from '@/lib/supabase';
 import {
-  GRADES,
   EXAM_TYPES,
-  SUBJECTS_BY_PHASE,
+  GRADES,
   LANGUAGE_OPTIONS,
+  SUBJECTS_BY_PHASE,
+  getPhaseFromGrade,
+  type ExamContextSummary,
+  type ExamGenerationResponse,
   type SouthAfricanLanguage,
-  type ExamType,
-  type GradeInfo,
 } from '@/components/exam-prep/types';
-import { buildExamPrompt } from '@/components/exam-prep/prompt-builder';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Get phase from grade
-function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'senior' | 'fet' {
-  const gradeNum = parseInt(grade.replace('grade_', ''));
-  if (isNaN(gradeNum) || gradeNum <= 3) return 'foundation';
-  if (gradeNum <= 6) return 'intermediate';
-  if (gradeNum <= 9) return 'senior';
-  return 'fet';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SUBJECT_CARD_WIDTH = Math.max(140, Math.floor((SCREEN_WIDTH - 16 * 2 - 12) / 2));
+
+type WizardStep = 'grade' | 'subject' | 'type' | 'review';
+type SubjectCategory = 'all' | 'core' | 'languages' | 'sciences' | 'social';
+
+const SUBJECT_CATEGORY_OPTIONS: Array<{ id: SubjectCategory; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'core', label: 'Core' },
+  { id: 'languages', label: 'Languages' },
+  { id: 'sciences', label: 'Sciences' },
+  { id: 'social', label: 'Social' },
+];
+
+function getSubjectCategory(subject: string): SubjectCategory {
+  const s = subject.toLowerCase();
+
+  if (
+    s.includes('language') ||
+    s.includes('english') ||
+    s.includes('afrikaans') ||
+    s.includes('isizulu') ||
+    s.includes('isixhosa') ||
+    s.includes('sepedi')
+  ) {
+    return 'languages';
+  }
+
+  if (
+    s.includes('science') ||
+    s.includes('technology') ||
+    s.includes('computer') ||
+    s.includes('physical') ||
+    s.includes('life sciences')
+  ) {
+    return 'sciences';
+  }
+
+  if (
+    s.includes('history') ||
+    s.includes('geography') ||
+    s.includes('economic') ||
+    s.includes('business') ||
+    s.includes('accounting') ||
+    s.includes('tourism')
+  ) {
+    return 'social';
+  }
+
+  if (s.includes('math') || s.includes('life skills') || s.includes('life orientation')) {
+    return 'core';
+  }
+
+  return 'all';
+}
+
+function getSubjectIcon(subject: string): string {
+  const s = subject.toLowerCase();
+  if (s.includes('math')) return 'calculator';
+  if (s.includes('english') || s.includes('language')) return 'book';
+  if (s.includes('science')) return 'flask';
+  if (s.includes('history')) return 'time';
+  if (s.includes('geography')) return 'globe';
+  if (s.includes('life')) return 'heart';
+  if (s.includes('economic') || s.includes('business') || s.includes('accounting')) return 'cash';
+  if (s.includes('technology') || s.includes('computer')) return 'laptop';
+  if (s.includes('art') || s.includes('creative')) return 'color-palette';
+  return 'book-outline';
+}
+
+function toSafeParam(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }
 
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
   const { tier } = useSubscription();
-  const { grade: gradeParam, childName } = useLocalSearchParams<{ grade?: string; childName?: string }>();
+  const params = useLocalSearchParams<{
+    grade?: string;
+    childName?: string;
+    studentId?: string;
+    classId?: string;
+    schoolId?: string;
+  }>();
 
-  // If a grade was passed from the dashboard, pre-fill it and skip to subject step
+  const gradeParam = toSafeParam(params.grade);
+  const childName = toSafeParam(params.childName);
+  const studentId = toSafeParam(params.studentId);
+  const classId = toSafeParam(params.classId);
+  const schoolId = toSafeParam(params.schoolId);
+
   const hasPrefilledGrade = !!(gradeParam && GRADES.some((g) => g.value === gradeParam));
 
-  // State
   const [selectedGrade, setSelectedGrade] = useState<string>(hasPrefilledGrade ? gradeParam! : 'grade_4');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedExamType, setSelectedExamType] = useState<string>('practice_test');
   const [selectedLanguage, setSelectedLanguage] = useState<SouthAfricanLanguage>('en-ZA');
-  const [generating, setGenerating] = useState(false);
-  const [step, setStep] = useState<'grade' | 'subject' | 'type'>(hasPrefilledGrade ? 'subject' : 'grade');
- 
-  // Get subjects for current grade
+  const [step, setStep] = useState<WizardStep>(hasPrefilledGrade ? 'subject' : 'grade');
+
+  const [subjectSearch, setSubjectSearch] = useState('');
+  const [subjectCategory, setSubjectCategory] = useState<SubjectCategory>('all');
+
+  const [useTeacherContext, setUseTeacherContext] = useState(true);
+  const [contextPreview, setContextPreview] = useState<ExamContextSummary | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
+
   const phase = getPhaseFromGrade(selectedGrade);
   const subjects = SUBJECTS_BY_PHASE[phase] || [];
+  const gradeInfo = GRADES.find((g) => g.value === selectedGrade);
   const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
   const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice');
   const requiredExamTier = getRequiredTier('exam.practice');
+  const selectedExamTypeCard = EXAM_TYPES.find((item) => item.id === selectedExamType);
 
-  // Get grade info
-  const gradeInfo = GRADES.find((g) => g.value === selectedGrade);
+  const filteredSubjects = useMemo(() => {
+    const search = subjectSearch.trim().toLowerCase();
 
-  // Handle generate exam
-  const handleGenerate = useCallback(async () => {
-    if (!selectedSubject || !selectedExamType) return;
+    return subjects.filter((subject) => {
+      const category = getSubjectCategory(subject);
+      const categoryMatches = subjectCategory === 'all' || category === subjectCategory;
+      const searchMatches = !search || subject.toLowerCase().includes(search);
+      return categoryMatches && searchMatches;
+    });
+  }, [subjects, subjectSearch, subjectCategory]);
 
-    setGenerating(true);
+  const contextPreviewKey = `${selectedGrade}|${selectedSubject}|${selectedExamType}|${selectedLanguage}|${studentId || ''}|${classId || ''}|${schoolId || ''}|${useTeacherContext ? '1' : '0'}`;
+
+  const fetchContextPreview = useCallback(async () => {
+    if (!selectedGrade || !selectedSubject || !selectedExamType || !useTeacherContext) {
+      setContextPreview(null);
+      setContextError(null);
+      return;
+    }
+
+    setContextLoading(true);
+    setContextError(null);
+
     try {
-      // Build the prompt using the shared prompt builder
-      const { prompt, displayTitle } = buildExamPrompt({
+      const supabase = assertSupabase();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const invokeOptions: {
+        body: Record<string, unknown>;
+        headers?: Record<string, string>;
+      } = {
+        body: {
+          grade: selectedGrade,
+          subject: selectedSubject,
+          examType: selectedExamType,
+          language: selectedLanguage,
+          studentId,
+          classId,
+          schoolId,
+          useTeacherContext: true,
+          previewContext: true,
+        },
+      };
+
+      if (token) {
+        invokeOptions.headers = { Authorization: `Bearer ${token}` };
+      }
+
+      const { data, error } = await supabase.functions.invoke('generate-exam', invokeOptions);
+      if (error) {
+        throw new Error(error.message || 'Could not load teacher context');
+      }
+
+      const response = data as ExamGenerationResponse;
+      if (!response?.success) {
+        throw new Error(response?.error || 'Could not load teacher context');
+      }
+
+      setContextPreview(
+        response.contextSummary || {
+          assignmentCount: 0,
+          lessonCount: 0,
+          focusTopics: [],
+          weakTopics: [],
+        }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load teacher context';
+      setContextError(message);
+      setContextPreview(null);
+    } finally {
+      setContextLoading(false);
+    }
+  }, [
+    selectedGrade,
+    selectedSubject,
+    selectedExamType,
+    selectedLanguage,
+    studentId,
+    classId,
+    schoolId,
+    useTeacherContext,
+  ]);
+
+  useEffect(() => {
+    if (step !== 'review') return;
+
+    if (!useTeacherContext) {
+      setContextPreview(null);
+      setContextError(null);
+      setContextLoading(false);
+      return;
+    }
+
+    fetchContextPreview();
+  }, [step, useTeacherContext, fetchContextPreview, contextPreviewKey]);
+
+  const moveToStep = useCallback((nextStep: WizardStep) => {
+    setStep(nextStep);
+  }, []);
+
+  const handleStartGeneration = useCallback(
+    (withTeacherContext: boolean) => {
+      if (!selectedGrade || !selectedSubject || !selectedExamType) {
+        return;
+      }
+
+      const generationParams: Record<string, string> = {
         grade: selectedGrade,
         subject: selectedSubject,
         examType: selectedExamType,
         language: selectedLanguage,
-        enableInteractive: true,
-      });
+        useTeacherContext: withTeacherContext ? '1' : '0',
+      };
 
-      // Navigate to Dash AI with the generated prompt
-      // Use initialMessage (not initialPrompt) to match DashAssistantScreen params
+      if (childName) generationParams.childName = childName;
+      if (studentId) generationParams.studentId = studentId;
+      if (classId) generationParams.classId = classId;
+      if (schoolId) generationParams.schoolId = schoolId;
+
       router.push({
-        pathname: '/screens/dash-assistant',
-        params: {
-          initialMessage: prompt,
-          mode: 'exam',
-        },
-      });
-    } catch (error) {
-      console.error('Error generating exam:', error);
-    } finally {
-      setGenerating(false);
-    }
-  }, [selectedGrade, selectedSubject, selectedExamType, selectedLanguage]);
+        pathname: '/screens/exam-generation',
+        params: generationParams,
+      } as any);
+    },
+    [selectedGrade, selectedSubject, selectedExamType, selectedLanguage, childName, studentId, classId, schoolId]
+  );
 
-  // Render grade selector
   const renderGradeStep = () => (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepTitle, { color: theme.text }]}>Select Grade</Text>
-      <Text style={[styles.stepSubtitle, { color: theme.muted }]}>
-        Choose your child's grade level
-      </Text>
+      <Text style={[styles.stepSubtitle, { color: theme.muted }]}>Choose the learner grade level first.</Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.gradeScroll}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gradeScroll}>
         {GRADES.map((grade) => {
           const isSelected = selectedGrade === grade.value;
           return (
@@ -121,17 +305,12 @@ export default function ExamPrepScreen() {
               ]}
               onPress={() => {
                 setSelectedGrade(grade.value);
-                setSelectedSubject(''); // Reset subject when grade changes
+                setSelectedSubject('');
+                setSubjectSearch('');
+                setSubjectCategory('all');
               }}
             >
-              <Text
-                style={[
-                  styles.gradeLabel,
-                  { color: isSelected ? '#ffffff' : theme.text },
-                ]}
-              >
-                {grade.label}
-              </Text>
+              <Text style={[styles.gradeLabel, { color: isSelected ? '#ffffff' : theme.text }]}>{grade.label}</Text>
               <Text
                 style={[
                   styles.gradeAge,
@@ -145,36 +324,61 @@ export default function ExamPrepScreen() {
         })}
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.nextButton, { backgroundColor: theme.primary }]}
-        onPress={() => setStep('subject')}
-      >
+      <TouchableOpacity style={[styles.nextButton, { backgroundColor: theme.primary }]} onPress={() => moveToStep('subject')}>
         <Text style={styles.nextButtonText}>Next: Choose Subject</Text>
-        <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+        <Ionicons name="arrow-forward" size={18} color="#ffffff" />
       </TouchableOpacity>
     </View>
   );
 
-  // Render subject selector
   const renderSubjectStep = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity
-        style={styles.backStepButton}
-        onPress={() => setStep('grade')}
-      >
-        <Ionicons name="arrow-back" size={20} color={theme.primary} />
-        <Text style={[styles.backStepText, { color: theme.primary }]}>
-          Back to Grade
-        </Text>
+      <TouchableOpacity style={styles.backStepButton} onPress={() => moveToStep('grade')}>
+        <Ionicons name="arrow-back" size={18} color={theme.primary} />
+        <Text style={[styles.backStepText, { color: theme.primary }]}>Back to Grade</Text>
       </TouchableOpacity>
 
       <Text style={[styles.stepTitle, { color: theme.text }]}>Select Subject</Text>
       <Text style={[styles.stepSubtitle, { color: theme.muted }]}>
-        {gradeInfo?.label} - CAPS Curriculum
+        {gradeInfo?.label} • CAPS curriculum
       </Text>
 
+      <View style={[styles.searchWrap, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+        <Ionicons name="search" size={16} color={theme.muted} />
+        <TextInput
+          value={subjectSearch}
+          onChangeText={setSubjectSearch}
+          placeholder="Search subjects"
+          placeholderTextColor={theme.muted}
+          style={[styles.searchInput, { color: theme.text }]}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+        {SUBJECT_CATEGORY_OPTIONS.map((option) => {
+          const isSelected = subjectCategory === option.id;
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.categoryChip,
+                {
+                  backgroundColor: isSelected ? theme.primary : theme.surface,
+                  borderColor: isSelected ? theme.primary : theme.border,
+                },
+              ]}
+              onPress={() => setSubjectCategory(option.id)}
+            >
+              <Text style={[styles.categoryChipText, { color: isSelected ? '#ffffff' : theme.text }]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
       <View style={styles.subjectGrid}>
-        {subjects.map((item) => {
+        {filteredSubjects.map((item) => {
           const isSelected = selectedSubject === item;
           return (
             <TouchableOpacity
@@ -190,15 +394,12 @@ export default function ExamPrepScreen() {
             >
               <Ionicons
                 name={getSubjectIcon(item) as any}
-                size={24}
+                size={20}
                 color={isSelected ? '#ffffff' : theme.primary}
               />
               <Text
-                style={[
-                  styles.subjectLabel,
-                  { color: isSelected ? '#ffffff' : theme.text },
-                ]}
-                numberOfLines={2}
+                style={[styles.subjectLabel, { color: isSelected ? '#ffffff' : theme.text }]}
+                numberOfLines={3}
               >
                 {item}
               </Text>
@@ -207,34 +408,29 @@ export default function ExamPrepScreen() {
         })}
       </View>
 
-      {selectedSubject && (
-        <TouchableOpacity
-          style={[styles.nextButton, { backgroundColor: theme.primary }]}
-          onPress={() => setStep('type')}
-        >
+      {filteredSubjects.length === 0 && (
+        <View style={[styles.emptySubjects, { borderColor: theme.border, backgroundColor: theme.surface }]}> 
+          <Text style={[styles.emptySubjectsText, { color: theme.muted }]}>No subjects match your current filter.</Text>
+        </View>
+      )}
+
+      {!!selectedSubject && (
+        <TouchableOpacity style={[styles.nextButton, { backgroundColor: theme.primary }]} onPress={() => moveToStep('type')}>
           <Text style={styles.nextButtonText}>Next: Choose Exam Type</Text>
-          <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+          <Ionicons name="arrow-forward" size={18} color="#ffffff" />
         </TouchableOpacity>
       )}
     </View>
   );
 
-  // Render exam type selector
   const renderTypeStep = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity
-        style={styles.backStepButton}
-        onPress={() => setStep('subject')}
-      >
-        <Ionicons name="arrow-back" size={20} color={theme.primary} />
-        <Text style={[styles.backStepText, { color: theme.primary }]}>
-          Back to Subject
-        </Text>
+      <TouchableOpacity style={styles.backStepButton} onPress={() => moveToStep('subject')}>
+        <Ionicons name="arrow-back" size={18} color={theme.primary} />
+        <Text style={[styles.backStepText, { color: theme.primary }]}>Back to Subject</Text>
       </TouchableOpacity>
 
-      <Text style={[styles.stepTitle, { color: theme.text }]}>
-        Choose Exam Type
-      </Text>
+      <Text style={[styles.stepTitle, { color: theme.text }]}>Choose Exam Type</Text>
       <Text style={[styles.stepSubtitle, { color: theme.muted }]}>
         {gradeInfo?.label} • {selectedSubject}
       </Text>
@@ -248,150 +444,217 @@ export default function ExamPrepScreen() {
               style={[
                 styles.examTypeCard,
                 {
-                  backgroundColor: isSelected
-                    ? examType.color
-                    : theme.surface,
+                  backgroundColor: isSelected ? examType.color : theme.surface,
                   borderColor: isSelected ? examType.color : theme.border,
                 },
               ]}
               onPress={() => setSelectedExamType(examType.id)}
             >
-              <Ionicons
-                name={examType.icon as any}
-                size={32}
-                color={isSelected ? '#ffffff' : examType.color}
-              />
-              <Text
-                style={[
-                  styles.examTypeLabel,
-                  { color: isSelected ? '#ffffff' : theme.text },
-                ]}
-              >
+              <Ionicons name={examType.icon as any} size={24} color={isSelected ? '#ffffff' : examType.color} />
+              <Text style={[styles.examTypeLabel, { color: isSelected ? '#ffffff' : theme.text }]}>
                 {examType.label}
               </Text>
               <Text
                 style={[
                   styles.examTypeDesc,
-                  { color: isSelected ? 'rgba(255,255,255,0.8)' : theme.muted },
+                  { color: isSelected ? 'rgba(255,255,255,0.9)' : theme.muted },
                 ]}
               >
                 {examType.description}
               </Text>
-              <View
-                style={[
-                  styles.examTypeDuration,
-                  {
-                    backgroundColor: isSelected
-                      ? 'rgba(255,255,255,0.2)'
-                      : theme.background,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={12}
-                  color={isSelected ? '#ffffff' : theme.muted}
-                />
-                <Text
-                  style={[
-                    styles.examTypeDurationText,
-                    { color: isSelected ? '#ffffff' : theme.muted },
-                  ]}
-                >
-                  {examType.duration}
-                </Text>
-              </View>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Language Selector */}
       <View style={styles.languageSection}>
-        <Text style={[styles.languageLabel, { color: theme.text }]}>
-          Response Language
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.languageScroll}
-        >
-          {(Object.entries(LANGUAGE_OPTIONS) as [SouthAfricanLanguage, string][]).map(
-            ([code, label]) => {
-              const isSelected = selectedLanguage === code;
-              return (
-                <TouchableOpacity
-                  key={code}
-                  style={[
-                    styles.languageChip,
-                    {
-                      backgroundColor: isSelected ? theme.primary : theme.surface,
-                      borderColor: isSelected ? theme.primary : theme.border,
-                    },
-                  ]}
-                  onPress={() => setSelectedLanguage(code)}
-                >
-                  <Text
-                    style={[
-                      styles.languageChipText,
-                      { color: isSelected ? '#ffffff' : theme.text },
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }
-          )}
+        <Text style={[styles.languageLabel, { color: theme.text }]}>Response Language</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.languageScroll}>
+          {(Object.entries(LANGUAGE_OPTIONS) as [SouthAfricanLanguage, string][]).map(([code, label]) => {
+            const isSelected = selectedLanguage === code;
+            return (
+              <TouchableOpacity
+                key={code}
+                style={[
+                  styles.languageChip,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.surface,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedLanguage(code)}
+              >
+                <Text style={[styles.languageChipText, { color: isSelected ? '#ffffff' : theme.text }]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
-      {/* Generate Button */}
-      <TouchableOpacity
-        style={[
-          styles.generateButton,
-          { backgroundColor: generating ? theme.muted : '#22c55e' },
-        ]}
-        onPress={handleGenerate}
-        disabled={generating}
-      >
-        {generating ? (
-          <EduDashSpinner color="#ffffff" />
-        ) : (
-          <>
-            <Ionicons name="sparkles" size={24} color="#ffffff" />
-            <Text style={styles.generateButtonText}>
-              Generate with Dash AI
-            </Text>
-          </>
-        )}
+      <TouchableOpacity style={[styles.nextButton, { backgroundColor: theme.primary }]} onPress={() => moveToStep('review')}>
+        <Text style={styles.nextButtonText}>Next: Review & Generate</Text>
+        <Ionicons name="arrow-forward" size={18} color="#ffffff" />
       </TouchableOpacity>
     </View>
   );
- 
+
+  const renderContextPreview = () => {
+    if (!useTeacherContext) {
+      return (
+        <View style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+          <Text style={[styles.contextLabel, { color: theme.text }]}>Teacher context disabled</Text>
+          <Text style={[styles.contextSubLabel, { color: theme.muted }]}>Exam will use CAPS baseline only.</Text>
+        </View>
+      );
+    }
+
+    if (contextLoading) {
+      return (
+        <View style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+          <EduDashSpinner color={theme.primary} />
+          <Text style={[styles.contextSubLabel, { color: theme.muted }]}>Loading teacher artifacts for this learner...</Text>
+        </View>
+      );
+    }
+
+    if (contextError) {
+      return (
+        <View style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+          <Text style={[styles.contextLabel, { color: theme.text }]}>Could not fetch teacher context</Text>
+          <Text style={[styles.contextSubLabel, { color: theme.muted }]}>{contextError}</Text>
+        </View>
+      );
+    }
+
+    const summary = contextPreview;
+    return (
+      <View style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+        <Text style={[styles.contextLabel, { color: theme.text }]}>Teacher context found</Text>
+        <View style={styles.summaryRow}>
+          <View style={[styles.summaryChip, { backgroundColor: `${theme.primary}22` }]}>
+            <Text style={[styles.summaryChipText, { color: theme.primary }]}>Assignments: {summary?.assignmentCount ?? 0}</Text>
+          </View>
+          <View style={[styles.summaryChip, { backgroundColor: `${theme.primary}22` }]}>
+            <Text style={[styles.summaryChipText, { color: theme.primary }]}>Lessons: {summary?.lessonCount ?? 0}</Text>
+          </View>
+        </View>
+
+        {summary?.focusTopics?.length ? (
+          <View style={styles.topicBlock}>
+            <Text style={[styles.topicHeading, { color: theme.text }]}>Focus topics</Text>
+            <Text style={[styles.contextSubLabel, { color: theme.muted }]} numberOfLines={3}>
+              {summary.focusTopics.slice(0, 6).join(' • ')}
+            </Text>
+          </View>
+        ) : null}
+
+        {summary?.weakTopics?.length ? (
+          <View style={styles.topicBlock}>
+            <Text style={[styles.topicHeading, { color: theme.text }]}>Weak-topic signals</Text>
+            <Text style={[styles.contextSubLabel, { color: theme.muted }]} numberOfLines={3}>
+              {summary.weakTopics.slice(0, 6).join(' • ')}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderReviewStep = () => (
+    <View style={styles.stepContainer}>
+      <TouchableOpacity style={styles.backStepButton} onPress={() => moveToStep('type')}>
+        <Ionicons name="arrow-back" size={18} color={theme.primary} />
+        <Text style={[styles.backStepText, { color: theme.primary }]}>Back to Type</Text>
+      </TouchableOpacity>
+
+      <Text style={[styles.stepTitle, { color: theme.text }]}>Review & Generate</Text>
+      <Text style={[styles.stepSubtitle, { color: theme.muted }]}>Confirm your setup before generating the practice exam.</Text>
+
+      <View style={[styles.reviewCard, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+        <View style={styles.reviewRow}>
+          <Text style={[styles.reviewLabel, { color: theme.muted }]}>Learner</Text>
+          <Text style={[styles.reviewValue, { color: theme.text }]}>{childName || 'Current learner'}</Text>
+        </View>
+        <View style={styles.reviewRow}>
+          <Text style={[styles.reviewLabel, { color: theme.muted }]}>Grade</Text>
+          <Text style={[styles.reviewValue, { color: theme.text }]}>{gradeInfo?.label || selectedGrade}</Text>
+        </View>
+        <View style={styles.reviewRow}>
+          <Text style={[styles.reviewLabel, { color: theme.muted }]}>Subject</Text>
+          <Text style={[styles.reviewValue, { color: theme.text }]}>{selectedSubject}</Text>
+        </View>
+        <View style={styles.reviewRow}>
+          <Text style={[styles.reviewLabel, { color: theme.muted }]}>Type</Text>
+          <Text style={[styles.reviewValue, { color: theme.text }]}>{selectedExamTypeCard?.label || selectedExamType}</Text>
+        </View>
+        <View style={styles.reviewRow}>
+          <Text style={[styles.reviewLabel, { color: theme.muted }]}>Language</Text>
+          <Text style={[styles.reviewValue, { color: theme.text }]}>{LANGUAGE_OPTIONS[selectedLanguage]}</Text>
+        </View>
+      </View>
+
+      <View style={styles.contextToggleRow}>
+        <TouchableOpacity
+          style={[
+            styles.contextToggle,
+            {
+              backgroundColor: useTeacherContext ? theme.primary : theme.surface,
+              borderColor: useTeacherContext ? theme.primary : theme.border,
+            },
+          ]}
+          onPress={() => setUseTeacherContext(true)}
+        >
+          <Text style={[styles.contextToggleText, { color: useTeacherContext ? '#ffffff' : theme.text }]}>Use teacher context</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.contextToggle,
+            {
+              backgroundColor: !useTeacherContext ? theme.primary : theme.surface,
+              borderColor: !useTeacherContext ? theme.primary : theme.border,
+            },
+          ]}
+          onPress={() => setUseTeacherContext(false)}
+        >
+          <Text style={[styles.contextToggleText, { color: !useTeacherContext ? '#ffffff' : theme.text }]}>CAPS only</Text>
+        </TouchableOpacity>
+      </View>
+
+      {renderContextPreview()}
+
+      <TouchableOpacity style={[styles.generateButton, { backgroundColor: '#22c55e' }]} onPress={() => handleStartGeneration(useTeacherContext)}>
+        <Ionicons name="sparkles" size={22} color="#ffffff" />
+        <Text style={styles.generateButtonText}>Generate Practice Exam</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.secondaryGenerateButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+        onPress={() => handleStartGeneration(false)}
+      >
+        <Text style={[styles.secondaryGenerateText, { color: theme.text }]}>Generate without teacher context</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   if (!canUseExamPrep) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}> 
         <Stack.Screen options={{ title: 'Exam Prep' }} />
         <View style={styles.disabledContainer}>
           <Ionicons name="lock-closed-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            Exam Prep is locked
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Upgrade to {requiredExamTier || 'Starter'} to unlock exam practice features.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.push('/screens/manage-subscription')}
-          >
+          <Text style={[styles.disabledText, { color: theme.text }]}>Exam Prep is locked</Text>
+          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>Upgrade to {requiredExamTier || 'Starter'} to unlock exam practice features.</Text>
+          <TouchableOpacity style={[styles.backButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/screens/manage-subscription')}>
             <Text style={styles.backButtonText}>Manage Plan</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
- 
+
+  const currentStep = step === 'grade' ? 1 : step === 'subject' ? 2 : step === 'type' ? 3 : 4;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}> 
       <Stack.Screen
@@ -405,86 +668,39 @@ export default function ExamPrepScreen() {
         }}
       />
 
-      {/* Header */}
-      <LinearGradient
-        colors={isDark ? ['#1e293b', '#0f172a'] : ['#f0f9ff', '#e0f2fe']}
-        style={styles.header}
-      >
+      <LinearGradient colors={isDark ? ['#1e293b', '#0f172a'] : ['#f0f9ff', '#e0f2fe']} style={styles.header}>
         <View style={styles.headerContent}>
           <Ionicons name="school" size={32} color={theme.primary} />
           <View style={styles.headerText}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              AI-Powered Exam Prep
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.muted }]}>
-              CAPS-aligned practice tests & study materials
-            </Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>AI-Powered Exam Prep</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.muted }]}>Structured CAPS-aligned generation from real teacher artifacts.</Text>
           </View>
         </View>
 
-        {/* Progress Steps */}
         <View style={styles.progressSteps}>
-          {['Grade', 'Subject', 'Type'].map((label, index) => {
+          {['Grade', 'Subject', 'Type', 'Review'].map((label, index) => {
             const stepNum = index + 1;
-            const currentStepNum =
-              step === 'grade' ? 1 : step === 'subject' ? 2 : 3;
-            const isActive = stepNum <= currentStepNum;
+            const isActive = stepNum <= currentStep;
             return (
               <View key={label} style={styles.progressStep}>
-                <View
-                  style={[
-                    styles.progressDot,
-                    {
-                      backgroundColor: isActive ? theme.primary : theme.border,
-                    },
-                  ]}
-                >
-                  {stepNum < currentStepNum && (
-                    <Ionicons name="checkmark" size={12} color="#ffffff" />
-                  )}
+                <View style={[styles.progressDot, { backgroundColor: isActive ? theme.primary : theme.border }]}>
+                  {stepNum < currentStep ? <Ionicons name="checkmark" size={12} color="#ffffff" /> : null}
                 </View>
-                <Text
-                  style={[
-                    styles.progressLabel,
-                    { color: isActive ? theme.primary : theme.muted },
-                  ]}
-                >
-                  {label}
-                </Text>
+                <Text style={[styles.progressLabel, { color: isActive ? theme.primary : theme.muted }]}>{label}</Text>
               </View>
             );
           })}
         </View>
       </LinearGradient>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentInner}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
         {step === 'grade' && renderGradeStep()}
         {step === 'subject' && renderSubjectStep()}
         {step === 'type' && renderTypeStep()}
+        {step === 'review' && renderReviewStep()}
       </ScrollView>
     </View>
   );
-}
-
-// Get icon for subject
-function getSubjectIcon(subject: string): string {
-  const s = subject.toLowerCase();
-  if (s.includes('math')) return 'calculator';
-  if (s.includes('english') || s.includes('language')) return 'book';
-  if (s.includes('science')) return 'flask';
-  if (s.includes('history')) return 'time';
-  if (s.includes('geography')) return 'globe';
-  if (s.includes('life')) return 'heart';
-  if (s.includes('economic') || s.includes('business') || s.includes('accounting'))
-    return 'cash';
-  if (s.includes('technology') || s.includes('computer')) return 'laptop';
-  if (s.includes('art') || s.includes('creative')) return 'color-palette';
-  return 'book-outline';
 }
 
 const styles = StyleSheet.create({
@@ -535,7 +751,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 4,
   },
   headerBadge: {
@@ -566,7 +782,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   progressLabel: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
     fontWeight: '500',
   },
@@ -587,24 +803,24 @@ const styles = StyleSheet.create({
   },
   stepSubtitle: {
     fontSize: 14,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   backStepButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   backStepText: {
     fontSize: 14,
     fontWeight: '500',
-    marginLeft: 4,
+    marginLeft: 6,
   },
   gradeScroll: {
     paddingVertical: 8,
   },
   gradeCard: {
-    width: 100,
-    padding: 16,
+    width: 102,
+    padding: 14,
     borderRadius: 12,
     borderWidth: 2,
     marginRight: 12,
@@ -612,116 +828,233 @@ const styles = StyleSheet.create({
   },
   gradeLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   gradeAge: {
     fontSize: 11,
     marginTop: 4,
   },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  categoryScroll: {
+    paddingBottom: 10,
+    paddingTop: 2,
+  },
+  categoryChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   subjectGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingVertical: 8,
+    justifyContent: 'space-between',
+    marginTop: 2,
   },
   subjectCard: {
-    flex: 1,
-    maxWidth: (SCREEN_WIDTH - 48) / 2,
-    margin: 4,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    minHeight: 100,
+    width: SUBJECT_CARD_WIDTH,
+    minHeight: 112,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+    justifyContent: 'space-between',
   },
   subjectLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'center',
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  emptySubjects: {
     marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  emptySubjectsText: {
+    fontSize: 13,
+  },
+  nextButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nextButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   examTypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 16,
-    gap: 12,
+    gap: 10,
   },
   examTypeCard: {
-    width: (SCREEN_WIDTH - 44) / 2,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
   },
   examTypeLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 12,
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: '700',
   },
   examTypeDesc: {
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  examTypeDuration: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  examTypeDurationText: {
-    fontSize: 10,
-    marginLeft: 4,
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
   },
   languageSection: {
-    marginTop: 16,
+    marginTop: 14,
   },
   languageLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12,
+    fontWeight: '700',
+    marginBottom: 8,
   },
   languageScroll: {
-    paddingVertical: 4,
+    paddingBottom: 4,
   },
   languageChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
     borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginRight: 8,
   },
   languageChipText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  nextButton: {
+  reviewCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+  },
+  reviewRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  reviewLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  reviewValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 10,
+  },
+  contextToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  contextToggle: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 24,
   },
-  nextButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
+  contextToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  contextCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  contextLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  contextSubLabel: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  summaryChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summaryChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  topicBlock: {
+    marginTop: 4,
+  },
+  topicHeading: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   generateButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 18,
-    borderRadius: 12,
-    marginTop: 24,
+    gap: 8,
   },
   generateButtonText: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
-    marginLeft: 12,
+  },
+  secondaryGenerateButton: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryGenerateText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

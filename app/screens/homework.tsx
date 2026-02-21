@@ -12,8 +12,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Dimensions,
-  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,19 +23,18 @@ import { useParentDashboard } from '@/hooks/useDashboardData';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { SubPageHeader } from '@/components/SubPageHeader';
 
-const { width } = Dimensions.get('window');
-
 // Homework Item Component
 interface HomeworkItemProps {
   homework: {
     id: string;
     title: string;
-    subject: string;
-    due_date: string;
+    subject?: string;
+    due_date?: string;
     status: 'not_submitted' | 'submitted' | 'graded';
     grade?: number;
     teacher_name?: string;
     child_name?: string;
+    student_id?: string;
   };
   onPress: () => void;
 }
@@ -53,7 +50,9 @@ const HomeworkItem: React.FC<HomeworkItemProps> = ({ homework, onPress }) => {
   };
   
   const status = statusConfig[homework.status] || statusConfig.not_submitted;
-  const isOverdue = new Date(homework.due_date) < new Date() && homework.status === 'not_submitted';
+  const dueDateRaw = homework.due_date || '';
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  const isOverdue = Boolean(dueDate && dueDate < new Date() && homework.status === 'not_submitted');
   
   return (
     <TouchableOpacity 
@@ -84,7 +83,7 @@ const HomeworkItem: React.FC<HomeworkItemProps> = ({ homework, onPress }) => {
         </View>
         
         <Text style={[itemStyles.subject, { color: theme.textSecondary }]}>
-          {homework.subject} {homework.child_name && `• ${homework.child_name}`}
+          {homework.subject || t('homework.take_home', { defaultValue: 'Take-home' })} {homework.child_name && `• ${homework.child_name}`}
         </Text>
         
         <View style={itemStyles.footer}>
@@ -99,7 +98,9 @@ const HomeworkItem: React.FC<HomeworkItemProps> = ({ homework, onPress }) => {
               color={isOverdue ? theme.error : theme.textSecondary} 
             />
             <Text style={[itemStyles.dueDateText, { color: isOverdue ? theme.error : theme.textSecondary }]}>
-              {isOverdue ? t('homework.overdue', { defaultValue: 'Overdue' }) : new Date(homework.due_date).toLocaleDateString()}
+              {isOverdue
+                ? t('homework.overdue', { defaultValue: 'Overdue' })
+                : (dueDate ? dueDate.toLocaleDateString() : t('homework.no_due_date', { defaultValue: 'No due date' }))}
             </Text>
           </View>
         </View>
@@ -156,8 +157,22 @@ export default function HomeworkScreen() {
   
   // Get homework from dashboard data
   const allHomework = useMemo(() => {
-    return dashboardData?.recentHomework || [];
+    return (dashboardData?.recentHomework || []).map((item: any) => ({
+      ...item,
+      due_date: item.due_date || item.dueDate || '',
+      child_name: item.child_name || item.studentName || '',
+      subject: item.subject || 'Take-home',
+    }));
   }, [dashboardData]);
+
+  const isPreschoolContext = useMemo(() => {
+    const children = dashboardData?.children || [];
+    if (children.length === 0) return false;
+    return children.every((child: any) => {
+      const grade = String(child?.grade || '').toLowerCase();
+      return grade.includes('preschool') || grade.includes('grade r');
+    });
+  }, [dashboardData?.children]);
   
   // Filter homework
   const filteredHomework = useMemo(() => {
@@ -183,8 +198,13 @@ export default function HomeworkScreen() {
   };
   
   const handleHomeworkPress = (homework: any) => {
-    // Navigate to homework detail or AI helper
-    router.push(`/screens/ai-homework-helper?homeworkId=${homework.id}`);
+    router.push({
+      pathname: '/screens/homework-detail',
+      params: {
+        assignmentId: homework.id,
+        ...(homework.student_id ? { studentId: homework.student_id } : {}),
+      },
+    });
   };
   
   const handleAIHelp = () => {
@@ -194,7 +214,7 @@ export default function HomeworkScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SubPageHeader 
-        title={t('homework.title', { defaultValue: 'Homework' })}
+        title={isPreschoolContext ? t('homework.take_home_activities', { defaultValue: 'Take-home Activities' }) : t('homework.title', { defaultValue: 'Homework' })}
         subtitle={profile?.preschool_name || ''}
         rightAction={{
           icon: 'sparkles',

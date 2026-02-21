@@ -28,6 +28,7 @@ import {
   resolveOrganizationId,
 } from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
+import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 
 interface NavItem {
   id: string;
@@ -295,6 +296,7 @@ const getDefaultNavItems = (
 export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerProps) {
   const { theme, isDark } = useTheme();
   const { profile, signOut } = useAuth();
+  const { hideFeesOnDashboards } = useFinancePrivacyMode();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -316,7 +318,8 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
       }) || '/screens/org-admin-dashboard'
     )
     : undefined;
-  const items = ensureGlobalSearchItem(navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute }));
+  const items = ensureGlobalSearchItem(navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute }))
+    .filter((item) => (hideFeesOnDashboards ? item.id !== 'financials' : true));
   
   // Get display role - prioritize member_type for membership organizations
   const displayRole = memberType 

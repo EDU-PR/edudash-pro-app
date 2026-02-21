@@ -10,6 +10,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { TIER_HIERARCHY, type SubscriptionTier } from '@/lib/ai/models';
 import { normalizeRole } from '@/lib/rbac';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
+import { getTutorChallengePlan } from '@/features/dash-assistant/tutorChallengePolicy';
 import { createDashOrbStyles } from './DashOrb.styles';
 
 export interface QuickAction {
@@ -55,7 +56,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   // Education Content Generation - AVAILABLE TO ALL (with quota gating at API level)
   { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
   { id: 'gen-ecd-theme', label: 'ECD Theme', icon: 'sparkles', color: '#a855f7', command: 'Brainstorm an ECD weekly theme with daily activities, routines, and parent tips', defaultTopic: 'All About Me', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
-  { id: 'gen-ecd-routine', label: 'Daily Routine', icon: 'time', color: '#38bdf8', command: 'Create a structured ECD daily routine with transitions and classroom management cues', defaultTopic: 'Half-day class schedule', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-ecd-routine', label: 'Daily Routine', icon: 'time', color: '#38bdf8', command: 'Create a structured ECD daily routine with transitions and classroom management cues', defaultTopic: 'Half-day class schedule', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin', 'super_admin'] },
   { id: 'gen-ecd-workshop', label: 'Parent Workshop', icon: 'people', color: '#22c55e', command: 'Draft a parent workshop plan with objectives, agenda, activities, and take-home tips', defaultTopic: 'Supporting language development at home', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
   { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
   { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium', allowedRoles: ['principal_admin', 'super_admin'] },
@@ -148,6 +149,18 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     [tierStatus?.tier, tierStatus?.isActive]
   );
   const tierRank = TIER_HIERARCHY[normalizedTier];
+  const quizChallengeTarget = React.useMemo(() => {
+    const selectedAgeBand = ageGroup && ageGroup !== 'auto' ? ageGroup : null;
+    const plan = getTutorChallengePlan({
+      mode: 'quiz',
+      difficulty: 2,
+      learnerContext: {
+        ageBand: selectedAgeBand,
+        schoolType: isPreschool ? 'preschool' : schoolType || null,
+      },
+    });
+    return plan.maxQuestions;
+  }, [ageGroup, isPreschool, schoolType]);
   const quickCtas = isTutorRole
     ? (isPreschool
       ? [
@@ -165,7 +178,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
           },
           {
             label: 'Quick Quiz',
-            prompt: 'Quiz with 3 very easy questions using colors, shapes, or counting. Keep it fun.',
+            prompt: `Quiz with about ${quizChallengeTarget} very easy questions using colors, shapes, or counting. Keep it fun.`,
             icon: 'happy-outline',
             color: theme.warning || '#f59e0b',
           },
@@ -191,7 +204,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
           },
           {
             label: 'Quiz me',
-            prompt: 'Quiz me with 5 questions, starting easy and getting harder.',
+            prompt: `Quiz me with about ${quizChallengeTarget} questions, starting easy and getting harder.`,
             icon: 'school-outline',
             color: theme.warning || '#f59e0b',
           },
