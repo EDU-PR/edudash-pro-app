@@ -49,6 +49,7 @@ export default function Home() {
   const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [installMode, setInstallMode] = useState<"prompt" | "ios" | "unsupported">("unsupported");
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [hasInstalledApp, setHasInstalledApp] = useState(false);
   const [checking, setChecking] = useState(true);
   const [earlyAccessEmail, setEarlyAccessEmail] = useState("");
   const [earlyAccessSubmitting, setEarlyAccessSubmitting] = useState(false);
@@ -72,27 +73,59 @@ export default function Home() {
     if (typeof window === "undefined") return;
 
     const handleBeforeInstall = (event: Event) => {
+      if (hasInstalledApp) return;
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
       setInstallMode("prompt");
     };
 
+    const handleAppInstalled = () => {
+      setHasInstalledApp(true);
+      setDeferredPrompt(null);
+      setInstallMode("unsupported");
+      setInstallSheetOpen(false);
+      window.localStorage.setItem("edudash-pwa-installed", "true");
+    };
+
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleAppInstalled);
 
     const ua = window.navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true;
+    const rememberedInstalled = window.localStorage.getItem("edudash-pwa-installed") === "true";
 
-    if (isIOS && !isStandalone) {
+    if (isStandalone || rememberedInstalled) {
+      setHasInstalledApp(true);
+    }
+
+    const detectInstalledRelatedApps = async () => {
+      try {
+        const navAny = window.navigator as any;
+        if (typeof navAny.getInstalledRelatedApps === "function") {
+          const relatedApps = await navAny.getInstalledRelatedApps();
+          if (Array.isArray(relatedApps) && relatedApps.length > 0) {
+            setHasInstalledApp(true);
+            window.localStorage.setItem("edudash-pwa-installed", "true");
+          }
+        }
+      } catch {
+        // Best-effort signal only; ignore unsupported/permission errors.
+      }
+    };
+    detectInstalledRelatedApps();
+
+    if (isIOS && !isStandalone && !rememberedInstalled) {
       setInstallMode("ios");
     }
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, []);
+  }, [hasInstalledApp]);
 
   const featureCards = useMemo(
     () => [
@@ -350,6 +383,8 @@ export default function Home() {
       await deferredPrompt.prompt();
       const result = await deferredPrompt.userChoice;
       if (result.outcome === "accepted") {
+        setHasInstalledApp(true);
+        window.localStorage.setItem("edudash-pwa-installed", "true");
         setInstallMode("unsupported");
       }
       setDeferredPrompt(null);
@@ -359,7 +394,7 @@ export default function Home() {
     setInstallSheetOpen(true);
   };
 
-  const showInstallButton = !isPWA;
+  const showInstallButton = !isPWA && !hasInstalledApp;
 
   if (checking || isPWALoading) {
     return (
