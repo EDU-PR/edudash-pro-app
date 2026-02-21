@@ -89,6 +89,7 @@
     "check:backups": "bash scripts/scan-backups.sh",
     "check:todos": "bash scripts/scan-todos.sh",
     "check:console": "rg -n --hidden --glob '!node_modules/**' 'console\\.log\\('",
+    "git:remote": "bash scripts/git-remote-target.sh",
     "verify:dash-caps-contracts": "tsx scripts/acceptance/verify-dash-caps-contracts.ts",
     "verify:read-receipts-rollout": "tsx scripts/acceptance/verify-read-receipts-rollout.ts",
     "verify:reliability-audit": "npm run verify:dash-caps-contracts && npm run verify:read-receipts-rollout",

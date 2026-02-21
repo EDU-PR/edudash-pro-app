@@ -258,3 +258,33 @@ For issues with these scripts:
 4. Ensure database admin privileges are available
 
 Remember: All scripts are designed to be idempotent and safe to re-run if needed.
+
+## 🔀 Multi-Remote Git Workflow
+
+Use the helper below to push/pull/fetch across different remotes without editing git config every time:
+
+```bash
+npm run git:remote -- list
+npm run git:remote -- add <name> <url>
+npm run git:remote -- set-default <name>
+npm run git:remote -- show-default
+npm run git:remote -- push [remote] [branch]
+npm run git:remote -- pull [remote] [branch]
+npm run git:remote -- fetch [remote]
+```
+
+Remote choice priority for `push/pull/fetch`:
+1. explicit remote argument
+2. `GIT_REMOTE_TARGET` env var in current shell
+3. saved default remote
+4. `origin`
+
+Examples:
+
+```bash
+npm run git:remote -- add youngeagles https://github.com/YOUR_ORG/YOUR_REPO.git
+npm run git:remote -- set-default youngeagles
+npm run git:remote -- push
+
+GIT_REMOTE_TARGET=origin npm run git:remote -- push
+```
