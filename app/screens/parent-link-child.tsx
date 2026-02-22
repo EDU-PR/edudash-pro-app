@@ -26,7 +26,12 @@ export default function ParentLinkChildScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
-  const schoolId = ((profile as any)?.organization_id || (profile as any)?.preschool_id || null) as string | null;
+  const schoolId = (
+    (profile as any)?.organization_membership?.organization_id ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschool_id ||
+    null
+  ) as string | null;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchedStudent[]>([]);
@@ -40,6 +45,12 @@ export default function ParentLinkChildScreen() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const pendingRequests = requests.filter((request) => request.status === 'pending');
+  const linkFlow = [
+    '1. Search your child by full name or student ID.',
+    '2. Select the matching child profile from results.',
+    '3. Choose your relationship and submit the request.',
+    '4. School admin approves the link before messaging and dashboard data unlock.',
+  ];
 
   const loadRequests = useCallback(async (isRefresh = false) => {
     if (!user?.id) return;
@@ -140,6 +151,15 @@ export default function ParentLinkChildScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadRequests(true)} tintColor={theme.primary} />}
       >
+        <View style={[styles.card, { backgroundColor: theme.primary + '12', borderColor: theme.primary + '44' }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>How to link your child</Text>
+          {linkFlow.map((step) => (
+            <Text key={step} style={[styles.cardSubtitle, { color: theme.textSecondary, marginBottom: 6 }]}>
+              {step}
+            </Text>
+          ))}
+        </View>
+
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Find your child</Text>
           <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>Search by student name or ID.</Text>

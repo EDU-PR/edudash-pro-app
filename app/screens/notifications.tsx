@@ -22,7 +22,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -465,7 +465,7 @@ export default function NotificationsScreen() {
   // Loading state
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
         <NotificationHeader title={t('notifications.title', { defaultValue: 'Notifications' })} />
         <View style={styles.loadingContainer}>
           {[1, 2, 3, 4, 5].map(i => (
@@ -474,14 +474,14 @@ export default function NotificationsScreen() {
             </View>
           ))}
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
   
   // Empty state
   if (notifications.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
         <NotificationHeader title={t('notifications.title', { defaultValue: 'Notifications' })} />
         <View style={styles.emptyContainer}>
           <View style={[styles.emptyIcon, { backgroundColor: theme.primary + '15' }]}>
@@ -494,12 +494,12 @@ export default function NotificationsScreen() {
             {t('notifications.emptyDesc', { defaultValue: "You're all caught up! Check back later for updates." })}
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
   
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
       <NotificationHeader 
         title={t('notifications.title', { defaultValue: 'Notifications' })}
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
@@ -541,7 +541,7 @@ export default function NotificationsScreen() {
           />
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

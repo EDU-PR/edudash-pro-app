@@ -71,6 +71,37 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
     onSuccess,
     onError
   });
+
+  const stepGuidance = React.useMemo(
+    () => ({
+      personal_info: {
+        title: 'Step 1: Parent details',
+        description: 'Enter your legal name, email, and phone so the school can identify and contact you.',
+        nextAction: 'Next you will confirm which school your child belongs to.',
+        ctaLabel: 'Save Details',
+      },
+      organization_selection: {
+        title: 'Step 2: School link',
+        description: 'Choose the correct school carefully. This controls your dashboard, messaging, and child records.',
+        nextAction: 'Next you will set your password and accept terms.',
+        ctaLabel: 'Confirm School',
+      },
+      security_setup: {
+        title: 'Step 3: Secure account',
+        description: 'Create a strong password and accept terms to finish parent account setup.',
+        nextAction: 'After account setup, you can register or link your child profile.',
+        ctaLabel: 'Create Parent Account',
+      },
+    }),
+    []
+  );
+
+  const activeGuidance = (stepGuidance as Record<string, { title: string; description: string; nextAction: string; ctaLabel: string }>)[currentStep] || {
+    title: 'Complete your registration',
+    description: 'Fill in this section to continue.',
+    nextAction: 'Proceed to the next required step.',
+    ctaLabel: isLastStep ? 'Complete Registration' : 'Continue',
+  };
   
   // Render step content based on current step
   const renderStepContent = () => {
@@ -173,6 +204,26 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
             showDescriptions={false}
             compact={true}
           />
+
+          <View
+            style={[
+              styles.guidanceCard,
+              {
+                backgroundColor: theme.colors.primaryContainer,
+                borderColor: theme.colors.primary + '55',
+              },
+            ]}
+          >
+            <Text style={[styles.guidanceTitle, { color: theme.colors.onPrimaryContainer }]}>
+              {activeGuidance.title}
+            </Text>
+            <Text style={[styles.guidanceDescription, { color: theme.colors.onPrimaryContainer }]}>
+              {activeGuidance.description}
+            </Text>
+            <Text style={[styles.guidanceNext, { color: theme.colors.onPrimaryContainer }]}>
+              Next: {activeGuidance.nextAction}
+            </Text>
+          </View>
           
           {/* Step Content */}
           {renderStepContent()}
@@ -223,7 +274,7 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
                     fontWeight: '600'
                   }
                 ]}>
-                  {isLastStep ? 'Complete Registration' : 'Continue'}
+                  {isLastStep ? 'Complete Registration' : activeGuidance.ctaLabel}
                 </Text>
               )}
             </TouchableOpacity>
@@ -244,6 +295,28 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  guidanceCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  guidanceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  guidanceDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  guidanceNext: {
+    fontSize: 12,
+    marginTop: 8,
+    opacity: 0.9,
+    fontWeight: '600',
   },
   navigationContainer: {
     flexDirection: 'row',

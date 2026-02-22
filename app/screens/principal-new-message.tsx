@@ -53,7 +53,11 @@ export default function PrincipalNewMessageScreen() {
   const { terminology } = useOrganizationTerminology();
   const { showAlert, alertProps } = useAlertModal();
 
-  const organizationId = profile?.organization_id || profile?.preschool_id || null;
+  const organizationId =
+    (profile as any)?.organization_membership?.organization_id ||
+    profile?.organization_id ||
+    profile?.preschool_id ||
+    null;
   const [activeTab, setActiveTab] = useState<TabKey>('parents');
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<StudentRow[]>([]);

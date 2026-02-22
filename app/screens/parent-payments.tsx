@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Linking } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -202,18 +203,18 @@ export default function ParentPaymentsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScreenHeader title="Fees & Payments" subtitle={selectedChild?.preschool_name} />
         <View style={styles.loadingContainer}>
           <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading payment information...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScreenHeader title="Fees & Payments" subtitle={selectedChild?.preschool_name} />
       
       <ScrollView
@@ -346,7 +347,7 @@ export default function ParentPaymentsScreen() {
         theme={theme}
       />
       <AlertModal {...alertProps} />
-    </View>
+    </SafeAreaView>
   );
 }
 

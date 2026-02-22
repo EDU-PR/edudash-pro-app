@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -282,13 +283,13 @@ export default function CalendarScreen() {
   if (isStillLoading) {
     return (
       <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['bottom']}>
           <Stack.Screen options={{ headerShown: false }} />
           <View style={styles.loadingContainer}>
             <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
           </View>
-        </View>
+        </SafeAreaView>
       </DesktopLayout>
     );
   }
@@ -298,32 +299,32 @@ export default function CalendarScreen() {
     if (!user) {
       return (
         <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
-          <View style={styles.container}>
+          <SafeAreaView style={styles.container} edges={['bottom']}>
             <Stack.Screen options={{ headerShown: false }} />
             <View style={styles.loadingContainer}>
               <EduDashSpinner size="large" color={theme.primary} />
               <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
             </View>
-          </View>
+          </SafeAreaView>
         </DesktopLayout>
       );
     }
     return (
       <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['bottom']}>
           <Stack.Screen options={{ headerShown: false }} />
           <View style={styles.loadingContainer}>
             <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
             <Text style={styles.loadingText}>{t('calendar.standalone_mode', { defaultValue: 'Calendar can be used in standalone mode. Join an organization to access shared events.' })}</Text>
           </View>
-        </View>
+        </SafeAreaView>
       </DesktopLayout>
     );
   }
 
   return (
     <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         
         {/* Month Navigation */}
@@ -437,7 +438,7 @@ export default function CalendarScreen() {
               ))
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </DesktopLayout>
   );
 }

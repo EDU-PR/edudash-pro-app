@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 import { logger } from '@/lib/logger';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
@@ -582,12 +583,12 @@ export default function SettingsScreen() {
     return (
       <DesktopLayout role={(profile?.role as 'teacher' | 'principal' | 'parent') || 'teacher'} title={t('navigation.settings', { defaultValue: 'Settings' })} showBackButton>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['bottom']}>
           <View style={styles.loadingContainer}>
             <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('settings.loading.settings', { defaultValue: 'Loading settings...' })}</Text>
           </View>
-        </View>
+        </SafeAreaView>
       </DesktopLayout>
     );
   }
@@ -595,7 +596,7 @@ export default function SettingsScreen() {
   return (
     <DesktopLayout role={(profile?.role as 'teacher' | 'principal' | 'parent') || 'teacher'} title={t('navigation.settings', { defaultValue: 'Settings' })} showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -824,7 +825,7 @@ export default function SettingsScreen() {
         </ScrollView>
 
         <AlertModal {...alertProps} />
-      </View>
+      </SafeAreaView>
     </DesktopLayout>
   );
 }

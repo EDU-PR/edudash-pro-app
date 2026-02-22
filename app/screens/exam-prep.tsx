@@ -22,6 +22,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
@@ -639,7 +640,7 @@ export default function ExamPrepScreen() {
 
   if (!canUseExamPrep) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}> 
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ title: 'Exam Prep' }} />
         <View style={styles.disabledContainer}>
           <Ionicons name="lock-closed-outline" size={64} color={theme.muted} />
@@ -649,14 +650,14 @@ export default function ExamPrepScreen() {
             <Text style={styles.backButtonText}>Manage Plan</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   const currentStep = step === 'grade' ? 1 : step === 'subject' ? 2 : step === 'type' ? 3 : 4;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Exam Prep',
@@ -699,7 +700,7 @@ export default function ExamPrepScreen() {
         {step === 'type' && renderTypeStep()}
         {step === 'review' && renderReviewStep()}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

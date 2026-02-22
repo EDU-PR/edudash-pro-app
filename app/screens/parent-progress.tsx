@@ -9,7 +9,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParentProgress, useLessonProgress } from '@/hooks/useLessonProgress';
@@ -67,16 +67,16 @@ export default function ParentProgressScreen() {
   
   if (isLoadingChildren && !childrenProgress.length) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading progress...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
   
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* Header */}
@@ -355,6 +355,6 @@ export default function ParentProgressScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

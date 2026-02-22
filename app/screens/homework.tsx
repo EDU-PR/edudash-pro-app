@@ -16,7 +16,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParentDashboard } from '@/hooks/useDashboardData';
@@ -212,7 +212,7 @@ export default function HomeworkScreen() {
   };
   
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
       <SubPageHeader 
         title={isPreschoolContext ? t('homework.take_home_activities', { defaultValue: 'Take-home Activities' }) : t('homework.title', { defaultValue: 'Homework' })}
         subtitle={profile?.preschool_name || ''}
@@ -323,7 +323,7 @@ export default function HomeworkScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

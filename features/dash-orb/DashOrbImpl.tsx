@@ -61,14 +61,26 @@ import { formatToolResultMessage } from '@/lib/ai/toolUtils';
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 import type { DashAttachment } from '@/services/dash-ai/types';
 import { pickImages } from '@/services/AttachmentService';
-import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
+import {
+  detectOCRTask,
+  getCriteriaResponsePrompt,
+  getOCRPromptForTask,
+  isOCRIntent,
+  isShortOrAttachmentOnlyPrompt,
+} from '@/lib/dash-ai/ocrPrompts';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { buildImagePayloadsFromAttachments } from '@/lib/dash-ai/imagePayloadBuilder';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
 import { resolveAgeBand } from '@/lib/dash-ai/learnerContext';
 import { classifyResponseMode } from '@/lib/dash-ai/responseMode';
 import { detectLanguageOverrideFromText, resolveResponseLocale } from '@/lib/dash-ai/languageRouting';
-import { FREE_IMAGE_BUDGET_PER_DAY, loadImageBudget, trackImageUsage } from '@/lib/dash-ai/imageBudget';
+import {
+  FREE_IMAGE_BUDGET_PER_DAY,
+  loadImageBudget,
+  trackImageUsage,
+  loadAutoScanBudget,
+  trackAutoScanUsage,
+} from '@/lib/dash-ai/imageBudget';
 import { logger } from '@/lib/logger';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
@@ -171,6 +183,7 @@ export default function DashOrb({
   const [pendingTutorIntent, setPendingTutorIntent] = useState<{ prompt: string; label?: string } | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<DashAttachment[]>([]);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [remainingAutoScans, setRemainingAutoScans] = useState<number | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [whisperModeEnabled, setWhisperModeEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -204,6 +217,15 @@ export default function DashOrb({
     const selectedCount = pendingAttachments.filter((attachment) => attachment.kind === 'image').length;
     return Math.max(0, budget.remainingCount - selectedCount);
   }, [isFreeImageBudgetTier, pendingAttachments]);
+
+  const refreshAutoScanBudget = useCallback(async () => {
+    const budget = await loadAutoScanBudget(tierLabel || 'free');
+    setRemainingAutoScans(budget.remainingCount);
+  }, [tierLabel]);
+
+  useEffect(() => {
+    void refreshAutoScanBudget();
+  }, [refreshAutoScanBudget]);
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
     if (!lang) return null;
@@ -1171,9 +1193,11 @@ export default function DashOrb({
       },
     };
     setPendingAttachments((prev) => [...prev, attachment].slice(0, 5));
+    await trackAutoScanUsage(tierLabel || 'free', 1).catch(() => {});
+    void refreshAutoScanBudget();
     setScannerVisible(false);
     toast.success('Homework scan attached');
-  }, [getRemainingOrbImageSlots]);
+  }, [getRemainingOrbImageSlots, refreshAutoScanBudget, tierLabel]);
 
   const handleSend = async (text: string) => {
     const trimmed = text.trim();
@@ -1857,7 +1881,11 @@ export default function DashOrb({
       const aiProxyEndpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
       const images = await buildImagePayloads(attachments);
       const detectedOCRTask = images.length > 0 ? detectOCRTask(command) : null;
-      const ocrMode = images.length > 0 && (isOCRIntent(command) || detectedOCRTask !== null);
+      const ocrMode = images.length > 0 && (
+        isOCRIntent(command) ||
+        detectedOCRTask !== null ||
+        isShortOrAttachmentOnlyPrompt(command)
+      );
       const ocrTask = detectedOCRTask || 'document';
       const attachmentContext = attachments.length > 0
         ? [
@@ -1870,6 +1898,7 @@ export default function DashOrb({
             }),
           ].join('\n')
         : null;
+      const criteriaContext = getCriteriaResponsePrompt(command);
       const ocrContext = ocrMode ? getOCRPromptForTask(ocrTask) : null;
       const aiScope = resolveAIProxyScopeFromRole(normalizedRole);
 
@@ -1886,6 +1915,7 @@ export default function DashOrb({
             history.length > 0 ? history.map((h) => `${h.role}: ${h.content}`).join('\n') : null,
             memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
             attachmentContext,
+            criteriaContext,
             ocrContext,
             nameContext,
             gradeContext,
@@ -2484,6 +2514,8 @@ export default function DashOrb({
         onClose={() => setScannerVisible(false)}
         onScanned={handleScannerScanned}
         title="Scan Homework"
+        tier={tierLabel || 'free'}
+        remainingScans={remainingAutoScans}
       />
       <DashToolsModal
         visible={showToolsModal}

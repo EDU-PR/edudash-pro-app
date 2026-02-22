@@ -17,6 +17,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
+import {
+  FREE_AUTO_SCAN_BUDGET_PER_DAY,
+  PAID_AUTO_SCAN_BUDGET_PER_DAY,
+  hasAutoScanBudget,
+} from '@/lib/dash-ai/imageBudget';
 
 export type HomeworkScanResult = {
   uri: string;
@@ -30,6 +35,8 @@ interface HomeworkScannerProps {
   onClose: () => void;
   onScanned: (result: HomeworkScanResult) => void;
   title?: string;
+  tier?: string | null;
+  remainingScans?: number | null;
 }
 
 type HomeworkPreview = {
@@ -43,6 +50,8 @@ export default function HomeworkScanner({
   onClose,
   onScanned,
   title = 'Homework Scanner',
+  tier = 'free',
+  remainingScans = null,
 }: HomeworkScannerProps) {
   const { theme } = useTheme();
   const cameraRef = useRef<CameraView | null>(null);
@@ -64,23 +73,46 @@ export default function HomeworkScanner({
     const initial = await ImageManipulator.manipulateAsync(
       uri,
       [],
-      { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
-    const cropWidth = Math.floor(initial.width * 0.92);
-    const cropHeight = Math.floor(initial.height * 0.88);
-    const originX = Math.max(0, Math.floor((initial.width - cropWidth) / 2));
-    const originY = Math.max(0, Math.floor((initial.height - cropHeight) / 2));
+
+    // Step 1: normalize orientation to portrait-ish for notebook pages.
+    const orientationAdjusted = initial.width > initial.height * 1.2
+      ? await ImageManipulator.manipulateAsync(
+          initial.uri,
+          [{ rotate: 90 }],
+          { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+        )
+      : initial;
+
+    // Step 2: adaptive crop; keep a larger center area for close shots and
+    // tighten more for wider frames to reduce desk/background noise.
+    const aspect = orientationAdjusted.width / Math.max(1, orientationAdjusted.height);
+    const widthRatio = aspect > 0.9 ? 0.88 : 0.93;
+    const heightRatio = aspect > 1.1 ? 0.82 : 0.9;
+    const cropWidth = Math.max(320, Math.floor(orientationAdjusted.width * widthRatio));
+    const cropHeight = Math.max(420, Math.floor(orientationAdjusted.height * heightRatio));
+    const originX = Math.max(0, Math.floor((orientationAdjusted.width - cropWidth) / 2));
+    const originY = Math.max(0, Math.floor((orientationAdjusted.height - cropHeight) / 2));
 
     const cropped = await ImageManipulator.manipulateAsync(
-      initial.uri,
+      orientationAdjusted.uri,
       [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+    );
+
+    // Step 3: upscale/downscale to OCR-friendly size while preserving details.
+    const targetWidth = Math.min(1800, Math.max(1200, cropped.width));
+    const enhanced = await ImageManipulator.manipulateAsync(
+      cropped.uri,
+      [{ resize: { width: targetWidth } }],
+      { compress: 0.94, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
     return {
-      uri: cropped.uri,
-      width: cropped.width,
-      height: cropped.height,
+      uri: enhanced.uri,
+      width: enhanced.width,
+      height: enhanced.height,
     } as HomeworkPreview;
   }, []);
 
@@ -143,6 +175,17 @@ export default function HomeworkScanner({
     if (!preview?.uri || busy) return;
     setBusy(true);
     try {
+      const canScan = await hasAutoScanBudget(tier, 1);
+      if (!canScan) {
+        const isFreeTier = String(tier || 'free').toLowerCase() === 'free';
+        const dailyLimit = isFreeTier ? FREE_AUTO_SCAN_BUDGET_PER_DAY : PAID_AUTO_SCAN_BUDGET_PER_DAY;
+        Alert.alert(
+          'Daily Scan Limit Reached',
+          `You have reached your ${dailyLimit} scans/day limit for Auto-Scanner. Try again tomorrow.`
+        );
+        return;
+      }
+
       const compressed = await compressImageForAI(preview.uri, 4_000_000);
       onScanned({
         uri: compressed.uri,
@@ -168,6 +211,15 @@ export default function HomeworkScanner({
   const overlayHint = useMemo(() => {
     return 'Tip: place worksheet inside the frame. Use good lighting and keep the page flat.';
   }, []);
+
+  const scanLimitHint = useMemo(() => {
+    const isFreeTier = String(tier || 'free').toLowerCase() === 'free';
+    const dailyLimit = isFreeTier ? FREE_AUTO_SCAN_BUDGET_PER_DAY : PAID_AUTO_SCAN_BUDGET_PER_DAY;
+    if (typeof remainingScans === 'number') {
+      return `Auto-Scanner: ${remainingScans} of ${dailyLimit} scans left today.`;
+    }
+    return `Auto-Scanner daily limit: ${dailyLimit} scans.`;
+  }, [remainingScans, tier]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={closeAndReset}>
@@ -208,6 +260,7 @@ export default function HomeworkScanner({
         )}
 
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
+          <Text style={[styles.scanLimitText, { color: theme.textSecondary }]}>{scanLimitHint}</Text>
           {!preview ? (
             <>
               <TouchableOpacity style={[styles.iconBtn, { borderColor: theme.border }]} onPress={pickFromLibrary} disabled={busy}>
@@ -337,6 +390,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  scanLimitText: {
+    position: 'absolute',
+    top: -20,
+    left: 24,
+    fontSize: 11,
+    fontWeight: '600',
   },
   iconBtn: {
     width: 46,

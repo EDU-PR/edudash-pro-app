@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
@@ -329,7 +329,7 @@ export default function ParentAttendanceScreen() {
   
   return (
     <DesktopLayout role={userRole as any}>
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <ScreenHeader 
           title={t('parent.attendance', { defaultValue: 'Attendance' })}
@@ -462,7 +462,7 @@ export default function ParentAttendanceScreen() {
             </>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </DesktopLayout>
   );
 }

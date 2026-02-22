@@ -13,6 +13,11 @@ export const HOMEWORK_SCAN_PROMPT = [
   '- Provide kind, practical next-step feedback for learner and parent.',
   '- For math: show worked solutions step-by-step. Identify calculation errors.',
   '- Suggest 1-2 follow-up practice problems if gaps are found.',
+  '- If the task includes labelled criteria (e.g., a) b) c) or 1. 2. 3.), preserve labels and wording exactly.',
+  '- Do not merge, rename, skip, or reorder criteria.',
+  '- For criteria-answer requests, use exact headings in this form: "a) <exact criterion text>" followed by the response.',
+  '- Never replace an original criterion heading with a different heading.',
+  '- Do not invent school names, learner names, signatures, or claims not visible in the prompt/image.',
 ].join('\n');
 
 export const DOCUMENT_SCAN_PROMPT = [
@@ -22,12 +27,19 @@ export const DOCUMENT_SCAN_PROMPT = [
   '- Use markdown formatting for structure when outputting.',
   '- Return uncertain words with [?]. Provide a brief summary at the end.',
   '- If it is a worksheet or form, identify blank fields and question types.',
+  '- If the document uses assessment criteria labels (a) b) c) d) e) or similar), keep labels and wording exact.',
+  '- When drafting answers from this document, output one section per criterion with matching labels and no relabeling.',
+  '- Use exact section headings in this form: "a) <exact criterion text>", "b) <exact criterion text>", etc.',
+  '- Before finalizing, self-check that the number of response sections matches the number of criteria labels shown in the image.',
+  '- Keep "evidence/documentation" requests in their own separate section; do not mix with criteria answers.',
+  '- Avoid fabricated facts, school names, or sign-offs unless explicitly provided by the user.',
 ].join('\n');
 
 export const HANDWRITING_ANALYSIS_PROMPT = [
   'OCR HANDWRITING ANALYSIS:',
   '- Read as much handwritten text as possible with best-effort accuracy.',
   '- Mark uncertain readings with [?].',
+  '- Include an "unclear_spans" list with short quotes of low-confidence words/lines.',
   '- Assess handwriting legibility, letter formation, and spacing.',
   '- For preschool learners, include short fine-motor practice suggestions.',
   '- For older learners, suggest specific letter/word practice if needed.',

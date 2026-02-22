@@ -47,6 +47,20 @@ type ProviderResponse = {
 };
 
 type ResolutionStatus = 'resolved' | 'needs_clarification' | 'escalated';
+type ResolutionMetaSource = 'ocr_threshold' | 'request_metadata_override' | 'pending_tool_calls_default';
+
+type ResolutionMeta = {
+  source: ResolutionMetaSource;
+  ocr_confidence?: number;
+  thresholds?: {
+    low: number;
+    high: number;
+  };
+  pending_tool_calls: number;
+};
+
+const OCR_CONFIDENCE_LOW_THRESHOLD = 0.55;
+const OCR_CONFIDENCE_HIGH_THRESHOLD = 0.75;
 
 const DEFAULT_OPENAI_ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o'];
 const DEFAULT_ANTHROPIC_ALLOWED_MODELS = [
@@ -151,13 +165,40 @@ function clampConfidence(value: unknown): number | null {
   return Math.max(0, Math.min(1, parsed));
 }
 
+function deriveResolutionFromOCRConfidence(confidence: number): {
+  status: ResolutionStatus;
+  escalationOffer: boolean;
+} {
+  if (confidence < OCR_CONFIDENCE_LOW_THRESHOLD) {
+    return {
+      status: 'escalated',
+      escalationOffer: true,
+    };
+  }
+  if (confidence <= OCR_CONFIDENCE_HIGH_THRESHOLD) {
+    return {
+      status: 'needs_clarification',
+      escalationOffer: true,
+    };
+  }
+  return {
+    status: 'resolved',
+    escalationOffer: false,
+  };
+}
+
 function deriveResolutionMetadata(
   requestMetadata: Record<string, unknown> | undefined,
-  pendingToolCallCount: number
+  pendingToolCallCount: number,
+  options?: {
+    requestedOCRMode?: boolean;
+    ocrConfidence?: number | null;
+  }
 ): {
   resolution_status: ResolutionStatus;
   confidence_score: number;
   escalation_offer: boolean;
+  resolution_meta: ResolutionMeta;
 } {
   const fromRequest = requestMetadata || {};
   const explicitStatus = normalizeResolutionStatus(fromRequest.resolution_status);
@@ -165,20 +206,58 @@ function deriveResolutionMetadata(
   const explicitEscalationOffer = typeof fromRequest.escalation_offer === 'boolean'
     ? fromRequest.escalation_offer
     : null;
+  const requestedOCRMode = options?.requestedOCRMode === true;
+  const normalizedOCRConfidence = clampConfidence(options?.ocrConfidence);
+
+  if (requestedOCRMode && normalizedOCRConfidence !== null) {
+    const derived = deriveResolutionFromOCRConfidence(normalizedOCRConfidence);
+    return {
+      resolution_status: derived.status,
+      confidence_score: Number(normalizedOCRConfidence.toFixed(2)),
+      escalation_offer: derived.escalationOffer,
+      resolution_meta: {
+        source: 'ocr_threshold',
+        ocr_confidence: Number(normalizedOCRConfidence.toFixed(2)),
+        thresholds: {
+          low: OCR_CONFIDENCE_LOW_THRESHOLD,
+          high: OCR_CONFIDENCE_HIGH_THRESHOLD,
+        },
+        pending_tool_calls: pendingToolCallCount,
+      },
+    };
+  }
+
+  if (explicitStatus || explicitConfidence !== null || explicitEscalationOffer !== null) {
+    const status = explicitStatus || (pendingToolCallCount > 0 ? 'needs_clarification' : 'resolved');
+    const confidence =
+      explicitConfidence ??
+      (status === 'escalated' ? 0.42 : status === 'needs_clarification' ? 0.58 : 0.82);
+    const escalationOffer =
+      explicitEscalationOffer ??
+      (status === 'escalated' || status === 'needs_clarification');
+    return {
+      resolution_status: status,
+      confidence_score: Number(confidence.toFixed(2)),
+      escalation_offer: escalationOffer,
+      resolution_meta: {
+        source: 'request_metadata_override',
+        pending_tool_calls: pendingToolCallCount,
+      },
+    };
+  }
 
   const defaultStatus: ResolutionStatus = pendingToolCallCount > 0 ? 'needs_clarification' : 'resolved';
-  const status = explicitStatus || defaultStatus;
-  const confidence =
-    explicitConfidence ??
-    (status === 'escalated' ? 0.42 : status === 'needs_clarification' ? 0.58 : 0.82);
-  const escalationOffer =
-    explicitEscalationOffer ??
-    (status === 'escalated' || status === 'needs_clarification');
+  const confidence = defaultStatus === 'needs_clarification' ? 0.58 : 0.82;
+  const escalationOffer = defaultStatus === 'needs_clarification';
 
   return {
-    resolution_status: status,
+    resolution_status: defaultStatus,
     confidence_score: Number(confidence.toFixed(2)),
     escalation_offer: escalationOffer,
+    resolution_meta: {
+      source: 'pending_tool_calls_default',
+      pending_tool_calls: pendingToolCallCount,
+    },
   };
 }
 
@@ -958,6 +1037,93 @@ function getOCRPrompt(task: 'homework' | 'document' | 'handwriting'): string {
   return OCR_PROMPT_BY_TASK[task] || OCR_PROMPT_BY_TASK.document;
 }
 
+const CRITERIA_RESPONSE_PROMPT = [
+  'CRITERIA RESPONSE MODE:',
+  '- Identify each criterion label exactly as written in the source.',
+  '- Keep section order exactly aligned to the source labels.',
+  '- Use one section per criterion with the exact heading text (for example: "a) Planning and delivery of learning programme").',
+  '- Never rename or paraphrase criterion headings.',
+  '- Do not skip or merge criteria.',
+  '- Put evidence in a separate section titled exactly: "Attach all relevant documentation as evidence".',
+  '- Do not add names, institutions, signatures, or dates unless explicitly provided by the user.',
+].join('\n');
+
+const CRITERIA_RESPONSE_PATTERNS: RegExp[] = [
+  /\b(help|assist|draft|write|answer|respond)\b.{0,30}\b(criteria|criterion|rubric|assessment)\b/i,
+  /\b(criteria|criterion|rubric|assessment)\b.{0,30}\b(answer|response|draft|write|help)\b/i,
+  /\bgroup discussion response\b/i,
+  /\bassessment criteria?\b/i,
+  /\bassessment criterion\s*(1|2|3|4|5)\b/i,
+  /\banswer (a|b|c|d|e)\b/i,
+  /\battach all relevant documentation as evidence\b/i,
+];
+
+function extractMessageText(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const entry = part as Record<string, unknown>;
+      if (entry.type === 'text' && typeof entry.text === 'string') {
+        return entry.text.trim();
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function countCriteriaLabels(text: string): number {
+  const value = String(text || '').toLowerCase();
+  if (!value) return 0;
+  const alphaMatches = value.match(/\b([a-e])\)/g) || [];
+  const alphaUnique = new Set(alphaMatches.map((item) => item.trim())).size;
+  const numericMatches = value.match(/\b([1-9])[.)]/g) || [];
+  const numericUnique = new Set(numericMatches.map((item) => item.trim())).size;
+  return Math.max(alphaUnique, numericUnique);
+}
+
+function getLatestUserTextForCriteria(
+  requestPayload: z.infer<typeof RequestSchema>['payload'],
+): string {
+  if (Array.isArray(requestPayload.messages) && requestPayload.messages.length > 0) {
+    for (let idx = requestPayload.messages.length - 1; idx >= 0; idx -= 1) {
+      const msg = requestPayload.messages[idx];
+      if (msg.role !== 'user') continue;
+      const text = extractMessageText(msg.content);
+      if (text) return text;
+    }
+  }
+
+  if (Array.isArray(requestPayload.conversationHistory) && requestPayload.conversationHistory.length > 0) {
+    for (let idx = requestPayload.conversationHistory.length - 1; idx >= 0; idx -= 1) {
+      const msg = requestPayload.conversationHistory[idx];
+      if (msg.role !== 'user') continue;
+      const text = extractMessageText(msg.content);
+      if (text) return text;
+    }
+  }
+
+  return String(requestPayload.prompt || '').trim();
+}
+
+function shouldUseCriteriaResponseMode(
+  requestPayload: z.infer<typeof RequestSchema>['payload'],
+  requestMetadata?: Record<string, unknown>,
+): boolean {
+  if (requestMetadata?.criteria_mode === true) {
+    return true;
+  }
+  const text = getLatestUserTextForCriteria(requestPayload);
+  if (!text) return false;
+  if (CRITERIA_RESPONSE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+  return countCriteriaLabels(text) >= 3;
+}
+
 function detectPhonicsMode(
   requestPayload: z.infer<typeof RequestSchema>['payload'],
   metadata?: Record<string, unknown>
@@ -1026,6 +1192,7 @@ function normalizeOCRResponse(params: {
   confidence: number;
   document_type: 'homework' | 'document' | 'handwriting';
   analysis: string;
+  unclear_spans: string[];
 } {
   const parsed = extractJsonObjectCandidate(params.content);
   const extractedText = typeof parsed?.extracted_text === 'string'
@@ -1051,12 +1218,26 @@ function normalizeOCRResponse(params: {
   )
     ? parsed.document_type
     : params.task;
+  const unclearSpans = Array.isArray(parsed?.unclear_spans)
+    ? parsed.unclear_spans
+        .map((span) => String(span || '').trim())
+        .filter((span) => span.length > 0)
+        .slice(0, 6)
+    : (() => {
+        const matches = String(analysis || '')
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.includes('[?]'))
+          .slice(0, 6);
+        return matches;
+      })();
 
   return {
     extracted_text: extractedText,
     confidence: Number(confidence.toFixed(2)),
     document_type: documentType,
     analysis,
+    unclear_spans: unclearSpans,
   };
 }
 
@@ -3244,15 +3425,17 @@ serve(async (req) => {
     const requestedOCRMode = payload.payload.ocr_mode === true || normalizedServiceType === 'image_analysis';
     const ocrTask = payload.payload.ocr_task || 'document';
     const ocrResponseFormat = payload.payload.ocr_response_format || 'text';
-    const phonicsMode = detectPhonicsMode(payload.payload, payload.metadata as Record<string, unknown> | undefined);
+    const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
+    const phonicsMode = detectPhonicsMode(payload.payload, requestMetadata);
+    const criteriaResponseMode = shouldUseCriteriaResponseMode(payload.payload, requestMetadata);
 
     const contextParts = [
       payload.payload.context,
       phonicsMode ? SHARED_PHONICS_PROMPT_BLOCK : null,
       requestedOCRMode ? getOCRPrompt(ocrTask) : null,
+      criteriaResponseMode ? CRITERIA_RESPONSE_PROMPT : null,
     ].filter(Boolean);
     const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
-    const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
 
     const systemPrompt = buildSystemPrompt(mergedContext, normalizedServiceType, requestMetadata);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
@@ -3764,7 +3947,11 @@ serve(async (req) => {
 
     const resolutionMeta = deriveResolutionMetadata(
       requestMetadata,
-      providerResponse.pending_tool_calls?.length || 0
+      providerResponse.pending_tool_calls?.length || 0,
+      {
+        requestedOCRMode,
+        ocrConfidence: normalizedOCR?.confidence ?? null,
+      }
     );
 
     return new Response(JSON.stringify({
@@ -3779,6 +3966,7 @@ serve(async (req) => {
       resolution_status: resolutionMeta.resolution_status,
       confidence_score: resolutionMeta.confidence_score,
       escalation_offer: resolutionMeta.escalation_offer,
+      resolution_meta: resolutionMeta.resolution_meta,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

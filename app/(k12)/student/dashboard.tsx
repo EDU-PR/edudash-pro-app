@@ -19,6 +19,7 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
+import { normalizeTierName } from '@/lib/tiers';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { GlassCard } from '@/components/nextgen/GlassCard';
 import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
@@ -86,6 +87,15 @@ export default function K12StudentDashboardScreen() {
   const [metrics, setMetrics] = useState(defaultMetrics);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  const toUuidOrUndefined = (value?: string | null): string | undefined => {
+    const normalized = String(value || '').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      normalized,
+    )
+      ? normalized
+      : undefined;
+  };
+
   // Get school and user info from profile
   const schoolName = (profile as any)?.organization_membership?.organization_name || 'Your School';
   const userName = profile?.full_name || profile?.email?.split('@')[0] || 'Student';
@@ -94,6 +104,10 @@ export default function K12StudentDashboardScreen() {
   const gradeMatch = grade.match(/\d+/);
   const gradeNumber = gradeMatch ? Number(gradeMatch[0]) : 0;
   const canBuildFormalExam = gradeNumber >= 4;
+  const normalizedTier = normalizeTierName(
+    String(tier || (profile as any)?.subscription_tier || 'free')
+  );
+  const tierBadgeLabel = `Tier: ${normalizedTier.charAt(0).toUpperCase()}${normalizedTier.slice(1)}`;
 
   // RBAC checks - students use 'student' role
   const canView = permissions?.hasRole ? permissions.hasRole('student') : false;
@@ -127,14 +141,17 @@ export default function K12StudentDashboardScreen() {
       (profile as any)?.preschool_id ||
       '';
     const gradeParam = gradeNumber >= 4 ? `grade_${gradeNumber}` : '';
+    const safeStudentId = toUuidOrUndefined(inferredStudentId);
+    const safeClassId = toUuidOrUndefined(inferredClassId);
+    const safeSchoolId = toUuidOrUndefined(inferredSchoolId);
 
     router.push({
       pathname: '/screens/exam-prep',
       params: {
         grade: gradeParam || undefined,
-        studentId: inferredStudentId || undefined,
-        classId: inferredClassId || undefined,
-        schoolId: inferredSchoolId || undefined,
+        studentId: safeStudentId,
+        classId: safeClassId,
+        schoolId: safeSchoolId,
         childName: userName,
       },
     } as any);
@@ -199,7 +216,7 @@ export default function K12StudentDashboardScreen() {
   // Loading state
   if (authLoading || profileLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <EduDashSpinner size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
@@ -241,6 +258,9 @@ export default function K12StudentDashboardScreen() {
               <Text style={[styles.schoolName, { color: theme.colors.textSecondary }]}>
                 {grade} • {schoolName}
               </Text>
+              <View style={{ marginTop: 6 }}>
+                <Pill label={tierBadgeLabel} tone="accent" compact />
+              </View>
             </View>
           </View>
           <View style={styles.headerRight}>

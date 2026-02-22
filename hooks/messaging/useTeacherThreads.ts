@@ -10,7 +10,10 @@ import type { MessageThread } from '@/lib/messaging/types';
 
 export const useTeacherThreads = () => {
   const { user, profile } = useAuth();
-  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
+  const organizationId =
+    (profile as any)?.organization_membership?.organization_id ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschool_id;
   
   return useQuery({
     queryKey: ['teacher', 'threads', user?.id, organizationId],
