@@ -9,7 +9,14 @@
 
 export interface ExamQuestion {
   id: string;
-  type: 'multiple_choice' | 'short_answer' | 'essay' | 'true_false' | 'fill_blank' | 'matching';
+  type:
+    | 'multiple_choice'
+    | 'short_answer'
+    | 'essay'
+    | 'true_false'
+    | 'fill_blank'
+    | 'fill_in_blank'
+    | 'matching';
   question: string;
   marks: number;
   options?: string[];
@@ -19,12 +26,19 @@ export interface ExamQuestion {
   difficulty?: 'easy' | 'medium' | 'hard';
   topic?: string;
   bloomsLevel?: string;
+  visual?: {
+    mode: 'diagram' | 'image';
+    altText?: string;
+    imageUrl?: string;
+    diagramSpec?: Record<string, unknown>;
+  };
 }
 
 export interface ExamSection {
   id: string;
   title: string;
   instructions?: string;
+  readingPassage?: string;
   questions: ExamQuestion[];
   totalMarks: number;
 }
@@ -212,18 +226,28 @@ function normalizeQuestion(partial: Partial<ExamQuestion>, id: number): ExamQues
       : 'short_answer';
   const normalizedMarks = Number(partial.marks ?? raw.points ?? 1);
 
+  const rawOptions = partial.options ?? raw.options;
+  const options = Array.isArray(rawOptions)
+    ? rawOptions.map((item: unknown) =>
+        String(item || '')
+          .replace(/^(?:\s*[A-D]\s*[\.\)\-:]\s*)+/i, '')
+          .trim(),
+      )
+    : undefined;
+
   return {
     id: partial.id || `q_${id}`,
     type: normalizedType,
     question: String(partial.question ?? raw.text ?? '').trim(),
     marks: Number.isFinite(normalizedMarks) ? normalizedMarks : 1,
-    options: partial.options ?? raw.options,
+    options,
     correctAnswer: partial.correctAnswer ?? raw.correct_answer ?? raw.answer,
     rubric: partial.rubric,
     explanation: partial.explanation,
     difficulty: partial.difficulty,
     topic: partial.topic,
     bloomsLevel: partial.bloomsLevel,
+    visual: raw.visual && typeof raw.visual === 'object' ? (raw.visual as ExamQuestion['visual']) : undefined,
   };
 }
 
@@ -244,6 +268,12 @@ function normalizeExamStructure(data: any): ParsedExam {
         id: s.id || `section_${i + 1}`,
         title: s.title || s.name || `Section ${i + 1}`,
         instructions: s.instructions,
+        readingPassage:
+          typeof s.readingPassage === 'string'
+            ? s.readingPassage
+            : typeof s.reading_passage === 'string'
+            ? s.reading_passage
+            : undefined,
         questions: s.questions?.map((q: any, j: number) => normalizeQuestion(q, j + 1)) || [],
         totalMarks: s.totalMarks || calculateSectionMarks(s.questions || []),
       })),
@@ -300,34 +330,102 @@ export function gradeAnswer(
 
   const answer = studentAnswer.trim().toLowerCase();
 
-  // Multiple choice - exact match
+  const normalize = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ');
+
+  // Multiple choice - flexible matching
   if (question.type === 'multiple_choice' && question.correctAnswer) {
-    const correct = question.correctAnswer.toLowerCase();
-    const isCorrect = answer === correct || answer.startsWith(correct.charAt(0));
+    const correctRaw = question.correctAnswer;
+    const correctNormalized = normalize(correctRaw);
+    const answerNormalized = normalize(answer);
+    const answerLetter = answerNormalized.match(/^[a-d]$/)?.[0];
+
+    let correctLetter = correctNormalized.match(/^[a-d]$/)?.[0];
+    if (!correctLetter && question.options?.length) {
+      const correctOptionIndex = question.options.findIndex(
+        (option) => normalize(option) === correctNormalized,
+      );
+      if (correctOptionIndex >= 0) {
+        correctLetter = String.fromCharCode(97 + correctOptionIndex);
+      }
+    }
+
+    const isCorrect =
+      answerNormalized === correctNormalized ||
+      (!!answerLetter && !!correctLetter && answerLetter === correctLetter);
 
     return {
       isCorrect,
-      feedback: isCorrect ? 'Correct!' : `Incorrect. The correct answer is ${question.correctAnswer}.`,
+      feedback: isCorrect
+        ? question.explanation || 'Correct!'
+        : question.explanation
+        ? `Incorrect. ${question.explanation}`
+        : `Incorrect. The correct answer is ${question.correctAnswer}.`,
       marks: isCorrect ? question.marks : 0,
     };
   }
 
   // True/false - exact match
   if (question.type === 'true_false' && question.correctAnswer) {
-    const correct = question.correctAnswer.toLowerCase();
-    const isCorrect = answer === correct || answer.startsWith(correct.charAt(0));
+    const normalizedAnswer = normalize(answer);
+    const normalizedCorrect = normalize(question.correctAnswer);
+    const normalizedStudent = normalizedAnswer === 't' ? 'true' : normalizedAnswer === 'f' ? 'false' : normalizedAnswer;
+    const normalizedTarget = normalizedCorrect === 't' ? 'true' : normalizedCorrect === 'f' ? 'false' : normalizedCorrect;
+    const isCorrect = normalizedStudent === normalizedTarget;
 
     return {
       isCorrect,
-      feedback: isCorrect ? 'Correct!' : `Incorrect. The correct answer is ${question.correctAnswer}.`,
+      feedback: isCorrect
+        ? question.explanation || 'Correct!'
+        : question.explanation
+        ? `Incorrect. ${question.explanation}`
+        : `Incorrect. The correct answer is ${question.correctAnswer}.`,
       marks: isCorrect ? question.marks : 0,
     };
   }
 
-  // For short answer and essay, require AI grading
+  if ((question.type === 'fill_blank' || question.type === 'fill_in_blank') && question.correctAnswer) {
+    const isCorrect = normalize(answer) === normalize(question.correctAnswer);
+    return {
+      isCorrect,
+      feedback: isCorrect
+        ? question.explanation || 'Correct!'
+        : question.explanation
+        ? `Incorrect. ${question.explanation}`
+        : `Incorrect. The correct answer is ${question.correctAnswer}.`,
+      marks: isCorrect ? question.marks : 0,
+    };
+  }
+
+  if ((question.type === 'short_answer' || question.type === 'essay') && question.correctAnswer) {
+    const expectedTokens = normalize(question.correctAnswer)
+      .split(' ')
+      .filter((token) => token.length >= 4);
+    const studentTokens = normalize(answer).split(' ');
+    const matched = expectedTokens.filter((token) => studentTokens.includes(token)).length;
+    const coverage = expectedTokens.length > 0 ? matched / expectedTokens.length : 0;
+    const awarded = Math.min(question.marks, Math.max(0, Math.round(question.marks * coverage)));
+
+    return {
+      isCorrect: coverage >= 0.6,
+      feedback:
+        coverage >= 0.6
+          ? question.explanation || 'Good answer. Key ideas are covered.'
+          : question.explanation
+          ? `Partially correct. ${question.explanation}`
+          : 'Partially correct. Add more key terms and explain your reasoning.',
+      marks: awarded,
+    };
+  }
+
   return {
     isCorrect: false,
-    feedback: 'This answer requires teacher review.',
+    feedback: question.explanation || 'This answer requires teacher review.',
     marks: 0,
   };
 }

@@ -113,7 +113,17 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                      communitySchoolName;
   const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.parent', { defaultValue: 'Parent' });
   const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
-  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
+  const organizationId =
+    (profile as any)?.organization_membership?.organization_id ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschool_id;
+  const tierBadgeLabel = useMemo(() => {
+    const normalizedTier = normalizeTierName(
+      String(tier || (profile as any)?.subscription_tier || 'free')
+    );
+    const displayTier = normalizedTier.charAt(0).toUpperCase() + normalizedTier.slice(1);
+    return `Tier: ${displayTier}`;
+  }, [profile, tier]);
 
     // RBAC checks
   const canView = permissions?.hasRole ? permissions.hasRole('parent') : true;
@@ -135,6 +145,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     if (normalized.includes('grade r') || normalized.trim() === 'r') return 0;
     const match = normalized.match(/\d{1,2}/);
     return match ? Number(match[0]) : 0;
+  };
+
+  const toUuidOrUndefined = (value?: string | null): string | undefined => {
+    const normalized = String(value || '').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      normalized,
+    )
+      ? normalized
+      : undefined;
   };
 
   const normalizeGradeLabel = (value?: string | null): string | null => {
@@ -302,15 +321,18 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     const leadChild = children[0];
     const gradeNum = leadChild ? getGradeNumber(leadChild.grade) : 0;
     const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
+    const safeStudentId = toUuidOrUndefined(leadChild?.id || null);
+    const safeClassId = toUuidOrUndefined((leadChild as any)?.classId || (leadChild as any)?.class_id || null);
+    const safeSchoolId = toUuidOrUndefined(organizationId || null);
     pushAction(
       'exam_builder',
       gradeParam
         ? {
             grade: gradeParam,
             childName: leadChild?.name || '',
-            studentId: leadChild?.id || undefined,
-            classId: leadChild?.classId || undefined,
-            schoolId: organizationId || undefined,
+            studentId: safeStudentId,
+            classId: safeClassId,
+            schoolId: safeSchoolId,
           }
         : undefined
     );
@@ -370,7 +392,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <View pointerEvents="none" style={styles.cosmicBackdrop}>
         <LinearGradient
           colors={['#070B16', '#0F121E', '#131A2E']}
@@ -524,11 +546,20 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                 ) : null}
               </View>
             </View>
-            <Pill
-              tone="success"
-              compact
-              label={t('dashboard.parent.k12.tutor_badge', { defaultValue: 'Tutor Mode' })}
-            />
+            <View style={{ alignItems: 'flex-end' }}>
+              <Pill
+                tone="accent"
+                compact
+                label={tierBadgeLabel}
+              />
+              <View style={{ marginTop: 6 }}>
+                <Pill
+                  tone="success"
+                  compact
+                  label={t('dashboard.parent.k12.tutor_badge', { defaultValue: 'Tutor Mode' })}
+                />
+              </View>
+            </View>
           </View>
           <View style={styles.heroSummaryStatsRow}>
             <View style={styles.heroSummaryStat}>

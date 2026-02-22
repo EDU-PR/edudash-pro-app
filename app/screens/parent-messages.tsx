@@ -11,7 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
@@ -168,7 +168,7 @@ export default function ParentMessagesScreen() {
   // --- Loading ---
   if (isLoading && !threads) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
           rightActionLabel={selectionMode ? 'Done' : 'Select'}
@@ -183,7 +183,7 @@ export default function ParentMessagesScreen() {
         <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={handleStartNewMessage} activeOpacity={0.8}>
           <Ionicons name="add" size={28} color={theme.onPrimary} />
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -191,7 +191,7 @@ export default function ParentMessagesScreen() {
   if (error && !threads) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
           rightActionLabel={selectionMode ? 'Done' : 'Select'}
@@ -209,14 +209,14 @@ export default function ParentMessagesScreen() {
             <Text style={styles.retryButtonText}>{t('common.retry', { defaultValue: 'Retry' })}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // --- Empty ---
   if (!filteredThreads || filteredThreads.length === 0) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
           rightActionLabel={selectionMode ? 'Done' : 'Select'}
@@ -239,13 +239,13 @@ export default function ParentMessagesScreen() {
             <Text style={styles.emptyButtonText}>{t('parent.startNewMessage', { defaultValue: 'Start a Conversation' })}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // --- Thread list ---
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <MessagesListHeader
         title={t('parent.messages', { defaultValue: 'Messages' })}
         subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
@@ -329,6 +329,6 @@ export default function ParentMessagesScreen() {
         <Ionicons name="add" size={28} color={theme.onPrimary} />
       </TouchableOpacity>
       <AlertModal {...alertProps} />
-    </View>
+    </SafeAreaView>
   );
 }

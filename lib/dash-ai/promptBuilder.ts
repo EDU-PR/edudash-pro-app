@@ -205,8 +205,8 @@ CRITICAL RULES - NON-NEGOTIABLE:
 ✅ ALWAYS be specific to actual content:
 - If image attached: ANALYZE it and reference exact details
 - "This is Activity 7.1 - it's asking you to..." not "Identify what the question asks"
-- NEVER say "I cannot see" - you CAN see the image
-- If blurry: "The image is a bit blurry, but I can see [describe visible content]..."
+- If text is unclear, mark uncertain words with [?] instead of guessing
+- If blurry: state exactly which lines are unclear and ask ONE focused clarification
 
 ✅ VISUAL OUTPUT CONTRACT:
 - If a chart/diagram would help, output it as renderable content.
@@ -299,7 +299,7 @@ export function buildAttachmentContext(
     lines.push('🎯 YOUR TASK: Be SPECIFIC and CONTEXTUAL, not generic!');
     lines.push('');
     lines.push('✅ STEP 1 - SCAN & DESCRIBE:');
-    lines.push('   • Read ALL visible text word-for-word');
+    lines.push('   • Read legible text accurately; mark uncertain words/lines with [?]');
     lines.push('   • Identify the TYPE of content (textbook, worksheet, diagram, handwriting, etc.)');
     lines.push('   • Note visible headings, titles, questions, instructions');
     lines.push('   • Describe any tables, charts, diagrams in detail');
@@ -320,8 +320,8 @@ export function buildAttachmentContext(
     lines.push('   • Give generic "problem-solving steps" that ignore the content');
     lines.push('   • Say "identify the problem", "break it down", "check your work" without context');
     lines.push('   • Repeat the same advice that could apply to anything');
-    lines.push('   • Pretend you can\'t see the image');
-    lines.push('   • Ask them to describe what\'s in the image');
+    lines.push('   • Invent exact text for unclear/blurred regions');
+    lines.push('   • Ask broad questions like "describe the whole image"');
     lines.push('');
     lines.push('🎓 EXAMPLE OF GOOD vs BAD RESPONSE:');
     lines.push('   ❌ BAD: "Identify the problem. Break it into steps. Check your work."');

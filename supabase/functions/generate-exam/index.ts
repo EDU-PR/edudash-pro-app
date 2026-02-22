@@ -14,6 +14,12 @@ import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 const ANTHROPIC_API_KEY=REDACTED
+const OPENAI_API_KEY =
+  Deno.env.get('OPENAI_API_KEY') ||
+  Deno.env.get('SERVER_OPENAI_API_KEY') ||
+  Deno.env.get('OPENAI_API_KEY_2') ||
+  '';
+const OPENAI_EXAM_MODEL = Deno.env.get('OPENAI_EXAM_MODEL') || 'gpt-4o-mini';
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
@@ -27,6 +33,7 @@ type ProfileRow = {
   organization_id: string | null;
   preschool_id: string | null;
   auth_user_id: string | null;
+  subscription_tier: string | null;
 };
 
 type StudentRow = {
@@ -100,6 +107,43 @@ type ExamContextSummary = {
   weakTopics: string[];
   sourceAssignmentIds: string[];
   sourceLessonIds: string[];
+  intentTaggedCount?: number;
+};
+
+type ExamTeacherAlignmentSummary = {
+  assignmentCount: number;
+  lessonCount: number;
+  intentTaggedCount: number;
+  coverageScore: number;
+};
+
+type ExamBlueprintAudit = {
+  minQuestions: number;
+  maxQuestions: number;
+  actualQuestions: number;
+  totalMarks: number;
+  objectiveMarks: number;
+  shortMarks: number;
+  extendedMarks: number;
+  objectiveRatio: number;
+  shortRatio: number;
+  extendedRatio: number;
+};
+
+type StudyCoachDayPlan = {
+  day: string;
+  focus: string;
+  readingPiece: string;
+  paperWritingDrill: string;
+  memoryActivity: string;
+  parentTip: string;
+};
+
+type StudyCoachPack = {
+  mode: 'guided_first';
+  planTitle: string;
+  days: StudyCoachDayPlan[];
+  testDayChecklist: string[];
 };
 
 type AuthorizedRequestScope = {
@@ -188,6 +232,309 @@ function getDefaultModelForTier(tier: string | null | undefined): string {
   return 'claude-3-haiku-20240307';
 }
 
+function normalizeTierForExamRole(role: string, profileTier: string | null, resolvedTier: string | null): string {
+  const normalizedRole = String(role || '').toLowerCase();
+  const normalizedProfileTier = String(profileTier || 'free').toLowerCase();
+  const normalizedResolvedTier = String(resolvedTier || 'free').toLowerCase();
+
+  if (normalizedRole === 'super_admin') return 'enterprise';
+
+  // Parents/students must use personal tier only (do not inherit school enterprise plans).
+  if (PARENT_ROLES.has(normalizedRole) || STUDENT_ROLES.has(normalizedRole)) {
+    return normalizedProfileTier || 'free';
+  }
+
+  return normalizedResolvedTier || normalizedProfileTier || 'free';
+}
+
+function buildModelFallbackChain(preferredModel: string): string[] {
+  const ordered = [
+    preferredModel,
+    'claude-3-7-sonnet-20250219',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-haiku-20240307',
+  ];
+  return [...new Set(ordered.filter(Boolean))];
+}
+
+function isCreditOrBillingError(status: number, responseText: string): boolean {
+  const text = String(responseText || '').toLowerCase();
+  if (status === 402) return true;
+  return (
+    text.includes('credit balance is too low') ||
+    text.includes('insufficient credits') ||
+    text.includes('insufficient_quota') ||
+    text.includes('quota') && text.includes('exceeded') ||
+    text.includes('billing')
+  );
+}
+
+function buildLocalFallbackExam(
+  grade: string,
+  subject: string,
+  examType: string,
+  contextSummary: ExamContextSummary,
+) {
+  const focusTopics = contextSummary.focusTopics.length > 0
+    ? contextSummary.focusTopics.slice(0, 6)
+    : [
+        `${subject} fundamentals`,
+        `core ${subject} concepts`,
+        `problem solving in ${subject}`,
+      ];
+
+  const weakTopics = contextSummary.weakTopics.slice(0, 3);
+  const revisionTopics = [...new Set([...weakTopics, ...focusTopics])].slice(0, 6);
+
+  const sectionAQuestions = focusTopics.slice(0, 6).map((topic, index) => ({
+    id: `A${index + 1}`,
+    type: 'multiple_choice',
+    marks: 2,
+    question: `Which option best matches a correct CAPS-level understanding of ${topic} in ${subject}?`,
+    options: [
+      `A basic fact without clear reasoning`,
+      `A concept explained with correct terms and a clear example`,
+      `An unrelated idea from another topic`,
+      `A guess without subject vocabulary`,
+    ],
+    correctAnswer: 'B',
+    explanation: `A strong CAPS-aligned answer should include accurate terminology and an example tied to ${topic}.`,
+  }));
+
+  const sectionBQuestions = revisionTopics.map((topic, index) => ({
+    id: `B${index + 1}`,
+    type: 'short_answer',
+    marks: 3,
+    question: `Write a short answer explaining one key idea about ${topic} and how it applies in ${subject}.`,
+    correctAnswer: `A valid answer should define ${topic}, include one correct subject example, and use grade-appropriate vocabulary.`,
+    explanation: `Use one definition, one worked/contextual example, and one sentence linking the idea back to ${subject}.`,
+  }));
+
+  return {
+    title: `${subject} ${examType.replace(/_/g, ' ')} (Fallback)`,
+    grade,
+    subject,
+    duration: '60 minutes',
+    totalMarks: 30,
+    sections: [
+      {
+        name: 'Section A: Multiple Choice',
+        questions: sectionAQuestions,
+      },
+      {
+        name: 'Section B: Short Answers',
+        questions: sectionBQuestions,
+      },
+    ],
+  };
+}
+
+function parseGradeNumber(grade: string): number {
+  const normalized = String(grade || '').toLowerCase().trim();
+  if (!normalized) return 6;
+  if (normalized === 'grade_r' || normalized === 'grader' || normalized === 'r') return 0;
+  const match = normalized.match(/grade[_\s-]*(\d{1,2})/);
+  if (match?.[1]) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 6;
+}
+
+function getQuestionCountPolicy(grade: string, examType: string): { min: number; max: number } {
+  const level = parseGradeNumber(grade);
+  const type = String(examType || 'practice_test').toLowerCase();
+
+  if (type === 'practice_test') {
+    if (level >= 10) return { min: 28, max: 40 };
+    if (level >= 7) return { min: 22, max: 30 };
+    if (level >= 4) return { min: 20, max: 24 };
+    return { min: 12, max: 18 };
+  }
+
+  if (type === 'flashcards') {
+    if (level >= 10) return { min: 20, max: 32 };
+    if (level >= 7) return { min: 16, max: 24 };
+    return { min: 12, max: 18 };
+  }
+
+  if (type === 'study_guide') {
+    if (level >= 10) return { min: 12, max: 20 };
+    return { min: 8, max: 14 };
+  }
+
+  if (type === 'revision_notes') {
+    if (level >= 10) return { min: 14, max: 24 };
+    if (level >= 7) return { min: 12, max: 20 };
+    return { min: 10, max: 16 };
+  }
+
+  return { min: 12, max: 20 };
+}
+
+function getMinimumQuestionCount(grade: string, examType: string): number {
+  return getQuestionCountPolicy(grade, examType).min;
+}
+
+function buildSupplementQuestion(
+  index: number,
+  subject: string,
+  topic: string,
+): {
+  id: string;
+  question: string;
+  text: string;
+  type: string;
+  marks: number;
+  options?: string[];
+  correctAnswer: string;
+  explanation: string;
+} {
+  const slot = index % 4;
+  const safeTopic = sanitizeTopic(topic) || `${subject} concept`;
+
+  if (slot === 0) {
+    const question = `Which statement best describes ${safeTopic} in ${subject}?`;
+    return {
+      id: `q_auto_${index + 1}`,
+      question,
+      text: question,
+      type: 'multiple_choice',
+      marks: 2,
+      options: [
+        'A fact that is unrelated to the topic',
+        'A concept explained with correct vocabulary and context',
+        'A random guess with no evidence',
+        'A misconception from another topic',
+      ],
+      correctAnswer: 'B',
+      explanation: `The best answer uses correct subject terminology and applies it directly to ${safeTopic}.`,
+    };
+  }
+
+  if (slot === 1) {
+    const question = `${safeTopic} is always applied without checking context.`;
+    return {
+      id: `q_auto_${index + 1}`,
+      question,
+      text: question,
+      type: 'true_false',
+      marks: 2,
+      options: ['True', 'False'],
+      correctAnswer: 'False',
+      explanation: `In ${subject}, learners must apply ${safeTopic} using context and reasoned steps.`,
+    };
+  }
+
+  if (slot === 2) {
+    const question = `Fill in the blank: A key idea in ${safeTopic} is ________.`;
+    return {
+      id: `q_auto_${index + 1}`,
+      question,
+      text: question,
+      type: 'fill_in_blank',
+      marks: 2,
+      correctAnswer: `${safeTopic}`,
+      explanation: `A valid answer identifies a core concept related to ${safeTopic} using grade-appropriate language.`,
+    };
+  }
+
+  const question = `Write a short response showing how ${safeTopic} can be used to solve a problem in ${subject}.`;
+  return {
+    id: `q_auto_${index + 1}`,
+    question,
+    text: question,
+    type: 'short_answer',
+    marks: 3,
+    correctAnswer: `A complete answer should define ${safeTopic}, apply it correctly, and justify the result with one clear example.`,
+    explanation: `Use one definition, one correct example, and one reason why the method works.`,
+  };
+}
+
+function recalculateExamMarks(exam: any) {
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  let totalMarks = 0;
+
+  sections.forEach((section: any) => {
+    const sectionQuestions = Array.isArray(section?.questions) ? section.questions : [];
+    const sectionMarks = sectionQuestions.reduce((sum: number, question: any) => {
+      const marks = Number(question?.marks ?? question?.points ?? 1);
+      return sum + (Number.isFinite(marks) ? Math.max(1, marks) : 1);
+    }, 0);
+
+    section.totalMarks = sectionMarks;
+    totalMarks += sectionMarks;
+  });
+
+  exam.totalMarks = totalMarks;
+  return exam;
+}
+
+function ensureMinimumQuestionCoverage(
+  exam: any,
+  payload: {
+    grade: string;
+    subject: string;
+    examType: string;
+    contextSummary: ExamContextSummary;
+    minQuestionCount?: number;
+  },
+) {
+  const minQuestions = Number.isFinite(Number(payload.minQuestionCount))
+    ? Math.max(1, Number(payload.minQuestionCount))
+    : getMinimumQuestionCount(payload.grade, payload.examType);
+  const sections = Array.isArray(exam?.sections)
+    ? exam.sections.filter((section: any) => section && Array.isArray(section.questions))
+    : [];
+
+  if (sections.length === 0) return exam;
+
+  const currentQuestionCount = sections.reduce(
+    (sum: number, section: any) => sum + section.questions.length,
+    0,
+  );
+
+  if (currentQuestionCount >= minQuestions) {
+    return recalculateExamMarks(exam);
+  }
+
+  const needed = minQuestions - currentQuestionCount;
+  const topics = [
+    ...payload.contextSummary.weakTopics,
+    ...payload.contextSummary.focusTopics,
+    `${payload.subject} fundamentals`,
+    `${payload.subject} applications`,
+    `${payload.subject} problem solving`,
+  ].filter((topic) => sanitizeTopic(topic));
+
+  const topicPool = topics.length > 0 ? topics : [payload.subject];
+
+  let supplementSection = sections.find((section: any) =>
+    normalizeText(String(section?.name || section?.title || '')).includes('extended practice'),
+  );
+
+  if (!supplementSection) {
+    supplementSection = {
+      id: `section_${sections.length + 1}`,
+      name: 'Section C: Extended Practice',
+      title: 'Section C: Extended Practice',
+      questions: [],
+      totalMarks: 0,
+    };
+    sections.push(supplementSection);
+    exam.sections = sections;
+  }
+
+  for (let i = 0; i < needed; i += 1) {
+    const topic = String(topicPool[i % topicPool.length] || payload.subject);
+    supplementSection.questions.push(
+      buildSupplementQuestion(currentQuestionCount + i, payload.subject, topic),
+    );
+  }
+
+  return recalculateExamMarks(exam);
+}
+
 function normalizeText(value: string | null | undefined): string {
   return String(value || '')
     .toLowerCase()
@@ -269,7 +616,15 @@ function normalizeExamShape(rawExam: any, grade: string, subject: string, examTy
       const marks = Number(question?.marks ?? question?.points ?? question?.score ?? 1);
       const type = normalizeQuestionType(question?.type);
       const options = Array.isArray(question?.options)
-        ? question.options.map((item: unknown) => String(item))
+        ? [...new Set(
+            question.options
+              .map((item: unknown) =>
+                String(item || '')
+                  .replace(/^(?:\s*[A-D]\s*[\.\)\-:]\s*)+/i, '')
+                  .trim(),
+              )
+              .filter((item: string) => item.length > 0),
+          )]
         : undefined;
       const prompt = String(question?.question ?? question?.text ?? '').trim();
 
@@ -282,6 +637,10 @@ function normalizeExamShape(rawExam: any, grade: string, subject: string, examTy
         options,
         correctAnswer: String(question?.correctAnswer ?? question?.correct_answer ?? question?.answer ?? ''),
         explanation: String(question?.explanation || '').trim() || undefined,
+        visual:
+          question?.visual && typeof question.visual === 'object'
+            ? question.visual
+            : undefined,
       };
     });
 
@@ -291,6 +650,9 @@ function normalizeExamShape(rawExam: any, grade: string, subject: string, examTy
       id: String(section?.id || `section_${sectionIndex + 1}`),
       name: String(section?.name || section?.title || `Section ${sectionIndex + 1}`),
       title: String(section?.title || section?.name || `Section ${sectionIndex + 1}`),
+      instructions: String(section?.instructions || '').trim() || undefined,
+      readingPassage:
+        String(section?.readingPassage || section?.reading_passage || '').trim() || undefined,
       questions: normalizedQuestions,
       totalMarks: sectionMarks,
     };
@@ -306,6 +668,237 @@ function normalizeExamShape(rawExam: any, grade: string, subject: string, examTy
     totalMarks,
     sections,
   };
+}
+
+function countQuestions(exam: any): number {
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  return sections.reduce(
+    (sum: number, section: any) => sum + (Array.isArray(section?.questions) ? section.questions.length : 0),
+    0,
+  );
+}
+
+function enforceQuestionUpperBound(exam: any, maxQuestions: number) {
+  if (!Number.isFinite(maxQuestions) || maxQuestions <= 0) return exam;
+  let remaining = countQuestions(exam) - maxQuestions;
+  if (remaining <= 0) return exam;
+
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  for (let i = sections.length - 1; i >= 0 && remaining > 0; i -= 1) {
+    const questions = Array.isArray(sections[i]?.questions) ? sections[i].questions : [];
+    if (questions.length === 0) continue;
+
+    const cutCount = Math.min(remaining, Math.max(0, questions.length - 1));
+    if (cutCount > 0) {
+      sections[i].questions = questions.slice(0, questions.length - cutCount);
+      remaining -= cutCount;
+    }
+  }
+
+  if (remaining > 0) {
+    for (let i = sections.length - 1; i >= 0 && remaining > 0; i -= 1) {
+      const questions = Array.isArray(sections[i]?.questions) ? sections[i].questions : [];
+      if (questions.length === 0) continue;
+      const cutCount = Math.min(remaining, questions.length);
+      sections[i].questions = questions.slice(0, Math.max(0, questions.length - cutCount));
+      remaining -= cutCount;
+    }
+  }
+
+  return recalculateExamMarks(exam);
+}
+
+function isLanguageSubject(subject: string): boolean {
+  const normalized = normalizeText(subject);
+  return (
+    normalized.includes('language') ||
+    normalized.includes('english') ||
+    normalized.includes('afrikaans') ||
+    normalized.includes('isizulu') ||
+    normalized.includes('isixhosa') ||
+    normalized.includes('sepedi')
+  );
+}
+
+function ensureLanguageReadingPassage(exam: any, subject: string, grade: string, language: string) {
+  if (!isLanguageSubject(subject)) return exam;
+
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  if (sections.length === 0) return exam;
+
+  const first = sections[0];
+  const sectionTitle = normalizeText(first?.title || first?.name || '');
+  const needsPassage =
+    sectionTitle.includes('lees') ||
+    sectionTitle.includes('read') ||
+    sectionTitle.includes('comprehension') ||
+    sectionTitle.includes('begrip') ||
+    sections.some((section: any) => normalizeText(section?.title || '').includes('lees')) ||
+    sections.some((section: any) => normalizeText(section?.title || '').includes('read'));
+
+  if (!needsPassage) return exam;
+
+  const existingPassage = String(first?.readingPassage || first?.reading_passage || first?.instructions || '').trim();
+  if (existingPassage.length >= 120) return exam;
+
+  first.readingPassage = `Lees die storie hieronder en beantwoord die vrae wat volg.
+
+Mia en haar broer, Tumi, het Saterdag vroeg op hul oupa se plaas gaan help. Hulle het eers die hoenders gevoer, daarna groente geplant en later saam met Oupa die kraal skoongemaak. Teen die middag het dit begin reën, maar hulle het onder die stoep gesit en stories geluister. Voor hulle huis toe is, het Ouma vir hulle warm sop gegee en almal het saam gelag.
+
+Read the passage carefully and answer in ${language}.`;
+
+  first.instructions = `Grade: ${grade}. Read the passage first, then answer with full meaning and context clues.`;
+  return exam;
+}
+
+function computeBlueprintAudit(exam: any, grade: string, examType: string): ExamBlueprintAudit {
+  const policy = getQuestionCountPolicy(grade, examType);
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  let objectiveMarks = 0;
+  let shortMarks = 0;
+  let extendedMarks = 0;
+
+  sections.forEach((section: any) => {
+    const questions = Array.isArray(section?.questions) ? section.questions : [];
+    questions.forEach((question: any) => {
+      const marks = Number(question?.marks ?? 1);
+      const safeMarks = Number.isFinite(marks) ? Math.max(1, marks) : 1;
+      const type = normalizeQuestionType(question?.type);
+      if (type === 'multiple_choice' || type === 'true_false' || type === 'fill_in_blank') {
+        objectiveMarks += safeMarks;
+      } else if (type === 'short_answer') {
+        shortMarks += safeMarks;
+      } else {
+        extendedMarks += safeMarks;
+      }
+    });
+  });
+
+  const totalMarks = Number(exam?.totalMarks || objectiveMarks + shortMarks + extendedMarks || 1);
+  const actualQuestions = countQuestions(exam);
+  const denominator = totalMarks > 0 ? totalMarks : 1;
+
+  return {
+    minQuestions: policy.min,
+    maxQuestions: policy.max,
+    actualQuestions,
+    totalMarks,
+    objectiveMarks,
+    shortMarks,
+    extendedMarks,
+    objectiveRatio: Number((objectiveMarks / denominator).toFixed(3)),
+    shortRatio: Number((shortMarks / denominator).toFixed(3)),
+    extendedRatio: Number((extendedMarks / denominator).toFixed(3)),
+  };
+}
+
+function computeTeacherAlignmentSummary(contextSummary: ExamContextSummary): ExamTeacherAlignmentSummary {
+  const intentTaggedCount = Number(contextSummary.intentTaggedCount || 0);
+  const taughtSignals = contextSummary.assignmentCount + contextSummary.lessonCount + intentTaggedCount;
+  const weakSignals = contextSummary.weakTopics.length;
+  const coverageScore = Math.max(
+    0,
+    Math.min(100, Math.round((taughtSignals / Math.max(1, taughtSignals + weakSignals)) * 100)),
+  );
+
+  return {
+    assignmentCount: contextSummary.assignmentCount,
+    lessonCount: contextSummary.lessonCount,
+    intentTaggedCount,
+    coverageScore,
+  };
+}
+
+function buildStudyCoachPack(
+  grade: string,
+  subject: string,
+  language: string,
+  contextSummary: ExamContextSummary,
+): StudyCoachPack {
+  const focus = contextSummary.focusTopics.length > 0
+    ? contextSummary.focusTopics
+    : [`${subject} foundations`, `${subject} problem solving`, `${subject} vocabulary`];
+
+  const days: StudyCoachDayPlan[] = [
+    {
+      day: 'Day 1',
+      focus: `Understand core concepts: ${focus[0] || subject}`,
+      readingPiece: `Read a short ${subject} passage and underline 5 key words. Summarize it in 5 sentences in ${language}.`,
+      paperWritingDrill: 'Write definitions by hand, then explain one example in your own words.',
+      memoryActivity: 'Use 10-minute active recall: close notes and write everything remembered.',
+      parentTip: 'Ask the learner to teach you the concept in 2 minutes.',
+    },
+    {
+      day: 'Day 2',
+      focus: `Practice with guided questions: ${focus[1] || subject}`,
+      readingPiece: 'Read one worked example slowly and identify each solving step.',
+      paperWritingDrill: 'Do 8 mixed questions on paper with full working.',
+      memoryActivity: 'Create 6 flash cards and self-test twice (morning/evening).',
+      parentTip: 'Check if steps are written clearly, not only final answers.',
+    },
+    {
+      day: 'Day 3',
+      focus: `Fix weak areas: ${contextSummary.weakTopics[0] || focus[2] || subject}`,
+      readingPiece: 'Read a short explanatory text and answer 4 comprehension prompts.',
+      paperWritingDrill: 'Write one paragraph explaining a common mistake and how to avoid it.',
+      memoryActivity: 'Spaced recall block: 5-5-5 minute review (now, later, before sleep).',
+      parentTip: 'Encourage corrections in a different pen color to build reflection.',
+    },
+    {
+      day: 'Day 4',
+      focus: 'Timed exam rehearsal',
+      readingPiece: 'Skim instructions first, then read questions in order of confidence.',
+      paperWritingDrill: 'Complete a timed mini paper and mark with memo hints.',
+      memoryActivity: 'Rapid retrieval: list formulas/keywords without notes in 3 minutes.',
+      parentTip: 'Simulate a calm test environment with no interruptions.',
+    },
+  ];
+
+  return {
+    mode: 'guided_first',
+    planTitle: `${grade} ${subject} - 4 Day Study Coach + Test Day`,
+    days,
+    testDayChecklist: [
+      'Sleep early and review only summary notes.',
+      'Start with easiest section to build confidence.',
+      'Show full working and label answers clearly.',
+      'Leave 10 minutes to review skipped or uncertain questions.',
+    ],
+  };
+}
+
+function augmentQuestionVisuals(exam: any, visualMode: 'off' | 'hybrid') {
+  if (visualMode !== 'hybrid') return exam;
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+
+  sections.forEach((section: any) => {
+    const questions = Array.isArray(section?.questions) ? section.questions : [];
+    questions.forEach((question: any) => {
+      const text = normalizeText(question?.question || question?.text || '');
+      if (!text) return;
+
+      if (question?.visual) return;
+      if (!(text.includes('diagram') || text.includes('graph') || text.includes('chart') || text.includes('table'))) {
+        return;
+      }
+
+      question.visual = {
+        mode: 'diagram',
+        altText: `Supporting visual for question: ${String(question.question || '').slice(0, 90)}`,
+        diagramSpec: {
+          type: 'flow',
+          title: 'Concept Flow',
+          nodes: ['Input', 'Process', 'Output'],
+          edges: [
+            { from: 'Input', to: 'Process' },
+            { from: 'Process', to: 'Output' },
+          ],
+        },
+      };
+    });
+  });
+
+  return exam;
 }
 
 function extractJsonBlock(text: string): string {
@@ -324,7 +917,7 @@ function extractJsonBlock(text: string): string {
 async function fetchProfileByAuthUser(supabase: ReturnType<typeof createClient>, authUserId: string): Promise<ProfileRow | null> {
   const byAuth = await supabase
     .from('profiles')
-    .select('id, role, organization_id, preschool_id, auth_user_id')
+    .select('id, role, organization_id, preschool_id, auth_user_id, subscription_tier')
     .eq('auth_user_id', authUserId)
     .maybeSingle();
 
@@ -334,7 +927,7 @@ async function fetchProfileByAuthUser(supabase: ReturnType<typeof createClient>,
 
   const byId = await supabase
     .from('profiles')
-    .select('id, role, organization_id, preschool_id, auth_user_id')
+    .select('id, role, organization_id, preschool_id, auth_user_id, subscription_tier')
     .eq('id', authUserId)
     .maybeSingle();
 
@@ -571,6 +1164,7 @@ async function resolveTeacherContext(
     subject: string;
     useTeacherContext: boolean;
     lookbackDays: number;
+    examIntentMode: 'teacher_weighted' | 'caps_only';
   },
 ): Promise<ExamContextSummary> {
   const emptySummary: ExamContextSummary = {
@@ -678,13 +1272,39 @@ async function resolveTeacherContext(
 
   const focusMap = new Map<string, number>();
   const weakMap = new Map<string, number>();
+  const intentTaggedIds = new Set<string>();
 
   const assignmentById = new Map<string, HomeworkRow>();
   homeworkRows.forEach((assignment) => {
     assignmentById.set(assignment.id, assignment);
-    addWeightedTopic(focusMap, assignment.title, 5);
+    const metadata = assignment.metadata && typeof assignment.metadata === 'object'
+      ? (assignment.metadata as Record<string, unknown>)
+      : null;
+    const isExamIntent =
+      metadata?.is_test_relevant === true ||
+      metadata?.exam_intent === true ||
+      metadata?.test_relevant === true ||
+      metadata?.priority_weight === 'high';
+
+    if (isExamIntent) {
+      intentTaggedIds.add(assignment.id);
+    }
+
+    const baseTitleWeight =
+      payload.examIntentMode === 'teacher_weighted' && isExamIntent ? 8 : 5;
+    addWeightedTopic(focusMap, assignment.title, baseTitleWeight);
     addWeightedTopic(focusMap, assignment.subject, 3);
-    hydrateFocusFromMetadata(focusMap, assignment.metadata, assignment.title, 3);
+
+    if (metadata && Array.isArray(metadata.caps_topics)) {
+      metadata.caps_topics.forEach((topic) => addWeightedTopic(focusMap, String(topic || ''), 5));
+    }
+
+    hydrateFocusFromMetadata(
+      focusMap,
+      assignment.metadata,
+      assignment.title,
+      payload.examIntentMode === 'teacher_weighted' && isExamIntent ? 6 : 3,
+    );
   });
 
   lessonRows.forEach((assignment) => {
@@ -726,6 +1346,7 @@ async function resolveTeacherContext(
     weakTopics: pickTopTopics(weakMap, 6),
     sourceAssignmentIds: assignmentIds,
     sourceLessonIds: lessonIds,
+    intentTaggedCount: intentTaggedIds.size,
   };
 }
 
@@ -737,13 +1358,25 @@ function buildUserPrompt(payload: {
   customPrompt?: string;
   contextSummary: ExamContextSummary;
   useTeacherContext: boolean;
+  fullPaperMode: boolean;
+  guidedMode: 'guided_first' | 'memo_first';
 }) {
+  const countPolicy = getQuestionCountPolicy(payload.grade, payload.examType);
   const base = [
     `Generate a ${payload.examType} exam for ${payload.grade}.`,
     `Subject: ${payload.subject}.`,
     `Language: ${payload.language}.`,
+    `Minimum total questions required: ${countPolicy.min}.`,
+    `Maximum total questions allowed: ${countPolicy.max}.`,
     'Align strictly to CAPS/DBE outcomes and cognitive level for this grade.',
     'Include a balanced progression from foundational to challenging items.',
+    payload.fullPaperMode
+      ? 'Full-paper mode is ON: include formal section progression and realistic exam pacing.'
+      : 'Use compact paper mode with high quality question diversity.',
+    'Target mark distribution: objective 45-60%, short response 25-35%, extended response 10-20%.',
+    'For language subjects with comprehension, include a passage/story in section instructions.',
+    'Do not duplicate option letters inside option strings.',
+    'Always include explanation for each answer key item.',
   ];
 
   if (payload.useTeacherContext) {
@@ -763,6 +1396,12 @@ function buildUserPrompt(payload: {
   } else {
     base.push('Teacher artifact context is disabled. Build from CAPS baseline only.');
   }
+
+  base.push(
+    payload.guidedMode === 'guided_first'
+      ? 'Guided-first policy: hints should be prioritized before full memo style explanations.'
+      : 'Memo-first mode allowed.',
+  );
 
   if (payload.customPrompt) {
     base.push(`Additional instructions: ${payload.customPrompt}`);
@@ -817,6 +1456,11 @@ serve(async (req: Request) => {
     const lookbackDays = Number.isFinite(Number(body?.lookbackDays))
       ? Math.max(7, Math.min(180, Number(body.lookbackDays)))
       : 45;
+    const examIntentMode =
+      body?.examIntentMode === 'caps_only' ? 'caps_only' : 'teacher_weighted';
+    const fullPaperMode = body?.fullPaperMode !== false;
+    const visualMode = body?.visualMode === 'hybrid' ? 'hybrid' : 'off';
+    const guidedMode = body?.guidedMode === 'memo_first' ? 'memo_first' : 'guided_first';
 
     if (!grade || !subject) {
       return jsonResponse({ error: 'Missing required fields: grade, subject' }, 400, corsHeaders);
@@ -833,6 +1477,7 @@ serve(async (req: Request) => {
       subject,
       useTeacherContext,
       lookbackDays,
+      examIntentMode,
     });
 
     if (previewContext) {
@@ -847,15 +1492,18 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error('AI service not configured');
-    }
-
     const { data: tierData } = await supabase.rpc('get_user_subscription_tier', {
       user_id: scope.profile.id,
     });
 
-    const model = modelOverride || getDefaultModelForTier(typeof tierData === 'string' ? tierData : null);
+    const effectiveTierForRole = normalizeTierForExamRole(
+      scope.role,
+      scope.profile.subscription_tier,
+      typeof tierData === 'string' ? tierData : null,
+    );
+    const preferredModel = modelOverride || getDefaultModelForTier(effectiveTierForRole);
+    const modelCandidates = buildModelFallbackChain(preferredModel);
+    let modelUsed = preferredModel;
 
     const userPrompt = buildUserPrompt({
       grade,
@@ -865,6 +1513,8 @@ serve(async (req: Request) => {
       customPrompt,
       contextSummary,
       useTeacherContext,
+      fullPaperMode,
+      guidedMode,
     });
 
     console.log('[generate-exam] generating', {
@@ -873,65 +1523,171 @@ serve(async (req: Request) => {
       examType,
       userId: user.id,
       profileId: scope.profile.id,
-      model,
+      preferredModel,
       useTeacherContext,
+      effectiveTierForRole,
+      examIntentMode,
+      fullPaperMode,
+      visualMode,
+      guidedMode,
       assignmentCount: contextSummary.assignmentCount,
       lessonCount: contextSummary.lessonCount,
     });
 
-    const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        system: EXAM_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
+    let aiContent = '';
+    let localFallbackReason: string | null = null;
+    let lastModelError = 'Failed to generate exam content';
+    let anthropicCreditIssue = false;
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error('[generate-exam] AI API error:', aiResponse.status, errText);
-      if (aiResponse.status === 429) {
-        throw new Error('AI service is busy. Please try again in a moment.');
+    if (ANTHROPIC_API_KEY) {
+      for (const candidateModel of modelCandidates) {
+        const candidateResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: candidateModel,
+            max_tokens: 4096,
+            system: EXAM_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: userPrompt }],
+          }),
+        });
+
+        if (candidateResponse.ok) {
+          const aiData = await candidateResponse.json();
+          aiContent = String(aiData?.content?.[0]?.text || '');
+          modelUsed = candidateModel;
+          break;
+        }
+
+        const errText = await candidateResponse.text();
+        lastModelError = errText || `status=${candidateResponse.status}`;
+        console.error('[generate-exam] Anthropic API error:', candidateResponse.status, candidateModel, errText);
+
+        if (candidateResponse.status === 429) {
+          throw new Error('AI service is busy. Please try again in a moment.');
+        }
+
+        if (isCreditOrBillingError(candidateResponse.status, errText)) {
+          anthropicCreditIssue = true;
+          break;
+        }
       }
-      throw new Error('Failed to generate exam content');
+    } else {
+      lastModelError = 'ANTHROPIC_API_KEY missing';
     }
 
-    const aiData = await aiResponse.json();
-    const content = String(aiData?.content?.[0]?.text || '');
+    if (!aiContent && OPENAI_API_KEY) {
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: OPENAI_EXAM_MODEL,
+          temperature: 0.2,
+          max_tokens: 4096,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: EXAM_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
 
-    let parsedRawExam: any;
-    try {
-      parsedRawExam = JSON.parse(extractJsonBlock(content));
-    } catch (parseError) {
-      console.error('[generate-exam] parse error', parseError);
-      throw new Error('Failed to parse generated exam JSON. Please retry.');
+      if (openAIResponse.ok) {
+        const openAIData = await openAIResponse.json();
+        aiContent = String(openAIData?.choices?.[0]?.message?.content || '');
+        modelUsed = `openai:${OPENAI_EXAM_MODEL}`;
+      } else {
+        const openAIErr = await openAIResponse.text();
+        lastModelError = openAIErr || `openai_status=${openAIResponse.status}`;
+        console.error('[generate-exam] OpenAI API error:', openAIResponse.status, openAIErr);
+        if (openAIResponse.status === 429 && !isCreditOrBillingError(openAIResponse.status, openAIErr)) {
+          throw new Error('AI service is busy. Please try again in a moment.');
+        }
+      }
     }
 
-    const normalizedExam = normalizeExamShape(parsedRawExam, grade, subject, examType);
+    let normalizedExam: any;
+
+    if (!aiContent) {
+      modelUsed = 'fallback:local-template-v1';
+      localFallbackReason = anthropicCreditIssue
+        ? 'AI provider credits are currently depleted. Generated a local fallback practice exam.'
+        : 'AI providers are currently unavailable. Generated a local fallback practice exam.';
+      normalizedExam = normalizeExamShape(
+        buildLocalFallbackExam(grade, subject, examType, contextSummary),
+        grade,
+        subject,
+        examType,
+      );
+    } else {
+      let parsedRawExam: any;
+      try {
+        parsedRawExam = JSON.parse(extractJsonBlock(aiContent));
+        normalizedExam = normalizeExamShape(parsedRawExam, grade, subject, examType);
+      } catch (parseError) {
+        console.error('[generate-exam] parse error', parseError);
+        modelUsed = 'fallback:local-template-v1';
+        localFallbackReason = 'AI returned malformed exam JSON. Generated a local fallback practice exam.';
+        normalizedExam = normalizeExamShape(
+          buildLocalFallbackExam(grade, subject, examType, contextSummary),
+          grade,
+          subject,
+          examType,
+        );
+      }
+    }
+
+    const countPolicy = getQuestionCountPolicy(grade, examType);
+
+    normalizedExam = ensureMinimumQuestionCoverage(normalizedExam, {
+      grade,
+      subject,
+      examType,
+      contextSummary,
+      minQuestionCount: fullPaperMode ? countPolicy.min : Math.min(countPolicy.min, 16),
+    });
+    normalizedExam = enforceQuestionUpperBound(normalizedExam, countPolicy.max);
+    normalizedExam = ensureLanguageReadingPassage(normalizedExam, subject, grade, language);
+    normalizedExam = augmentQuestionVisuals(normalizedExam, visualMode);
+    normalizedExam = recalculateExamMarks(normalizedExam);
+
     if (!normalizedExam.sections.length || !normalizedExam.sections.some((section: any) => section.questions.length > 0)) {
-      throw new Error('Generated exam has no valid questions. Please retry.');
+      throw new Error(`Generated exam has no valid questions. ${lastModelError}`);
     }
+
+    const teacherAlignment = computeTeacherAlignmentSummary(contextSummary);
+    const examBlueprintAudit = computeBlueprintAudit(normalizedExam, grade, examType);
+    const studyCoachPack = buildStudyCoachPack(grade, subject, language, contextSummary);
 
     const metadata = {
-      source: useTeacherContext ? 'teacher_artifact_context' : 'caps_baseline',
+      source: localFallbackReason
+        ? 'local_fallback'
+        : useTeacherContext
+        ? 'teacher_artifact_context'
+        : 'caps_baseline',
       contextSummary,
+      teacherAlignment,
+      examBlueprintAudit,
+      studyCoachPack,
       caps: {
         aligned: true,
         framework: 'CAPS/DBE',
         lookbackDays,
         language,
       },
+      generationWarning: localFallbackReason || undefined,
     };
 
     let persistedExamId = `temp-${Date.now()}`;
-    let persistenceWarning: string | undefined;
+    const warningParts: string[] = [];
+    if (localFallbackReason) warningParts.push(localFallbackReason);
 
     const { data: savedExam, error: saveError } = await supabase
       .from('exam_generations')
@@ -942,8 +1698,8 @@ serve(async (req: Request) => {
         exam_type: examType,
         display_title: normalizedExam.title,
         generated_content: JSON.stringify(normalizedExam),
-        status: 'generated',
-        model_used: model,
+        status: 'completed',
+        model_used: modelUsed,
         metadata,
       })
       .select('id')
@@ -951,10 +1707,12 @@ serve(async (req: Request) => {
 
     if (saveError) {
       console.warn('[generate-exam] Could not persist exam_generations row', saveError.message);
-      persistenceWarning = 'Exam generated, but cloud save failed. You can still continue with this attempt.';
+      warningParts.push('Exam generated, but cloud save failed. You can still continue with this attempt.');
     } else if (savedExam?.id) {
       persistedExamId = String(savedExam.id);
     }
+
+    const persistenceWarning = warningParts.length > 0 ? warningParts.join(' ') : undefined;
 
     return jsonResponse(
       {
@@ -962,6 +1720,9 @@ serve(async (req: Request) => {
         exam: normalizedExam,
         examId: persistedExamId,
         contextSummary,
+        teacherAlignment,
+        examBlueprintAudit,
+        studyCoachPack,
         persistenceWarning,
       },
       200,

@@ -6,15 +6,22 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { parseExamMarkdown, type ParsedExam } from '@/lib/examParser';
 import { ExamInteractiveView, type ExamResults } from '@/components/exam-prep/ExamInteractiveView';
-import type { ExamContextSummary, ExamGenerationResponse } from '@/components/exam-prep/types';
+import type {
+  ExamBlueprintAudit,
+  ExamContextSummary,
+  ExamGenerationResponse,
+  ExamStudyCoachPack,
+  ExamTeacherAlignmentSummary,
+} from '@/components/exam-prep/types';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 type GenerationState = 'loading' | 'error' | 'ready';
@@ -59,7 +66,12 @@ export default function ExamGenerationScreen() {
   const [exam, setExam] = useState<ParsedExam | null>(null);
   const [examId, setExamId] = useState<string>('');
   const [contextSummary, setContextSummary] = useState<ExamContextSummary | null>(null);
+  const [teacherAlignment, setTeacherAlignment] = useState<ExamTeacherAlignmentSummary | null>(null);
+  const [blueprintAudit, setBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
+  const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
+  const [completionSummary, setCompletionSummary] = useState<string | null>(null);
+  const hasGenerationWarning = useMemo(() => Boolean(persistenceWarning && persistenceWarning.trim().length > 0), [persistenceWarning]);
 
   const generationLabel = useMemo(() => {
     if (!grade || !subject) return 'Preparing generation request...';
@@ -109,6 +121,11 @@ export default function ExamGenerationScreen() {
           classId,
           schoolId,
           useTeacherContext,
+          examIntentMode: useTeacherContext ? 'teacher_weighted' : 'caps_only',
+          fullPaperMode: true,
+          visualMode: 'hybrid',
+          guidedMode: 'guided_first',
+          lookbackDays: 45,
         },
       };
 
@@ -118,7 +135,15 @@ export default function ExamGenerationScreen() {
 
       const { data, error } = await supabase.functions.invoke('generate-exam', invokeOptions);
       if (error) {
-        throw new Error(error.message || 'Failed to generate exam');
+        const serverError =
+          typeof (data as any)?.error === 'string'
+            ? String((data as any).error)
+            : typeof (error as any)?.context?.error === 'string'
+            ? String((error as any).context.error)
+            : typeof (error as any)?.context === 'string'
+            ? String((error as any).context)
+            : '';
+        throw new Error(serverError || error.message || 'Failed to generate exam');
       }
 
       const response = data as ExamGenerationResponse;
@@ -138,6 +163,9 @@ export default function ExamGenerationScreen() {
       });
       setExamId(response.examId || `temp-${Date.now()}`);
       setContextSummary(response.contextSummary || null);
+      setTeacherAlignment(response.teacherAlignment || null);
+      setBlueprintAudit(response.examBlueprintAudit || null);
+      setStudyCoachPack(response.studyCoachPack || null);
       setPersistenceWarning(response.persistenceWarning || null);
       setState('ready');
     } catch (err) {
@@ -151,37 +179,104 @@ export default function ExamGenerationScreen() {
     generateExam();
   }, [generateExam]);
 
-  useEffect(() => {
-    if (state !== 'ready' || !persistenceWarning) return;
-    Alert.alert('Exam generated', persistenceWarning);
-  }, [state, persistenceWarning]);
-
   const handleBack = useCallback(() => {
     router.back();
   }, []);
 
   const handleComplete = useCallback(
     (results: ExamResults) => {
-      Alert.alert(
-        'Exam submitted',
-        `Score: ${results.percentage}% (${results.earnedMarks}/${results.totalMarks})`,
-        [{ text: 'Done', onPress: () => router.back() }]
-      );
+      setCompletionSummary(`Score: ${results.percentage}% (${results.earnedMarks}/${results.totalMarks})`);
     },
     []
   );
 
   if (state === 'ready' && exam) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ExamInteractiveView exam={exam} examId={examId} onComplete={handleComplete} onExit={handleBack} />
-      </View>
+        <View style={styles.readyContent}>
+          {hasGenerationWarning ? (
+            <View style={[styles.warningBanner, { borderColor: `${theme.warning}55`, backgroundColor: `${theme.warning}18` }]}>
+              <Ionicons name="cloud-offline-outline" size={16} color={theme.warning} />
+              <Text style={[styles.warningText, { color: theme.warning }]}>{persistenceWarning}</Text>
+            </View>
+          ) : null}
+          {completionSummary ? (
+            <View style={[styles.completionBanner, { borderColor: `${theme.success}55`, backgroundColor: `${theme.success}18` }]}>
+              <View style={styles.completionBannerLeft}>
+                <Ionicons name="checkmark-circle" size={18} color={theme.success} />
+                <Text style={[styles.completionText, { color: theme.success }]}>Exam submitted. {completionSummary}</Text>
+              </View>
+              <TouchableOpacity style={[styles.doneButton, { borderColor: theme.success }]} onPress={() => router.back()}>
+                <Text style={[styles.doneButtonText, { color: theme.success }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {(contextSummary || teacherAlignment || blueprintAudit) ? (
+            <View style={[styles.metaCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.metaTitle, { color: theme.text }]}>Exam generation audit</Text>
+              {contextSummary ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Teacher context: {contextSummary.assignmentCount} assignments • {contextSummary.lessonCount} lessons
+                </Text>
+              ) : null}
+              {teacherAlignment ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Alignment score: {teacherAlignment.coverageScore}% • intent-tagged artifacts: {teacherAlignment.intentTaggedCount}
+                </Text>
+              ) : null}
+              {blueprintAudit ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Blueprint: {blueprintAudit.actualQuestions} questions ({blueprintAudit.minQuestions}-{blueprintAudit.maxQuestions}) • {blueprintAudit.totalMarks} marks
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {studyCoachPack ? (
+            <View style={[styles.studyCoachCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.metaTitle, { color: theme.text }]}>{studyCoachPack.planTitle || '4-day study coach + test day'}</Text>
+              {studyCoachPack.days?.slice(0, 2).map((day) => (
+                <View key={day.day} style={styles.studyCoachRow}>
+                  <Text style={[styles.studyCoachDay, { color: theme.primary }]}>{day.day}</Text>
+                  <View style={styles.studyCoachCopy}>
+                    <Text style={[styles.studyCoachFocus, { color: theme.text }]}>{day.focus}</Text>
+                    <Text style={[styles.studyCoachHint, { color: theme.muted }]} numberOfLines={2}>
+                      Reading: {day.readingPiece}
+                    </Text>
+                    <Text style={[styles.studyCoachHint, { color: theme.muted }]} numberOfLines={2}>
+                      Paper drill: {day.paperWritingDrill}
+                    </Text>
+                    <Text style={[styles.studyCoachHint, { color: theme.muted }]} numberOfLines={2}>
+                      Memory: {day.memoryActivity}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              {studyCoachPack.testDayChecklist?.length ? (
+                <Text style={[styles.metaLine, { color: theme.muted }]}>
+                  Test-day checklist: {studyCoachPack.testDayChecklist.slice(0, 3).join(' • ')}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          <View style={styles.examViewWrap}>
+            <ExamInteractiveView
+              exam={exam}
+              examId={examId}
+              studentId={studentId}
+              classId={classId}
+              schoolId={schoolId}
+              onComplete={handleComplete}
+              onExit={handleBack}
+            />
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <LinearGradient
@@ -232,7 +327,7 @@ export default function ExamGenerationScreen() {
           </View>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -244,7 +339,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 10,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
@@ -272,6 +367,113 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 18,
     paddingVertical: 22,
+  },
+  readyContent: {
+    flex: 1,
+  },
+  warningBanner: {
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  completionBanner: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  completionBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  completionText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  doneButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  doneButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  metaCard: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  metaTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  metaLine: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  studyCoachCard: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  studyCoachRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  studyCoachDay: {
+    width: 54,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  studyCoachCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  studyCoachFocus: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  studyCoachHint: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  examViewWrap: {
+    flex: 1,
   },
   centerBlock: {
     flex: 1,

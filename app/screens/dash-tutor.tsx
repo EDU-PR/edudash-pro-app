@@ -19,6 +19,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import DashAssistant from '@/components/ai/DashAssistant';
@@ -148,7 +149,7 @@ export default function DashTutorScreen() {
     : [tutorTheme.colors.surface, tutorTheme.colors.surface + 'E0'];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Cosmic background layer */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <LinearGradient colors={bgBase} style={StyleSheet.absoluteFill} />
@@ -249,7 +250,7 @@ export default function DashTutorScreen() {
           }}
         />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

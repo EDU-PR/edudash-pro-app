@@ -10,6 +10,7 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
@@ -32,17 +33,17 @@ export default function ParentChildrenScreen() {
 
   if (h.loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScreenHeader title="My Children" showBackButton onBackPress={h.handleBackPress} />
         <View style={[styles.section, { justifyContent: 'center', flex: 1 }]}>
           <Text style={{ color: theme.text, textAlign: 'center' }}>Loading...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScreenHeader title="My Children" showBackButton onBackPress={h.handleBackPress} />
       <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={h.refreshing} onRefresh={h.onRefresh} />}>
         <View style={styles.section}>
@@ -104,6 +105,6 @@ export default function ParentChildrenScreen() {
       </ScrollView>
       <ImageConfirmModal visible={!!h.pendingAvatar} imageUri={h.pendingAvatar?.uri || null} title="Child Photo" confirmLabel="Set Photo" confirmIcon="checkmark-circle-outline" showCrop cropAspect={[1, 1]} loading={!!h.uploadingChildId} onConfirm={h.confirmAvatarUpload} onCancel={() => h.setPendingAvatar(null)} />
       <AlertModal {...alertProps} />
-    </View>
+    </SafeAreaView>
   );
 }

@@ -388,6 +388,42 @@ export interface ExamContextSummary {
   sourceLessonIds?: string[];
 }
 
+export interface ExamTeacherAlignmentSummary {
+  assignmentCount: number;
+  lessonCount: number;
+  intentTaggedCount: number;
+  coverageScore: number;
+}
+
+export interface ExamBlueprintAudit {
+  minQuestions: number;
+  maxQuestions: number;
+  actualQuestions: number;
+  totalMarks: number;
+  objectiveMarks: number;
+  shortMarks: number;
+  extendedMarks: number;
+  objectiveRatio: number;
+  shortRatio: number;
+  extendedRatio: number;
+}
+
+export interface StudyCoachDayPlan {
+  day: string;
+  focus: string;
+  readingPiece: string;
+  paperWritingDrill: string;
+  memoryActivity: string;
+  parentTip: string;
+}
+
+export interface ExamStudyCoachPack {
+  mode: 'guided_first';
+  planTitle: string;
+  days: StudyCoachDayPlan[];
+  testDayChecklist: string[];
+}
+
 export interface ExamGenerationRequest {
   grade: string;
   subject: string;
@@ -400,6 +436,10 @@ export interface ExamGenerationRequest {
   useTeacherContext?: boolean;
   lookbackDays?: number;
   previewContext?: boolean;
+  examIntentMode?: 'teacher_weighted' | 'caps_only';
+  fullPaperMode?: boolean;
+  visualMode?: 'off' | 'hybrid';
+  guidedMode?: 'guided_first' | 'memo_first';
 }
 
 export interface ExamGenerationResponse {
@@ -407,6 +447,9 @@ export interface ExamGenerationResponse {
   examId: string;
   exam?: unknown;
   contextSummary?: ExamContextSummary;
+  teacherAlignment?: ExamTeacherAlignmentSummary;
+  examBlueprintAudit?: ExamBlueprintAudit;
+  studyCoachPack?: ExamStudyCoachPack;
   persistenceWarning?: string;
   error?: string;
 }

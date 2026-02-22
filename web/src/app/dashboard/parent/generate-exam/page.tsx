@@ -16,6 +16,33 @@ type ExamContextSummary = {
   weakTopics: string[];
 };
 
+type ExamTeacherAlignmentSummary = {
+  assignmentCount: number;
+  lessonCount: number;
+  intentTaggedCount: number;
+  coverageScore: number;
+};
+
+type ExamBlueprintAudit = {
+  minQuestions: number;
+  maxQuestions: number;
+  actualQuestions: number;
+  totalMarks: number;
+};
+
+type ExamStudyCoachPack = {
+  planTitle: string;
+  days: Array<{
+    day: string;
+    focus: string;
+    readingPiece: string;
+    paperWritingDrill: string;
+    memoryActivity: string;
+    parentTip: string;
+  }>;
+  testDayChecklist: string[];
+};
+
 /**
  * Generate Exam Page - Simplified Version
  * 
@@ -55,6 +82,9 @@ function GenerateExamContent() {
   const [examId, setExamId] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('Initializing...');
   const [contextSummary, setContextSummary] = useState<ExamContextSummary | null>(null);
+  const [teacherAlignment, setTeacherAlignment] = useState<ExamTeacherAlignmentSummary | null>(null);
+  const [examBlueprintAudit, setExamBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
+  const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const hasStartedRef = useRef(false);
   
@@ -169,6 +199,14 @@ function GenerateExamContent() {
           schoolId,
           language: language || 'en-ZA',
           useTeacherContext: useTeacherContext ? useTeacherContext === '1' || useTeacherContext === 'true' : true,
+          examIntentMode:
+            useTeacherContext && (useTeacherContext === '1' || useTeacherContext === 'true')
+              ? 'teacher_weighted'
+              : 'caps_only',
+          fullPaperMode: true,
+          visualMode: 'hybrid',
+          guidedMode: 'guided_first',
+          lookbackDays: 45,
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -188,6 +226,9 @@ function GenerateExamContent() {
       setExam(data.exam);
       setExamId(data.examId);
       setContextSummary(data.contextSummary || null);
+      setTeacherAlignment(data.teacherAlignment || null);
+      setExamBlueprintAudit(data.examBlueprintAudit || null);
+      setStudyCoachPack(data.studyCoachPack || null);
       setPersistenceWarning(data.persistenceWarning || null);
       setStatus('success');
       setProgress('Ready!');
@@ -431,11 +472,21 @@ function GenerateExamContent() {
         {/* Success State - Show Exam */}
         {status === 'success' && exam && (
           <>
-            {(contextSummary || persistenceWarning) && (
+            {(contextSummary || persistenceWarning || teacherAlignment || examBlueprintAudit) && (
               <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
                 {contextSummary && (
                   <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
                     Teacher context used: {contextSummary.assignmentCount} assignments, {contextSummary.lessonCount} lessons
+                  </p>
+                )}
+                {teacherAlignment && (
+                  <p style={{ margin: '8px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
+                    Alignment score: {teacherAlignment.coverageScore}% • Intent-tagged artifacts: {teacherAlignment.intentTaggedCount}
+                  </p>
+                )}
+                {examBlueprintAudit && (
+                  <p style={{ margin: '8px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
+                    Blueprint: {examBlueprintAudit.actualQuestions} questions ({examBlueprintAudit.minQuestions}-{examBlueprintAudit.maxQuestions}), {examBlueprintAudit.totalMarks} marks
                   </p>
                 )}
                 {persistenceWarning && (
@@ -443,6 +494,33 @@ function GenerateExamContent() {
                     {persistenceWarning}
                   </p>
                 )}
+              </div>
+            )}
+            {studyCoachPack && (
+              <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{studyCoachPack.planTitle || '4-day study plan + test day'}</h3>
+                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                  {(studyCoachPack.days || []).slice(0, 2).map((day) => (
+                    <div key={day.day} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{day.day}</p>
+                      <p style={{ margin: '6px 0 0 0', fontSize: 13 }}>{day.focus}</p>
+                      <p style={{ margin: '6px 0 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                        Reading: {day.readingPiece}
+                      </p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                        Paper drill: {day.paperWritingDrill}
+                      </p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                        Memory: {day.memoryActivity}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {studyCoachPack.testDayChecklist?.length ? (
+                  <p style={{ margin: '10px 0 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                    Test-day checklist: {studyCoachPack.testDayChecklist.slice(0, 3).join(' • ')}
+                  </p>
+                ) : null}
               </div>
             )}
             <ExamInteractiveView

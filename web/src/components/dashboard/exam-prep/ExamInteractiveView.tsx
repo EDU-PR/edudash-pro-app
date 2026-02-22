@@ -436,7 +436,7 @@ Every question you attempt is helping you learn and grow. Keep up the great work
             {question.options.map((option, idx) => {
               const optionLetter = String.fromCharCode(65 + idx); // A, B, C, D
               // Strip any existing letter prefix (A., A), a., a), etc.)
-              const cleanOption = option.replace(/^[a-dA-D][\.\)]\s*/, '');
+              const cleanOption = option.replace(/^(?:\s*[a-dA-D][\.\)]\s*)+/, '').trim();
               const isSelected = answer === optionLetter;
               return (
                 <label
@@ -1115,6 +1115,33 @@ Every question you attempt is helping you learn and grow. Keep up the great work
           }}>
             {section.title}
           </h2>
+          {(section.readingPassage || section.instructions) && (
+            <div
+              style={{
+                marginBottom: 'var(--space-3)',
+                padding: 'var(--space-3)',
+                borderRadius: isMobile ? 0 : 'var(--radius-2)',
+                border: '1px solid var(--border)',
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.08))',
+              }}
+            >
+              {section.readingPassage && (
+                <div>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8, color: 'var(--primary)' }}>
+                    Reading passage
+                  </div>
+                  <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                    {section.readingPassage}
+                  </p>
+                </div>
+              )}
+              {section.instructions && (
+                <p style={{ marginTop: section.readingPassage ? 12 : 0, marginBottom: 0, color: 'var(--text-muted)', fontSize: 13 }}>
+                  {section.instructions}
+                </p>
+              )}
+            </div>
+          )}
           {section.questions && Array.isArray(section.questions) && section.questions.map(renderQuestion)}
         </div>
       ))}

@@ -15,6 +15,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -173,12 +174,12 @@ export default function ParentWeeklyReportScreen() {
   if (loadingReports) {
     return (
       <DesktopLayout role="parent">
-        <View style={styles.loadingContainer}>
+        <SafeAreaView style={styles.loadingContainer} edges={['bottom']}>
           <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading reports...
           </Text>
-        </View>
+        </SafeAreaView>
       </DesktopLayout>
     );
   }
@@ -194,7 +195,7 @@ export default function ParentWeeklyReportScreen() {
             headerTintColor: theme.text,
           }}
         />
-        <View style={styles.emptyContainer}>
+        <SafeAreaView style={styles.emptyContainer} edges={['bottom']}>
           <Ionicons name="document-text-outline" size={80} color={theme.textTertiary} />
           <Text style={[styles.emptyTitle, { color: theme.text }]}>
             No Children Found
@@ -202,7 +203,7 @@ export default function ParentWeeklyReportScreen() {
           <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
             You don't have any children registered in the system.
           </Text>
-        </View>
+        </SafeAreaView>
       </DesktopLayout>
     );
   }
@@ -217,7 +218,8 @@ export default function ParentWeeklyReportScreen() {
           headerTintColor: theme.text,
         }}
       />
-      <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
+        <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
         {/* Student Selector */}
         {students.length > 1 && (
           <View style={[styles.studentSelector, { backgroundColor: theme.card }]}>
@@ -319,7 +321,8 @@ export default function ParentWeeklyReportScreen() {
         )}
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
       <AlertModal {...alertProps} />
     </DesktopLayout>
   );

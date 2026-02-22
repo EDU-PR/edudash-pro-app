@@ -34,7 +34,11 @@ export default function TeacherNewMessageScreen() {
   const { user, profile } = useAuth();
   const { terminology } = useOrganizationTerminology();
 
-  const organizationId = profile?.organization_id || profile?.preschool_id || null;
+  const organizationId =
+    (profile as any)?.organization_membership?.organization_id ||
+    profile?.organization_id ||
+    profile?.preschool_id ||
+    null;
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [parentMap, setParentMap] = useState<Record<string, ParentProfile>>({});
   const [loadingParents, setLoadingParents] = useState(false);

@@ -9,7 +9,12 @@ import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { dashAIThrottler } from '@/lib/dash-ai-throttle';
 import type { ChatMessage, SelectedImage, ExamContext } from '@/components/dash-chat/types';
-import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
+import {
+  detectOCRTask,
+  getOCRPromptForTask,
+  isOCRIntent,
+  isShortOrAttachmentOnlyPrompt,
+} from '@/lib/dash-ai/ocrPrompts';
 
 interface UseChatLogicProps {
   scope: 'parent' | 'teacher' | 'principal';
@@ -203,8 +208,13 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
       const token = sessionData.session?.access_token;
 
       // Prepare payload
-      const ocrTask = selectedImages.length > 0 ? detectOCRTask(textToSend || '') : null;
-      const ocrMode = selectedImages.length > 0 && (isOCRIntent(textToSend || '') || ocrTask !== null);
+      const normalizedText = textToSend || '';
+      const ocrTask = selectedImages.length > 0 ? detectOCRTask(normalizedText) : null;
+      const ocrMode = selectedImages.length > 0 && (
+        isOCRIntent(normalizedText) ||
+        ocrTask !== null ||
+        isShortOrAttachmentOnlyPrompt(normalizedText)
+      );
       const payload: any = {
         prompt: textToSend || userMessage.content,
         conversationHistory: conversationHistory,
@@ -328,7 +338,16 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
 
       // Format response
       const rawContent = data?.content || data?.text || 'I received an empty response. Please resend or add a bit more detail.';
-      const content = formatAssistantContent(String(rawContent));
+      const confidenceScore = typeof data?.confidence_score === 'number'
+        ? data.confidence_score
+        : typeof data?.ocr?.confidence === 'number'
+          ? data.ocr.confidence
+          : null;
+      const lowConfidenceSuffix =
+        ocrMode && typeof confidenceScore === 'number' && confidenceScore <= 0.75
+          ? `\n\nScan clarity: ${Math.round(confidenceScore * 100)}%. Retake with brighter lighting and a flatter page for better OCR accuracy.`
+          : '';
+      const content = formatAssistantContent(String(rawContent) + lowConfidenceSuffix);
       const tokensIn = data?.usage?.tokens_in || data?.tokensIn || 0;
       const tokensOut = data?.usage?.tokens_out || data?.tokensOut || 0;
 

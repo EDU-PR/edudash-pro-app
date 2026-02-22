@@ -37,7 +37,10 @@ export default function TeacherMessageListScreen() {
   const queryClient = useQueryClient();
   const { showAlert, alertProps } = useAlertModal();
 
-  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
+  const organizationId =
+    (profile as any)?.organization_membership?.organization_id ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschool_id;
 
   const { data: threads, isLoading, error, refetch, isRefetching } = useTeacherThreads();
 

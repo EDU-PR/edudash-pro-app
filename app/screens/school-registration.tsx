@@ -42,6 +42,26 @@ export default function SchoolRegistrationScreen() {
   const [errors, setErrors] = useState<RegistrationErrors>({});
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 3;
+  const stepCopy = useMemo(() => {
+    const copy: Record<number, { title: string; description: string; cta: string }> = {
+      1: {
+        title: 'Set up your school profile',
+        description: 'Start with the basics so we can map your school correctly across principal, teacher, and parent dashboards.',
+        cta: 'Next: Contact Info',
+      },
+      2: {
+        title: 'Confirm school contact details',
+        description: 'These details are used for school notices, onboarding reminders, and support follow-ups.',
+        cta: 'Next: Principal Info',
+      },
+      3: {
+        title: 'Review and submit registration',
+        description: 'Double-check key details, then create your school and continue to email verification.',
+        cta: 'Create School',
+      },
+    };
+    return copy[currentStep] || copy[1];
+  }, [currentStep]);
 
   // Load saved form data
   useEffect(() => {
@@ -428,6 +448,13 @@ export default function SchoolRegistrationScreen() {
                 <Text style={styles.summaryValue}>{formData.contactEmail}</Text>
               </View>
             </View>
+
+            <View style={styles.nextStepsCard}>
+              <Text style={styles.nextStepsTitle}>What Happens Next</Text>
+              <Text style={styles.nextStepsItem}>1. We create your school workspace.</Text>
+              <Text style={styles.nextStepsItem}>2. We send a verification link to your school email.</Text>
+              <Text style={styles.nextStepsItem}>3. You continue to verification and onboarding.</Text>
+            </View>
           </View>
         );
 
@@ -452,6 +479,11 @@ export default function SchoolRegistrationScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <View style={styles.contextCard}>
+              <Text style={styles.contextEyebrow}>School Registration</Text>
+              <Text style={styles.contextTitle}>{stepCopy.title}</Text>
+              <Text style={styles.contextDescription}>{stepCopy.description}</Text>
+            </View>
             <StepIndicator />
             {renderStepContent()}
           </ScrollView>
@@ -475,7 +507,7 @@ export default function SchoolRegistrationScreen() {
                 <EduDashSpinner color="#000" size="small" />
               ) : (
                 <Text style={styles.nextButtonText}>
-                  {currentStep === totalSteps ? 'Register School' : 'Continue'}
+                  {currentStep === totalSteps ? stepCopy.cta : stepCopy.cta}
                 </Text>
               )}
             </TouchableOpacity>
@@ -502,6 +534,33 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 16,
     paddingBottom: 100, // Space for navigation
+  },
+  contextCard: {
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  contextEyebrow: {
+    color: '#00f5ff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  contextTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  contextDescription: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    lineHeight: 18,
   },
   stepIndicator: {
     flexDirection: 'row',
@@ -680,6 +739,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
+  },
+  nextStepsCard: {
+    backgroundColor: '#0f1c2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    padding: 14,
+    gap: 6,
+  },
+  nextStepsTitle: {
+    color: '#E5E7EB',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  nextStepsItem: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    lineHeight: 18,
   },
   navigationContainer: {
     position: 'absolute',

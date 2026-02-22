@@ -1417,7 +1417,12 @@ class DashPDFGeneratorImpl {
       if (Platform.OS !== 'web') {
         try {
           onProgress?.('upload', 90, 'Uploading to storage...');
-          const storagePath = await this.uploadToStorage(uri, filename);
+          const storagePath = await Promise.race<string>([
+            this.uploadToStorage(uri, filename),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error('Storage upload timeout')), 15000)
+            ),
+          ]);
           
           return {
             success: true,

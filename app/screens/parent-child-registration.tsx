@@ -57,6 +57,14 @@ export default function ParentChildRegistrationScreen() {
     onSubmit,
   } = useChildRegistration();
 
+  const flowSteps = [
+    '1. Complete your child details exactly as on school records.',
+    '2. Select the correct school/campus for this child.',
+    '3. If a registration fee appears, upload proof of payment before submitting.',
+    '4. Add health, emergency, and special-care details for safety.',
+    '5. Submit request and wait for school approval confirmation.',
+  ];
+
   return (
     <View style={{ flex: 1 }}>
       <Stack.Screen 
@@ -69,6 +77,25 @@ export default function ParentChildRegistrationScreen() {
       />
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View
+            style={{
+              backgroundColor: theme.primary + '12',
+              borderWidth: 1,
+              borderColor: theme.primary + '44',
+              borderRadius: 12,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 16, marginBottom: 6 }}>
+              Registration flow for parents
+            </Text>
+            {flowSteps.map((step) => (
+              <Text key={step} style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
+                {step}
+              </Text>
+            ))}
+          </View>
+
           <ChildInfoSection
             firstName={firstName}
             setFirstName={setFirstName}
@@ -135,6 +162,26 @@ export default function ParentChildRegistrationScreen() {
             errors={errors}
             clearError={clearError}
           />
+
+          <View
+            style={{
+              backgroundColor: theme.surface,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 12,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15, marginBottom: 6 }}>
+              Before you submit
+            </Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
+              The school will review this child registration and notify you in-app once approved.
+              {registrationFee > 0
+                ? ' Fee proof is required when a registration fee applies.'
+                : ' No registration fee is required for this selection.'}
+            </Text>
+          </View>
 
           <TouchableOpacity style={styles.btn} onPress={onSubmit} disabled={loading}>
             {loading ? (

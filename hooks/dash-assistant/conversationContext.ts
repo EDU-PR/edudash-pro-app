@@ -8,6 +8,7 @@ export interface ConversationContextOptions {
 
 const DEFAULT_MAX_TOKENS = 8000;
 const MESSAGE_OVERHEAD_TOKENS = 8;
+const PDF_TOOL_NAMES = new Set(['export_pdf', 'generate_worksheet', 'generate_pdf_from_prompt', 'generate_chart']);
 
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
@@ -38,6 +39,59 @@ function normalizeMessageContent(content: string | null | undefined): string {
   return String(content || '').replace(/\s+/g, ' ').trim();
 }
 
+function firstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function extractArtifactCue(message: DashMessage): string | null {
+  const metadata = (message.metadata || {}) as Record<string, any>;
+  const toolResults = Array.isArray(metadata.tool_results) ? metadata.tool_results : [];
+  const fallbackTool = metadata.tool_result
+    ? [{ name: metadata.tool_name, output: metadata.tool_result?.result ?? metadata.tool_result, success: metadata.tool_result?.success !== false }]
+    : [];
+  const combinedTools = [...toolResults, ...fallbackTool];
+
+  for (let i = combinedTools.length - 1; i >= 0; i -= 1) {
+    const entry = combinedTools[i] as Record<string, any>;
+    const toolName = String(entry?.name || metadata.tool_name || '').toLowerCase();
+    if (!PDF_TOOL_NAMES.has(toolName)) continue;
+
+    const output = entry?.output && typeof entry.output === 'object' ? entry.output : {};
+    const nested = output?.result && typeof output.result === 'object' ? output.result : {};
+    const payload = { ...output, ...nested };
+    const filename = firstText(payload.filename, payload.file_name, payload.name);
+    const link = firstText(
+      payload.downloadUrl,
+      payload.download_url,
+      payload.signedUrl,
+      payload.signed_url,
+      payload.publicUrl,
+      payload.public_url,
+      payload.uri,
+      payload.url,
+    );
+
+    if (filename || link) {
+      return `[PDF artifact available: ${filename || 'Generated document'}${link ? ` | ${link}` : ''}]`;
+    }
+    return '[PDF artifact available]';
+  }
+
+  const attachmentPdf = (message.attachments || []).find((attachment) => {
+    const kind = String(attachment?.kind || '').toLowerCase();
+    const name = String(attachment?.name || '');
+    return kind === 'pdf' || /\.pdf$/i.test(name);
+  });
+  if (attachmentPdf) {
+    return `[PDF attachment: ${attachmentPdf.name || 'document.pdf'}]`;
+  }
+
+  return null;
+}
+
 export function buildConversationContext(
   messages: DashMessage[],
   options: ConversationContextOptions = {},
@@ -54,13 +108,15 @@ export function buildConversationContext(
     if (!role) continue;
 
     const content = normalizeMessageContent(message.content);
-    if (!content) continue;
+    const artifactCue = role === 'assistant' ? extractArtifactCue(message) : null;
+    const contextualContent = [content, artifactCue].filter(Boolean).join('\n');
+    if (!contextualContent) continue;
 
-    const messageTokens = estimateTokenCount(content) + MESSAGE_OVERHEAD_TOKENS;
+    const messageTokens = estimateTokenCount(contextualContent) + MESSAGE_OVERHEAD_TOKENS;
     if (context.length >= maxMessages) break;
     if (context.length > 0 && tokenBudget + messageTokens > maxTokens) break;
 
-    context.push({ role, content });
+    context.push({ role, content: contextualContent });
     tokenBudget += messageTokens;
   }
 

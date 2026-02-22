@@ -19,7 +19,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +31,9 @@ import { logger } from '@/lib/logger';
 interface ExamInteractiveViewProps {
   exam: ParsedExam;
   examId: string;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
   onComplete?: (results: ExamResults) => void;
   onExit?: () => void;
 }
@@ -50,28 +52,36 @@ export interface ExamResults {
 export function ExamInteractiveView({
   exam,
   examId,
+  studentId,
+  classId,
+  schoolId,
   onComplete,
   onExit,
 }: ExamInteractiveViewProps) {
   const { theme } = useTheme();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const {
     session,
     loading: sessionLoading,
     submitAnswer,
     goToQuestion,
     completeExam,
-    resetExam,
     getProgress,
   } = useExamSession({
     examId,
     exam,
-    userId: profile?.id || user?.id,
+    userId: user?.id,
+    studentId,
+    classId,
+    schoolId,
     autoSave: true,
   });
 
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uiNotice, setUiNotice] = useState<{ type: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [confirmIncompleteSubmit, setConfirmIncompleteSubmit] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
 
   // Flatten all questions
   const allQuestions = useMemo(() => {
@@ -105,7 +115,7 @@ export function ExamInteractiveView({
    */
   const handleSubmitAnswer = useCallback(async () => {
     if (!currentQuestion || !currentAnswer.trim()) {
-      Alert.alert('No Answer', 'Please provide an answer before submitting.');
+      setUiNotice({ type: 'warning', text: 'Please provide an answer before submitting.' });
       return;
     }
 
@@ -113,13 +123,10 @@ export function ExamInteractiveView({
       setSubmitting(true);
       const result = await submitAnswer(currentQuestion.id, currentAnswer, true);
 
-      if (result?.feedback) {
-        Alert.alert(
-          result.isCorrect ? '✅ Correct!' : '❌ Incorrect',
-          result.feedback,
-          [{ text: 'OK' }]
-        );
-      }
+      setUiNotice({
+        type: result?.isCorrect ? 'success' : 'info',
+        text: result?.feedback || 'Answer submitted.',
+      });
 
       logger.info('[ExamView] Answer submitted', {
         questionId: currentQuestion.id,
@@ -127,7 +134,7 @@ export function ExamInteractiveView({
       });
     } catch (error) {
       logger.error('[ExamView] Failed to submit answer', { error });
-      Alert.alert('Error', 'Failed to submit answer. Please try again.');
+      setUiNotice({ type: 'error', text: 'Failed to submit answer. Please try again.' });
     } finally {
       setSubmitting(false);
     }
@@ -140,6 +147,8 @@ export function ExamInteractiveView({
     const nextIndex = (session?.currentQuestionIndex || 0) + 1;
     if (nextIndex < allQuestions.length) {
       goToQuestion(nextIndex);
+      setConfirmIncompleteSubmit(false);
+      setConfirmExit(false);
     }
   }, [session, allQuestions, goToQuestion]);
 
@@ -150,6 +159,8 @@ export function ExamInteractiveView({
     const prevIndex = (session?.currentQuestionIndex || 0) - 1;
     if (prevIndex >= 0) {
       goToQuestion(prevIndex);
+      setConfirmIncompleteSubmit(false);
+      setConfirmExit(false);
     }
   }, [session, goToQuestion]);
 
@@ -160,63 +171,42 @@ export function ExamInteractiveView({
     const answeredCount = Object.keys(session?.answers || {}).length;
     const totalCount = allQuestions.length;
 
-    if (answeredCount < totalCount) {
-      Alert.alert(
-        'Incomplete Exam',
-        `You have answered ${answeredCount} of ${totalCount} questions. Are you sure you want to submit?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Submit',
-            style: 'destructive',
-            onPress: async () => {
-              const completedSession = await completeExam();
-              if (completedSession && onComplete) {
-                const startTime = new Date(completedSession.startedAt).getTime();
-                const endTime = new Date(completedSession.completedAt!).getTime();
-                const duration = Math.floor((endTime - startTime) / 1000);
+    if (answeredCount < totalCount && !confirmIncompleteSubmit) {
+      setConfirmIncompleteSubmit(true);
+      setUiNotice({
+        type: 'warning',
+        text: `You answered ${answeredCount} of ${totalCount}. Tap Complete again to submit now.`,
+      });
+      return;
+    }
 
-                const results: ExamResults = {
-                  examId: completedSession.examId,
-                  examTitle: exam.title,
-                  totalMarks: completedSession.totalMarks,
-                  earnedMarks: completedSession.earnedMarks,
-                  percentage: Math.round(
-                    (completedSession.earnedMarks / completedSession.totalMarks) * 100
-                  ),
-                  answers: completedSession.answers,
-                  completedAt: completedSession.completedAt!,
-                  duration,
-                };
+    const completedSession = await completeExam();
+    if (completedSession && onComplete) {
+      const startTime = new Date(completedSession.startedAt).getTime();
+      const endTime = new Date(completedSession.completedAt || new Date().toISOString()).getTime();
+      const duration = Math.floor((endTime - startTime) / 1000);
+      const safeTotalMarks = Math.max(1, completedSession.totalMarks || 0);
 
-                onComplete(results);
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      const completedSession = await completeExam();
-      if (completedSession && onComplete) {
-        const startTime = new Date(completedSession.startedAt).getTime();
-        const endTime = new Date(completedSession.completedAt!).getTime();
-        const duration = Math.floor((endTime - startTime) / 1000);
+      const results: ExamResults = {
+        examId: completedSession.examId,
+        examTitle: exam.title,
+        totalMarks: safeTotalMarks,
+        earnedMarks: completedSession.earnedMarks,
+        percentage: Math.round((completedSession.earnedMarks / safeTotalMarks) * 100),
+        answers: completedSession.answers,
+        completedAt: completedSession.completedAt || new Date().toISOString(),
+        duration,
+      };
 
-        const results: ExamResults = {
-          examId: completedSession.examId,
-          examTitle: exam.title,
-          totalMarks: completedSession.totalMarks,
-          earnedMarks: completedSession.earnedMarks,
-          percentage: Math.round(
-            (completedSession.earnedMarks / completedSession.totalMarks) * 100
-          ),
-          answers: completedSession.answers,
-          completedAt: completedSession.completedAt!,
-          duration,
-        };
-
-        onComplete(results);
+      if (completedSession.persistenceWarning) {
+        setUiNotice({ type: 'warning', text: completedSession.persistenceWarning });
+      } else {
+        setUiNotice({
+          type: 'success',
+          text: `Exam submitted. Score: ${results.percentage}% (${results.earnedMarks}/${results.totalMarks}).`,
+        });
       }
+      onComplete(results);
     }
   }, [session, allQuestions, exam, completeExam, onComplete]);
 
@@ -224,23 +214,18 @@ export function ExamInteractiveView({
    * Exit exam with confirmation
    */
   const handleExit = useCallback(() => {
-    Alert.alert(
-      'Exit Exam',
-      'Your progress will be saved. Are you sure you want to exit?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Exit',
-          style: 'destructive',
-          onPress: () => {
-            if (onExit) {
-              onExit();
-            }
-          },
-        },
-      ]
-    );
-  }, [onExit]);
+    if (!confirmExit) {
+      setConfirmExit(true);
+      setUiNotice({
+        type: 'warning',
+        text: 'Tap close again to exit. Your progress stays saved.',
+      });
+      return;
+    }
+    if (onExit) {
+      onExit();
+    }
+  }, [confirmExit, onExit]);
 
   // Loading state
   if (sessionLoading || !session || !currentQuestion) {
@@ -306,6 +291,15 @@ export function ExamInteractiveView({
           )}
         </View>
 
+        {currentSection.readingPassage ? (
+          <View style={[styles.readingPassageCard, { backgroundColor: theme.surface }]}>
+            <Text style={[styles.readingPassageTitle, { color: theme.primary }]}>Reading passage</Text>
+            <Text style={[styles.readingPassageText, { color: theme.text }]}>
+              {currentSection.readingPassage}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Question */}
         <View style={[styles.questionCard, { backgroundColor: theme.surface }]}>
           <View style={styles.questionHeader}>
@@ -328,7 +322,8 @@ export function ExamInteractiveView({
             <View style={styles.optionsContainer}>
               {currentQuestion.options.map((option, index) => {
                 const optionLetter = String.fromCharCode(65 + index); // A, B, C, D
-                const isSelected = currentAnswer === option || currentAnswer === optionLetter;
+                const cleanedOption = option.replace(/^\s*[A-D]\s*[\.\)\-:]\s*/i, '').trim();
+                const isSelected = currentAnswer === option || currentAnswer === cleanedOption || currentAnswer === optionLetter;
 
                 return (
                   <TouchableOpacity
@@ -344,7 +339,7 @@ export function ExamInteractiveView({
                           : theme.border,
                       },
                     ]}
-                    onPress={() => setCurrentAnswer(option)}
+                    onPress={() => setCurrentAnswer(cleanedOption)}
                   >
                     <View
                       style={[
@@ -375,7 +370,7 @@ export function ExamInteractiveView({
                         },
                       ]}
                     >
-                      {optionLetter}. {option}
+                      {optionLetter}. {cleanedOption}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -383,8 +378,45 @@ export function ExamInteractiveView({
             </View>
           )}
 
-          {/* Short Answer / Essay Input */}
-          {(currentQuestion.type === 'short_answer' || currentQuestion.type === 'essay') && (
+          {currentQuestion.type === 'true_false' && (
+            <View style={styles.optionsContainer}>
+              {['True', 'False'].map((option) => {
+                const isSelected = currentAnswer.toLowerCase() === option.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.optionButton,
+                      {
+                        backgroundColor: isSelected ? theme.primary + '20' : theme.background,
+                        borderColor: isSelected ? theme.primary : theme.border,
+                      },
+                    ]}
+                    onPress={() => setCurrentAnswer(option)}
+                  >
+                    <View
+                      style={[
+                        styles.optionCircle,
+                        { borderColor: isSelected ? theme.primary : theme.border },
+                      ]}
+                    >
+                      {isSelected && (
+                        <View style={[styles.optionCircleFill, { backgroundColor: theme.primary }]} />
+                      )}
+                    </View>
+                    <Text style={[styles.optionText, { color: isSelected ? theme.primary : theme.text }]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Text-based Input */}
+          {(currentQuestion.type === 'short_answer' ||
+            currentQuestion.type === 'essay' ||
+            currentQuestion.type === 'fill_blank') && (
             <TextInput
               style={[
                 styles.answerInput,
@@ -401,7 +433,7 @@ export function ExamInteractiveView({
               placeholderTextColor={theme.textTertiary}
               multiline={currentQuestion.type === 'essay'}
               numberOfLines={currentQuestion.type === 'essay' ? 6 : 2}
-              editable={!currentStudentAnswer}
+              editable
             />
           )}
 
@@ -445,10 +477,38 @@ export function ExamInteractiveView({
 
       {/* Footer Navigation */}
       <View style={[styles.footer, { backgroundColor: theme.surface }]}>
-        <View style={styles.footerRow}>
+        {uiNotice ? (
+          <View
+            style={[
+              styles.noticeCard,
+              {
+                backgroundColor:
+                  uiNotice.type === 'success'
+                    ? '#10b9811f'
+                    : uiNotice.type === 'warning'
+                    ? '#f59e0b1f'
+                    : uiNotice.type === 'error'
+                    ? '#ef44441f'
+                    : theme.background,
+                borderColor:
+                  uiNotice.type === 'success'
+                    ? '#10b981'
+                    : uiNotice.type === 'warning'
+                    ? '#f59e0b'
+                    : uiNotice.type === 'error'
+                    ? '#ef4444'
+                    : theme.border,
+              },
+            ]}
+          >
+            <Text style={[styles.noticeText, { color: theme.text }]}>{uiNotice.text}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.footerNavRow}>
           <TouchableOpacity
             style={[
-              styles.navButton,
+              styles.navButtonWide,
               { backgroundColor: theme.background },
               currentIndex === 0 && styles.navButtonDisabled,
             ]}
@@ -470,29 +530,8 @@ export function ExamInteractiveView({
               ]}
             >
               Previous
-            </Text>
+              </Text>
           </TouchableOpacity>
-
-          {!currentStudentAnswer && (
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                { backgroundColor: theme.primary },
-                (!currentAnswer.trim() || submitting) && styles.submitButtonDisabled,
-              ]}
-              onPress={handleSubmitAnswer}
-              disabled={!currentAnswer.trim() || submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Text style={styles.submitButtonText}>Submit Answer</Text>
-                  <Ionicons name="checkmark" size={20} color="#ffffff" />
-                </>
-              )}
-            </TouchableOpacity>
-          )}
 
           {currentIndex === totalQuestions - 1 ? (
             <TouchableOpacity
@@ -505,7 +544,7 @@ export function ExamInteractiveView({
           ) : (
             <TouchableOpacity
               style={[
-                styles.navButton,
+                styles.navButtonWide,
                 { backgroundColor: theme.background },
                 currentIndex === totalQuestions - 1 && styles.navButtonDisabled,
               ]}
@@ -537,6 +576,27 @@ export function ExamInteractiveView({
             </TouchableOpacity>
           )}
         </View>
+
+        <TouchableOpacity
+          style={[
+            styles.submitButton,
+            { backgroundColor: theme.primary },
+            (!currentAnswer.trim() || submitting) && styles.submitButtonDisabled,
+          ]}
+          onPress={handleSubmitAnswer}
+          disabled={!currentAnswer.trim() || submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <>
+              <Text style={styles.submitButtonText}>
+                {currentStudentAnswer ? 'Update Answer' : 'Submit Answer'}
+              </Text>
+              <Ionicons name="checkmark" size={20} color="#ffffff" />
+            </>
+          )}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -604,6 +664,24 @@ const styles = StyleSheet.create({
   sectionInstructions: {
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  readingPassageCard: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.25)',
+  },
+  readingPassageTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  readingPassageText: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   questionCard: {
     borderRadius: 12,
@@ -697,16 +775,29 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
+    gap: 10,
   },
-  footerRow: {
+  noticeCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  footerNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 12,
   },
-  navButton: {
+  navButtonWide: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -720,7 +811,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   submitButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -17,7 +17,25 @@ export interface StudentAnswer {
   isCorrect?: boolean;
   feedback?: string;
   marks?: number;
+  gradingMode?: 'deterministic' | 'heuristic';
   submittedAt?: string;
+}
+
+export interface SectionBreakdown {
+  sectionId: string;
+  title: string;
+  earnedMarks: number;
+  totalMarks: number;
+  questionCount: number;
+  correctCount: number;
+}
+
+export interface TopicFeedback {
+  topic: string;
+  earnedMarks: number;
+  totalMarks: number;
+  percentage: number;
+  priority: 'high' | 'medium' | 'low';
 }
 
 export interface ExamSessionState {
@@ -29,6 +47,12 @@ export interface ExamSessionState {
   completedAt?: string;
   totalMarks: number;
   earnedMarks: number;
+  gradingStatus?: string;
+  sectionBreakdown?: SectionBreakdown[];
+  topicFeedback?: TopicFeedback[];
+  recommendedPractice?: string[];
+  persistenceWarning?: string | null;
+  cloudSessionId?: string | null;
   status: 'in_progress' | 'completed' | 'abandoned';
 }
 
@@ -36,11 +60,37 @@ interface UseExamSessionOptions {
   examId: string;
   exam: ParsedExam;
   userId?: string;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
   autoSave?: boolean;
 }
 
+interface GradeExamAttemptResponse {
+  success: boolean;
+  sessionId?: string | null;
+  earnedMarks?: number;
+  totalMarks?: number;
+  percentage?: number;
+  gradingStatus?: string;
+  questionFeedback?: Record<
+    string,
+    {
+      isCorrect: boolean;
+      marksAwarded: number;
+      feedback: string;
+      gradingMode: 'deterministic' | 'heuristic';
+    }
+  >;
+  sectionBreakdown?: SectionBreakdown[];
+  topicFeedback?: TopicFeedback[];
+  recommendedPractice?: string[];
+  persistenceWarning?: string | null;
+  error?: string;
+}
+
 export function useExamSession(options: UseExamSessionOptions) {
-  const { examId, exam, userId, autoSave = true } = options;
+  const { examId, exam, userId, studentId, classId, schoolId, autoSave = true } = options;
   const [session, setSession] = useState<ExamSessionState | null>(null);
   const [loading, setLoading] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -73,10 +123,13 @@ export function useExamSession(options: UseExamSessionOptions) {
           .eq('exam_id', examId)
           .eq('user_id', userId)
           .eq('status', 'in_progress')
-          .single();
+          .maybeSingle();
 
         if (data && !error) {
-          const cloudSession = data.session_data as ExamSessionState;
+          const cloudSession = {
+            ...(data.session_data as ExamSessionState),
+            cloudSessionId: data.id as string,
+          };
           setSession(cloudSession);
           // Cache locally
           await AsyncStorage.setItem(storageKey, JSON.stringify(cloudSession));
@@ -94,6 +147,7 @@ export function useExamSession(options: UseExamSessionOptions) {
         startedAt: new Date().toISOString(),
         totalMarks: exam.totalMarks,
         earnedMarks: 0,
+        cloudSessionId: null,
         status: 'in_progress',
       };
 
@@ -121,7 +175,15 @@ export function useExamSession(options: UseExamSessionOptions) {
         // Save to Supabase (cloud backup)
         if (userId) {
           const supabase = assertSupabase();
-          await supabase.from('exam_sessions').upsert({
+          const { data: existing } = await supabase
+            .from('exam_sessions')
+            .select('id')
+            .eq('exam_id', examId)
+            .eq('user_id', userId)
+            .eq('status', 'in_progress')
+            .maybeSingle();
+
+          const payload = {
             exam_id: examId,
             user_id: userId,
             session_data: sessionData,
@@ -131,7 +193,14 @@ export function useExamSession(options: UseExamSessionOptions) {
             total_marks: sessionData.totalMarks,
             earned_marks: sessionData.earnedMarks,
             updated_at: new Date().toISOString(),
-          });
+            preschool_id: schoolId || null,
+          };
+
+          if (existing?.id) {
+            await supabase.from('exam_sessions').update(payload).eq('id', existing.id);
+          } else {
+            await supabase.from('exam_sessions').insert(payload);
+          }
         }
 
         logger.debug('[ExamSession] Saved session', { examId });
@@ -139,7 +208,7 @@ export function useExamSession(options: UseExamSessionOptions) {
         logger.error('[ExamSession] Failed to save session', { examId, error });
       }
     },
-    [examId, userId, storageKey]
+    [examId, userId, schoolId, storageKey]
   );
 
   /**
@@ -183,14 +252,15 @@ export function useExamSession(options: UseExamSessionOptions) {
         submittedAt: new Date().toISOString(),
       };
 
-      // Auto-grade if enabled and possible
-      if (autoGrade && (question.type === 'multiple_choice' || question.type === 'true_false')) {
+      // Auto-grade for immediate inline feedback.
+      if (autoGrade) {
         const gradeResult = gradeAnswer(question, answer);
         studentAnswer = {
           ...studentAnswer,
           isCorrect: gradeResult.isCorrect,
           feedback: gradeResult.feedback,
           marks: gradeResult.marks,
+          gradingMode: 'deterministic',
         };
       }
 
@@ -248,11 +318,66 @@ export function useExamSession(options: UseExamSessionOptions) {
   const completeExam = useCallback(async () => {
     if (!session) return;
 
-    const completedSession: ExamSessionState = {
+    let completedSession: ExamSessionState = {
       ...session,
       status: 'completed',
       completedAt: new Date().toISOString(),
     };
+
+    try {
+      const supabase = assertSupabase();
+      const { data, error } = await supabase.functions.invoke<GradeExamAttemptResponse>(
+        'grade-exam-attempt',
+        {
+          body: {
+            examId,
+            exam,
+            answers: Object.fromEntries(
+              Object.entries(session.answers).map(([questionId, value]) => [questionId, value.answer]),
+            ),
+            studentId: studentId || undefined,
+            classId: classId || undefined,
+            schoolId: schoolId || undefined,
+          },
+        },
+      );
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Failed to grade exam attempt');
+      }
+
+      const mergedAnswers: Record<string, StudentAnswer> = { ...session.answers };
+      Object.entries(data.questionFeedback || {}).forEach(([questionId, feedback]) => {
+        mergedAnswers[questionId] = {
+          ...(mergedAnswers[questionId] || {
+            questionId,
+            answer: '',
+          }),
+          isCorrect: feedback.isCorrect,
+          feedback: feedback.feedback,
+          marks: feedback.marksAwarded,
+          gradingMode: feedback.gradingMode,
+        };
+      });
+
+      completedSession = {
+        ...completedSession,
+        answers: mergedAnswers,
+        earnedMarks: Number(data.earnedMarks ?? completedSession.earnedMarks ?? 0),
+        totalMarks: Number(data.totalMarks ?? completedSession.totalMarks ?? exam.totalMarks ?? 0),
+        gradingStatus: data.gradingStatus || completedSession.gradingStatus,
+        sectionBreakdown: data.sectionBreakdown || [],
+        topicFeedback: data.topicFeedback || [],
+        recommendedPractice: data.recommendedPractice || [],
+        persistenceWarning: data.persistenceWarning || null,
+        cloudSessionId: data.sessionId || completedSession.cloudSessionId || null,
+      };
+    } catch (gradingError) {
+      logger.error('[ExamSession] Cloud grading failed, falling back to local score', {
+        examId,
+        gradingError,
+      });
+    }
 
     setSession(completedSession);
     await saveSession(completedSession);
@@ -264,7 +389,7 @@ export function useExamSession(options: UseExamSessionOptions) {
     });
 
     return completedSession;
-  }, [session, examId, saveSession]);
+  }, [session, examId, exam, studentId, classId, schoolId, saveSession]);
 
   /**
    * Reset exam

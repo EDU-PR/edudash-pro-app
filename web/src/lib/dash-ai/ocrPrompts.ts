@@ -18,6 +18,11 @@ export const HOMEWORK_SCAN_PROMPT = [
   '- Provide kind, practical next-step feedback for learner and parent.',
   '- For math: show worked solutions step-by-step. Identify calculation errors.',
   '- Suggest 1-2 follow-up practice problems if gaps are found.',
+  '- If the task includes labelled criteria (e.g., a) b) c) or 1. 2. 3.), preserve labels and wording exactly.',
+  '- Do not merge, rename, skip, or reorder criteria.',
+  '- For criteria-answer requests, use exact headings in this form: "a) <exact criterion text>" followed by the response.',
+  '- Never replace an original criterion heading with a different heading.',
+  '- Do not invent school names, learner names, signatures, or claims not visible in the prompt/image.',
 ].join('\n');
 
 export const DOCUMENT_SCAN_PROMPT = [
@@ -27,21 +32,37 @@ export const DOCUMENT_SCAN_PROMPT = [
   '- Use markdown formatting for structure when outputting.',
   '- Return uncertain words with [?]. Provide a brief summary at the end.',
   '- If it is a worksheet or form, identify blank fields and question types.',
+  '- If the document uses assessment criteria labels (a) b) c) d) e) or similar), keep labels and wording exact.',
+  '- When drafting answers from this document, output one section per criterion with matching labels and no relabeling.',
+  '- Use exact section headings in this form: "a) <exact criterion text>", "b) <exact criterion text>", etc.',
+  '- Before finalizing, self-check that the number of response sections matches the number of criteria labels shown in the image.',
+  '- Keep "evidence/documentation" requests in their own separate section; do not mix with criteria answers.',
+  '- Avoid fabricated facts, school names, or sign-offs unless explicitly provided by the user.',
 ].join('\n');
 
 export const HANDWRITING_ANALYSIS_PROMPT = [
   'OCR HANDWRITING ANALYSIS:',
   '- Read as much handwritten text as possible with best-effort accuracy.',
   '- Mark uncertain readings with [?].',
+  '- Include an "unclear_spans" list with short quotes of low-confidence words/lines.',
   '- Assess handwriting legibility, letter formation, and spacing.',
   '- For preschool learners, include short fine-motor practice suggestions.',
   '- For older learners, suggest specific letter/word practice if needed.',
 ].join('\n');
 
 const OCR_PATTERNS: Array<{ task: OCRTask; pattern: RegExp }> = [
-  { task: 'homework', pattern: /\b(homework|worksheet|assignment|grade this|mark this|check my work|help with this|solve this|math problem)\b/i },
-  { task: 'handwriting', pattern: /\b(handwriting|write|letter formation|trace|motor skills?|penmanship)\b/i },
-  { task: 'document', pattern: /\b(scan|read this document|extract text|ocr|photo of notes|page|what does this say|read this)\b/i },
+  {
+    task: 'homework',
+    pattern: /\b(homework|worksheet|assignment|grade this|mark this|check my work|help with this|solve this|math problem|huiswerk|werkkaart|taak|opdrag|merk dit|help my met|wiskunde probleem|umsebenzi wasekhaya|ngomsebenzi wasekhaya|isabelo|ngisize ngalokhu|hlola umsebenzi wami)\b/i,
+  },
+  {
+    task: 'handwriting',
+    pattern: /\b(handwriting|write|letter formation|trace|motor skills?|penmanship|handskrif|skryf|letters vorming|natrek|fynmotoriese vaardighede|umbhalo wesandla|bhala|ukwakheka kwezinhlamvu|landelela|amakhono amancane ezandla)\b/i,
+  },
+  {
+    task: 'document',
+    pattern: /\b(scan|read this document|extract text|ocr|photo of notes|page|what does this say|read this|skandeer|lees hierdie dokument|haal teks uit|foto van notas|bladsy|wat staan hier|funda lokhu|skena|funda lo mbhalo|khipha umbhalo|isithombe samanothi|ikhasi|kuthini lokhu)\b/i,
+  },
 ];
 
 export function detectOCRTask(text: string): OCRTask | null {
@@ -57,6 +78,21 @@ export function isOCRIntent(text: string): boolean {
   return detectOCRTask(text) !== null;
 }
 
+export function isShortOrAttachmentOnlyPrompt(text: string): boolean {
+  const value = String(text || '').trim().toLowerCase();
+  if (!value) return true;
+  if (value.length <= 10) return true;
+
+  const shortPromptPatterns = [
+    /^(attached files?|attachment|image|photo|scan)\.?$/i,
+    /^(help|please help|check|mark|read|scan|explain)\.?$/i,
+    /^(help my|check this|read this|scan this)\.?$/i,
+    /^(help my asseblief|help met dit|lees dit|skandeer dit)\.?$/i,
+    /^(ngisize|ngicela usizo|funda lokhu|skena lokhu)\.?$/i,
+  ];
+  return shortPromptPatterns.some((pattern) => pattern.test(value));
+}
+
 export function getOCRPromptForTask(task: OCRTask | null | undefined): string {
   switch (task) {
     case 'homework':
@@ -67,4 +103,57 @@ export function getOCRPromptForTask(task: OCRTask | null | undefined): string {
     default:
       return DOCUMENT_SCAN_PROMPT;
   }
+}
+
+export const CRITERIA_RESPONSE_PROMPT = [
+  'CRITERIA RESPONSE MODE:',
+  '- When the user asks for help answering a rubric/criteria sheet, first identify each criterion label exactly as written.',
+  '- Return responses mapped one-to-one using the same labels (e.g., a), b), c), d), e)).',
+  '- Do not skip any criterion. Do not combine two criteria into one section.',
+  '- Keep each heading exactly as provided, for example: "b) All areas of learning including literacy, numeracy and life skills are covered".',
+  '- Never replace a criterion heading with a paraphrased heading.',
+  '- Use this output format for each section: "<label and exact criterion text>" on one line, then the response paragraph(s).',
+  '- Verify section count and order before finishing.',
+  '- Keep wording formal and aligned to the criterion only.',
+  '- Put supporting evidence/documents in a separate section titled exactly: "Attach all relevant documentation as evidence".',
+  '- If any criterion text is unclear, mark it with [?] and ask one concise clarification question.',
+  '- Do not add names, institutions, signatures, or dates unless the user explicitly provided them.',
+].join('\n');
+
+const CRITERIA_RESPONSE_PATTERNS: RegExp[] = [
+  /\b(help|assist|draft|write|answer|respond)\b.{0,30}\b(criteria|criterion|rubric|assessment)\b/i,
+  /\b(criteria|criterion|rubric|assessment)\b.{0,30}\b(answer|response|draft|write|help)\b/i,
+  /\bgroup discussion response\b/i,
+  /\bassessment criteria?\b/i,
+  /\bassessment criterion\b/i,
+  /\bcriteria\s*(1|2|3|4|5)\b/i,
+  /\bassessment criterion\s*(1|2|3|4|5)\b/i,
+  /\banswer (a|b|c|d|e)\b/i,
+  /\battach all relevant documentation as evidence\b/i,
+];
+
+function countCriteriaLabels(text: string): number {
+  const value = String(text || '').toLowerCase();
+  if (!value) return 0;
+
+  const alphaMatches = value.match(/\b([a-e])\)/g) || [];
+  const alphaUnique = new Set(alphaMatches.map((item) => item.trim())).size;
+
+  const numericMatches = value.match(/\b([1-9])[.)]/g) || [];
+  const numericUnique = new Set(numericMatches.map((item) => item.trim())).size;
+
+  return Math.max(alphaUnique, numericUnique);
+}
+
+export function isCriteriaResponseIntent(text: string): boolean {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  if (CRITERIA_RESPONSE_PATTERNS.some((pattern) => pattern.test(value))) {
+    return true;
+  }
+  return countCriteriaLabels(value) >= 3;
+}
+
+export function getCriteriaResponsePrompt(text: string): string | null {
+  return isCriteriaResponseIntent(text) ? CRITERIA_RESPONSE_PROMPT : null;
 }
