@@ -251,7 +251,7 @@ export function K12AdminDashboard() {
         title: 'Messages',
         icon: 'chatbubbles-outline',
         color: '#6366F1',
-        onPress: () => router.push('/screens/messages'),
+        onPress: () => router.push('/screens/principal-messages'),
       },
       {
         id: 'settings',

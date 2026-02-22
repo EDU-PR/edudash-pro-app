@@ -109,6 +109,9 @@ const QUEUE_STAGE_LABELS: Record<FinanceQueueStage, string> = {
   rejected: 'Rejected',
 };
 
+const FINANCE_QUEUE_FUNNEL_V1 =
+  process.env.EXPO_PUBLIC_FINANCE_QUEUE_FUNNEL_V1 !== 'false';
+
 const TAB_SET = new Set<CenterTab>(TAB_ITEMS.map((tab) => tab.id));
 
 const isCenterTab = (value: unknown): value is CenterTab =>
@@ -422,6 +425,7 @@ export default function FinanceControlCenterScreen() {
   }, [queueRows, resolveQueueStage]);
 
   const visibleQueueRows = React.useMemo(() => {
+    if (!FINANCE_QUEUE_FUNNEL_V1) return queueRows;
     return queueRows.filter((row) => {
       const stage = resolveQueueStage(row);
       if (queueStageFilter !== 'all' && stage !== queueStageFilter) return false;
@@ -932,36 +936,42 @@ export default function FinanceControlCenterScreen() {
       {renderSectionError(pickSectionError(bundle?.errors, 'queue'))}
       <View style={styles.queueSummaryCard}>
         <Text style={styles.queueSummaryTitle}>Queue Funnel ({monthLabel})</Text>
-        <View style={styles.queueSummaryChips}>
-          {queueStageSummary.map((summary) => {
-            const active = queueStageFilter === summary.stage;
-            return (
-              <TouchableOpacity
-                key={summary.stage}
-                style={[styles.queueStageChip, active && styles.queueStageChipActive]}
-                onPress={() =>
-                  setQueueStageFilter((prev) => (prev === summary.stage ? 'all' : summary.stage))
-                }
-              >
-                <Text style={[styles.queueStageChipLabel, active && styles.queueStageChipLabelActive]}>
-                  {QUEUE_STAGE_LABELS[summary.stage]}
-                </Text>
-                <Text style={[styles.queueStageChipMeta, active && styles.queueStageChipLabelActive]}>
-                  {summary.count} • {formatCurrency(summary.amount)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <TouchableOpacity
-          style={[styles.queueMismatchChip, queueMismatchOnly && styles.queueMismatchChipActive]}
-          onPress={() => setQueueMismatchOnly((prev) => !prev)}
-        >
-          <Ionicons name="alert-circle-outline" size={14} color={queueMismatchOnly ? '#fff' : theme.warning || '#F59E0B'} />
-          <Text style={[styles.queueMismatchChipText, queueMismatchOnly && styles.queueMismatchChipTextActive]}>
-            {queueMismatchOnly ? 'Mismatch filter on' : 'Show amount mismatches'}
-          </Text>
-        </TouchableOpacity>
+        {FINANCE_QUEUE_FUNNEL_V1 ? (
+          <>
+            <View style={styles.queueSummaryChips}>
+              {queueStageSummary.map((summary) => {
+                const active = queueStageFilter === summary.stage;
+                return (
+                  <TouchableOpacity
+                    key={summary.stage}
+                    style={[styles.queueStageChip, active && styles.queueStageChipActive]}
+                    onPress={() =>
+                      setQueueStageFilter((prev) => (prev === summary.stage ? 'all' : summary.stage))
+                    }
+                  >
+                    <Text style={[styles.queueStageChipLabel, active && styles.queueStageChipLabelActive]}>
+                      {QUEUE_STAGE_LABELS[summary.stage]}
+                    </Text>
+                    <Text style={[styles.queueStageChipMeta, active && styles.queueStageChipLabelActive]}>
+                      {summary.count} • {formatCurrency(summary.amount)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.queueMismatchChip, queueMismatchOnly && styles.queueMismatchChipActive]}
+              onPress={() => setQueueMismatchOnly((prev) => !prev)}
+            >
+              <Ionicons name="alert-circle-outline" size={14} color={queueMismatchOnly ? '#fff' : theme.warning || '#F59E0B'} />
+              <Text style={[styles.queueMismatchChipText, queueMismatchOnly && styles.queueMismatchChipTextActive]}>
+                {queueMismatchOnly ? 'Mismatch filter on' : 'Show amount mismatches'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={styles.queueSubtext}>Queue funnel filters are disabled by feature flag.</Text>
+        )}
       </View>
       {visibleQueueRows.length === 0 ? (
         <View style={styles.emptyCard}>

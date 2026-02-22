@@ -647,6 +647,16 @@ export default function PrincipalMessagesScreen() {
           <Text style={styles.emptySubtitle}>
             {t('principal.noMessagesDesc', { defaultValue: 'Messages from parents and staff will appear here.' })}
           </Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => router.push('/screens/principal-new-message')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={theme.onPrimary} />
+            <Text style={styles.emptyButtonText}>
+              {t('principal.startMessage', { defaultValue: 'Start message' })}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     );

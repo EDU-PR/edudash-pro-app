@@ -315,6 +315,12 @@ function TeacherMessagesPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
+  const schoolId = profile?.preschoolId || profile?.organizationId;
+  const CHAT_WALLPAPER_STORAGE_KEY_BASE = 'edudash-chat-wallpaper';
+  const wallpaperStorageKey =
+    userId && schoolId
+      ? `${CHAT_WALLPAPER_STORAGE_KEY_BASE}:${userId}:${schoolId}`
+      : CHAT_WALLPAPER_STORAGE_KEY_BASE;
   const { slug: tenantSlug } = useTenantSlug(userId);
 
   // Typing indicator and calling
@@ -337,7 +343,7 @@ function TeacherMessagesPage() {
 
   // Load wallpaper from localStorage on mount
   useEffect(() => {
-    const savedWallpaper = localStorage.getItem('edudash-chat-wallpaper');
+    const savedWallpaper = localStorage.getItem(wallpaperStorageKey);
     if (savedWallpaper) {
       try {
         const parsed = JSON.parse(savedWallpaper);
@@ -348,9 +354,12 @@ function TeacherMessagesPage() {
         }
       } catch (e) {
         console.error('Failed to load wallpaper:', e);
+        setWallpaperCss(null);
       }
+    } else {
+      setWallpaperCss(null);
     }
-  }, []);
+  }, [wallpaperStorageKey]);
 
   // Message options menu state
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
@@ -384,7 +393,7 @@ function TeacherMessagesPage() {
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     // Save to localStorage for persistence
-    localStorage.setItem('edudash-chat-wallpaper', JSON.stringify(sel));
+    localStorage.setItem(wallpaperStorageKey, JSON.stringify(sel));
     
     if (sel.type === 'url') {
       setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);
