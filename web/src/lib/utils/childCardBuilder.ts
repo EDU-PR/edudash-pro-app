@@ -42,6 +42,7 @@ export function buildChildCardFromData(
     className: child.classes?.name || (child.class_id ? `Class ${String(child.class_id).slice(-4)}` : null),
     classId: child.class_id || undefined,
     preschoolId,
+    organizationId: child.organization_id || null,
     preschoolName: null,
     studentCode: child.student_id || null,
     lastActivity: metrics.lastActivity,

@@ -25,10 +25,34 @@ type ChildRow = {
   organization_id?: string | null;
 };
 
+function getCurrentAcademicYear(): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+      }).format(new Date()),
+    );
+  } catch {
+    return new Date().getFullYear();
+  }
+}
+
+function getChildSchoolIds(child: ChildRow): string[] {
+  const ids = [
+    child.organization_id,
+    child.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
 export default function ParentStationeryScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const supabase = useMemo(() => assertSupabase(), []);
+  const academicYear = useMemo(() => getCurrentAcademicYear(), []);
 
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,16 +91,23 @@ export default function ParentStationeryScreen() {
       setChildren(rows);
 
       const schoolIds = Array.from(
-        new Set(rows.map((child) => child.preschool_id || child.organization_id).filter(Boolean))
+        new Set(rows.flatMap((child) => getChildSchoolIds(child)))
       ) as string[];
       if (!schoolIds.length) {
         setFeatureEnabledSchoolIds([]);
         return;
       }
 
-      const [{ data: preschools }, { data: orgs }] = await Promise.all([
+      const [{ data: preschools }, { data: orgs }, { data: publishedLists }] = await Promise.all([
         supabase.from('preschools').select('id, settings').in('id', schoolIds),
         supabase.from('organizations').select('id, settings').in('id', schoolIds),
+        supabase
+          .from('stationery_lists')
+          .select('school_id')
+          .in('school_id', schoolIds)
+          .eq('academic_year', academicYear)
+          .eq('is_visible', true)
+          .eq('is_published', true),
       ]);
 
       const enabled = new Set<string>();
@@ -84,6 +115,9 @@ export default function ParentStationeryScreen() {
         if (row?.settings?.features?.stationery?.enabled) {
           enabled.add(String(row.id));
         }
+      });
+      (publishedLists || []).forEach((row: any) => {
+        if (row?.school_id) enabled.add(String(row.school_id));
       });
       setFeatureEnabledSchoolIds(Array.from(enabled));
     } catch (loadError: any) {
@@ -94,7 +128,7 @@ export default function ParentStationeryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [parentId, supabase, user?.id]);
+  }, [academicYear, parentId, supabase, user?.id]);
 
   useEffect(() => {
     void load();
@@ -103,8 +137,8 @@ export default function ParentStationeryScreen() {
   const eligibleChildren = useMemo(
     () =>
       children.filter((child) => {
-        const schoolId = child.preschool_id || child.organization_id;
-        return Boolean(schoolId && featureEnabledSchoolIds.includes(String(schoolId)));
+        const schoolIds = getChildSchoolIds(child);
+        return schoolIds.some((schoolId) => featureEnabledSchoolIds.includes(schoolId));
       }),
     [children, featureEnabledSchoolIds]
   );

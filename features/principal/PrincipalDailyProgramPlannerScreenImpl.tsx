@@ -263,6 +263,91 @@ function toMinutes(value: string): number | null {
   return hours * 60 + minutes;
 }
 
+function toHHMM(totalMinutes: number): string {
+  const safe = Math.max(0, Math.min(23 * 60 + 59, Math.round(totalMinutes)));
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function applyTimeRulesToBlocks(
+  blocks: DailyProgramBlock[],
+  rules: ProgramTimeRules,
+  requestedDailyMinutes: number,
+): DailyProgramBlock[] {
+  const arrivalStart = toMinutes(rules.arrivalStartTime);
+  const pickupCutoff = toMinutes(rules.pickupCutoffTime);
+  if (arrivalStart === null || pickupCutoff === null || pickupCutoff <= arrivalStart) {
+    return blocks;
+  }
+
+  const weekdayBlocks = blocks.filter((block) =>
+    DAY_ORDER.includes(Number(block.day_of_week) as (typeof DAY_ORDER)[number]),
+  );
+  const nonWeekdayBlocks = blocks.filter((block) =>
+    !DAY_ORDER.includes(Number(block.day_of_week) as (typeof DAY_ORDER)[number]),
+  );
+  const timedBlocks: DailyProgramBlock[] = [];
+
+  for (const day of DAY_ORDER) {
+    const dayBlocks = weekdayBlocks
+      .filter((block) => Number(block.day_of_week) === day)
+      .slice()
+      .sort((a, b) => Number(a.block_order || 0) - Number(b.block_order || 0));
+
+    if (dayBlocks.length === 0) continue;
+
+    const hasStrictValidTimes = dayBlocks.every((block) => {
+      const start = toMinutes(String(block.start_time || ''));
+      const end = toMinutes(String(block.end_time || ''));
+      return start !== null && end !== null && start >= arrivalStart && end <= pickupCutoff && end > start;
+    });
+
+    if (hasStrictValidTimes) {
+      timedBlocks.push(
+        ...dayBlocks.map((block, index) => ({
+          ...block,
+          day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+          block_order: index + 1,
+          start_time: normalizeTime(String(block.start_time || '')),
+          end_time: normalizeTime(String(block.end_time || '')),
+        })),
+      );
+      continue;
+    }
+
+    const totalWindow = pickupCutoff - arrivalStart;
+    const targetMinutes = Math.max(120, Number.isFinite(requestedDailyMinutes) ? requestedDailyMinutes : totalWindow);
+    const usableMinutes = Math.max(60, Math.min(totalWindow, targetMinutes));
+    const slotMinutes = Math.max(20, Math.floor(usableMinutes / dayBlocks.length));
+    const dayEnd = Math.min(pickupCutoff, arrivalStart + usableMinutes);
+
+    let cursor = arrivalStart;
+    dayBlocks.forEach((block, index) => {
+      const start = cursor;
+      const preferredEnd = index === dayBlocks.length - 1 ? dayEnd : start + slotMinutes;
+      let end = Math.min(pickupCutoff, preferredEnd);
+      if (end <= start) end = Math.min(pickupCutoff, start + 20);
+      if (end <= start) end = Math.min(pickupCutoff, start + 1);
+
+      timedBlocks.push({
+        ...block,
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: index + 1,
+        start_time: toHHMM(start),
+        end_time: toHHMM(end),
+      });
+      cursor = end;
+    });
+  }
+
+  return [...timedBlocks, ...nonWeekdayBlocks].sort((a, b) =>
+    a.day_of_week === b.day_of_week
+      ? Number(a.block_order || 0) - Number(b.block_order || 0)
+      : Number(a.day_of_week || 0) - Number(b.day_of_week || 0),
+  );
+}
+
 function resolveSchoolName(profile: any): string {
   const fromMembership = String(profile?.organization_membership?.organization_name || '').trim();
   if (fromMembership) return fromMembership;
@@ -445,13 +530,23 @@ export default function PrincipalDailyProgramPlannerScreen() {
           includeStoryCircle: routineOptions.storyCircle,
           includeTransitionCues: routineOptions.transitionCues,
           includeHygieneChecks: routineOptions.hygieneChecks,
+          arrivalStartTime: rules.arrivalStartTime,
+          arrivalCutoffTime: rules.arrivalCutoffTime,
+          pickupStartTime: rules.pickupStartTime,
+          pickupCutoffTime: rules.pickupCutoffTime,
         },
       });
+
+      const generatedBlocks = applyTimeRulesToBlocks(
+        (generated.blocks || []).map((block) => ({ ...block, parent_tip: null })),
+        rules,
+        Math.max(120, safeDailyMinutes || 300),
+      );
 
       setDraft({
         ...generated,
         title: withSchoolNamedTitle(generated.title, schoolName, themeTitle),
-        blocks: (generated.blocks || []).map((block) => ({ ...block, parent_tip: null })),
+        blocks: generatedBlocks,
         generation_context: {
           preflight: {
             ...preflight,
@@ -498,6 +593,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     userId,
     weekStartDate,
     weeklyObjectives,
+    rules,
     preflight,
     preflightComplete,
     confirmedAssumptions,
@@ -559,7 +655,11 @@ export default function PrincipalDailyProgramPlannerScreen() {
             },
             assumptionSummary: confirmedAssumptions,
           },
-          blocks: (draft.blocks || []).map((block) => ({ ...block, parent_tip: null })),
+          blocks: applyTimeRulesToBlocks(
+            (draft.blocks || []).map((block) => ({ ...block, parent_tip: null })),
+            rules,
+            Math.max(120, Number(dailyMinutes) || 300),
+          ),
         },
       });
 
@@ -579,7 +679,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     } finally {
       setSaving(false);
     }
-  }, [ageGroup, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate, preflight, confirmedAssumptions]);
+  }, [ageGroup, dailyMinutes, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate, preflight, confirmedAssumptions, rules]);
 
   const shareWithParents = useCallback(async (programOverride?: WeeklyProgramDraft) => {
     const activeProgram = programOverride || draft;
@@ -1456,12 +1556,24 @@ export default function PrincipalDailyProgramPlannerScreen() {
         {draft && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Draft Blocks</Text>
-            <Text style={styles.sectionHint}>
-              {draftViewMode === 'cards'
-                ? 'Card preview mode for quick scan. Switch to Edit to change details.'
-                : 'Tune times and titles before sharing.'}
-            </Text>
-            <View style={styles.previewModeRow}>
+          <Text style={styles.sectionHint}>
+            {draftViewMode === 'cards'
+              ? 'Card preview mode for quick scan. Switch to Edit to change details.'
+              : 'Tune times and titles before sharing.'}
+          </Text>
+          <View style={styles.draftHeaderActions}>
+            <TouchableOpacity
+              style={[styles.inlineBtn, saving && styles.buttonDisabled]}
+              onPress={() => void saveDraft()}
+              disabled={saving}
+            >
+              {saving
+                ? <EduDashSpinner size="small" color={theme.primary} />
+                : <Ionicons name="save-outline" size={14} color={theme.primary} />}
+              <Text style={styles.inlineBtnText}>{saving ? 'Saving...' : 'Save / Update Draft'}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.previewModeRow}>
               <TouchableOpacity
                 style={[styles.previewModePill, draftViewMode === 'cards' && styles.previewModePillActive]}
                 onPress={() => setDraftViewMode('cards')}
@@ -2277,6 +2389,11 @@ const createStyles = (theme: any) =>
     dayEmpty: {
       color: theme.textSecondary,
       fontSize: 12,
+    },
+    draftHeaderActions: {
+      marginTop: 8,
+      marginBottom: 2,
+      alignItems: 'flex-start',
     },
     previewModeRow: {
       flexDirection: 'row',

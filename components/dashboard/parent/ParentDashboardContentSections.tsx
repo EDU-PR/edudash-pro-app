@@ -36,6 +36,23 @@ interface BirthdayData {
   nextMonth: any[];
 }
 
+function getChildSchoolIds(child: any): string[] {
+  const ids = [
+    child?.organizationId,
+    child?.preschoolId,
+    child?.organization_id,
+    child?.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
+function isChildInEnabledSchools(child: any, enabledSchoolIds: string[]): boolean {
+  if (!enabledSchoolIds.length) return false;
+  return getChildSchoolIds(child).some((id) => enabledSchoolIds.includes(id));
+}
+
 export interface ParentDashboardContentSectionsProps {
   // Children + active
   activeChildId: string | null;
@@ -118,11 +135,7 @@ export const ParentDashboardContentSections: React.FC<ParentDashboardContentSect
           onToggle={toggleSection}
         >
           <UniformSizesSection
-            children={children.filter((child) =>
-              (child.preschoolId || child.preschool_id)
-                ? uniformSchoolIds.includes(child.preschoolId || child.preschool_id)
-                : false
-            )}
+            children={children.filter((child) => isChildInEnabledSchools(child, uniformSchoolIds))}
           />
         </CollapsibleSection>
       )}
@@ -140,11 +153,7 @@ export const ParentDashboardContentSections: React.FC<ParentDashboardContentSect
           onToggle={toggleSection}
         >
           <StationeryChecklistSection
-            children={children.filter((child) =>
-              (child.preschoolId || child.preschool_id)
-                ? stationerySchoolIds.includes(child.preschoolId || child.preschool_id)
-                : false
-            )}
+            children={children.filter((child) => isChildInEnabledSchools(child, stationerySchoolIds))}
           />
         </CollapsibleSection>
       )}

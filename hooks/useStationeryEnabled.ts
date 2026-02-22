@@ -7,10 +7,36 @@ interface StationeryEnabledResult {
   stationerySchoolIds: string[];
 }
 
+function getCurrentAcademicYear(): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+      }).format(new Date()),
+    );
+  } catch {
+    return new Date().getFullYear();
+  }
+}
+
+function getChildSchoolIds(child: any): string[] {
+  const ids = [
+    child?.organizationId,
+    child?.preschoolId,
+    child?.organization_id,
+    child?.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
 export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
   const [stationeryEnabled, setStationeryEnabled] = useState(false);
   const [stationerySchoolIds, setStationerySchoolIds] = useState<string[]>([]);
   const [focusTick, setFocusTick] = useState(0);
+  const academicYear = getCurrentAcademicYear();
 
   useFocusEffect(
     useCallback(() => {
@@ -25,15 +51,7 @@ export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
     const load = async () => {
       const schoolIds = Array.from(
         new Set(
-          children
-            .map(
-              (child) =>
-                child.preschoolId ||
-                child.preschool_id ||
-                child.organizationId ||
-                child.organization_id
-            )
-            .filter(Boolean)
+          children.flatMap((child) => getChildSchoolIds(child))
         )
       ) as string[];
 
@@ -47,9 +65,16 @@ export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
 
       try {
         const supabase = assertSupabase();
-        const [{ data: preschoolRows }, { data: orgRows }] = await Promise.all([
+        const [{ data: preschoolRows }, { data: orgRows }, { data: publishedLists }] = await Promise.all([
           supabase.from('preschools').select('id, settings').in('id', schoolIds),
           supabase.from('organizations').select('id, settings').in('id', schoolIds),
+          supabase
+            .from('stationery_lists')
+            .select('school_id')
+            .in('school_id', schoolIds)
+            .eq('academic_year', academicYear)
+            .eq('is_visible', true)
+            .eq('is_published', true),
         ]);
 
         const enabledIds = new Set<string>();
@@ -57,6 +82,9 @@ export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
           if (row?.settings?.features?.stationery?.enabled) {
             enabledIds.add(String(row.id));
           }
+        });
+        (publishedLists || []).forEach((row: any) => {
+          if (row?.school_id) enabledIds.add(String(row.school_id));
         });
 
         if (!cancelled) {
@@ -76,7 +104,7 @@ export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
     return () => {
       cancelled = true;
     };
-  }, [children, focusTick]);
+  }, [academicYear, children, focusTick]);
 
   return { stationeryEnabled, stationerySchoolIds };
 }

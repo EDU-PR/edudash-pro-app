@@ -89,14 +89,16 @@ function sortByOrder<T extends { sort_order?: number | null }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => (Number(a.sort_order || 0) - Number(b.sort_order || 0)));
 }
 
-function resolveChildSchoolId(child: ChildRow): string {
-  return String(
-    child.preschoolId ||
-      child.preschool_id ||
-      child.organizationId ||
-      child.organization_id ||
-      ''
-  );
+function resolveChildSchoolIds(child: ChildRow): string[] {
+  const ids = [
+    child.organizationId,
+    child.preschoolId,
+    child.organization_id,
+    child.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
 }
 
 function resolveChildSchoolName(child: ChildRow): string | undefined {
@@ -115,7 +117,7 @@ export function useStationeryChecklist(children: ChildRow[]) {
 
   const load = useCallback(async () => {
     const filteredChildren = children.filter(
-      (child) => Boolean(child?.id) && Boolean(resolveChildSchoolId(child))
+      (child) => Boolean(child?.id) && resolveChildSchoolIds(child).length > 0
     );
     if (!filteredChildren.length) {
       setChecklists([]);
@@ -128,7 +130,7 @@ export function useStationeryChecklist(children: ChildRow[]) {
 
     try {
       const schoolIds = Array.from(
-        new Set(filteredChildren.map((child) => resolveChildSchoolId(child)))
+        new Set(filteredChildren.flatMap((child) => resolveChildSchoolIds(child)))
       ).filter(Boolean);
 
       await Promise.all(
@@ -228,8 +230,9 @@ export function useStationeryChecklist(children: ChildRow[]) {
       });
 
       const mapped: StationeryChildChecklist[] = filteredChildren.map((child) => {
-        const schoolId = resolveChildSchoolId(child);
-        const schoolLists = listsBySchool.get(schoolId) || [];
+        const childSchoolIds = resolveChildSchoolIds(child);
+        const listSchoolId = childSchoolIds.find((id) => (listsBySchool.get(id) || []).length > 0) || null;
+        const schoolLists = listSchoolId ? listsBySchool.get(listSchoolId) || [] : [];
         const overrideListId = overrideMap.get(child.id);
         const age = resolveChildAge(child);
 
@@ -270,7 +273,7 @@ export function useStationeryChecklist(children: ChildRow[]) {
         return {
           childId: child.id,
           childName: resolveChildName(child),
-          schoolId,
+          schoolId: String(activeList?.school_id || listSchoolId || childSchoolIds[0] || ''),
           schoolName: resolveChildSchoolName(child),
           academicYear,
           listId: activeList ? String(activeList.id) : '',

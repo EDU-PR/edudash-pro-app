@@ -110,8 +110,28 @@ const TIER_QUOTAS: Record<string, Record<string, number>> = {
 
 function normalizeTier(tier: string): string {
   const t = (tier || 'free').toLowerCase().trim();
-  if (t.startsWith('parent_')) return t.replace('parent_', '');
   if (t === 'superadmin' || t === 'super_admin') return 'enterprise';
+  if (t === 'group_10') return 'premium';
+
+  if (t === 'parent_starter' || t === 'teacher_starter' || t === 'school_starter') return 'starter';
+  if (t === 'parent_plus' || t === 'teacher_pro' || t === 'school_premium' || t === 'school_pro') return 'premium';
+  if (t === 'school_enterprise') return 'enterprise';
+
+  if (t.startsWith('parent_')) {
+    if (t.endsWith('_starter')) return 'starter';
+    if (t.endsWith('_plus') || t.endsWith('_premium') || t.endsWith('_pro')) return 'premium';
+    if (t.endsWith('_enterprise')) return 'enterprise';
+  }
+
+  if (t.startsWith('school_') || t.startsWith('teacher_')) {
+    if (t.includes('starter')) return 'starter';
+    if (t.includes('premium') || t.includes('pro') || t.includes('plus')) return 'premium';
+    if (t.includes('enterprise')) return 'enterprise';
+  }
+
+  if (t.includes('enterprise')) return 'enterprise';
+  if (t.includes('premium') || t.includes('pro') || t.includes('plus')) return 'premium';
+  if (t.includes('starter')) return 'starter';
   if (Object.keys(TIER_QUOTAS).includes(t)) return t;
   return 'free';
 }
