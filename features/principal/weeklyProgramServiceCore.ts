@@ -655,14 +655,23 @@ export class WeeklyProgramService {
       throw new Error(announcementError?.message || 'Failed to share routine with parents');
     }
 
-    await supabase
+    const publishedAt = new Date().toISOString();
+    const { data: publishRows, error: publishError } = await supabase
       .from('weekly_programs')
       .update({
         status: 'published',
         published_by: input.sharedBy,
-        published_at: new Date().toISOString(),
+        published_at: publishedAt,
       })
-      .eq('id', input.weeklyProgramId);
+      .eq('id', input.weeklyProgramId)
+      .eq('preschool_id', input.preschoolId)
+      .select('id, status, published_at')
+      .limit(1);
+
+    const publishedRow = Array.isArray(publishRows) ? publishRows[0] : null;
+    if (publishError || !publishedRow?.id || String(publishedRow.status || '').toLowerCase() !== 'published') {
+      throw new Error(publishError?.message || 'Failed to publish weekly routine');
+    }
 
     try {
       await supabase.functions.invoke('notifications-dispatcher', {

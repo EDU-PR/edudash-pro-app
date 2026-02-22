@@ -16,6 +16,16 @@ import type {
 import { extractStepsFromContent, extractMediaFromContent } from '@/lib/display/parseLessonContent';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DEFAULT_ORG_TIMEZONE = 'Africa/Johannesburg';
+const WEEKDAY_TO_MONDAY_FIRST: Record<string, number> = {
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+  sun: 7,
+};
 
 type ProgramRow = {
   id: string;
@@ -81,6 +91,88 @@ function toDateOnly(value: Date): string {
 
 function getDayOfWeekMondayFirst(value: Date): number {
   return value.getDay() === 0 ? 7 : value.getDay();
+}
+
+function isValidTimeZone(value: unknown): value is string {
+  const timezone = String(value || '').trim();
+  if (!timezone) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function extractTimezoneFromSettings(settings: unknown): string | null {
+  if (!settings || typeof settings !== 'object') return null;
+  const timezone = (settings as Record<string, unknown>).timezone;
+  return isValidTimeZone(timezone) ? String(timezone).trim() : null;
+}
+
+async function resolveOrgTimezone(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<string> {
+  try {
+    const { data: preschoolRow } = await supabase
+      .from('preschools')
+      .select('settings')
+      .eq('id', orgId)
+      .maybeSingle();
+
+    const preschoolTimezone = extractTimezoneFromSettings((preschoolRow as { settings?: unknown } | null)?.settings);
+    if (preschoolTimezone) return preschoolTimezone;
+
+    const { data: organizationRow } = await supabase
+      .from('organizations')
+      .select('settings')
+      .eq('id', orgId)
+      .maybeSingle();
+
+    const organizationTimezone = extractTimezoneFromSettings(
+      (organizationRow as { settings?: unknown } | null)?.settings,
+    );
+    if (organizationTimezone) return organizationTimezone;
+  } catch {
+    // Non-fatal. Fall back to default timezone.
+  }
+
+  return DEFAULT_ORG_TIMEZONE;
+}
+
+function resolveCalendarContext(value: Date, timeZone: string): {
+  dateLabel: string;
+  dayOfWeek: number;
+  dayName: string;
+} {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'long',
+  });
+  const parts = formatter.formatToParts(value);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  const weekdayLong = parts.find((part) => part.type === 'weekday')?.value || '';
+
+  if (!year || !month || !day) {
+    return {
+      dateLabel: toDateOnly(value),
+      dayOfWeek: getDayOfWeekMondayFirst(value),
+      dayName: DAY_NAMES[value.getDay()],
+    };
+  }
+
+  const weekdayKey = weekdayLong.slice(0, 3).toLowerCase();
+  return {
+    dateLabel: `${year}-${month}-${day}`,
+    dayOfWeek: WEEKDAY_TO_MONDAY_FIRST[weekdayKey] || getDayOfWeekMondayFirst(value),
+    dayName: weekdayLong || DAY_NAMES[value.getDay()],
+  };
 }
 
 function normalizeTime(value: unknown): string | null {
@@ -259,8 +351,10 @@ export async function fetchDisplayDataServer(
   classId: string | null,
 ): Promise<DisplayData> {
   const now = new Date();
-  const today = toDateOnly(now);
-  const dayOfWeek = getDayOfWeekMondayFirst(now);
+  const orgTimezone = await resolveOrgTimezone(supabase, orgId);
+  const calendarContext = resolveCalendarContext(now, orgTimezone);
+  const today = calendarContext.dateLabel;
+  const dayOfWeek = calendarContext.dayOfWeek;
 
   let routine: DisplayTodayRoutine | null = null;
   let themeLabel: string | null = null;
@@ -629,6 +723,6 @@ export async function fetchDisplayDataServer(
     announcements,
     insights,
     dateLabel: today,
-    dayName: DAY_NAMES[now.getDay()],
+    dayName: calendarContext.dayName,
   };
 }
