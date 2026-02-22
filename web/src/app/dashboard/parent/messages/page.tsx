@@ -48,6 +48,12 @@ function ParentMessagesContent() {
   const [authLoading, setAuthLoading] = useState(true);
   const { slug } = useTenantSlug(userId);
   const { profile, loading: profileLoading } = useUserProfile(userId);
+  const schoolId = profile?.preschoolId || profile?.organizationId;
+  const CHAT_WALLPAPER_STORAGE_KEY_BASE = 'edudash-chat-wallpaper';
+  const wallpaperStorageKey =
+    userId && schoolId
+      ? `${CHAT_WALLPAPER_STORAGE_KEY_BASE}:${userId}:${schoolId}`
+      : CHAT_WALLPAPER_STORAGE_KEY_BASE;
 
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -105,7 +111,7 @@ function ParentMessagesContent() {
   
   // Load wallpaper from localStorage on mount
   useEffect(() => {
-    const savedWallpaper = localStorage.getItem('edudash-chat-wallpaper');
+    const savedWallpaper = localStorage.getItem(wallpaperStorageKey);
     if (savedWallpaper) {
       try {
         const parsed = JSON.parse(savedWallpaper);
@@ -116,13 +122,16 @@ function ParentMessagesContent() {
         }
       } catch (e) {
         console.error('Failed to load wallpaper:', e);
+        setWallpaperCss(null);
       }
+    } else {
+      setWallpaperCss(null);
     }
-  }, []);
+  }, [wallpaperStorageKey]);
   
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     // Save to localStorage
-    localStorage.setItem('edudash-chat-wallpaper', JSON.stringify(sel));
+    localStorage.setItem(wallpaperStorageKey, JSON.stringify(sel));
     
     if (sel.type === 'url') {
       setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);

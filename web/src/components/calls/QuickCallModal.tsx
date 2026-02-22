@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Phone, Video, X, Search, User, Loader2 } from 'lucide-react';
 
@@ -18,6 +18,7 @@ interface QuickCallModalProps {
   onVideoCall: (userId: string, userName: string) => void;
   currentUserId?: string;
   preschoolId?: string;
+  organizationId?: string;
 }
 
 export function QuickCallModal({
@@ -27,17 +28,32 @@ export function QuickCallModal({
   onVideoCall,
   currentUserId,
   preschoolId,
+  organizationId,
 }: QuickCallModalProps) {
   const supabase = createClient();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const tenantFilter = useMemo(() => {
+    const tenantIds = Array.from(
+      new Set([preschoolId, organizationId].filter((value): value is string => Boolean(value)))
+    );
+
+    if (tenantIds.length === 0) return null;
+
+    return tenantIds
+      .flatMap((id) => [`preschool_id.eq.${id}`, `organization_id.eq.${id}`])
+      .join(',');
+  }, [organizationId, preschoolId]);
 
   // Fetch contacts when modal opens
   // PRIVACY FIX: Parents should only see teachers/principals, not other parents
   const fetchContacts = useCallback(async () => {
-    if (!currentUserId || !preschoolId) return;
+    if (!currentUserId || !tenantFilter) {
+      setContacts([]);
+      return;
+    }
     
     setLoading(true);
     try {
@@ -65,7 +81,7 @@ export function QuickCallModal({
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, role')
-        .eq('preschool_id', preschoolId)
+        .or(tenantFilter)
         .neq('id', currentUserId)
         .in('role', allowedRoles)
         .order('first_name', { ascending: true });
@@ -78,7 +94,7 @@ export function QuickCallModal({
     } finally {
       setLoading(false);
     }
-  }, [supabase, currentUserId, preschoolId]);
+  }, [supabase, currentUserId, tenantFilter]);
 
   useEffect(() => {
     if (isOpen) {

@@ -8,6 +8,10 @@ import { OCR_PROMPT_BY_TASK } from './generated/ocrPrompts.ts';
 import {
   deriveResolutionMetadata,
 } from './resolutionPolicy.ts';
+import {
+  derivePlanModeMeta,
+  deriveSuggestedActions,
+} from './interactionHints.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -267,6 +271,14 @@ function redactMessagesForProvider(messages: Array<JsonRecord>): Array<JsonRecor
 function getEnv(name: string): string | null {
   const value = Deno.env.get(name);
   return value && value.length > 0 ? value : null;
+}
+
+function getBooleanFlag(name: string, fallback = true): boolean {
+  const raw = (getEnv(name) || getEnv(`EXPO_PUBLIC_${name}`) || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
+  return fallback;
 }
 
 function getAnthropicApiKey(): string | null {
@@ -3298,6 +3310,8 @@ serve(async (req) => {
     const ocrTask = payload.payload.ocr_task || 'document';
     const ocrResponseFormat = payload.payload.ocr_response_format || 'text';
     const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
+    const dashPlanModeEnabled = getBooleanFlag('DASH_PLAN_MODE_V1', true);
+    const dashSuggestedActionsEnabled = getBooleanFlag('DASH_SUGGESTED_ACTIONS_V1', true);
     const phonicsMode = detectPhonicsMode(payload.payload, requestMetadata);
     const criteriaResponseMode = shouldUseCriteriaResponseMode(payload.payload, requestMetadata);
 
@@ -3826,6 +3840,43 @@ serve(async (req) => {
       }
     );
 
+    const latestUserPrompt = getLatestUserTextForCriteria(payload.payload);
+    const planMode = dashPlanModeEnabled
+      ? derivePlanModeMeta({
+          metadata: requestMetadata,
+          latestUserPrompt,
+          assistantResponse: responseContent,
+        })
+      : undefined;
+    if (planMode?.active) {
+      console.info('dash.plan_mode.detected', {
+        user_id: userData.user.id,
+        scope: payload.scope || profile.role || 'unknown',
+        stage: planMode.stage,
+        completed: planMode.completed,
+      });
+    }
+
+    const suggestedActions = dashSuggestedActionsEnabled
+      ? deriveSuggestedActions({
+          latestUserPrompt,
+          assistantResponse: responseContent,
+          scope: String(payload.scope || profile.role || ''),
+          planMode,
+          pendingToolCalls: providerResponse.pending_tool_calls?.length || 0,
+          resolutionStatus: resolutionMeta.resolution_status,
+        })
+      : [];
+    if (suggestedActions.length > 0) {
+      console.info('dash.suggestions.generated', {
+        user_id: userData.user.id,
+        scope: payload.scope || profile.role || 'unknown',
+        count: suggestedActions.length,
+        plan_mode: planMode?.active || false,
+        stage: planMode?.stage || null,
+      });
+    }
+
     return new Response(JSON.stringify({
       success: true,
       content: responseContent,
@@ -3834,6 +3885,8 @@ serve(async (req) => {
       generated_images: providerResponse.generated_images || [],
       tool_results: providerResponse.tool_results || [],
       pending_tool_calls: providerResponse.pending_tool_calls || [],
+      suggested_actions: suggestedActions,
+      plan_mode: planMode || undefined,
       ocr: normalizedOCR || undefined,
       resolution_status: resolutionMeta.resolution_status,
       confidence_score: resolutionMeta.confidence_score,

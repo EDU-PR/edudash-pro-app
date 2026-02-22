@@ -35,6 +35,7 @@ interface NewChatModalProps {
   currentUserId: string | null;
   currentUserRole?: string;
   preschoolId?: string;
+  organizationId?: string;
 }
 
 export function NewChatModal({
@@ -46,12 +47,24 @@ export function NewChatModal({
   currentUserId,
   currentUserRole,
   preschoolId,
+  organizationId,
 }: NewChatModalProps) {
   const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'teachers' | 'parents' | 'community'>('all');
+  const tenantFilter = useMemo(() => {
+    const tenantIds = Array.from(
+      new Set([preschoolId, organizationId].filter((value): value is string => Boolean(value)))
+    );
+
+    if (tenantIds.length === 0) return null;
+
+    return tenantIds
+      .flatMap((id) => [`preschool_id.eq.${id}`, `organization_id.eq.${id}`])
+      .join(',');
+  }, [organizationId, preschoolId]);
 
   // Fetch contacts based on user role
   useEffect(() => {
@@ -60,6 +73,11 @@ export function NewChatModal({
     const fetchContacts = async () => {
       setLoading(true);
       try {
+        if (!tenantFilter) {
+          setContacts([]);
+          return;
+        }
+
         let allContacts: Contact[] = [];
 
         if (currentUserRole === 'parent') {
@@ -69,7 +87,7 @@ export function NewChatModal({
           const { data: schoolStaff } = await supabase
             .from('profiles')
             .select('id, first_name, last_name, email, phone, avatar_url, role')
-            .eq('preschool_id', preschoolId)
+            .or(tenantFilter)
             .in('role', ['teacher', 'principal', 'admin', 'principal_admin'])
             .neq('id', currentUserId);
 
@@ -78,12 +96,17 @@ export function NewChatModal({
           }
 
           // DO NOT fetch other parents - privacy violation removed
-        } else if (currentUserRole === 'teacher' || currentUserRole === 'principal' || currentUserRole === 'admin') {
+        } else if (
+          currentUserRole === 'teacher' ||
+          currentUserRole === 'principal' ||
+          currentUserRole === 'admin' ||
+          currentUserRole === 'principal_admin'
+        ) {
           // Teachers/principals see: all parents + all teachers at their school
           const { data: schoolUsers } = await supabase
             .from('profiles')
             .select('id, first_name, last_name, email, phone, avatar_url, role')
-            .eq('preschool_id', preschoolId)
+            .or(tenantFilter)
             .neq('id', currentUserId);
 
           if (schoolUsers) {
@@ -105,7 +128,7 @@ export function NewChatModal({
     };
 
     fetchContacts();
-  }, [isOpen, currentUserId, currentUserRole, preschoolId, supabase]);
+  }, [isOpen, currentUserId, currentUserRole, supabase, tenantFilter]);
 
   // Filter contacts based on search and tab
   const filteredContacts = useMemo(() => {
@@ -113,7 +136,13 @@ export function NewChatModal({
 
     // Filter by tab
     if (activeTab === 'teachers') {
-      filtered = filtered.filter(c => c.role === 'teacher' || c.role === 'principal' || c.role === 'admin');
+      filtered = filtered.filter(
+        c =>
+          c.role === 'teacher' ||
+          c.role === 'principal' ||
+          c.role === 'admin' ||
+          c.role === 'principal_admin'
+      );
     } else if (activeTab === 'parents') {
       filtered = filtered.filter(c => c.role === 'parent');
     }
@@ -143,6 +172,7 @@ export function NewChatModal({
     switch (role) {
       case 'teacher': return 'rgba(59, 130, 246, 0.3)';
       case 'principal': return 'rgba(168, 85, 247, 0.3)';
+      case 'principal_admin': return 'rgba(168, 85, 247, 0.3)';
       case 'admin': return 'rgba(236, 72, 153, 0.3)';
       case 'parent': return 'rgba(34, 197, 94, 0.3)';
       default: return 'rgba(148, 163, 184, 0.3)';

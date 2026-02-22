@@ -360,6 +360,12 @@ function PrincipalMessagesPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
+  const schoolId = profile?.preschoolId || profile?.organizationId;
+  const CHAT_WALLPAPER_STORAGE_KEY_BASE = 'edudash-chat-wallpaper';
+  const wallpaperStorageKey =
+    userId && schoolId
+      ? `${CHAT_WALLPAPER_STORAGE_KEY_BASE}:${userId}:${schoolId}`
+      : CHAT_WALLPAPER_STORAGE_KEY_BASE;
   const { slug: tenantSlug } = useTenantSlug(userId);
 
   // Typing indicator and calling
@@ -382,7 +388,7 @@ function PrincipalMessagesPage() {
 
   // Load wallpaper from localStorage on mount
   useEffect(() => {
-    const savedWallpaper = localStorage.getItem('edudash-chat-wallpaper');
+    const savedWallpaper = localStorage.getItem(wallpaperStorageKey);
     if (savedWallpaper) {
       try {
         const parsed = JSON.parse(savedWallpaper);
@@ -393,9 +399,12 @@ function PrincipalMessagesPage() {
         }
       } catch (e) {
         console.error('Failed to load wallpaper:', e);
+        setWallpaperCss(null);
       }
+    } else {
+      setWallpaperCss(null);
     }
-  }, []);
+  }, [wallpaperStorageKey]);
 
   // Message options menu state
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
@@ -429,7 +438,7 @@ function PrincipalMessagesPage() {
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     // Save to localStorage for persistence
-    localStorage.setItem('edudash-chat-wallpaper', JSON.stringify(sel));
+    localStorage.setItem(wallpaperStorageKey, JSON.stringify(sel));
     
     if (sel.type === 'url') {
       setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);
@@ -452,7 +461,7 @@ function PrincipalMessagesPage() {
   }, [selectedThreadId]);
 
   const startConversationWithContact = useCallback(async (contact: ChatContact) => {
-    if (!userId || !profile?.preschoolId) return;
+    if (!userId || !schoolId) return;
     if (contact.id === userId) return;
 
     const contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
@@ -468,7 +477,7 @@ function PrincipalMessagesPage() {
           group_type,
           message_participants(user_id)
         `)
-        .eq('preschool_id', profile.preschoolId);
+        .eq('preschool_id', schoolId);
 
       if (threadsError) throw threadsError;
 
@@ -497,7 +506,7 @@ function PrincipalMessagesPage() {
 
       const threadType = contactRole === 'parent' ? 'parent-principal' : 'staff-chat';
       const threadPayload = {
-        preschool_id: profile.preschoolId,
+        preschool_id: schoolId,
         subject: contactName ? `Conversation with ${contactName}` : 'New Conversation',
         created_by: userId,
         type: threadType,
@@ -517,7 +526,7 @@ function PrincipalMessagesPage() {
           const { data: fallbackThread, error: fallbackError } = await supabase
             .from('message_threads')
             .insert({
-              preschool_id: profile.preschoolId,
+              preschool_id: schoolId,
               subject: contactName ? `Conversation with ${contactName}` : 'New Conversation',
               type: threadType,
               last_message_at: new Date().toISOString(),
@@ -560,7 +569,7 @@ function PrincipalMessagesPage() {
       console.error('Error starting conversation:', err);
       alert('Failed to start conversation. Please try again.');
     }
-  }, [profile?.preschoolId, profile?.role, router, supabase, userId]);
+  }, [profile?.role, router, schoolId, supabase, userId]);
 
   const startConversationWithContactId = useCallback(async (contactId: string) => {
     if (!contactId) return;
@@ -605,10 +614,10 @@ function PrincipalMessagesPage() {
   useEffect(() => {
     if (!directContactId || threadFromUrl) return;
     if (directContactHandledRef.current === directContactId) return;
-    if (!userId || !profile?.preschoolId) return;
+    if (!userId || !schoolId) return;
     directContactHandledRef.current = directContactId;
     startConversationWithContactId(directContactId);
-  }, [directContactId, profile?.preschoolId, startConversationWithContactId, threadFromUrl, userId]);
+  }, [directContactId, schoolId, startConversationWithContactId, threadFromUrl, userId]);
 
   const scrollToBottom = (instant = false) => {
     messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
@@ -861,7 +870,7 @@ function PrincipalMessagesPage() {
   };
 
   const fetchThreads = useCallback(async () => {
-    if (!userId || !profile?.preschoolId) return;
+    if (!userId || !schoolId) return;
 
     setThreadsLoading(true);
     setError(null);
@@ -889,7 +898,7 @@ function PrincipalMessagesPage() {
             can_send_messages
           )
         `)
-        .eq('preschool_id', profile.preschoolId)
+        .eq('preschool_id', schoolId)
         .order('last_message_at', { ascending: false });
       
       if (threadsError) throw threadsError;
@@ -1020,13 +1029,13 @@ function PrincipalMessagesPage() {
     } finally {
       setThreadsLoading(false);
     }
-  }, [profile?.preschoolId, selectedThreadId, supabase, userId]);
+  }, [schoolId, selectedThreadId, supabase, userId]);
 
   useEffect(() => {
-    if (userId && profile?.preschoolId) {
+    if (userId && schoolId) {
       fetchThreads();
     }
-  }, [userId, profile?.preschoolId, fetchThreads, refreshTrigger]);
+  }, [userId, schoolId, fetchThreads, refreshTrigger]);
 
   useEffect(() => {
     if (selectedThreadId) {
@@ -1781,7 +1790,7 @@ function PrincipalMessagesPage() {
         userEmail={profile?.email}
         userName={profile?.firstName}
         preschoolName={profile?.preschoolName}
-        preschoolId={profile?.preschoolId}
+        preschoolId={schoolId}
         unreadCount={totalUnread}
         contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100vh', maxHeight: '100vh', position: 'relative' }}
       >
@@ -2827,14 +2836,15 @@ function PrincipalMessagesPage() {
           }}
           currentUserId={userId || null}
           currentUserRole={profile?.role || 'principal'}
-          preschoolId={profile?.preschoolId}
+          preschoolId={schoolId}
+          organizationId={profile?.organizationId}
         />
 
         {/* Invite Contact Modal */}
         <InviteContactModal
           isOpen={showInviteModal}
           onClose={() => setShowInviteModal(false)}
-          preschoolId={profile?.preschoolId}
+          preschoolId={schoolId}
           inviterName={profile?.firstName || 'A principal'}
           preschoolName={profile?.preschoolName}
           inviterId={userId}
@@ -2849,7 +2859,7 @@ function PrincipalMessagesPage() {
             setSelectedThreadId(threadId);
             fetchThreads();
           }}
-          preschoolId={profile?.preschoolId}
+          preschoolId={schoolId}
           userId={userId}
           userRole={profile?.role || undefined}
         />
@@ -2861,7 +2871,8 @@ function PrincipalMessagesPage() {
           onVoiceCall={(uid, userName) => startVoiceCall(uid, userName)}
           onVideoCall={(uid, userName) => startVideoCall(uid, userName)}
           currentUserId={userId}
-          preschoolId={profile?.preschoolId}
+          preschoolId={schoolId}
+          organizationId={profile?.organizationId}
         />
 
         {/* Group chat: avatar click opens Message / Voice / Video options */}

@@ -580,6 +580,7 @@ export default function POPReviewScreen() {
       : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
     const selectedMonth = queueMonthSelections[upload.id];
     if (!selectedMonth) {
+      console.info('finance.queue.month_required_block', { uploadId: upload.id, studentId: upload.student_id });
       showAlert({
         title: 'Month Required',
         message: 'Select accounting month to continue.',
@@ -602,6 +603,12 @@ export default function POPReviewScreen() {
             const selectedMonth = resolvePaymentMonth(upload, monthOverride);
             setProcessing(upload.id);
             try {
+              console.info('finance.pop.approve.month_selected', {
+                uploadId: upload.id,
+                studentId: upload.student_id,
+                billingMonth: selectedMonth,
+                categoryCode: selectedCategory,
+              });
               await updatePOPStatus.mutateAsync({
                 uploadId: upload.id,
                 status: 'approved',
