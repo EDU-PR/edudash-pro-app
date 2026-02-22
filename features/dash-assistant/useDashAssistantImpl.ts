@@ -80,6 +80,14 @@ import {
 } from '@/hooks/dash-assistant/assistantHelpers';
 import type { TutorMode, TutorPayload, TutorSession } from '@/hooks/dash-assistant/tutorTypes';
 import {
+  mergeAutoToolExecutionIntoResponse,
+  type AutoToolExecution,
+} from '@/features/dash-assistant/autoToolMerge';
+import {
+  appendAssistantMessageByTurn,
+  normalizeMessagesByTurn,
+} from '@/features/dash-assistant/turnOrdering';
+import {
   applyTutorHints,
   buildFallbackTutorEvaluation,
   buildTutorDisplayContent,
@@ -833,11 +841,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, []);
 
   const normalizeConversationMessages = useCallback((items: DashMessage[]) => {
-    return items.map((msg) => {
+    const normalized = items.map((msg) => {
       if (msg.type !== 'user') return msg;
       const { content, sanitized } = sanitizeTutorUserContent(msg.content);
       return sanitized ? { ...msg, content } : msg;
     });
+    return normalizeMessagesByTurn(normalized);
   }, []);
 
   const mapToPersistedMessages = useCallback((items: DashMessage[]) => {
@@ -1284,11 +1293,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         content: displayText,
         timestamp: Date.now(),
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        metadata: {
+          turn_id: turnId,
+        },
       };
       setMessages(prev => [...prev, localUserMessage]);
 
       // Auto tool execution for low-risk tools (CAPS/data/navigation/PDF)
       let autoToolContext: string | null = null;
+      let autoToolExecution: AutoToolExecution | null = null;
       if (shouldAttemptToolPlan(outgoingText) && plannerTools.length > 0) {
         try {
           let supabaseClient: any = null;
@@ -1323,21 +1336,24 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               });
               const label = autoToolShortcuts.find((tool) => tool.name === plan.tool)?.label || plan.tool;
               const toolMessageContent = formatToolResultMessage(label, execution);
-
-              const toolMessage: DashMessage = {
-                id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                type: 'assistant',
-                content: toolMessageContent,
-                timestamp: Date.now(),
-                metadata: {
-                  tool_name: plan.tool,
-                  tool_result: execution,
-                  tool_args: plan.parameters || {},
-                },
-              };
-
-              setMessages(prev => [...prev, toolMessage]);
+              const executionPayload = (execution?.result && typeof execution.result === 'object')
+                ? execution.result as Record<string, unknown>
+                : null;
+              const executionSummary = executionPayload
+                ? String(
+                    executionPayload.summary
+                    || executionPayload.message
+                    || executionPayload.status_message
+                    || ''
+                  ).trim()
+                : '';
               autoToolContext = toolMessageContent;
+              autoToolExecution = {
+                toolName: plan.tool,
+                toolArgs: (plan.parameters || {}) as Record<string, unknown>,
+                execution,
+                summary: executionSummary || undefined,
+              };
             }
           }
         } catch (toolErr) {
@@ -1526,6 +1542,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             signal: controller.signal,
           }
         );
+      }
+
+      response = mergeAutoToolExecutionIntoResponse(response, autoToolExecution);
+      {
+        const metadata = { ...((response.metadata || {}) as Record<string, unknown>) };
+        metadata.turn_id = turnId;
+        if (!metadata.tool_origin && metadata.tool_name) {
+          metadata.tool_origin = autoToolExecution ? 'auto_planner' : 'server_tool';
+        }
+        response = {
+          ...response,
+          metadata: metadata as any,
+        };
       }
 
       if (tutorAction && response?.content) {
@@ -1740,7 +1769,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         preview: String(response.content || '').slice(0, 180),
         language: String((response.metadata as any)?.detected_language || requestLanguage.locale || ''),
       });
-      setMessages(prev => [...prev, response]);
+      setMessages(prev => appendAssistantMessageByTurn(prev, response));
       
       setLoadingStatus('responding');
       setStatusStartTime(Date.now());
@@ -1778,7 +1807,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const updatedConv = await dashInstance.getConversation(dashInstance.getCurrentConversationId()!);
       if (updatedConv && Array.isArray(updatedConv.messages) && updatedConv.messages.length > 0) {
         const overrideMap = tutorOverridesRef.current;
-        const merged = updatedConv.messages.map(msg => {
+        const merged = normalizeMessagesByTurn(updatedConv.messages.map(msg => {
           const override = overrideMap[msg.id];
           if (override) {
             return { ...msg, content: override };
@@ -1788,7 +1817,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             return sanitized ? { ...msg, content } : msg;
           }
           return msg;
-        });
+        }));
         setMessages(prev => (merged.length >= prev.length ? merged : prev));
         setConversation(updatedConv);
         if (isNearBottomRef.current) {
@@ -2328,6 +2357,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           tool_name: toolName,
           tool_result: execution,
           tool_args: params || {},
+          tool_origin: 'manual_tool',
         },
       };
 

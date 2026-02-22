@@ -12,7 +12,7 @@
  * - DashTypingIndicator for loading states
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutStyles, headerStyles, messageStyles, inputStyles } from '@/components/ai/dash-assistant/styles';
@@ -33,12 +33,11 @@ import { router } from 'expo-router';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
-import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips';
-import { setPreferredModel } from '@/lib/ai/preferences';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { loadAutoScanBudget, trackAutoScanUsage } from '@/lib/dash-ai/imageBudget';
+import { resolveSpeechControlsLayoutState } from '@/features/dash-ai/speechControls';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -114,6 +113,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_MIN_HEIGHT);
   const [lastSpokenMessageId, setLastSpokenMessageId] = useState<string | null>(null);
   const [speechSegmentIndex, setSpeechSegmentIndex] = useState(0);
+  const [speechControlsExpanded, setSpeechControlsExpanded] = useState(false);
+  const wasSpeakingRef = useRef(false);
   const [remainingScans, setRemainingScans] = useState<number | null>(null);
 
   // Keyboard listeners
@@ -214,6 +215,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   }, [speakingMessageId]);
 
   useEffect(() => {
+    if (isSpeaking) {
+      setSpeechControlsExpanded(true);
+    } else if (wasSpeakingRef.current) {
+      setSpeechControlsExpanded(false);
+    }
+    wasSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
+
+  useEffect(() => {
     if (!speechChunkProgress || speechChunkProgress.chunkCount <= 0) return;
     const boundedIndex = Math.max(
       0,
@@ -229,6 +239,12 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     if (!match || match.type !== 'assistant') return null;
     return match;
   }, [messages, activeSpeechMessageId]);
+
+  useEffect(() => {
+    if (!activeSpeechMessage) {
+      setSpeechControlsExpanded(false);
+    }
+  }, [activeSpeechMessage]);
   const speechSegments = useMemo(
     () => splitSpeechSegments(activeSpeechMessage?.content || ''),
     [activeSpeechMessage?.content],
@@ -243,7 +259,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const speechProgress = chunkCount > 0
     ? Math.min(1, Math.max(0, (displaySpeechIndex + 1) / chunkCount))
     : 0;
-  const showSpeakingTransport = Boolean(activeSpeechMessage) && (isSpeaking || speechSegments.length > 0);
+  const speechControlsLayout = resolveSpeechControlsLayoutState({
+    isSpeaking,
+    hasSpeechMessage: Boolean(activeSpeechMessage),
+    chunkCount,
+    expanded: speechControlsExpanded,
+  });
+  const showMiniSpeechControls = speechControlsLayout.showMiniControls;
+  const showFullSpeechControls = speechControlsLayout.showFullControls;
   const bottomThinkingLabel = getBottomThinkingLabel(loadingStatus);
   const showBottomThinkingDock = isTypingActive && !isRecording;
 
@@ -516,22 +539,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                     {shellSubtitle}
                   </Text>
                   {!useMinimalNextGenLayout && <ModelInUseIndicator modelId={selectedModel} compact showCostDots />}
-                  {!useMinimalNextGenLayout && availableModels.length > 1 && (
-                    <View style={{ marginTop: 6 }}>
-                      <ModelSelectorChips
-                        availableModels={availableModels}
-                        selectedModel={selectedModel}
-                        onSelect={setSelectedModel}
-                        feature="chat_message"
-                        onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'chat_message'); }}
-                        showSectionTitle={false}
-                        showWhenFree={true}
-                        collapsible
-                        defaultCollapsed
-                        autoCollapseOnSelect
-                      />
-                    </View>
-                  )}
                 </View>
                 <View style={headerStyles.headerRight}>
                   <View
@@ -557,7 +564,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                           void stopAllActivity('header_stop_button');
                         }}
                       >
-                        <Ionicons name="stop" size={18} color={theme.onError || theme.background} />
+                        <Ionicons name="stop" size={16} color={theme.onError || theme.background} />
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
@@ -565,7 +572,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                       accessibilityLabel="Open Dash options"
                       onPress={openOptionsSheet}
                     >
-                      <Ionicons name="ellipsis-horizontal" size={18} color={theme.text} />
+                      <Ionicons name="ellipsis-horizontal" size={16} color={theme.text} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -576,7 +583,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                       accessibilityLabel="Open Dash Orb"
                       onPress={handleOpenOrb}
                     >
-                      <Ionicons name="planet" size={19} color={theme.primary} />
+                      <Ionicons name="planet" size={17} color={theme.primary} />
                     </TouchableOpacity>
                     {onClose && (
                       <TouchableOpacity
@@ -588,7 +595,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                         }}
                         accessibilityLabel="Close"
                       >
-                        <Ionicons name="close" size={20} color={theme.text} />
+                        <Ionicons name="close" size={18} color={theme.text} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -620,33 +627,87 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </View>
                 </View>
               )}
-              {showSpeakingTransport && (
+              {showMiniSpeechControls && (
                 <View
                   style={{
-                    marginTop: 10,
+                    marginTop: 8,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    borderRadius: 11,
+                    backgroundColor: theme.surfaceVariant + 'C7',
+                    paddingHorizontal: 10,
+                    paddingVertical: 7,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <TouchableOpacity
+                    style={[headerStyles.iconButton, { backgroundColor: theme.primary + '22', borderColor: theme.primary + '44' }]}
+                    onPress={handleSpeechToggle}
+                    accessibilityLabel={isSpeaking ? 'Stop speech' : 'Play speech'}
+                  >
+                    <Ionicons
+                      name={isSpeaking ? 'stop' : 'play'}
+                      size={14}
+                      color={theme.primary}
+                    />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
+                      Speech controls
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 10, fontWeight: '600' }}>
+                      {chunkCount > 0 ? `${displaySpeechIndex + 1}/${chunkCount}` : '0/0'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                    onPress={() => setSpeechControlsExpanded(true)}
+                    accessibilityLabel="Expand speech controls"
+                  >
+                    <Ionicons name="chevron-down" size={15} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {showFullSpeechControls && (
+                <View
+                  style={{
+                    marginTop: 8,
                     borderWidth: 1,
                     borderColor: theme.border,
                     borderRadius: 12,
                     backgroundColor: theme.surfaceVariant + 'CC',
                     paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    gap: 8,
+                    paddingVertical: 7,
+                    gap: 7,
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <Text
-                      style={{ color: theme.text, fontSize: 12, fontWeight: '700', flex: 1 }}
+                      style={{ color: theme.text, fontSize: 11, fontWeight: '700', flex: 1 }}
                       numberOfLines={1}
                     >
                       {isSpeaking ? 'Dash speaking' : 'Speech controls'}
                     </Text>
-                    <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '600' }}>
-                      {chunkCount > 0 ? `${displaySpeechIndex + 1}/${chunkCount}` : '0/0'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: theme.textSecondary, fontSize: 10, fontWeight: '600' }}>
+                        {chunkCount > 0 ? `${displaySpeechIndex + 1}/${chunkCount}` : '0/0'}
+                      </Text>
+                      {!isSpeaking && (
+                        <TouchableOpacity
+                          style={[headerStyles.iconButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                          onPress={() => setSpeechControlsExpanded(false)}
+                          accessibilityLabel="Collapse speech controls"
+                        >
+                          <Ionicons name="chevron-up" size={14} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                   <View
                     style={{
-                      height: 6,
+                      height: 5,
                       borderRadius: 999,
                       overflow: 'hidden',
                       backgroundColor: theme.surface,

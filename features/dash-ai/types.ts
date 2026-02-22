@@ -114,6 +114,17 @@ export interface DashMessage {
     tool_result?: any;
     tool_args?: any;
     tool_summary?: string;
+    turn_id?: string;
+    tool_origin?: 'auto_planner' | 'server_tool' | 'manual_tool';
+    auto_tool_merged?: boolean;
+    pdf_artifact?: {
+      storagePath?: string;
+      downloadUrl?: string;
+      signedUrl?: string;
+      filename?: string;
+      linkType?: string;
+      warning?: string;
+    };
 
     /** Render helpers for richer chat UIs */
     render_hints?: {
