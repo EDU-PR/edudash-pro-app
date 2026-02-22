@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dimensions, FlatList, Image, Linking, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -123,6 +123,7 @@ export default function POPReviewScreen() {
   const insets = useSafeAreaInsets();
   const updatePOPStatus = useUpdatePOPStatus();
   const { showAlert, alertProps } = useAlertModal();
+  const params = useLocalSearchParams<{ monthIso?: string }>();
   
   // State
   const [uploads, setUploads] = useState<POPUpload[]>([]);
@@ -146,9 +147,13 @@ export default function POPReviewScreen() {
   const [receiptGenerating, setReceiptGenerating] = useState(false);
   const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, FeeCategoryCode>>({});
-  const [monthOverrides, setMonthOverrides] = useState<Record<string, string>>({});
+  const [queueMonthSelections, setQueueMonthSelections] = useState<Record<string, string>>({});
 
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  const selectedControlMonth = React.useMemo(
+    () => getMonthStartISO(params.monthIso || new Date().toISOString()),
+    [params.monthIso],
+  );
 
   // Fetch POP uploads
   const fetchUploads = useCallback(async () => {
@@ -513,51 +518,50 @@ export default function POPReviewScreen() {
     });
   }, [getResolvedCategoryCode, showAlert]);
 
-  const resolvePaymentMonth = useCallback((upload: POPUpload, explicitMonth?: string) => {
-    const rawMonth =
-      explicitMonth ??
-      monthOverrides[upload.id] ??
-      upload.payment_for_month ??
-      upload.payment_date ??
-      new Date().toISOString().split('T')[0];
+  const resolveQueueDisplayMonth = useCallback(
+    (upload: POPUpload) =>
+      getMonthStartISO(upload.payment_for_month || upload.payment_date || upload.created_at || selectedControlMonth, {
+        recoverUtcMonthBoundary: Boolean(upload.payment_for_month),
+      }),
+    [selectedControlMonth],
+  );
 
-    return getMonthStartISO(rawMonth, {
-      recoverUtcMonthBoundary: Boolean(upload.payment_for_month || upload.payment_date),
-    });
-  }, [monthOverrides]);
+  const openQueueMonthPicker = useCallback((upload: POPUpload) => {
+    const selectedMonth = queueMonthSelections[upload.id];
+    const currentMonthDate = new Date(selectedControlMonth);
+    const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
+    const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
+    const suggestedMonth = resolveQueueDisplayMonth(upload);
+    const candidateMonths = Array.from(
+      new Set(
+        [
+          selectedControlMonth,
+          `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+          `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+          suggestedMonth,
+        ].filter(Boolean),
+      ),
+    );
 
-  const openMonthPicker = useCallback((upload: POPUpload, onMonthSelected?: (value: string) => void) => {
-    const resolvedMonth = resolvePaymentMonth(upload);
-    const [baseYear, baseMonth] = resolvedMonth.split('-').map((part) => Number(part));
-    const anchorYear = Number.isFinite(baseYear) ? baseYear : new Date().getFullYear();
-    const anchorMonth = Number.isFinite(baseMonth) && baseMonth >= 1 && baseMonth <= 12
-      ? baseMonth
-      : new Date().getMonth() + 1;
-    const options: { label: string; value: string }[] = [];
-    for (let i = -6; i <= 6; i++) {
-      const d = new Date(anchorYear, anchorMonth - 1 + i, 1);
-      const value = getMonthStartISO(d);
-      const label = d.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' });
-      options.push({ label, value });
-    }
     showAlert({
-      title: 'Payment For Month',
-      message: 'Select the billing month for this adjustment.',
+      title: 'Select Accounting Month',
+      message: 'Choose the month this POP should settle against.',
       type: 'warning',
       buttons: [
-        ...options.map((opt) => ({
-          text: `${opt.label}${resolvedMonth.slice(0, 7) === opt.value.slice(0, 7) ? ' ✓' : ''}`,
+        ...candidateMonths.map((candidate) => ({
+          text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
+            selectedMonth === candidate ? ' ✓' : ''
+          }`,
           onPress: () => {
-            setMonthOverrides((prev) => ({ ...prev, [upload.id]: opt.value }));
-            onMonthSelected?.(opt.value);
+            setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
           },
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
-  }, [resolvePaymentMonth, showAlert]);
+  }, [queueMonthSelections, resolveQueueDisplayMonth, selectedControlMonth, showAlert]);
 
-  const showApprovalDialog = useCallback((upload: POPUpload, monthOverride?: string) => {
+  const handleApprove = async (upload: POPUpload) => {
     const originalCategory = upload.category_code
       ? normalizeFeeCategoryCode(upload.category_code)
       : inferFeeCategoryCode(upload.description || upload.title || 'tuition');
@@ -574,8 +578,15 @@ export default function POPReviewScreen() {
     const reviewNotes = categoryWasCorrected
       ? `Payment verified and approved. Category corrected from ${CATEGORY_META[originalCategory].label} to ${CATEGORY_META[selectedCategory].label}.`
       : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
-    const displayMonth = resolvePaymentMonth(upload, monthOverride);
-    const monthLabel = formatMonth(displayMonth);
+    const selectedMonth = queueMonthSelections[upload.id];
+    if (!selectedMonth) {
+      showAlert({
+        title: 'Month Required',
+        message: 'Select accounting month to continue.',
+        type: 'warning',
+      });
+      return;
+    }
     showAlert({
       title: 'Approve Payment',
       message: `Approve this payment proof from ${uploaderDisplay}?\n\nCategory: ${categoryLabel}${categoryWasCorrected ? ' (corrected)' : ''}\nPayment For: ${monthLabel}`,
@@ -603,7 +614,7 @@ export default function POPReviewScreen() {
                 delete next[upload.id];
                 return next;
               });
-              setMonthOverrides((prev) => {
+              setQueueMonthSelections((prev) => {
                 const next = { ...prev };
                 delete next[upload.id];
                 return next;
@@ -754,6 +765,7 @@ export default function POPReviewScreen() {
     })();
     const paymentForMonth = resolvePaymentMonth(item);
     const categoryMeta = getCategoryMeta(item);
+    const selectedMonth = queueMonthSelections[item.id];
 
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -818,6 +830,35 @@ export default function POPReviewScreen() {
             </View>
           )}
 
+          {item.status === 'pending' && (
+            <View style={styles.infoRow}>
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={selectedMonth ? theme.primary : theme.warning || '#F59E0B'}
+              />
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Accounting month:</Text>
+              <TouchableOpacity
+                style={[
+                  styles.monthPickerButton,
+                  { borderColor: selectedMonth ? theme.primary + '60' : theme.warning || '#F59E0B' },
+                ]}
+                onPress={() => openQueueMonthPicker(item)}
+              >
+                <Text
+                  style={[
+                    styles.monthPickerButtonText,
+                    { color: selectedMonth ? theme.primary : theme.warning || '#F59E0B' },
+                  ]}
+                >
+                  {selectedMonth
+                    ? new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
+                    : 'Select month'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.infoRow}>
             <Ionicons name="pricetag" size={16} color={theme.textSecondary} />
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Category:</Text>
@@ -866,14 +907,16 @@ export default function POPReviewScreen() {
             <TouchableOpacity
               style={[styles.actionButton, styles.approveButton, { backgroundColor: theme.success }]}
               onPress={() => handleApprove(item)}
-              disabled={isProcessing}
+              disabled={isProcessing || !selectedMonth}
             >
               {isProcessing ? (
                 <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark" size={18} color="#fff" />
-                  <Text style={[styles.actionButtonText, { color: '#fff' }]}>Approve</Text>
+                  <Text style={[styles.actionButtonText, { color: '#fff' }]}>
+                    {selectedMonth ? 'Approve' : 'Select month first'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -1374,6 +1417,17 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
     categoryEditText: {
       fontSize: 11,
       fontWeight: '600',
+    },
+    monthPickerButton: {
+      marginLeft: 4,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    monthPickerButtonText: {
+      fontSize: 11,
+      fontWeight: '700',
     },
     cardActions: {
       flexDirection: 'row',

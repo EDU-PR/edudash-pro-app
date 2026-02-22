@@ -18,14 +18,14 @@ import {
 // Silence detection settings (defaults, overridable via options)
 // Speech threshold is configurable via env (default -30dB for better sensitivity in quiet environments)
 const DEFAULT_SPEECH_THRESHOLD = parseFloat(process.env.EXPO_PUBLIC_VOICE_SPEECH_THRESHOLD || '-30');
-const DEFAULT_SILENCE_DURATION_MS = 2500; // Auto-send after 2.5s silence
+const DEFAULT_SILENCE_DURATION_MS = 1400; // Auto-send quickly after stable silence
 const MIN_RECORDING_MS = 800;
 const MAX_RECORDING_MS = 30000;
 
 export interface VoiceRecorderOptions {
   /** Override speech threshold dB (default -30). Use -35 for children. */
   speechThreshold?: number;
-  /** Override silence duration ms (default 2500). Use 4000 for children. */
+  /** Override silence duration ms (default 1400). Use 3000+ for children. */
   silenceDuration?: number;
 }
 

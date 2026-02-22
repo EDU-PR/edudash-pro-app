@@ -29,6 +29,12 @@ const TTS_CHUNK_TIMEOUT_MIN_MS = 45_000;
 const TTS_CHUNK_TIMEOUT_MAX_MS = 210_000;
 const TTS_CHUNK_TIMEOUT_PER_CHAR_MS = 85;
 const RAW_URL_REGEX = /https?:\/\/[^\s)]+/gi;
+const STT_FINALIZE_MIN_MS = 650;
+const STT_FINALIZE_MAX_MS = 5000;
+const STT_FINALIZE_DEFAULT_MS = 900;
+const STT_FINALIZE_DEFAULT_PRESCHOOL_MS = 1300;
+const STT_FINAL_COMMIT_MIN_MS = 180;
+const STT_FINAL_COMMIT_MAX_MS = 520;
 
 export type SpeechChunkProgress = {
   messageId: string;
@@ -579,7 +585,7 @@ export async function handleDashVoiceInputPress(params: {
     setInputText,
     existingInputText = '',
     voiceAutoSend = false,
-    voiceAutoSendSilenceMs = 3200,
+    voiceAutoSendSilenceMs = STT_FINALIZE_DEFAULT_MS,
     voiceWhisperFlowEnabled = true,
     voiceWhisperFlowSummaryEnabled = true,
     isPreschoolMode = false,
@@ -709,7 +715,23 @@ export async function handleDashVoiceInputPress(params: {
     if (voiceRefs.sttTranscriptBufferRef) {
       voiceRefs.sttTranscriptBufferRef.current = transcriptSeed;
     }
-    const finalizeDelayMs = Math.max(1800, Math.min(8000, Number(voiceAutoSendSilenceMs) || 1800));
+    const defaultFinalizeDelayMs = isPreschoolMode
+      ? STT_FINALIZE_DEFAULT_PRESCHOOL_MS
+      : STT_FINALIZE_DEFAULT_MS;
+    const minFinalizeDelayMs = isPreschoolMode
+      ? Math.max(STT_FINALIZE_MIN_MS, 900)
+      : STT_FINALIZE_MIN_MS;
+    const maxFinalizeDelayMs = isPreschoolMode
+      ? Math.min(STT_FINALIZE_MAX_MS, 3600)
+      : Math.min(STT_FINALIZE_MAX_MS, 2200);
+    const parsedFinalizeDelay = Number(voiceAutoSendSilenceMs);
+    const finalizeDelayMs = Number.isFinite(parsedFinalizeDelay)
+      ? Math.max(minFinalizeDelayMs, Math.min(maxFinalizeDelayMs, parsedFinalizeDelay))
+      : defaultFinalizeDelayMs;
+    const finalCommitDelayMs = Math.max(
+      STT_FINAL_COMMIT_MIN_MS,
+      Math.min(STT_FINAL_COMMIT_MAX_MS, Math.round(finalizeDelayMs * 0.45)),
+    );
     let voiceActivityTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const setVoiceActivity = (active: boolean) => {
@@ -774,11 +796,14 @@ export async function handleDashVoiceInputPress(params: {
       }
     };
 
-    const scheduleFinalize = () => {
+    const scheduleFinalize = (source: 'partial' | 'final') => {
       clearFinalizeTimer();
+      const delayMs = source === 'final'
+        ? finalCommitDelayMs
+        : finalizeDelayMs;
       const finalizeTimer = setTimeout(() => {
         void commitTranscriptAndStop();
-      }, finalizeDelayMs);
+      }, delayMs);
       if (voiceRefs.sttFinalizeTimerRef) {
         voiceRefs.sttFinalizeTimerRef.current = finalizeTimer;
       }
@@ -800,6 +825,9 @@ export async function handleDashVoiceInputPress(params: {
         }
         setPartialTranscript(partial);
         setInputText(merged);
+        // Speculative commit path: when partials go stable, finalize quickly
+        // instead of waiting indefinitely for a final transcript event.
+        scheduleFinalize('partial');
       },
       onFinal: (text: string) => {
         const formatted = formatTranscript(text, voiceLocale, {
@@ -810,7 +838,7 @@ export async function handleDashVoiceInputPress(params: {
         });
         const chunk = String(formatted || '').trim();
         if (!chunk) {
-          scheduleFinalize();
+          scheduleFinalize('partial');
           return;
         }
         pulseVoiceActivity();
@@ -821,7 +849,8 @@ export async function handleDashVoiceInputPress(params: {
         }
         setInputText(merged);
         setPartialTranscript('');
-        scheduleFinalize();
+        // Final transcript means turn-end is known; commit sooner than partial path.
+        scheduleFinalize('final');
       },
       onError: (error: string) => {
         const msg = String(error || '');

@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getMonthStartISO } from '@/lib/utils/dateUtils';
+import type { FinanceStudentFeesRouteSource } from '@/types/finance';
 import type { Student, StudentFee, ClassOption } from './types';
 import {
   type FeeSetupStatus,
@@ -20,6 +22,7 @@ export interface StudentFeeDataReturn {
   studentRef: React.MutableRefObject<Student | null>;
   fees: StudentFee[];
   displayFees: StudentFee[];
+  displayFeesForMonth: StudentFee[];
   classes: ClassOption[];
   loading: boolean;
   refreshing: boolean;
@@ -27,6 +30,8 @@ export interface StudentFeeDataReturn {
   generatingFees: boolean;
   totals: { outstanding: number; paid: number; waived: number };
   organizationId: string | undefined;
+  source: FinanceStudentFeesRouteSource | 'unknown';
+  activeMonthIso: string | null;
   hasParent: boolean;
   onRefresh: () => Promise<void>;
   loadStudent: () => Promise<Student | null>;
@@ -34,9 +39,23 @@ export interface StudentFeeDataReturn {
   handleGenerateFees: () => Promise<void>;
 }
 
-export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
+interface UseStudentFeeDataOptions {
+  monthIso?: string;
+  source?: string;
+}
+
+export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDataOptions): StudentFeeDataReturn {
   const { profile } = useAuth();
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
+  const source: FinanceStudentFeesRouteSource | 'unknown' =
+    options?.source === 'receivables' || options?.source === 'direct'
+      ? options.source
+      : 'unknown';
+  const activeMonthIso = useMemo(() => {
+    const value = String(options?.monthIso || '').trim();
+    if (!value) return null;
+    return getMonthStartISO(value, { recoverUtcMonthBoundary: true });
+  }, [options?.monthIso]);
 
   const [student, setStudent] = useState<Student | null>(null);
   const [fees, setFees] = useState<StudentFee[]>([]);
@@ -228,12 +247,23 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
     });
   }, [fees, student?.enrollment_date]);
 
+  const displayFeesForMonth = useMemo(() => {
+    if (!activeMonthIso || source !== 'receivables') return displayFees;
+    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+    return displayFees.filter((fee) => {
+      if (!fee.due_date) return false;
+      const month = getMonthStartISO(fee.due_date, { recoverUtcMonthBoundary: true });
+      if (month !== activeMonthIso) return false;
+      return unpaidStatuses.has(String(fee.status || '').toLowerCase());
+    });
+  }, [activeMonthIso, displayFees, source]);
+
   const hasParent = Boolean(student?.parent_id || student?.parent_name);
 
   return {
-    student, setStudent, studentRef, fees, displayFees, classes,
+    student, setStudent, studentRef, fees, displayFees, displayFeesForMonth, classes,
     loading, refreshing, feeSetupStatus, generatingFees,
-    totals, organizationId, hasParent,
+    totals, organizationId, source, activeMonthIso, hasParent,
     onRefresh, loadStudent, loadFees, handleGenerateFees,
   };
 }

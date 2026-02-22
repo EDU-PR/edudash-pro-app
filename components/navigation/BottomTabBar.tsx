@@ -63,7 +63,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Dash', 
     icon: 'sparkles-outline', 
     activeIcon: 'sparkles', 
-    route: '/screens/dash-voice', 
+    route: '/screens/dash-assistant', 
     roles: ['parent'],
     isCenterTab: true,
   },
@@ -106,7 +106,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Dash', 
     icon: 'sparkles-outline', 
     activeIcon: 'sparkles', 
-    route: '/screens/dash-voice', 
+    route: '/screens/dash-assistant', 
     roles: ['teacher'],
     isCenterTab: true,
   },
@@ -141,7 +141,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Dash',
     icon: 'sparkles-outline',
     activeIcon: 'sparkles',
-    route: '/screens/dash-voice',
+    route: '/screens/dash-assistant',
     roles: ['principal', 'principal_admin'],
     isCenterTab: true,
   },
@@ -210,7 +210,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Dash', 
     icon: 'sparkles-outline', 
     activeIcon: 'sparkles', 
-    route: '/screens/dash-voice', 
+    route: '/screens/dash-assistant', 
     roles: ['student', 'learner'],
     isCenterTab: true,
   },
@@ -599,6 +599,7 @@ export function BottomTabBar() {
   // Check if current route matches tab
   const isActive = (route: string, tabId?: string) => {
     if (!pathname) return false;
+    const normalizedRoute = route.split('?')[0];
 
     if (tabId === 'parent-dashboard') {
       return (
@@ -618,7 +619,7 @@ export function BottomTabBar() {
       );
     }
 
-    return pathname === route || pathname.startsWith(route);
+    return pathname === normalizedRoute || pathname.startsWith(normalizedRoute);
   };
 
   // Don't show on auth/onboarding/landing screens or message threads

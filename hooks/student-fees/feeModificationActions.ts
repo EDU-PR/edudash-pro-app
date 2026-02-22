@@ -5,15 +5,25 @@
 import { assertSupabase } from '@/lib/supabase';
 import type { Student, StudentFee } from './types';
 import { isRegistrationFeeEntry } from './types';
-import { resolvePendingLikeStatus, getSupabaseErrorMessage, type ShowAlert } from './feeActionUtils';
+import { resolvePendingLikeStatus, type ShowAlert } from './feeActionUtils';
+import { writeFeeCorrectionAudit } from './feeCorrectionAudit';
+
+interface FeeAuditContext {
+  organizationId?: string;
+  actorId?: string;
+  actorRole?: string | null;
+  sourceScreen?: string;
+}
 
 export async function waiveFee(
   selectedFee: StudentFee,
+  student: Student | null,
   waiveType: 'full' | 'partial',
   waiveAmount: string,
   waiveReason: string,
   showAlert: ShowAlert,
   loadFees: () => Promise<void>,
+  auditContext?: FeeAuditContext,
 ): Promise<void> {
   const currentFinal = Number(selectedFee.final_amount || selectedFee.amount || 0);
   const currentDiscount = Number(selectedFee.discount_amount || selectedFee.waived_amount || 0);
@@ -54,6 +64,37 @@ export async function waiveFee(
     .eq('id', selectedFee.id)
     .throwOnError();
 
+  const auditResult = await writeFeeCorrectionAudit({
+    organizationId: auditContext?.organizationId || student?.preschool_id || null,
+    studentId: selectedFee.student_id,
+    studentFeeId: selectedFee.id,
+    action: 'waive',
+    reason: waiveReason.trim(),
+    beforeSnapshot: {
+      status: selectedFee.status,
+      amount: selectedFee.amount,
+      final_amount: currentFinal,
+      discount_amount: currentDiscount,
+      amount_paid: currentPaid,
+      amount_outstanding: currentOutstanding,
+    },
+    afterSnapshot: {
+      status: nextStatus,
+      amount: selectedFee.amount,
+      final_amount: newFinal,
+      discount_amount: newDiscount,
+      amount_paid: currentPaid,
+      amount_outstanding: newOutstanding,
+    },
+    metadata: {
+      waive_type: waiveType,
+      waived_amount: Number(amount.toFixed(2)),
+    },
+    actorId: auditContext?.actorId || null,
+    actorRole: auditContext?.actorRole || null,
+    sourceScreen: auditContext?.sourceScreen || 'principal-student-fees',
+  });
+
   showAlert(
     'Fee Waived',
     waiveType === 'full'
@@ -61,6 +102,13 @@ export async function waiveFee(
       : `R${amount.toFixed(2)} has been waived from this fee.`,
     'success',
   );
+  if (!auditResult.ok) {
+    showAlert(
+      'Audit Warning',
+      'Fee was updated, but correction audit logging failed. You can retry if needed.',
+      'warning',
+    );
+  }
   loadFees();
 }
 
@@ -72,6 +120,7 @@ export async function adjustFee(
   setStudent: React.Dispatch<React.SetStateAction<Student | null>>,
   showAlert: ShowAlert,
   loadFees: () => Promise<void>,
+  auditContext?: FeeAuditContext,
 ): Promise<void> {
   const amount = parseFloat(adjustAmountStr);
   if (!amount || amount <= 0) {
@@ -101,6 +150,37 @@ export async function adjustFee(
     .eq('id', selectedFee.id)
     .throwOnError();
 
+  const auditResult = await writeFeeCorrectionAudit({
+    organizationId: auditContext?.organizationId || student?.preschool_id || null,
+    studentId: selectedFee.student_id,
+    studentFeeId: selectedFee.id,
+    action: 'adjust',
+    reason: adjustReason.trim(),
+    beforeSnapshot: {
+      status: selectedFee.status,
+      amount: selectedFee.amount,
+      final_amount: Number(selectedFee.final_amount || selectedFee.amount || 0),
+      discount_amount: Number(selectedFee.discount_amount || selectedFee.waived_amount || 0),
+      amount_paid: Number(selectedFee.amount_paid || 0),
+      amount_outstanding: Number(selectedFee.amount_outstanding || 0),
+    },
+    afterSnapshot: {
+      status: amount === 0 ? 'waived' : nextStatus,
+      amount,
+      final_amount: amount,
+      discount_amount: 0,
+      amount_paid: amountPaid,
+      amount_outstanding: amountOutstanding,
+    },
+    metadata: {
+      adjusted_amount: amount,
+      is_registration_fee: isRegistrationFeeEntry(selectedFee.fee_type, selectedFee.description),
+    },
+    actorId: auditContext?.actorId || null,
+    actorRole: auditContext?.actorRole || null,
+    sourceScreen: auditContext?.sourceScreen || 'principal-student-fees',
+  });
+
   if (isRegistrationFeeEntry(selectedFee.fee_type, selectedFee.description)) {
     const { error: regError } = await supabase
       .from('students')
@@ -112,5 +192,12 @@ export async function adjustFee(
   }
 
   showAlert('Fee Adjusted', `Fee amount updated to R${amount.toFixed(2)}.`, 'success');
+  if (!auditResult.ok) {
+    showAlert(
+      'Audit Warning',
+      'Fee was adjusted, but correction audit logging failed. You can retry if needed.',
+      'warning',
+    );
+  }
   loadFees();
 }

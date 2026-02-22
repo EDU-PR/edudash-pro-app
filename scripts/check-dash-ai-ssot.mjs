@@ -32,8 +32,13 @@ function extractExportConstBlock(source, name) {
   return match[0];
 }
 
+function stripLeadingCommentBlock(source) {
+  return source.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
+}
+
 function buildWebOcrContent(ocrSource) {
-  return `${GENERATED_HEADER}${ocrSource.trim()}\n`;
+  const withoutLocalHeader = stripLeadingCommentBlock(ocrSource).trimStart();
+  return `${GENERATED_HEADER}${withoutLocalHeader.trimEnd()}\n`;
 }
 
 function buildEdgeOcrContent(ocrSource) {

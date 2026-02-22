@@ -15,6 +15,17 @@ export interface ChatMessage {
   meta?: {
     tokensUsed?: number;
     model?: string;
+    resolution_status?: 'resolved' | 'needs_clarification' | 'escalated' | string;
+    confidence_score?: number;
+    escalation_offer?: boolean;
+    resolution_meta?: Record<string, unknown>;
+    ocr?: {
+      extracted_text?: string;
+      confidence?: number;
+      document_type?: 'homework' | 'document' | 'handwriting' | string;
+      analysis?: string;
+      unclear_spans?: string[];
+    } | null;
   };
   isError?: boolean;
 }

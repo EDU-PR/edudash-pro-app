@@ -1,3 +1,4 @@
+import { detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
 type SupportedLang = 'en' | 'af' | 'zu';
 
 export interface TranscriptFormatOptions {
@@ -150,6 +151,21 @@ const normalizePhonicsTranscript = (text: string, lang: SupportedLang): string =
   return next;
 };
 
+const shouldNormalizePhonicsTranscript = (
+  text: string,
+  lang: SupportedLang,
+  preschoolMode: boolean
+): boolean => {
+  if (lang !== 'en') return false;
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  if (detectPhonicsIntent(value)) return true;
+  if (/[\/\[]([a-z]{1,8})[\/\]]/i.test(value)) return true;
+  if (/\b[a-z]-[a-z](?:-[a-z])+\b/i.test(value)) return true;
+  if (!preschoolMode) return false;
+  return /\b(letter(?:s)?|phoneme|phonics|alphabet|sound\s+out|reading\s+letters?|reading\s+words?)\b/i.test(value);
+};
+
 export const formatTranscript = (
   rawText: string,
   locale?: string | null,
@@ -175,16 +191,23 @@ export const formatTranscriptWithOptions = (
 
   const lang = detectLanguage(locale);
   let result = cleaned.replace(/\s+([?.!])/g, '$1');
-  result = normalizePhonicsTranscript(result, lang);
 
   if (whisperFlow) {
     result = applyWhisperFlowAutoEdits(result, lang, preschoolMode);
+  }
+
+  if (shouldNormalizePhonicsTranscript(result, lang, preschoolMode)) {
+    result = normalizePhonicsTranscript(result, lang);
   }
 
   // Preserve common education/domain acronyms and names.
   result = result
     .replace(/\bfnb\b/gi, 'FNB')
     .replace(/\bcaps\b/gi, 'CAPS')
+    .replace(/\bpdf\b/gi, 'PDF')
+    .replace(/\bstt\b/gi, 'STT')
+    .replace(/\btts\b/gi, 'TTS')
+    .replace(/\bai\b/gi, 'AI')
     .replace(/\bedudash\b/gi, 'EduDash')
     .replace(/\bdash ai\b/gi, 'Dash AI');
 

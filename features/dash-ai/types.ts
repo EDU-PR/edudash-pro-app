@@ -59,11 +59,29 @@ export interface DashMessage {
     detected_language?: string;
     response_mode?: 'direct_writing' | 'explain_direct' | 'tutor_interactive';
     language_source?: 'explicit_override' | 'auto_detect' | 'preference';
+    source?: string;
+    voice_turn?: boolean;
+    prefer_streaming_latency?: boolean;
+    stream_tool_mode?: 'enabled' | 'deferred';
     tutor_entry_source?: 'teacher_dashboard' | 'default';
     suggested_actions?: string[];
     tutor_phase?: string;
     tutor_question?: boolean;
     tutor_question_text?: string;
+    ocr_mode?: boolean;
+    ocr_task?: string;
+    ocr?: {
+      extracted_text?: string;
+      confidence?: number;
+      document_type?: string;
+      analysis?: string;
+      unclear_spans?: string[];
+      [key: string]: any;
+    };
+    resolution_status?: 'resolved' | 'needs_clarification' | 'escalated';
+    confidence_score?: number;
+    escalation_offer?: boolean;
+    resolution_meta?: Record<string, any>;
     
     /** References to database entities */
     references?: Array<{

@@ -12,6 +12,13 @@ describe('formatTranscript whisper flow', () => {
     expect(out).not.toContain('s s s');
   });
 
+  it('stabilizes acronym dictation for prompts', () => {
+    const out = formatTranscript('can you generate a p d f for grade four', 'en-ZA', {
+      whisperFlow: true,
+    });
+    expect(out).toContain('PDF');
+  });
+
   it('summarizes long transcript when enabled', () => {
     const out = formatTranscript(
       'Can you help me understand this maths problem because I am trying to solve it and I keep getting confused about fractions and denominators and numerators in the same question',
@@ -29,5 +36,13 @@ describe('formatTranscript whisper flow', () => {
     });
     expect(out.toLowerCase()).toContain('um');
   });
-});
 
+  it('does not force phonics markers for normal speech phrasing', () => {
+    const out = formatTranscript('that sounds like a good plan for class', 'en-ZA', {
+      whisperFlow: true,
+    });
+    expect(out).not.toContain('/s/');
+    expect(out.toLowerCase()).toContain('sounds');
+    expect(out.toLowerCase()).toContain('good plan');
+  });
+});

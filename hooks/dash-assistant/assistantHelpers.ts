@@ -20,16 +20,60 @@ export const wantsLessonGenerator = (text: string, assistantText?: string): bool
 
 export const extractFollowUps = (text: string): string[] => {
   try {
-    const lines = (text || '').split(/\n+/);
-    const results: string[] = [];
-    for (const line of lines) {
-      const m = line.match(/^\s*User:\s*(.+)$/i);
-      if (m && m[1]) {
-        const q = m[1].trim();
-        if (q.length > 0) results.push(q);
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    const cleaned = (value: string) =>
+      value
+        .replace(/^[\s"'`]+/, '')
+        .replace(/[\s"'`]+$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const dedupe = (items: string[]) =>
+      Array.from(new Set(items.map(cleaned).filter((item) => item.length >= 6))).slice(0, 6);
+
+    const jsonArrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (jsonArrayMatch?.[0]) {
+      try {
+        const parsed = JSON.parse(jsonArrayMatch[0]);
+        if (Array.isArray(parsed)) {
+          const mapped = parsed.map((entry) => String(entry || ''));
+          const normalized = dedupe(mapped);
+          if (normalized.length > 0) return normalized;
+        }
+      } catch {
+        // Continue with line-based parsing.
       }
     }
-    return results;
+
+    const lines = raw.split(/\n+/);
+    const results: string[] = [];
+    for (const lineRaw of lines) {
+      const line = String(lineRaw || '').trim();
+      if (!line) continue;
+
+      const userMatch = line.match(/^\s*User:\s*(.+)$/i);
+      if (userMatch?.[1]) {
+        results.push(userMatch[1]);
+        continue;
+      }
+
+      const numberedMatch = line.match(/^\s*\d{1,2}[\)\.\-:]\s+(.+)$/);
+      if (numberedMatch?.[1]) {
+        results.push(numberedMatch[1]);
+        continue;
+      }
+
+      const bulletMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+      if (bulletMatch?.[1]) {
+        results.push(bulletMatch[1]);
+        continue;
+      }
+
+      if (line.includes('?')) {
+        results.push(line);
+      }
+    }
+    return dedupe(results);
   } catch {
     return [];
   }

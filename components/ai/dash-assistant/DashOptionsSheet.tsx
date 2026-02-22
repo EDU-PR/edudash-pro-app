@@ -20,13 +20,6 @@ interface DashOptionsSheetProps {
   onOpenScanner?: () => void;
   onRunScheduleTool?: () => void;
   onRunAssignmentsTool?: () => void;
-  models?: Array<{
-    id: string;
-    displayName?: string;
-    name?: string;
-  }>;
-  selectedModelId?: string;
-  onSelectModel?: (modelId: string) => void;
   isBusy?: boolean;
 }
 
@@ -87,9 +80,6 @@ export function DashOptionsSheet({
   onOpenScanner,
   onRunScheduleTool,
   onRunAssignmentsTool,
-  models = [],
-  selectedModelId,
-  onSelectModel,
   isBusy = false,
 }: DashOptionsSheetProps) {
   const { theme } = useTheme();
@@ -129,49 +119,6 @@ export function DashOptionsSheet({
           <Text style={[styles.headerSubtitle, { color: theme.textSecondary || '#94a3b8' }]}>
             Quick actions and tools
           </Text>
-
-          {Array.isArray(models) && models.length > 0 && (
-            <View style={styles.modelSection}>
-              <Text style={[styles.modelTitle, { color: theme.textSecondary || '#94a3b8' }]}>
-                Model
-              </Text>
-              <View style={styles.modelRow}>
-                {models.map((model) => {
-                  const active = model.id === selectedModelId;
-                  const label = model.displayName || model.name || model.id;
-                  return (
-                    <TouchableOpacity
-                      key={model.id}
-                      style={[
-                        styles.modelChip,
-                        {
-                          backgroundColor: active ? (theme.primary || '#8b5cf6') + '24' : (theme.surfaceVariant || '#1f2937'),
-                          borderColor: active ? (theme.primary || '#8b5cf6') : (theme.border || '#334155'),
-                        },
-                      ]}
-                      activeOpacity={0.8}
-                      disabled={isBusy}
-                      onPress={() => {
-                        if (onSelectModel) {
-                          closeThen(() => onSelectModel(model.id));
-                        }
-                      }}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.modelChipText,
-                          { color: active ? (theme.primary || '#8b5cf6') : (theme.text || '#f8fafc') },
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
 
           <OptionItem
             icon="add-circle-outline"
@@ -295,32 +242,6 @@ const styles = StyleSheet.create({
   optionSubtitle: {
     marginTop: 1,
     fontSize: 13,
-  },
-  modelSection: {
-    marginBottom: 2,
-  },
-  modelTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  modelRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  modelChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    maxWidth: '48%',
-  },
-  modelChipText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   closeButton: {
     borderRadius: 14,

@@ -10,6 +10,8 @@ export type ToolPlanResult = {
   tool: string | null;
   parameters?: Record<string, any>;
   reason?: string;
+  intent?: 'tool' | 'plan_mode' | 'none';
+  intent_confidence?: number;
 };
 
 const KEYWORD_HINTS = [
@@ -33,9 +35,102 @@ const KEYWORD_HINTS = [
   'teacher', 'parent', 'member', 'list',
 ];
 
+const PDF_INTENT_PATTERN = /\b(pdf|worksheet|handout)\b/i;
+const PDF_ACTION_PATTERN = /\b(generate|create|make|export|build|produce|prepare)\b/i;
+const CAPS_SEARCH_PATTERN = /\b(caps|curriculum|south\s*afric(?:a|an)|dbe)\b/i;
+const SEARCH_ACTION_PATTERN = /\b(search|look\s*up|find|check|align|guideline|criteria)\b/i;
+const PLAN_MODE_PATTERN = /\b(please\s+implement\s+this\s+plan|implement\s+this\s+plan|implement\s+the\s+plan|execute\s+this\s+plan|execution\s+plan|implementation\s+plan|rollout\s+plan)\b/i;
+const PLAN_SUPPORT_PATTERN = /\b(plan|phases?|steps?|milestones?|hardening|rollout|implementation)\b/i;
+
+const normalizeSpaces = (value: string): string =>
+  String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const toTitleCase = (value: string): string =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+function buildPdfFallbackTitle(message: string): string {
+  const normalized = normalizeSpaces(message);
+  const afterFor = normalized.match(/\b(?:for|on|about)\s+(.{6,80})/i)?.[1] || '';
+  const cleaned = normalizeSpaces(
+    (afterFor || normalized)
+      .replace(/^[^a-z0-9]+/i, '')
+      .replace(/[?.!,;:]+$/g, '')
+  );
+  const shortTitle = cleaned.length > 70 ? `${cleaned.slice(0, 67)}...` : cleaned;
+  return toTitleCase(shortTitle || 'Requested Document');
+}
+
+function resolveDeterministicToolPlan(message: string, tools: ToolPlannerCandidate[]): ToolPlanResult | null {
+  const normalized = normalizeSpaces(message);
+  if (PLAN_MODE_PATTERN.test(normalized)) {
+    return {
+      tool: null,
+      reason: 'deterministic_plan_mode_intent',
+      intent: 'plan_mode',
+      intent_confidence: 0.96,
+    };
+  }
+  if (
+    /\bplan\b/i.test(normalized) &&
+    /\b(implement|execute|ship|deliver|build|apply)\b/i.test(normalized) &&
+    PLAN_SUPPORT_PATTERN.test(normalized)
+  ) {
+    return {
+      tool: null,
+      reason: 'deterministic_plan_mode_intent_secondary',
+      intent: 'plan_mode',
+      intent_confidence: 0.82,
+    };
+  }
+
+  const availableTools = new Set(
+    tools
+      .map((tool) => String(tool?.name || '').trim())
+      .filter(Boolean)
+  );
+
+  if (
+    PDF_INTENT_PATTERN.test(normalized) &&
+    PDF_ACTION_PATTERN.test(normalized) &&
+    availableTools.has('export_pdf')
+  ) {
+    return {
+      tool: 'export_pdf',
+      parameters: {
+        title: buildPdfFallbackTitle(normalized),
+        content: `User request:\n${normalized}`,
+      },
+      reason: 'deterministic_pdf_intent',
+    };
+  }
+
+  if (
+    CAPS_SEARCH_PATTERN.test(normalized) &&
+    SEARCH_ACTION_PATTERN.test(normalized) &&
+    availableTools.has('search_caps_curriculum')
+  ) {
+    return {
+      tool: 'search_caps_curriculum',
+      parameters: {
+        query: normalized.slice(0, 220),
+      },
+      reason: 'deterministic_caps_search_intent',
+    };
+  }
+
+  return null;
+}
+
 export function shouldAttemptToolPlan(message: string): boolean {
   const normalized = message.trim().toLowerCase();
   if (normalized.length < 6) return false;
+  if (PLAN_MODE_PATTERN.test(normalized)) return true;
   return KEYWORD_HINTS.some((keyword) => normalized.includes(keyword));
 }
 
@@ -82,6 +177,11 @@ export async function planToolCall(options: {
   tools: ToolPlannerCandidate[];
 }): Promise<ToolPlanResult | null> {
   const { supabaseClient, role, message, tools } = options;
+
+  const deterministicPlan = resolveDeterministicToolPlan(message, tools);
+  if (deterministicPlan) {
+    return deterministicPlan;
+  }
   if (!supabaseClient || tools.length === 0) return null;
 
   const prompt = buildPlannerPrompt(message, tools);
@@ -116,7 +216,12 @@ export async function planToolCall(options: {
     const toolName = parsed.tool || parsed.tool_name || parsed.name || null;
     const normalizedTool = typeof toolName === 'string' ? toolName.trim() : null;
     if (!normalizedTool || normalizedTool === 'none') {
-      return { tool: null };
+      return {
+        tool: null,
+        intent: parsed.intent === 'plan_mode' ? 'plan_mode' : 'none',
+        intent_confidence:
+          typeof parsed.intent_confidence === 'number' ? parsed.intent_confidence : undefined,
+      };
     }
     const allowed = tools.some((tool) => tool.name === normalizedTool);
     if (!allowed) return null;
@@ -125,6 +230,9 @@ export async function planToolCall(options: {
       tool: normalizedTool,
       parameters: parsed.parameters || {},
       reason: parsed.reason,
+      intent: 'tool',
+      intent_confidence:
+        typeof parsed.intent_confidence === 'number' ? parsed.intent_confidence : undefined,
     };
   } catch {
     return null;

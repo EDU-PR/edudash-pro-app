@@ -35,10 +35,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
 import { getCurrentLanguage } from '@/lib/i18n';
-import { useAIModelSelection } from '@/hooks/useAIModelSelection';
 import { useCapability } from '@/hooks/useCapability';
 import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
-import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { useDashAttachments, type AttachmentProgress } from '@/hooks/useDashAttachments';
 import {
@@ -125,12 +123,19 @@ import {
   trackVoiceUsage,
 } from '@/lib/dash-ai/voiceBudget';
 import { buildTranscriptModelPrompt } from '@/lib/voice/formatTranscript';
+import { consumeAutoScanBudget } from '@/lib/dash-ai/imageBudget';
+import {
+  countScannerAttachments,
+  isSuccessfulOCRResponse,
+} from '@/lib/dash-ai/retakeFlow';
+import { useDashChatModelPreference } from '@/hooks/useDashChatModelPreference';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
   initialMessage?: string;
   handoffSource?: string;
   onClose?: () => void;
+  onAutoScanConsumed?: () => Promise<void> | void;
   /** Pre-configured tutor mode — bypasses intent detection */
   externalTutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
   /** Tutor session config for programmatic start */
@@ -265,10 +270,11 @@ const buildTutorKickoffPrompt = (
 };
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
-  const { conversationId, initialMessage, handoffSource, externalTutorMode, tutorConfig } = options;
+  const { conversationId, initialMessage, handoffSource, onClose, onAutoScanConsumed, externalTutorMode, tutorConfig } = options;
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
+  const autoScanUserId = String(user?.id || profile?.id || '').trim() || null;
   const { can, ready: capsReady } = useCapability();
   const tutorSessionsV1Enabled = useMemo(
     () => getFeatureFlagsSync().dash_tutor_sessions_v1,
@@ -337,7 +343,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [voiceAutoSendCountdownActive, setVoiceAutoSendCountdownActive] = useState(false);
   const [voiceAutoSendCountdownMs, setVoiceAutoSendCountdownMs] = useState(0);
   const [voiceAutoSend, setVoiceAutoSend] = useState(false);
-  const [voiceAutoSendSilenceMs, setVoiceAutoSendSilenceMs] = useState(1800);
+  const [voiceAutoSendSilenceMs, setVoiceAutoSendSilenceMs] = useState(900);
   const [voiceWhisperFlowEnabled, setVoiceWhisperFlowEnabled] = useState(true);
   const [voiceWhisperFlowSummaryEnabled, setVoiceWhisperFlowSummaryEnabled] = useState(true);
   const [showTypingIndicator, setShowTypingIndicator] = useState(true);
@@ -347,42 +353,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
-  const [modelPrefLoaded, setModelPrefLoaded] = useState(false);
-  const { availableModels: tierModels, selectedModel, setSelectedModel, canSelectModel } = useAIModelSelection('chat_message');
-  const isSuperAdmin = ['superadmin', 'super_admin'].includes((profile?.role || '').toLowerCase());
-  const availableModels = useMemo(() => {
-    if (!isSuperAdmin) return tierModels;
-    const filtered = tierModels.filter(model => model.id.includes('sonnet-4'));
-    return filtered.length > 0 ? filtered : tierModels;
-  }, [tierModels, isSuperAdmin]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const stored = await getPreferredModel('chat_message');
-      if (!mounted) return;
-      if (stored && canSelectModel(stored as AIModelId)) {
-        setSelectedModel(stored as AIModelId);
-      }
-      setModelPrefLoaded(true);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [canSelectModel, setSelectedModel]);
-
-  useEffect(() => {
-    if (!modelPrefLoaded) return;
-    setPreferredModel(selectedModel, 'chat_message');
-  }, [modelPrefLoaded, selectedModel]);
-
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    if (availableModels.length === 0) return;
-    if (!availableModels.find(model => model.id === selectedModel)) {
-      setSelectedModel(availableModels[0].id);
-    }
-  }, [availableModels, isSuperAdmin, selectedModel, setSelectedModel]);
+  const { availableModels, selectedModel, setSelectedModel } = useDashChatModelPreference();
 
   useEffect(() => {
     if (!isRecording) {
@@ -440,6 +411,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const voiceAutoSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceAutoSendDeadlineRef = useRef<number | null>(null);
   const voiceAutoSendExpectedTranscriptRef = useRef('');
+  const nextVoiceTurnRef = useRef(false);
 
   const { tutorSessionRef } = useDashTutorSessionPersistence({
     userId: user?.id,
@@ -1085,6 +1057,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
     if (!dashInstance) return;
+    const isVoiceTurn = nextVoiceTurnRef.current;
+    nextVoiceTurnRef.current = false;
+    const scannerAttachmentCount = countScannerAttachments(attachments);
     const turnId = createDashTurnId('dash_assistant_turn');
     const turnStartedAt = Date.now();
     const normalizedRole = String(profile?.role || '').toLowerCase();
@@ -1111,7 +1086,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       turnId,
       mode: turnModeHint,
       tier: tier || null,
-      voiceProvider: 'none',
+      voiceProvider: isVoiceTurn ? 'assistant_voice' : 'none',
       fallbackReason: 'none',
       source: 'useDashAssistant.sendMessageInternal',
     });
@@ -1302,7 +1277,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Auto tool execution for low-risk tools (CAPS/data/navigation/PDF)
       let autoToolContext: string | null = null;
       let autoToolExecution: AutoToolExecution | null = null;
-      if (shouldAttemptToolPlan(outgoingText) && plannerTools.length > 0) {
+      let plannerIntent: 'tool' | 'plan_mode' | 'none' = 'none';
+      let plannerIntentConfidence: number | null = null;
+      if (shouldAttemptToolPlan(outgoingText)) {
         try {
           let supabaseClient: any = null;
           try {
@@ -1316,6 +1293,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               message: outgoingText,
               tools: plannerTools,
             });
+
+            if (plan?.intent) {
+              plannerIntent = plan.intent;
+            } else if (plan?.tool) {
+              plannerIntent = 'tool';
+            }
+            if (typeof plan?.intent_confidence === 'number') {
+              plannerIntentConfidence = plan.intent_confidence;
+            }
 
             if (plan?.tool) {
               const toolTraceId = `dash_assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1361,6 +1347,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
       }
 
+      const guidedPlanModeActive = plannerIntent === 'plan_mode';
+      if (guidedPlanModeActive) {
+        console.info('dash.plan_mode.detected', {
+          intent: plannerIntent,
+          confidence: plannerIntentConfidence,
+          turnId,
+          role: String(profile?.role || 'parent').toLowerCase(),
+        });
+      }
+
       const mergedContextOverride = [mergedContextBase, autoToolContext ? `TOOL RESULT:\n${autoToolContext}` : null]
         .filter(Boolean)
         .join('\n\n') || null;
@@ -1388,6 +1384,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         maxMessages: contextWindow.maxMessages,
         maxTokens: contextWindow.maxTokens,
       });
+      const requestMetadata = {
+        response_mode: responseMode,
+        language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
+        detected_language: requestLanguage.locale || undefined,
+        tutor_entry_source: tutorEntrySource,
+        source: isVoiceTurn ? 'dash_assistant_voice' : 'dash_assistant_chat',
+        voice_turn: isVoiceTurn || undefined,
+        prefer_streaming_latency: isVoiceTurn || undefined,
+        planning_mode: guidedPlanModeActive ? 'guided' : undefined,
+        planning_intent: guidedPlanModeActive || undefined,
+        planning_intent_confidence: plannerIntentConfidence ?? undefined,
+        plan_mode_stage: guidedPlanModeActive ? 'discover' : undefined,
+      };
       
       if (streamingEnabled) {
         const tempStreamingMsgId = `streaming_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1414,12 +1423,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           contextOverride: mergedContextOverride,
           modelOverride: selectedModel,
           messagesOverride,
-          metadata: {
-            response_mode: responseMode,
-            language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
-            detected_language: requestLanguage.locale || undefined,
-            tutor_entry_source: tutorEntrySource,
-          },
+          metadata: requestMetadata,
           signal: controller.signal,
         } as const;
 
@@ -1533,12 +1537,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
             messagesOverride,
-            metadata: {
-              response_mode: responseMode,
-              language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
-              detected_language: requestLanguage.locale || undefined,
-              tutor_entry_source: tutorEntrySource,
-            },
+            metadata: requestMetadata,
             signal: controller.signal,
           }
         );
@@ -1584,8 +1583,28 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               resolvedLocale.source || requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
             response_mode: responseMode,
             tutor_entry_source: tutorEntrySource,
+            source: isVoiceTurn ? 'dash_assistant_voice' : 'dash_assistant_chat',
+            voice_turn: isVoiceTurn || undefined,
           },
         };
+      }
+
+      if (scannerAttachmentCount > 0 && isSuccessfulOCRResponse(response)) {
+        const consumeResult = await consumeAutoScanBudget(
+          tier || 'free',
+          scannerAttachmentCount,
+          autoScanUserId
+        );
+        if (!consumeResult.allowed) {
+          logDashTrace('auto_scan_budget_overrun', {
+            scannerAttachmentCount,
+            turnId,
+            tier: tier || 'free',
+          });
+        }
+        if (typeof onAutoScanConsumed === 'function') {
+          await Promise.resolve(onAutoScanConsumed());
+        }
       }
 
       const rawTutorPayload = parseTutorPayload(response?.content || '');
@@ -1982,8 +2001,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     profile?.role,
     handoffSource,
     externalTutorMode,
+    onAutoScanConsumed,
     tier,
     capabilityTier,
+    autoScanUserId,
   ]);
 
   // Process queue
@@ -2015,7 +2036,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       });
       const outboundPrompt = modelPrompt || trimmed;
 
-      const delayMs = Math.max(3000, Math.min(5000, Number(options.delayMs) || 3000));
+      const isPreschool = learnerContextRef.current?.schoolType === 'preschool';
+      const defaultDelayMs = isPreschool ? 1500 : 850;
+      const minDelayMs = isPreschool ? 1200 : 600;
+      const maxDelayMs = isPreschool ? 2600 : 1800;
+      const parsedDelay = Number(options.delayMs);
+      const delayMs = Number.isFinite(parsedDelay)
+        ? Math.max(minDelayMs, Math.min(maxDelayMs, parsedDelay))
+        : defaultDelayMs;
       voiceAutoSendExpectedTranscriptRef.current = trimmed;
       const deadline = Date.now() + delayMs;
       voiceAutoSendDeadlineRef.current = deadline;
@@ -2041,8 +2069,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           cancelVoiceAutoSend();
           return;
         }
+        nextVoiceTurnRef.current = true;
         sendMessageRef.current(outboundPrompt).catch((error) => {
           console.warn('[useDashAssistant] Voice auto-send failed:', error);
+          nextVoiceTurnRef.current = false;
         }).finally(() => {
           cancelVoiceAutoSend();
         });

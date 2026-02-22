@@ -185,6 +185,19 @@ function normalizeSouthAfricanLanguageNames(text: string): string {
     .replace(/\bse\s+sotho\b/gi, 'Sesotho');
 }
 
+function normalizeAcronymsForNaturalSpeech(text: string, phonicsMode: boolean): string {
+  if (phonicsMode) return text;
+
+  return text
+    // Normalize dotted/spaced letter spell-outs into stable acronyms for natural TTS pacing.
+    .replace(/\bP(?:\s*\.?\s*)D(?:\s*\.?\s*)F\b\.?/gi, 'PDF')
+    .replace(/\bA(?:\s*\.?\s*)I\b\.?/gi, 'AI')
+    .replace(/\bA(?:\s*\.?\s*)P(?:\s*\.?\s*)I\b\.?/gi, 'API')
+    .replace(/\bS(?:\s*\.?\s*)T(?:\s*\.?\s*)T\b\.?/gi, 'speech to text')
+    .replace(/\bT(?:\s*\.?\s*)T(?:\s*\.?\s*)S\b\.?/gi, 'text to speech')
+    .replace(/\bU(?:\s*\.?\s*)R(?:\s*\.?\s*)L\b\.?/gi, 'link');
+}
+
 function stripMarkdownAndMeta(text: string, preservePhonicsMarkers: boolean): string {
   let next = text
     .replace(/```[\s\S]*?```/g, '')
@@ -251,6 +264,7 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
 
   // Normalize any remaining SA language name spacing issues
   text = normalizeSouthAfricanLanguageNames(text);
+  text = normalizeAcronymsForNaturalSpeech(text, phonicsMode);
 
   // Keep marker punctuation in phonics mode.
   text = preservePhonicsMarkers

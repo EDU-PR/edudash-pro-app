@@ -156,6 +156,44 @@ const firstText = (...values: unknown[]) => {
   return null;
 };
 
+const normalizeToolErrorMessage = (toolName: string, rawError: string | null): string | null => {
+  const message = String(rawError || '').trim();
+  if (!message) return null;
+  const lower = message.toLowerCase();
+
+  if (toolName === 'get_assignments') {
+    if (lower.includes('column') && lower.includes('does not exist')) {
+      return 'Assignments are temporarily unavailable. Please try again shortly.';
+    }
+    if (lower.includes('relation') && lower.includes('does not exist')) {
+      return 'Assignments data is not ready yet for this account.';
+    }
+  }
+
+  if (lower.includes('permission denied') || lower.includes('insufficient permission')) {
+    return 'You do not have access to run this action.';
+  }
+
+  if (lower.includes('network') || lower.includes('timeout') || lower.includes('fetch failed')) {
+    return 'Network issue while running this action. Please try again.';
+  }
+
+  if (
+    lower.includes('column') && lower.includes('does not exist')
+    || lower.includes('relation') && lower.includes('does not exist')
+    || lower.includes('schema')
+    || lower.includes('sql')
+  ) {
+    return 'This action is temporarily unavailable due to a data issue.';
+  }
+
+  if (message.length > 180) {
+    return 'This action failed. Please try again in a moment.';
+  }
+
+  return message;
+};
+
 type ToolChartKind = 'bar' | 'line' | 'pie';
 type ToolChartPoint = {
   label: string;
@@ -325,7 +363,7 @@ interface DashMessageBubbleProps {
   onSendFollowUp: (text: string) => void;
   extractFollowUps: (text: string) => string[];
   assistantLabel?: string;
-  onRetakeForClarity?: () => void;
+  onRetakeForClarity?: (message: DashMessage) => void;
 }
 
 export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
@@ -386,11 +424,20 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const isLatestMessage = index === totalMessages - 1;
 
   // Get suggestions from metadata or extract from content
-  const suggestions = !isUser && showFollowUps && (
-    (message.metadata?.suggested_actions && message.metadata.suggested_actions.length > 0)
+  const suggestions = React.useMemo(() => {
+    if (isUser || !showFollowUps) return [] as string[];
+    const rawSuggestions = Array.isArray(message.metadata?.suggested_actions) && message.metadata.suggested_actions.length > 0
       ? message.metadata.suggested_actions
-      : extractFollowUps(message.content)
-  );
+      : extractFollowUps(message.content);
+    const deduped = Array.from(
+      new Set(
+        rawSuggestions
+          .map((item: unknown) => String(item || '').trim())
+          .filter((item) => item.length >= 4),
+      ),
+    );
+    return deduped.slice(0, 4);
+  }, [extractFollowUps, isUser, message.content, message.metadata?.suggested_actions, showFollowUps]);
 
   const sanitizeAssistantContent = (content: string) => {
     return replaceVisualPlaceholders(content || '').trim();
@@ -483,6 +530,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const toolPayload = toolExecution ? (toolExecution.result ?? toolExecution.data ?? null) : null;
   const toolSuccess = toolExecution ? toolExecution.success !== false : true;
   const toolError = toolExecution ? firstText(toolExecution.error) : null;
+  const toolErrorFriendly = React.useMemo(
+    () => normalizeToolErrorMessage(toolNameKey, toolError),
+    [toolError, toolNameKey]
+  );
+  const allowRawToolPayload = process.env.EXPO_PUBLIC_DASH_SHOW_RAW_TOOL_PAYLOAD === 'true';
   const generatedImages = (Array.isArray(metadata.generated_images) ? metadata.generated_images : [])
     .filter((img) => typeof img?.signed_url === 'string' && String(img.signed_url).trim().length > 0);
   const toolSummary = (() => {
@@ -870,6 +922,9 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           styles.messageBubble,
           isUser ? styles.userBubble : styles.assistantBubble,
           { alignSelf: isUser ? 'flex-end' : 'flex-start' },
+          !isUser && isToolOperation
+            ? { width: '96%', minWidth: 260 }
+            : null,
           isUser
             ? { 
                 borderColor: 'rgba(255,255,255,0.3)', 
@@ -923,7 +978,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </Text>
               )}
               <TouchableOpacity
-                onPress={onRetakeForClarity}
+                onPress={() => onRetakeForClarity?.(message)}
                 style={{
                   marginTop: 2,
                   alignSelf: 'flex-start',
@@ -969,7 +1024,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             <View
               style={{
                 width: '100%',
-                padding: 12,
+                padding: 14,
                 borderRadius: 14,
                 borderWidth: 1,
                 borderColor: toolSuccess ? theme.primary + '44' : theme.error + '44',
@@ -977,8 +1032,15 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 gap: 8,
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexGrow: 1, flexShrink: 1, minWidth: 0, paddingRight: 6 }}>
                   <View
                     style={{
                       width: 24,
@@ -995,7 +1057,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       color={toolSuccess ? theme.primary : theme.error}
                     />
                   </View>
-                  <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flexShrink: 1 }}>
+                  <Text
+                    style={{ color: theme.text, fontSize: 13, fontWeight: '700', flexShrink: 1, flexGrow: 1, minWidth: 0 }}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     {prettifyToolName(rawToolName || undefined)}
                   </Text>
                 </View>
@@ -1005,6 +1071,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                     paddingHorizontal: 8,
                     paddingVertical: 4,
                     backgroundColor: toolSuccess ? theme.success + '22' : theme.error + '22',
+                    alignSelf: 'flex-start',
+                    flexShrink: 0,
                   }}
                 >
                   <Text
@@ -1308,7 +1376,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </TouchableOpacity>
               )}
 
-              {toolRawPayload && (
+              {allowRawToolPayload && toolRawPayload && (
                 <TouchableOpacity
                   onPress={() => setShowRawToolPayload((prev) => !prev)}
                   style={{
@@ -1330,7 +1398,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </TouchableOpacity>
               )}
 
-              {showRawToolPayload && toolRawPayload && (
+              {allowRawToolPayload && showRawToolPayload && toolRawPayload && (
                 <View
                   style={{
                     borderRadius: 10,
@@ -1362,9 +1430,9 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </View>
               )}
 
-              {!toolSuccess && toolError && (
+              {!toolSuccess && toolErrorFriendly && (
                 <Text style={{ color: theme.error, fontSize: 12, lineHeight: 17 }}>
-                  {toolError}
+                  {toolErrorFriendly}
                 </Text>
               )}
             </View>

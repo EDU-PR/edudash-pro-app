@@ -23,6 +23,8 @@ import type {
   ApprovePopPaymentPayload,
   FinanceControlCenterBundle,
   FinanceMonthExpenseBreakdown,
+  FinanceQueueStage,
+  FinanceQueueStageSummary,
   FinanceMonthSnapshot,
   FinanceReceivableStudentRow,
   FinanceReceivablesSummary,
@@ -2100,11 +2102,65 @@ export class FinancialDataService {
         `)
         .eq('preschool_id', orgId)
         .eq('upload_type', 'proof_of_payment')
-        .eq('status', 'pending')
+        .in('status', ['pending', 'approved', 'rejected', 'needs_revision'])
         .order('created_at', { ascending: false })
-        .limit(60);
+        .limit(240);
       if (error) throw new Error(error.message || 'Failed to load payment queue');
-      return data || [];
+      const rows = (data || [])
+        .filter((row: any) => {
+          const status = String(row?.status || '').toLowerCase();
+          if (status === 'pending') return true;
+          const accountingMonth = this.resolvePopAccountingMonth(row);
+          return accountingMonth === month;
+        })
+        .slice(0, 120);
+
+      const stageCounters: Record<FinanceQueueStage, { count: number; amount: number }> = {
+        needs_month: { count: 0, amount: 0 },
+        ready_to_approve: { count: 0, amount: 0 },
+        approved: { count: 0, amount: 0 },
+        rejected: { count: 0, amount: 0 },
+      };
+
+      rows.forEach((row: any) => {
+        const status = String(row?.status || '').toLowerCase();
+        const amount = Number(row?.payment_amount || 0);
+        const numericAmount = Number.isFinite(amount) ? amount : 0;
+        if (status === 'approved') {
+          stageCounters.approved.count += 1;
+          stageCounters.approved.amount += numericAmount;
+          return;
+        }
+        if (status === 'rejected' || status === 'needs_revision') {
+          stageCounters.rejected.count += 1;
+          stageCounters.rejected.amount += numericAmount;
+          return;
+        }
+        if (row?.payment_for_month) {
+          stageCounters.ready_to_approve.count += 1;
+          stageCounters.ready_to_approve.amount += numericAmount;
+          return;
+        }
+        stageCounters.needs_month.count += 1;
+        stageCounters.needs_month.amount += numericAmount;
+      });
+
+      const stageCounts: FinanceQueueStageSummary[] = ([
+        'needs_month',
+        'ready_to_approve',
+        'approved',
+        'rejected',
+      ] as FinanceQueueStage[]).map((stage) => ({
+        stage,
+        count: stageCounters[stage].count,
+        amount: Number(stageCounters[stage].amount.toFixed(2)),
+      }));
+
+      return {
+        rows,
+        pending: rows.filter((row: any) => String(row?.status || '').toLowerCase() === 'pending'),
+        stageCounts,
+      };
     })();
 
     const [snapshotRes, receivablesRes, expensesRes, breakdownRes, queueRes, payrollRes] = await Promise.all([
@@ -2131,7 +2187,9 @@ export class FinancialDataService {
       receivables: receivablesRes.value,
       expenses: expensesRes.value,
       payment_breakdown: breakdownRes.value,
-      pending_pops: (queueRes.value || []) as any[],
+      pending_pops: (queueRes.value?.pending || []) as any[],
+      queue_rows: (queueRes.value?.rows || []) as any[],
+      queue_stage_counts: (queueRes.value?.stageCounts || []) as any[],
       payroll: payrollValue,
       payroll_fallback_used: Boolean(payrollValue?.fallback_used),
       errors: Object.keys(errors).length ? errors : undefined,

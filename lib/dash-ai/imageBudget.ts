@@ -12,6 +12,8 @@ const FREE_IMAGE_BUDGET_KEY_PREFIX = '@dash_image_free_budget_';
 export const FREE_AUTO_SCAN_BUDGET_PER_DAY = 3;
 export const PAID_AUTO_SCAN_BUDGET_PER_DAY = 7;
 const AUTO_SCAN_BUDGET_KEY_PREFIX = '@dash_auto_scan_budget_';
+const AUTO_SCAN_ANONYMOUS_KEY = 'anonymous';
+const autoScanLockTails = new Map<string, Promise<unknown>>();
 
 function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];
@@ -21,8 +23,14 @@ function buildImageBudgetKey(dayKey?: string): string {
   return `${FREE_IMAGE_BUDGET_KEY_PREFIX}${dayKey || getTodayKey()}`;
 }
 
-function buildAutoScanBudgetKey(dayKey?: string): string {
-  return `${AUTO_SCAN_BUDGET_KEY_PREFIX}${dayKey || getTodayKey()}`;
+function normalizeAutoScanUserKey(userId?: string | null): string {
+  const normalized = String(userId || '').trim();
+  if (!normalized) return AUTO_SCAN_ANONYMOUS_KEY;
+  return normalized.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function buildAutoScanBudgetKey(dayKey?: string, userId?: string | null): string {
+  return `${AUTO_SCAN_BUDGET_KEY_PREFIX}${dayKey || getTodayKey()}_${normalizeAutoScanUserKey(userId)}`;
 }
 
 export interface ImageBudget {
@@ -37,10 +45,36 @@ function resolveAutoScanDailyLimit(tier?: string | null): number {
   return normalized === 'free' ? FREE_AUTO_SCAN_BUDGET_PER_DAY : PAID_AUTO_SCAN_BUDGET_PER_DAY;
 }
 
-export async function loadAutoScanBudget(tier?: string | null): Promise<ImageBudget> {
+async function withAutoScanLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = autoScanLockTails.get(key) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(task);
+  autoScanLockTails.set(
+    key,
+    next.finally(() => {
+      if (autoScanLockTails.get(key) === next) {
+        autoScanLockTails.delete(key);
+      }
+    })
+  );
+  return next;
+}
+
+function buildAutoScanBudgetFromUsage(usedCountRaw: unknown, dailyLimit: number): ImageBudget {
+  const usedCount = typeof usedCountRaw === 'number' ? usedCountRaw : 0;
+  const clampedUsedCount = Math.max(0, Math.min(dailyLimit, usedCount));
+  const remainingCount = Math.max(0, dailyLimit - clampedUsedCount);
+  return {
+    remainingCount,
+    usedCount: clampedUsedCount,
+    totalCount: dailyLimit,
+    percentUsed: (clampedUsedCount / dailyLimit) * 100,
+  };
+}
+
+export async function loadAutoScanBudget(tier?: string | null, userId?: string | null): Promise<ImageBudget> {
   const dailyLimit = resolveAutoScanDailyLimit(tier);
   try {
-    const raw = await AsyncStorage.getItem(buildAutoScanBudgetKey());
+    const raw = await AsyncStorage.getItem(buildAutoScanBudgetKey(undefined, userId));
     if (!raw) {
       return {
         remainingCount: dailyLimit,
@@ -50,14 +84,7 @@ export async function loadAutoScanBudget(tier?: string | null): Promise<ImageBud
       };
     }
     const parsed = JSON.parse(raw) as { usedCount?: number };
-    const usedCount = typeof parsed.usedCount === 'number' ? parsed.usedCount : 0;
-    const remainingCount = Math.max(0, dailyLimit - usedCount);
-    return {
-      remainingCount,
-      usedCount,
-      totalCount: dailyLimit,
-      percentUsed: (usedCount / dailyLimit) * 100,
-    };
+    return buildAutoScanBudgetFromUsage(parsed.usedCount, dailyLimit);
   } catch (error) {
     console.error('[AutoScanBudget] Failed to load:', error);
     return {
@@ -69,23 +96,73 @@ export async function loadAutoScanBudget(tier?: string | null): Promise<ImageBud
   }
 }
 
-export async function trackAutoScanUsage(tier?: string | null, count: number = 1): Promise<void> {
+export async function trackAutoScanUsage(
+  tier?: string | null,
+  count: number = 1,
+  userId?: string | null
+): Promise<void> {
   try {
     if (count <= 0) return;
-    const key = buildAutoScanBudgetKey();
-    const raw = await AsyncStorage.getItem(key);
-    const current = raw ? (JSON.parse(raw) as { usedCount?: number }) : { usedCount: 0 };
+    const key = buildAutoScanBudgetKey(undefined, userId);
     const dailyLimit = resolveAutoScanDailyLimit(tier);
-    const nextCount = Math.max(0, Math.min(dailyLimit, (current.usedCount || 0) + count));
-    await AsyncStorage.setItem(key, JSON.stringify({ usedCount: nextCount }));
+    await withAutoScanLock(key, async () => {
+      const raw = await AsyncStorage.getItem(key);
+      const current = raw ? (JSON.parse(raw) as { usedCount?: number }) : { usedCount: 0 };
+      const nextCount = Math.max(0, Math.min(dailyLimit, (current.usedCount || 0) + count));
+      await AsyncStorage.setItem(key, JSON.stringify({ usedCount: nextCount }));
+    });
   } catch (error) {
     console.error('[AutoScanBudget] Failed to track usage:', error);
   }
 }
 
-export async function hasAutoScanBudget(tier?: string | null, requiredCount: number = 1): Promise<boolean> {
-  const budget = await loadAutoScanBudget(tier);
+export async function hasAutoScanBudget(
+  tier?: string | null,
+  requiredCount: number = 1,
+  userId?: string | null
+): Promise<boolean> {
+  const budget = await loadAutoScanBudget(tier, userId);
   return budget.remainingCount >= requiredCount;
+}
+
+export interface AutoScanConsumeResult {
+  allowed: boolean;
+  budget: ImageBudget;
+}
+
+export async function consumeAutoScanBudget(
+  tier?: string | null,
+  count: number = 1,
+  userId?: string | null
+): Promise<AutoScanConsumeResult> {
+  const dailyLimit = resolveAutoScanDailyLimit(tier);
+  const key = buildAutoScanBudgetKey(undefined, userId);
+
+  return withAutoScanLock(key, async () => {
+    if (count <= 0) {
+      return {
+        allowed: true,
+        budget: await loadAutoScanBudget(tier, userId),
+      };
+    }
+
+    const raw = await AsyncStorage.getItem(key);
+    const current = raw ? (JSON.parse(raw) as { usedCount?: number }) : { usedCount: 0 };
+    const currentBudget = buildAutoScanBudgetFromUsage(current.usedCount, dailyLimit);
+    if (currentBudget.remainingCount < count) {
+      return {
+        allowed: false,
+        budget: currentBudget,
+      };
+    }
+
+    const nextUsed = Math.min(dailyLimit, currentBudget.usedCount + count);
+    await AsyncStorage.setItem(key, JSON.stringify({ usedCount: nextUsed }));
+    return {
+      allowed: true,
+      budget: buildAutoScanBudgetFromUsage(nextUsed, dailyLimit),
+    };
+  });
 }
 
 /**

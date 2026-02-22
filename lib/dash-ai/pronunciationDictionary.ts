@@ -196,7 +196,7 @@ const TECH_ABBREVIATIONS: PronunciationEntry[] = [
   { pattern: /\bTTS\b/g, alias: 'text to speech' },
   { pattern: /\bAI\b/g, alias: 'A.I.' },
   { pattern: /\bURL\b/g, alias: 'U.R.L.' },
-  { pattern: /\bPDF\b/g, alias: 'P.D.F.' },
+  { pattern: /\bPDF\b/g, alias: 'PDF' },
   { pattern: /\bOTP\b/g, alias: 'O.T.P.' },
 ];
 

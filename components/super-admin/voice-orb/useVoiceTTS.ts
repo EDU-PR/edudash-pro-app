@@ -60,6 +60,9 @@ const DEFAULT_DEVICE_RATE = DEVICE_RATE_NORMAL;
 const DEFAULT_PHONICS_DEVICE_RATE = DEVICE_RATE_PHONICS;
 const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
   process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
+const TTS_FAST_START_FIRST_CHUNK_MAX_CHARS = 260;
+const TTS_FAST_START_FIRST_CHUNK_MAX_SENTENCES = 1;
+const TTS_PROXY_TIMEOUT_DEFAULT_MS = 4200;
 
 const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
   a: 'ah',
@@ -775,12 +778,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       : (phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE);
     const effectivePitch = Number.isFinite(options.pitch as number) ? Number(options.pitch) : 0;
     const timeoutRaw = Number.parseInt(
-      String(process.env.EXPO_PUBLIC_TTS_PROXY_TIMEOUT_MS || '6500'),
+      String(process.env.EXPO_PUBLIC_TTS_PROXY_TIMEOUT_MS || String(TTS_PROXY_TIMEOUT_DEFAULT_MS)),
       10
     );
     const requestTimeoutMs = Number.isFinite(timeoutRaw)
-      ? Math.min(15000, Math.max(2500, timeoutRaw))
-      : 6500;
+      ? Math.min(12000, Math.max(1800, timeoutRaw))
+      : TTS_PROXY_TIMEOUT_DEFAULT_MS;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
 
@@ -932,6 +935,50 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     return normalized;
   };
 
+  const buildFastStartChunks = (text: string, maxLength: number): string[] => {
+    const baseChunks = splitIntoChunks(text, maxLength);
+    if (baseChunks.length === 0) return [];
+
+    const firstChunk = String(baseChunks[0] || '').trim();
+    if (!firstChunk || firstChunk.length <= TTS_FAST_START_FIRST_CHUNK_MAX_CHARS) {
+      return baseChunks;
+    }
+
+    const sentences = firstChunk
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+
+    let fastStartChunk = '';
+    for (let i = 0; i < sentences.length && i < TTS_FAST_START_FIRST_CHUNK_MAX_SENTENCES; i += 1) {
+      const candidate = fastStartChunk ? `${fastStartChunk} ${sentences[i]}` : sentences[i];
+      if (candidate.length > TTS_FAST_START_FIRST_CHUNK_MAX_CHARS) break;
+      fastStartChunk = candidate;
+    }
+
+    if (!fastStartChunk) {
+      const clipped = firstChunk.slice(0, TTS_FAST_START_FIRST_CHUNK_MAX_CHARS);
+      const lastSpace = clipped.lastIndexOf(' ');
+      fastStartChunk = (lastSpace > 40 ? clipped.slice(0, lastSpace) : clipped).trim();
+    }
+
+    if (!fastStartChunk || fastStartChunk.length >= firstChunk.length) {
+      return baseChunks;
+    }
+
+    const firstRemainder = firstChunk.slice(fastStartChunk.length).trim();
+    const remainingText = [firstRemainder, ...baseChunks.slice(1)]
+      .map((chunk) => String(chunk || '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    return [
+      fastStartChunk,
+      ...splitIntoChunks(remainingText, maxLength),
+    ];
+  };
+
   const speak = useCallback(async (
     text: string,
     language: SupportedLanguage = 'en-ZA',
@@ -1004,7 +1051,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
       // Keep chunking consistent in phonics mode to avoid extra request gaps.
-      const chunks = splitIntoChunks(cleanText, 1200);
+      const chunks = buildFastStartChunks(cleanText, 1200);
       const speechStartedAt = Date.now();
       const azureRate = Number.isFinite(effectiveOptions.rate as number)
         ? Number(effectiveOptions.rate)
@@ -1268,6 +1315,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     requestAzureAudioUrl,
     playAudioUrl,
     estimatePlaybackTimeoutMs,
+    buildFastStartChunks,
     speakWithDeviceTTS,
     reportTTSError,
     resolveSessionVoice,

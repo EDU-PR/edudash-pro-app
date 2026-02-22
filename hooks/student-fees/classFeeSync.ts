@@ -6,6 +6,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
 import type { Student, ClassOption } from './types';
 import { resolveSuggestedTuitionFee, resolveSuggestedRegistrationFee } from './feeHelpers';
+import { writeFeeCorrectionAudit } from './feeCorrectionAudit';
 
 interface FeeAssignmentPayload {
   student: Student;
@@ -21,7 +22,7 @@ export async function logFeeAssignmentCorrection(
   profileId: string,
   profileRole: string | null,
   organizationId: string | undefined,
-): Promise<void> {
+): Promise<boolean> {
   const supabase = assertSupabase();
   const nowIso = new Date().toISOString();
   const studentName = `${payload.student.first_name} ${payload.student.last_name}`.trim();
@@ -71,6 +72,47 @@ export async function logFeeAssignmentCorrection(
       });
     }
   }
+
+  const action = payload.source === 'change_class' ? 'change_class' : 'tuition_sync';
+  const reason =
+    payload.source === 'change_class'
+      ? `Class changed from ${payload.previousClassName || 'unknown'} to ${payload.nextClassName || 'unknown'}, with fee reassignment.`
+      : `Manual tuition sync run for ${payload.nextClassName || payload.student.class_name || 'current class'}.`;
+  const correctionAuditResult = await writeFeeCorrectionAudit({
+    organizationId: organizationId || payload.student.preschool_id || null,
+    studentId: payload.student.id,
+    action,
+    reason,
+    beforeSnapshot: {
+      class_name: payload.previousClassName || null,
+      updated_fee_rows: 0,
+      tuition_amount: null,
+    },
+    afterSnapshot: {
+      class_name: payload.nextClassName || null,
+      updated_fee_rows: payload.updatedFeeRows,
+      tuition_amount: payload.tuitionAmount ?? null,
+    },
+    metadata: {
+      source: payload.source,
+      previous_class_name: payload.previousClassName || null,
+      next_class_name: payload.nextClassName || null,
+      updated_fee_rows: payload.updatedFeeRows,
+      tuition_amount: payload.tuitionAmount ?? null,
+    },
+    actorId: profileId,
+    actorRole: profileRole || null,
+    sourceScreen: 'principal-student-fees',
+  });
+  if (!correctionAuditResult.ok) {
+    console.warn('[StudentFees] Failed to write fee correction audit row', {
+      error: correctionAuditResult.error,
+      action,
+      studentId: payload.student.id,
+    });
+    return false;
+  }
+  return true;
 }
 
 export interface TuitionSyncResult {

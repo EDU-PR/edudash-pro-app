@@ -17,9 +17,28 @@ import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 const OPENAI_API_KEY=REDACTED
+const WHISPER_PROMPT_BASE =
+  'Transcribe school voice notes with accurate punctuation and capitalization. ' +
+  'Prefer these spellings: EduDash, Dash AI, superadmin, principal, CAPS, Grade R, PDF, worksheet, rubric, memorandum, phonics, letter sound, isiZulu, isiXhosa, isiNdebele, Sepedi, Sesotho, Setswana, SiSwati, Tshivenda, Xitsonga.';
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
+}
+
+function normalizeWhisperLanguage(input: unknown): string | null {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw || raw === 'auto') return null;
+  const base = raw.split('-')[0];
+  return /^[a-z]{2,3}$/.test(base) ? base : null;
+}
+
+function buildWhisperPrompt(input: unknown): string {
+  const custom = typeof input === 'string' ? input.trim() : '';
+  const merged = custom
+    ? `${WHISPER_PROMPT_BASE} ${custom}`
+    : WHISPER_PROMPT_BASE;
+  // whisper-1 prompt guidance only uses the tail; keep this concise.
+  return merged.slice(0, 700);
 }
 
 serve(async (req: Request) => {
@@ -89,7 +108,7 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { audio_url, audio_base64, language } = body;
+    const { audio_url, audio_base64, language, prompt } = body;
 
     if (!audio_url && !audio_base64) {
       return new Response(
@@ -120,10 +139,13 @@ serve(async (req: Request) => {
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.webm');
     formData.append('model', 'whisper-1');
-    if (language) {
-      formData.append('language', language);
+    const whisperLanguage = normalizeWhisperLanguage(language);
+    if (whisperLanguage) {
+      formData.append('language', whisperLanguage);
     }
     formData.append('response_format', 'json');
+    formData.append('temperature', '0');
+    formData.append('prompt', buildWhisperPrompt(prompt));
 
     const whisperResp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -153,7 +175,7 @@ serve(async (req: Request) => {
         p_success: true,
         p_metadata: {
           scope: 'transcribe_audio',
-          language: result.language || language || 'en',
+          language: result.language || whisperLanguage || language || 'en',
           text_length: (result.text || '').length,
         },
       });
@@ -164,7 +186,7 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         text: result.text || '',
-        language: result.language || language || 'en',
+        language: result.language || whisperLanguage || language || 'en',
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

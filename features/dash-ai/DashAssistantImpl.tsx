@@ -32,12 +32,16 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { AlertModal } from '@/components/ui/AlertModal';
-import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
+import { CompactModelPicker } from '@/components/ai/model-picker/CompactModelPicker';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
-import { loadAutoScanBudget, trackAutoScanUsage } from '@/lib/dash-ai/imageBudget';
+import { loadAutoScanBudget } from '@/lib/dash-ai/imageBudget';
+import { deriveRetakePrompt } from '@/lib/dash-ai/retakeFlow';
 import { resolveSpeechControlsLayoutState } from '@/features/dash-ai/speechControls';
+import { getOrganizationType } from '@/lib/tenant/compat';
+import { canAccessModel, getDefaultModels, type AIModelId } from '@/lib/ai/models';
+import { normalizeTierToSubscription } from '@/lib/ai/modelForTier';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -104,6 +108,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   tutorConfig,
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
+  const { profile } = useAuth();
+  const autoScanUserId = String(profile?.id || '').trim() || null;
+  const orgType = getOrganizationType(profile);
+  const normalizedRole = String(profile?.role || '').toLowerCase();
+  const canRunAssignmentsTool = useMemo(() => {
+    if (orgType === 'preschool') return false;
+    return ['parent', 'student', 'learner', 'teacher', 'principal', 'principal_admin', 'admin', 'super_admin', 'superadmin']
+      .includes(normalizedRole);
+  }, [normalizedRole, orgType]);
   const insets = useSafeAreaInsets();
   const [scannerVisible, setScannerVisible] = useState(false);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
@@ -116,6 +129,19 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [speechControlsExpanded, setSpeechControlsExpanded] = useState(false);
   const wasSpeakingRef = useRef(false);
   const [remainingScans, setRemainingScans] = useState<number | null>(null);
+  const [retakeContext, setRetakeContext] = useState<{
+    assistantMessageId: string;
+    prompt: string;
+    pendingAttachmentId: string | null;
+  } | null>(null);
+  const retakeAutoSendRef = useRef(false);
+  const tierRef = useRef<string | undefined>(undefined);
+
+  const refreshScanBudget = useCallback(async (tierOverride?: string | null) => {
+    const activeTier = String(tierOverride || tierRef.current || 'free');
+    const budget = await loadAutoScanBudget(activeTier, autoScanUserId);
+    setRemainingScans(budget.remainingCount);
+  }, [autoScanUserId]);
 
   // Keyboard listeners
   useEffect(() => {
@@ -180,14 +206,32 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     addAttachments,
     runTool,
     extractFollowUps,
+    tier,
     cancelGeneration,
     selectedModel,
-    availableModels,
     setSelectedModel,
-  } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource, externalTutorMode, tutorConfig });
+  } = useDashAssistant({
+    conversationId,
+    initialMessage,
+    onClose,
+    handoffSource,
+    externalTutorMode,
+    tutorConfig,
+    onAutoScanConsumed: () => refreshScanBudget(),
+  });
+
+  useEffect(() => {
+    tierRef.current = tier;
+  }, [tier]);
+
+  useEffect(() => {
+    void refreshScanBudget(tier);
+  }, [refreshScanBudget, tier]);
 
   const isTypingActive = isLoading || !!loadingStatus;
-  const { profile } = useAuth();
+  const allModels = useMemo(() => getDefaultModels(), []);
+  const normalizedTier = useMemo(() => normalizeTierToSubscription(tier), [tier]);
+  const canSelectHeaderModel = useCallback((modelId: AIModelId) => canAccessModel(normalizedTier, modelId), [normalizedTier]);
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const isK12ParentDashEntry = handoffSource === 'k12_parent_tab';
   const useMinimalNextGenLayout = isK12ParentDashEntry;
@@ -269,15 +313,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const showFullSpeechControls = speechControlsLayout.showFullControls;
   const bottomThinkingLabel = getBottomThinkingLabel(loadingStatus);
   const showBottomThinkingDock = isTypingActive && !isRecording;
-
-  const refreshScanBudget = useCallback(async () => {
-    const budget = await loadAutoScanBudget(tier || 'free');
-    setRemainingScans(budget.remainingCount);
-  }, [tier]);
-
-  useEffect(() => {
-    void refreshScanBudget();
-  }, [refreshScanBudget]);
 
   const handleNewChat = useCallback(async () => {
     await stopAllActivity();
@@ -368,6 +403,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setScannerVisible(true);
   }, []);
 
+  const closeScanner = useCallback(() => {
+    setScannerVisible(false);
+    setRetakeContext((previous) => (
+      previous && !previous.pendingAttachmentId
+        ? null
+        : previous
+    ));
+  }, []);
+
   const handleAttachmentTakePhoto = useCallback(() => {
     openScanner();
   }, [openScanner]);
@@ -400,10 +444,22 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     void runTool('get_assignments', { status: 'pending', days_ahead: 14 });
   }, [runTool]);
 
+  const handleRetakeForClarity = useCallback((assistantMessage: DashMessage) => {
+    const prompt = deriveRetakePrompt(messages, assistantMessage.id);
+    setInputText(prompt);
+    setRetakeContext({
+      assistantMessageId: assistantMessage.id,
+      prompt,
+      pendingAttachmentId: null,
+    });
+    setScannerVisible(true);
+  }, [messages, setInputText]);
+
   const handleScannerScanned = useCallback((result: HomeworkScanResult) => {
     if (!result?.base64) return;
+    const attachmentId = `attach_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const attachment: DashAttachment = {
-      id: `attach_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: attachmentId,
       name: `scan_${Date.now()}.jpg`,
       mimeType: 'image/jpeg',
       size: Math.max(0, Math.floor(result.base64.length * 0.75)),
@@ -423,9 +479,37 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       },
     };
     addAttachments([attachment]);
-    void trackAutoScanUsage(tier || 'free', 1).then(() => refreshScanBudget());
+    setRetakeContext((previous) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        pendingAttachmentId: attachmentId,
+      };
+    });
+    void refreshScanBudget();
     setScannerVisible(false);
-  }, [addAttachments, refreshScanBudget, tier]);
+  }, [addAttachments, refreshScanBudget]);
+
+  useEffect(() => {
+    if (!retakeContext?.pendingAttachmentId) return;
+    if (retakeAutoSendRef.current) return;
+    if (isLoading || isUploading) return;
+    const hasAttachment = selectedAttachments.some(
+      (attachment) => attachment.id === retakeContext.pendingAttachmentId
+    );
+    if (!hasAttachment) return;
+    const prompt = String(retakeContext.prompt || '').trim();
+    if (!prompt) {
+      setRetakeContext(null);
+      return;
+    }
+
+    retakeAutoSendRef.current = true;
+    void sendMessage(prompt).finally(() => {
+      retakeAutoSendRef.current = false;
+      setRetakeContext(null);
+    });
+  }, [retakeContext, selectedAttachments, sendMessage, isLoading, isUploading]);
 
   // Scroll to bottom on keyboard show
   useEffect(() => {
@@ -453,9 +537,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       onSendFollowUp={(text) => sendMessage(text)}
       extractFollowUps={extractFollowUps}
       assistantLabel={roleCopy.assistantLabel}
-      onRetakeForClarity={openScanner}
+      onRetakeForClarity={handleRetakeForClarity}
     />
-  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, openScanner]);
+  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, handleRetakeForClarity]);
 
   const renderTypingIndicator = useCallback(() => {
     if (streamingMessageId) return null;
@@ -512,7 +596,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         <View style={layoutStyles.contentLayer}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
-          {/* Clean header — ChatGPT style */}
           <View style={[headerStyles.header, { backgroundColor: 'transparent' }]}>
             <View
               style={[
@@ -538,7 +621,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   <Text style={[headerStyles.headerSubtitle, { color: theme.textSecondary }]}>
                     {shellSubtitle}
                   </Text>
-                  {!useMinimalNextGenLayout && <ModelInUseIndicator modelId={selectedModel} compact showCostDots />}
                 </View>
                 <View style={headerStyles.headerRight}>
                   <View
@@ -567,6 +649,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                         <Ionicons name="stop" size={16} color={theme.onError || theme.background} />
                       </TouchableOpacity>
                     )}
+                    <CompactModelPicker
+                      models={allModels}
+                      selectedModelId={selectedModel}
+                      canSelectModel={canSelectHeaderModel}
+                      onSelectModel={(modelId) => setSelectedModel(modelId)}
+                      onLockedPress={() => { router.push('/screens/subscription-setup?reason=model_selection&source=dash_assistant' as any); }}
+                      disabled={isLoading || isUploading}
+                    />
                     <TouchableOpacity
                       style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: 'transparent', borderWidth: 0 }]}
                       accessibilityLabel="Open Dash options"
@@ -908,25 +998,17 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             onOpenOrb={handleOpenOrb}
             onOpenScanner={openScanner}
             onRunScheduleTool={handleRunScheduleTool}
-            onRunAssignmentsTool={handleRunAssignmentsTool}
-            models={availableModels}
-            selectedModelId={selectedModel}
-            onSelectModel={(modelId) => {
-              try {
-                setSelectedModel(modelId as any);
-              } catch {
-                // ignore invalid model id
-              }
-            }}
+            onRunAssignmentsTool={canRunAssignmentsTool ? handleRunAssignmentsTool : undefined}
             isBusy={isLoading || isUploading}
           />
           <HomeworkScanner
             visible={scannerVisible}
-            onClose={() => setScannerVisible(false)}
+            onClose={closeScanner}
             onScanned={handleScannerScanned}
             title="Scan Image"
             tier={tier || 'free'}
             remainingScans={remainingScans}
+            userId={autoScanUserId}
           />
         </View>
       </KeyboardAvoidingView>

@@ -41,6 +41,7 @@ import { useVoiceSTT } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 import { useWakeWord } from '@/hooks/useWakeWord';
+import { useDashChatModelPreference } from '@/hooks/useDashChatModelPreference';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import { useOrbStreaming } from '@/hooks/dash-orb/useOrbStreaming';
 import { sanitizeInput, validateCommand, RateLimiter } from '@/lib/security/validators';
@@ -75,17 +76,19 @@ import { resolveAgeBand } from '@/lib/dash-ai/learnerContext';
 import { classifyResponseMode } from '@/lib/dash-ai/responseMode';
 import { detectLanguageOverrideFromText, resolveResponseLocale } from '@/lib/dash-ai/languageRouting';
 import {
+  consumeAutoScanBudget,
   FREE_IMAGE_BUDGET_PER_DAY,
   loadImageBudget,
   trackImageUsage,
   loadAutoScanBudget,
-  trackAutoScanUsage,
 } from '@/lib/dash-ai/imageBudget';
+import { countScannerAttachments } from '@/lib/dash-ai/retakeFlow';
 import { logger } from '@/lib/logger';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
 import { resolveAIProxyScopeFromRole } from '@/lib/ai/aiProxyScope';
+import { shouldEnableVoiceTurnTools } from '@/lib/dash-voice-utils';
 
 let AsyncStorage: any = null;
 try {
@@ -123,6 +126,12 @@ interface DashOrbProps {
   onUpgradePress?: () => void;
 }
 
+type ExecuteCommandResult = {
+  text: string;
+  ok: boolean;
+  ocrMode: boolean;
+};
+
 export default function DashOrb({
   position = 'bottom-right',
   size = 60,
@@ -136,15 +145,14 @@ export default function DashOrb({
   lockedCtaLabel,
   onUpgradePress,
 }: DashOrbProps) {
-  // Get user profile for role-based AI endpoint selection
   const { profile, user } = useAuth();
+  const autoScanUserId = String(user?.id || profile?.id || '').trim() || null;
   const { theme } = useTheme();
   const styles = useMemo(() => createDashOrbStyles(theme), [theme]);
   const userRole = profile?.role?.toLowerCase() || '';
   const normalizedRole = userRole || 'guest';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   const orgType = getOrganizationType(profile);
-  // Age band from profile/learner context only (never inferred from voice)
   const ageBand = useMemo(
     () => resolveAgeBand(learnerContext?.ageYears, learnerContext?.grade) || 'adult',
     [learnerContext?.ageYears, learnerContext?.grade]
@@ -173,7 +181,6 @@ export default function DashOrb({
     ''
   ).toLowerCase();
   const isFreeImageBudgetTier = tierLabel === 'free' || tierLabel === 'trialing' || tierLabel === 'trial';
-  
   const [isExpanded, setIsExpanded] = useState(!!autoOpen);
   const [inputText, setInputText] = useState('');
   const [, setLiveTranscript] = useState('');
@@ -190,6 +197,7 @@ export default function DashOrb({
   const [isListeningForCommand, setIsListeningForCommand] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA'>('en-ZA');
+  const { selectedModel, setSelectedModel, allModels: modelPickerModels, canSelectModel: canSelectOrbModel } = useDashChatModelPreference();
   const [memorySnapshot, setMemorySnapshot] = useState('');
   const [quickActionAge, setQuickActionAge] = useState('auto');
   const [quickActionPrompt, setQuickActionPrompt] = useState('');
@@ -219,9 +227,9 @@ export default function DashOrb({
   }, [isFreeImageBudgetTier, pendingAttachments]);
 
   const refreshAutoScanBudget = useCallback(async () => {
-    const budget = await loadAutoScanBudget(tierLabel || 'free');
+    const budget = await loadAutoScanBudget(tierLabel || 'free', autoScanUserId);
     setRemainingAutoScans(budget.remainingCount);
-  }, [tierLabel]);
+  }, [autoScanUserId, tierLabel]);
 
   useEffect(() => {
     void refreshAutoScanBudget();
@@ -304,7 +312,6 @@ export default function DashOrb({
       .filter((tool) => !!tool.name);
   }, [autoToolShortcuts]);
   
-  // Rate limiter for commands (10 requests per minute)
   const rateLimiter = useRef(new RateLimiter(10, 60000)).current;
   
   // SSE streaming + sentence-level TTS pipelining
@@ -1193,11 +1200,10 @@ export default function DashOrb({
       },
     };
     setPendingAttachments((prev) => [...prev, attachment].slice(0, 5));
-    await trackAutoScanUsage(tierLabel || 'free', 1).catch(() => {});
     void refreshAutoScanBudget();
     setScannerVisible(false);
     toast.success('Homework scan attached');
-  }, [getRemainingOrbImageSlots, refreshAutoScanBudget, tierLabel]);
+  }, [getRemainingOrbImageSlots, refreshAutoScanBudget]);
 
   const handleSend = async (text: string) => {
     const trimmed = text.trim();
@@ -1393,23 +1399,39 @@ export default function DashOrb({
         .map(m => ({ role: m.role, content: m.content }));
       const history = toolContextEntry ? [...baseHistory, toolContextEntry] : baseHistory;
 
-      // Process the command — try SSE streaming first, fall back to non-streaming
-      const forceNonStreaming = (options?.attachments?.length ?? 0) > 0;
+      const attachmentsForTurn = options?.attachments || [];
+      const forceNonStreaming = attachmentsForTurn.length > 0;
 
       if (forceNonStreaming) {
-        // Non-streaming path: OCR / image attachments only
-        const result = await executeCommand(command, history, options?.attachments || []);
-        await streamResponseToMessage(thinkingId, result);
+        const result = await executeCommand(command, history, attachmentsForTurn);
+        await streamResponseToMessage(thinkingId, result.text);
         setMessages(prev =>
           prev.map(msg =>
             msg.id === thinkingId ? { ...msg, toolCalls: undefined } : msg
           )
         );
 
+        const scannedAttachmentCount = countScannerAttachments(attachmentsForTurn);
+        if (scannedAttachmentCount > 0 && result.ok && result.ocrMode) {
+          const consumeResult = await consumeAutoScanBudget(
+            tierLabel || 'free',
+            scannedAttachmentCount,
+            autoScanUserId
+          );
+          if (!consumeResult.allowed) {
+            logger.info('DashOrb.autoScanBudgetRaceDetected', {
+              scannedAttachmentCount,
+              tier: tierLabel || 'free',
+              source: 'processCommand',
+            });
+          }
+          await refreshAutoScanBudget();
+        }
+
         if (voiceEnabled && Platform.OS !== 'web') {
           const ttsLanguage = resolveResponseLocale({
             explicitOverride: requestLanguage.locale,
-            responseText: result,
+            responseText: result.text,
             fallbackPreference: selectedLanguage,
           }).locale || selectedLanguage;
           if (ttsLanguage !== selectedLanguage) {
@@ -1417,27 +1439,25 @@ export default function DashOrb({
           }
           lastTTSErrorRef.current = '';
           try {
-            const phonicsMode = shouldUsePhonicsMode(result, {
+            const phonicsMode = shouldUsePhonicsMode(result.text, {
               ageYears: learnerAgeYears,
               gradeLevel: learnerGrade || null,
               schoolType: learnerContext?.schoolType || null,
               organizationType: learnerContext?.schoolType || null,
             });
-            await speak(result, ttsLanguage, { phonicsMode });
+            await speak(result.text, ttsLanguage, { phonicsMode });
           } catch (ttsErr) {
             console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
           }
         }
-        onCommandExecuted?.(command, result);
+        onCommandExecuted?.(command, result.text);
       } else {
-        // ── SSE Streaming + Sentence-Level TTS Pipelining ──
         const supabase = assertSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error('Not authenticated.');
 
         const endpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
 
-        // Build the same body as executeCommand but with stream: true
         const isLearnerRole = ['student', 'learner'].includes(normalizedRole);
         const ageYears = isLearnerRole
           ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
@@ -1449,6 +1469,12 @@ export default function DashOrb({
           organizationType: learnerContext?.schoolType || null,
         });
         const aiScope = resolveAIProxyScopeFromRole(normalizedRole);
+        const streamCriteriaIntent = Boolean(getCriteriaResponsePrompt(command));
+        const enableToolsForStreamTurn = shouldEnableVoiceTurnTools(command, {
+          hasAttachment: false,
+          ocrMode: false,
+          criteriaIntent: streamCriteriaIntent,
+        });
         const traceId = `dash_orb_stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
         const streamBody: Record<string, unknown> = {
@@ -1456,31 +1482,32 @@ export default function DashOrb({
           service_type: 'dash_conversation',
           payload: {
             prompt: command,
-              context: [
-                history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
-                memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
-                learnerName ? `Learner name: ${learnerName}.` : null,
-                learnerGrade ? `Learner grade: ${learnerGrade}.` : null,
-                ageYears ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.` : null,
-                normalizedRole ? `Role: ${normalizedRole}.` : null,
-                dashPolicy.systemPromptAddendum,
-              ].filter(Boolean).join('\n\n') || undefined,
+            model: selectedModel,
+            context: [
+              history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
+              memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
+              learnerName ? `Learner name: ${learnerName}.` : null,
+              learnerGrade ? `Learner grade: ${learnerGrade}.` : null,
+              ageYears ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.` : null,
+              normalizedRole ? `Role: ${normalizedRole}.` : null,
+              dashPolicy.systemPromptAddendum,
+            ].filter(Boolean).join('\n\n') || undefined,
           },
           stream: true,
-          enable_tools: true,
+          enable_tools: enableToolsForStreamTurn,
           metadata: {
             role: normalizedRole,
+            model: selectedModel,
             source: 'dash_orb_stream',
             dash_mode: dashPolicy.defaultMode,
             response_mode: responseMode,
             language_source: languageSource,
             detected_language: requestLanguage.locale || undefined,
+            stream_tool_mode: enableToolsForStreamTurn ? 'enabled' : 'deferred',
             trace_id: traceId,
           },
         };
 
-        // Sentence TTS queue processor — batch multiple sentences per speak() to reduce
-        // pause-speak-pause gaps (single TTS source: useVoiceTTS; fewer calls = smoother playback)
         const MAX_TTS_BATCH_SENTENCES = 3;
         const MAX_TTS_BATCH_CHARS = 420;
         const processTTSQueue = async () => {
@@ -1836,7 +1863,8 @@ export default function DashOrb({
     command: string,
     history: Array<{ role: string; content: string }> = [],
     attachments: DashAttachment[] = []
-  ): Promise<string> => {
+  ): Promise<ExecuteCommandResult> => {
+    let attemptedOCRMode = false;
     try {
       const supabase = assertSupabase();
       const { data: { session } } = await supabase.auth.getSession();
@@ -1886,6 +1914,7 @@ export default function DashOrb({
         detectedOCRTask !== null ||
         isShortOrAttachmentOnlyPrompt(command)
       );
+      attemptedOCRMode = ocrMode;
       const ocrTask = detectedOCRTask || 'document';
       const attachmentContext = attachments.length > 0
         ? [
@@ -1901,12 +1930,18 @@ export default function DashOrb({
       const criteriaContext = getCriteriaResponsePrompt(command);
       const ocrContext = ocrMode ? getOCRPromptForTask(ocrTask) : null;
       const aiScope = resolveAIProxyScopeFromRole(normalizedRole);
+      const enableToolsForTurn = shouldEnableVoiceTurnTools(command, {
+        hasAttachment: images.length > 0,
+        ocrMode,
+        criteriaIntent: Boolean(criteriaContext),
+      });
 
       const aiProxyBody = {
         scope: aiScope,
         service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
         payload: {
           prompt: command,
+          model: selectedModel,
           images: images.length > 0 ? images : undefined,
           ocr_mode: ocrMode || undefined,
           ocr_task: ocrMode ? ocrTask : undefined,
@@ -1927,9 +1962,10 @@ export default function DashOrb({
           ].filter(Boolean).join('\n\n') || undefined,
         },
         stream: false,
-        enable_tools: true,
+        enable_tools: enableToolsForTurn,
         metadata: {
           role: normalizedRole,
+          model: selectedModel,
           source: 'dash_orb',
           dash_mode: dashPolicy.defaultMode,
           response_mode: responseMode,
@@ -1940,6 +1976,7 @@ export default function DashOrb({
           attachment_count: attachments.length,
           ocr_mode: ocrMode,
           ocr_task: ocrMode ? ocrTask : undefined,
+          stream_tool_mode: enableToolsForTurn ? 'enabled' : 'deferred',
           trace_id: traceId,
           tool_plan: {
             source: 'dash_orb.executeCommand',
@@ -2067,7 +2104,11 @@ export default function DashOrb({
             if (!fallback.ok) {
               throw new Error(fallback.data?.error || fallback.data?.message || 'Fallback ai-proxy request failed');
             }
-            return parseAiProxyResponse(fallback.data);
+            return {
+              text: parseAiProxyResponse(fallback.data),
+              ok: true,
+              ocrMode,
+            };
           }
           throw new Error(fallbackError);
         }
@@ -2075,10 +2116,18 @@ export default function DashOrb({
         let formattedResponse = String(response.data?.response || '');
         // Keep token/tool telemetry out of the conversational response body.
         // It creates noisy UX and gets read aloud by TTS.
-        return formattedResponse;
+        return {
+          text: formattedResponse,
+          ok: true,
+          ocrMode: false,
+        };
       }
 
-      return parseAiProxyResponse(response.data);
+      return {
+        text: parseAiProxyResponse(response.data),
+        ok: true,
+        ocrMode,
+      };
       
     } catch (error) {
       console.error('[DashOrb] Command execution error:', error);
@@ -2086,22 +2135,42 @@ export default function DashOrb({
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
       if (errorMessage.includes('Not authenticated')) {
-        return `⚠️ **Authentication Required**\n\nPlease log out and log back in to refresh your session.`;
+        return {
+          text: '⚠️ **Authentication Required**\n\nPlease log out and log back in to refresh your session.',
+          ok: false,
+          ocrMode: attemptedOCRMode,
+        };
       }
       
       if (errorMessage.includes('Super admin')) {
-        return `🔒 **Access Denied**\n\nThis feature requires Super Admin privileges.`;
+        return {
+          text: '🔒 **Access Denied**\n\nThis feature requires Super Admin privileges.',
+          ok: false,
+          ocrMode: attemptedOCRMode,
+        };
       }
       
       if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
-        return `📊 **AI Quota Exceeded**\n\nYou've reached your AI usage limit. Please try again later or upgrade your subscription.`;
+        return {
+          text: '📊 **AI Quota Exceeded**\n\nYou\'ve reached your AI usage limit. Please try again later or upgrade your subscription.',
+          ok: false,
+          ocrMode: attemptedOCRMode,
+        };
       }
       
       if (errorMessage.includes('ANTHROPIC_API_KEY')) {
-        return `⚙️ **Configuration Required**\n\nThe AI service is not configured. Please contact support.`;
+        return {
+          text: '⚙️ **Configuration Required**\n\nThe AI service is not configured. Please contact support.',
+          ok: false,
+          ocrMode: attemptedOCRMode,
+        };
       }
       
-      return `❌ **Error**\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`;
+      return {
+        text: `❌ **Error**\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`,
+        ok: false,
+        ocrMode: attemptedOCRMode,
+      };
     }
   };
 
@@ -2406,6 +2475,11 @@ export default function DashOrb({
           }
         }}
         onOpenSettings={() => router.push('/screens/dash-ai-settings' as any)}
+        models={modelPickerModels}
+        selectedModelId={selectedModel}
+        canSelectModel={canSelectOrbModel}
+        onSelectModel={(modelId) => setSelectedModel(modelId)}
+        onLockedModelPress={() => { router.push('/screens/subscription-setup?reason=model_selection&source=dash_orb' as any); }}
         onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
         onAttachFile={handleOrbAttach}
         onTakePhoto={handleOrbCamera}
@@ -2492,7 +2566,6 @@ export default function DashOrb({
         }}
         onOpenHistory={() => router.push('/screens/dash-conversations-history' as any)}
         onContinueFullChat={() => {
-          // Close the orb modal and navigate to full Dash Assistant
           setIsExpanded(false);
           const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
           router.push({
@@ -2516,6 +2589,7 @@ export default function DashOrb({
         title="Scan Homework"
         tier={tierLabel || 'free'}
         remainingScans={remainingAutoScans}
+        userId={autoScanUserId}
       />
       <DashToolsModal
         visible={showToolsModal}

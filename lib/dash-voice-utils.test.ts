@@ -1,4 +1,9 @@
-import { buildVoicePlaybackText, splitForTTS, TTS_CHUNK_MAX_LEN } from './dash-voice-utils';
+import {
+  buildVoicePlaybackText,
+  splitForTTS,
+  TTS_CHUNK_MAX_LEN,
+  shouldEnableVoiceTurnTools,
+} from './dash-voice-utils';
 
 describe('dash-voice-utils', () => {
   describe('TTS_CHUNK_MAX_LEN', () => {
@@ -62,6 +67,24 @@ describe('dash-voice-utils', () => {
       expect(spoken.length).toBeLessThanOrEqual(120);
       expect(spoken).toContain('First sentence');
       expect(spoken).not.toContain('Third sentence');
+    });
+  });
+
+  describe('shouldEnableVoiceTurnTools', () => {
+    it('enables tools for explicit PDF/export prompts', () => {
+      expect(shouldEnableVoiceTurnTools('Please export this as a PDF for me')).toBe(true);
+    });
+
+    it('enables tools for web-search-like prompts', () => {
+      expect(shouldEnableVoiceTurnTools('What is the latest weather forecast today?')).toBe(true);
+    });
+
+    it('keeps tools deferred for normal tutoring prompts', () => {
+      expect(shouldEnableVoiceTurnTools('Explain fractions to grade four learners')).toBe(false);
+    });
+
+    it('keeps tools deferred when OCR mode is active', () => {
+      expect(shouldEnableVoiceTurnTools('Read this worksheet image', { ocrMode: true })).toBe(false);
     });
   });
 });

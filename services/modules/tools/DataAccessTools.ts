@@ -244,7 +244,7 @@ export function registerDataAccessTools(register: (tool: AgentTool) => void): vo
       properties: {
         status: {
           type: 'string',
-          enum: ['pending', 'submitted', 'graded', 'all'],
+          enum: ['pending', 'submitted', 'graded', 'draft', 'published', 'archived', 'all'],
           description: 'Filter by assignment status (default: all)'
         },
         subject: {
@@ -267,25 +267,75 @@ export function registerDataAccessTools(register: (tool: AgentTool) => void): vo
           return { success: false, error: 'User not authenticated' };
         }
 
-        const orgId = (profile as any).organization_id || (profile as any).preschool_id;
+        const organizationId = (profile as any).organization_id || null;
+        const preschoolId = (profile as any).preschool_id || null;
+        const orgId = organizationId || preschoolId;
+        if (!orgId) {
+          return { success: false, error: 'No organization found for user' };
+        }
 
         const endDate = new Date();
         endDate.setDate(endDate.getDate() + (args.days_ahead || 30));
+        const now = new Date();
+        const nowMs = now.getTime();
+        const endMs = endDate.getTime();
+        const requestedStatus = String(args.status || 'all').toLowerCase();
+        const subjectFilter = String(args.subject || '').trim().toLowerCase();
+
+        const parseDueMs = (value: unknown): number | null => {
+          const raw = String(value || '').trim();
+          if (!raw) return null;
+          const parsed = Date.parse(raw);
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const mapStatusFilter = (status: string): {
+          mode: 'all' | 'pending' | 'exact';
+          exactStatus?: string;
+          warning?: string;
+        } => {
+          if (!status || status === 'all') return { mode: 'all' };
+          if (status === 'pending') return { mode: 'pending' };
+          if (status === 'draft' || status === 'published' || status === 'archived') {
+            return { mode: 'exact', exactStatus: status };
+          }
+          if (status === 'submitted' || status === 'graded') {
+            return {
+              mode: 'pending',
+              warning: `Filter "${status}" is not supported by assignments table. Showing pending published assignments instead.`,
+            };
+          }
+          return { mode: 'all' };
+        };
+
+        const statusPlan = mapStatusFilter(requestedStatus);
 
         let query = supabase
           .from('assignments')
-          .select('id, title, description, subject, due_date, status, points_possible')
-          .eq('school_id', orgId)
-          .lte('due_date', endDate.toISOString())
-          .order('due_date', { ascending: true })
-          .limit(50);
+          .select(`
+            id,
+            title,
+            description,
+            assignment_type,
+            due_at,
+            due_date,
+            status,
+            max_points,
+            is_visible_to_parents,
+            is_visible_to_students,
+            class:classes(id, name, grade_level),
+            course:courses(id, title, course_code)
+          `)
+          .is('deleted_at', null)
+          .order('due_at', { ascending: true, nullsFirst: false })
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .limit(120);
 
-        if (args.status && args.status !== 'all') {
-          query = query.eq('status', args.status);
-        }
-
-        if (args.subject) {
-          query = query.eq('subject', args.subject);
+        // Use the strongest available organization discriminator.
+        if (organizationId) {
+          query = query.eq('organization_id', organizationId);
+        } else {
+          query = query.eq('preschool_id', preschoolId);
         }
 
         const { data: assignments, error } = await query;
@@ -294,13 +344,73 @@ export function registerDataAccessTools(register: (tool: AgentTool) => void): vo
           return { success: false, error: error.message };
         }
 
+        const normalizedAssignments = (assignments || []).map((assignment: any) => {
+          const dueIso = assignment?.due_at || assignment?.due_date || null;
+          const dueMs = parseDueMs(dueIso);
+          const className = String(assignment?.class?.name || '').trim();
+          const courseTitle = String(assignment?.course?.title || '').trim();
+          return {
+            id: assignment?.id,
+            title: assignment?.title || 'Untitled assignment',
+            description: assignment?.description || '',
+            assignment_type: assignment?.assignment_type || 'homework',
+            due_date: dueIso,
+            status: assignment?.status || 'draft',
+            max_points: assignment?.max_points,
+            class_name: className || null,
+            course_title: courseTitle || null,
+            due_ms: dueMs,
+          };
+        });
+
+        const filteredAssignments = normalizedAssignments.filter((assignment: any) => {
+          // If due date exists, enforce days_ahead horizon.
+          if (typeof assignment.due_ms === 'number' && assignment.due_ms > endMs) return false;
+
+          if (statusPlan.mode === 'exact' && statusPlan.exactStatus) {
+            if (String(assignment.status || '').toLowerCase() !== statusPlan.exactStatus) {
+              return false;
+            }
+          } else if (statusPlan.mode === 'pending') {
+            const status = String(assignment.status || '').toLowerCase();
+            if (status !== 'published') return false;
+            if (typeof assignment.due_ms === 'number' && assignment.due_ms < nowMs) return false;
+          }
+
+          if (subjectFilter) {
+            const haystack = [
+              assignment.title,
+              assignment.description,
+              assignment.course_title,
+              assignment.class_name,
+              assignment.assignment_type,
+            ]
+              .map((value: unknown) => String(value || '').toLowerCase())
+              .join(' ');
+            if (!haystack.includes(subjectFilter)) return false;
+          }
+
+          return true;
+        });
+
         return {
           success: true,
-          assignments: assignments || [],
-          count: assignments?.length || 0,
+          assignments: filteredAssignments.map((assignment: any) => ({
+            id: assignment.id,
+            title: assignment.title,
+            description: assignment.description,
+            assignment_type: assignment.assignment_type,
+            due_date: assignment.due_date,
+            status: assignment.status,
+            max_points: assignment.max_points,
+            class_name: assignment.class_name,
+            course_title: assignment.course_title,
+          })),
+          count: filteredAssignments.length,
+          warning: statusPlan.warning,
           filters: {
-            status: args.status || 'all',
-            subject: args.subject,
+            status: requestedStatus || 'all',
+            subject: args.subject || null,
             days_ahead: args.days_ahead || 30
           }
         };

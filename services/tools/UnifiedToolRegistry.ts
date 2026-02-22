@@ -603,14 +603,24 @@ export class UnifiedToolRegistry {
           2
         ) as { success?: boolean; error?: string; result?: unknown };
 
-        if (execution.success) {
+        const nestedResult = execution.result as Record<string, unknown> | undefined;
+        const nestedSuccess = typeof nestedResult?.success === 'boolean'
+          ? nestedResult.success
+          : null;
+        const nestedError = typeof nestedResult?.error === 'string'
+          ? nestedResult.error
+          : null;
+        const effectiveSuccess = Boolean(execution.success) && nestedSuccess !== false;
+        const effectiveError = execution.error || (!effectiveSuccess ? (nestedError || 'Tool execution failed') : undefined);
+
+        if (effectiveSuccess) {
           this.successCount += 1;
         }
 
         return {
-          success: !!execution.success,
+          success: effectiveSuccess,
           result: execution.result,
-          error: execution.error,
+          error: effectiveError,
           trace_id: traceId,
           metadata: {
             trace_id: traceId,
