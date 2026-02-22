@@ -20,6 +20,20 @@ describe('pdfPreviewUtils', () => {
     expect(result.storagePath).toBe('org/file.pdf');
   });
 
+  it('keeps tool metadata as source of truth even when assistant text has another PDF link', () => {
+    const result = resolvePdfPreviewTarget({
+      isPdfToolOperation: true,
+      isToolOperation: true,
+      toolDownloadUrl: 'https://example.com/storage/v1/object/sign/generated-pdfs/org/file.pdf?token=tool',
+      toolStoragePath: 'org/file.pdf',
+      assistantPdfUrl: 'https://example.com/docs/assistant-file.pdf',
+      extractedPdfUrl: 'https://example.com/docs/assistant-file.pdf',
+    });
+
+    expect(result.url).toBe('https://example.com/storage/v1/object/sign/generated-pdfs/org/file.pdf?token=tool');
+    expect(result.storagePath).toBe('org/file.pdf');
+  });
+
   it('rejects generated-pdfs public URLs', () => {
     const publicUrl = 'https://example.com/storage/v1/object/public/generated-pdfs/org/file.pdf';
     expect(isGeneratedPdfsPublicUrl(publicUrl)).toBe(true);

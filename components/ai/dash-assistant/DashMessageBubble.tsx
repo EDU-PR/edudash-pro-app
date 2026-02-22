@@ -347,6 +347,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const warningColor = theme.warning || '#d97706';
   const isUser = message.type === 'user';
   const [showRawToolPayload, setShowRawToolPayload] = React.useState(false);
+  const [showFullToolNarrative, setShowFullToolNarrative] = React.useState(false);
   const [expandedVisual, setExpandedVisual] = React.useState<ExpandedVisualState | null>(null);
   
   // Enhanced gradients for better visual appeal
@@ -356,6 +357,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 
   React.useEffect(() => {
     setShowRawToolPayload(false);
+    setShowFullToolNarrative(false);
     setExpandedVisual(null);
   }, [message.id]);
 
@@ -547,7 +549,14 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     () => buildToolChartPreview(toolNameKey, toolArgs || null),
     [toolArgs, toolNameKey]
   );
+  const pdfArtifactMetadata = metadata.pdf_artifact && typeof metadata.pdf_artifact === 'object'
+    ? metadata.pdf_artifact as Record<string, any>
+    : null;
   const toolDownloadUrl = firstText(
+    pdfArtifactMetadata?.downloadUrl,
+    pdfArtifactMetadata?.download_url,
+    pdfArtifactMetadata?.signedUrl,
+    pdfArtifactMetadata?.signed_url,
     toolPayload?.downloadUrl,
     toolPayload?.download_url,
     toolPayload?.signedUrl,
@@ -555,7 +564,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     toolPayload?.uri,
     toolPayload?.url,
   );
-  const toolStoragePath = firstText(toolPayload?.storagePath, toolPayload?.storage_path);
+  const toolStoragePath = firstText(
+    pdfArtifactMetadata?.storagePath,
+    pdfArtifactMetadata?.storage_path,
+    toolPayload?.storagePath,
+    toolPayload?.storage_path
+  );
   const isPdfToolOperation = isToolOperation && PDF_TOOL_NAMES.has(toolNameKey);
   const assistantPdfUrl = !isUser ? extractUrl(assistantContent || '') : undefined;
   const attachmentPdfUrl = firstText(
@@ -577,11 +591,21 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     ? !!pdfPreviewUrl || !!pdfPreviewTarget.storagePath
     : !!pdfPreviewUrl && isLikelyPdfUrl(pdfPreviewUrl);
   const toolFilename = firstText(
+    pdfArtifactMetadata?.filename,
+    pdfArtifactMetadata?.file_name,
+    pdfArtifactMetadata?.name,
     toolPayload?.filename,
     toolPayload?.file_name,
     toolPayload?.name,
   );
-  const toolLinkType = String(toolPayload?.linkType || toolPayload?.link_type || '').toLowerCase();
+  const toolLinkType = String(
+    firstText(
+      pdfArtifactMetadata?.linkType,
+      pdfArtifactMetadata?.link_type,
+      toolPayload?.linkType,
+      toolPayload?.link_type
+    ) || ''
+  ).toLowerCase();
   const toolLinkStatus = isPdfToolOperation
     ? toolLinkType === 'signed'
       ? 'Secure link ready'
@@ -589,7 +613,19 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           ? 'Saved on this device'
           : 'Link unavailable'
     : '';
-  const toolWarning = firstText(toolPayload?.warning, toolPayload?.warning_message);
+  const toolWarning = firstText(
+    pdfArtifactMetadata?.warning,
+    pdfArtifactMetadata?.warning_message,
+    toolPayload?.warning,
+    toolPayload?.warning_message
+  );
+  const conciseToolNarrative = toolSummary
+    || (isPdfToolOperation ? 'PDF ready to open.' : (toolSuccess ? 'Task completed.' : 'Task needs attention.'));
+  const assistantNarrative = String(assistantContent || '').trim();
+  const hasVerboseAssistantNarrative = assistantNarrative.length > 220;
+  const showToolNarrativeToggle = isToolOperation
+    && hasVerboseAssistantNarrative
+    && assistantNarrative !== conciseToolNarrative;
   const inlineAssistantUrl = sanitizeGeneratedPdfUrl(url);
   const inlineActionUrl = isPdfToolOperation ? pdfPreviewUrl : inlineAssistantUrl;
   const inlineActionIsPdf = isPdfToolOperation ? !!pdfPreviewUrl : isLikelyPdfUrl(inlineAssistantUrl);
@@ -984,9 +1020,35 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </View>
               </View>
 
-              {(toolSummary || assistantContent) && (
+              {(conciseToolNarrative || assistantNarrative) && (
                 <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 18 }}>
-                  {toolSummary || assistantContent}
+                  {showToolNarrativeToggle ? conciseToolNarrative : (conciseToolNarrative || assistantNarrative)}
+                </Text>
+              )}
+              {showToolNarrativeToggle && (
+                <TouchableOpacity
+                  onPress={() => setShowFullToolNarrative((prev) => !prev)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showFullToolNarrative ? 'Hide full assistant response' : 'View full assistant response'}
+                >
+                  <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>
+                    {showFullToolNarrative ? 'Hide full response' : 'View full response'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {showToolNarrativeToggle && showFullToolNarrative && (
+                <Text style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>
+                  {assistantNarrative}
                 </Text>
               )}
 
