@@ -35,6 +35,7 @@ import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
 import type {
   FeeCategoryCode,
   FinanceControlCenterBundle,
+  FinanceQueueStage,
   FinancePendingPOPRow,
   PayrollRosterItem,
 } from '@/types/finance';
@@ -93,6 +94,20 @@ const CATEGORY_OPTIONS: FeeCategoryCode[] = [
   'other',
   'ad_hoc',
 ];
+
+const QUEUE_STAGE_ORDER: FinanceQueueStage[] = [
+  'needs_month',
+  'ready_to_approve',
+  'approved',
+  'rejected',
+];
+
+const QUEUE_STAGE_LABELS: Record<FinanceQueueStage, string> = {
+  needs_month: 'Needs month',
+  ready_to_approve: 'Ready',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
 
 const TAB_SET = new Set<CenterTab>(TAB_ITEMS.map((tab) => tab.id));
 
@@ -158,6 +173,9 @@ export default function FinanceControlCenterScreen() {
   const [bundle, setBundle] = React.useState<FinanceControlCenterBundle | null>(null);
   const [processingPopId, setProcessingPopId] = React.useState<string | null>(null);
   const [queueCategoryOverrides, setQueueCategoryOverrides] = React.useState<Record<string, FeeCategoryCode>>({});
+  const [queueMonthSelections, setQueueMonthSelections] = React.useState<Record<string, string>>({});
+  const [queueStageFilter, setQueueStageFilter] = React.useState<'all' | FinanceQueueStage>('all');
+  const [queueMismatchOnly, setQueueMismatchOnly] = React.useState(false);
 
   const [showPayModal, setShowPayModal] = React.useState(false);
   const [selectedRecipient, setSelectedRecipient] = React.useState<PayrollRosterItem | null>(null);
@@ -207,7 +225,18 @@ export default function FinanceControlCenterScreen() {
   const expenses = bundle?.expenses || null;
   const paymentBreakdown = bundle?.payment_breakdown || null;
   const pendingPOPs = bundle?.pending_pops || [];
+  const queueRows = React.useMemo(
+    () => (bundle?.queue_rows && bundle.queue_rows.length > 0 ? bundle.queue_rows : pendingPOPs),
+    [bundle?.queue_rows, pendingPOPs],
+  );
   const payrollItems = bundle?.payroll?.items || [];
+  const receivableOutstandingByStudent = React.useMemo(() => {
+    const map = new Map<string, number>();
+    (receivables?.students || []).forEach((row) => {
+      map.set(row.student_id, Number(row.outstanding_amount || 0));
+    });
+    return map;
+  }, [receivables?.students]);
 
   const derivedOverview = React.useMemo(() => {
     const due = Number(snapshot?.due_this_month || 0);
@@ -318,18 +347,114 @@ export default function FinanceControlCenterScreen() {
     });
   }, [resolveQueueCategory, showAlert]);
 
+  const resolveQueueDisplayMonth = React.useCallback((upload: FinancePendingPOPRow) => (
+    getMonthStartISO(upload.payment_for_month || upload.payment_date || upload.created_at || monthIso, {
+      recoverUtcMonthBoundary: Boolean(upload.payment_for_month),
+    })
+  ), [monthIso]);
+
+  const openQueueMonthPicker = React.useCallback((upload: FinancePendingPOPRow) => {
+    const selectedMonth = queueMonthSelections[upload.id];
+    const currentMonthDate = new Date(monthIso);
+    const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
+    const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
+    const suggestedMonth = resolveQueueDisplayMonth(upload);
+    const candidateMonths = Array.from(
+      new Set(
+        [
+          monthIso,
+          `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+          `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+          suggestedMonth,
+        ].filter(Boolean),
+      ),
+    );
+
+    showAlert({
+      title: 'Select Accounting Month',
+      message: 'Choose the month this payment should settle against.',
+      type: 'warning',
+      buttons: [
+        ...candidateMonths.map((candidate) => ({
+          text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
+            selectedMonth === candidate ? ' ✓' : ''
+          }`,
+          onPress: () => {
+            setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }, [monthIso, queueMonthSelections, resolveQueueDisplayMonth, showAlert]);
+
+  const resolveQueueStage = React.useCallback((upload: FinancePendingPOPRow): FinanceQueueStage => {
+    const status = String(upload.status || '').toLowerCase();
+    if (status === 'approved') return 'approved';
+    if (status === 'rejected' || status === 'needs_revision') return 'rejected';
+    return queueMonthSelections[upload.id] ? 'ready_to_approve' : 'needs_month';
+  }, [queueMonthSelections]);
+
+  const isQueueMismatch = React.useCallback((upload: FinancePendingPOPRow) => {
+    const expected = receivableOutstandingByStudent.get(upload.student_id);
+    const submitted = Number(upload.payment_amount || 0);
+    if (!Number.isFinite(expected) || !Number.isFinite(submitted)) return false;
+    if (submitted <= 0 || expected <= 0) return false;
+    return submitted > expected + 1;
+  }, [receivableOutstandingByStudent]);
+
+  const queueStageSummary = React.useMemo(() => {
+    const stageMap = new Map<FinanceQueueStage, { count: number; amount: number }>();
+    QUEUE_STAGE_ORDER.forEach((stage) => stageMap.set(stage, { count: 0, amount: 0 }));
+    queueRows.forEach((row) => {
+      const stage = resolveQueueStage(row);
+      const amount = Number(row.payment_amount || 0);
+      const current = stageMap.get(stage)!;
+      current.count += 1;
+      if (Number.isFinite(amount)) current.amount += amount;
+      stageMap.set(stage, current);
+    });
+    return QUEUE_STAGE_ORDER.map((stage) => ({
+      stage,
+      count: stageMap.get(stage)?.count || 0,
+      amount: Number((stageMap.get(stage)?.amount || 0).toFixed(2)),
+    }));
+  }, [queueRows, resolveQueueStage]);
+
+  const visibleQueueRows = React.useMemo(() => {
+    return queueRows.filter((row) => {
+      const stage = resolveQueueStage(row);
+      if (queueStageFilter !== 'all' && stage !== queueStageFilter) return false;
+      if (queueMismatchOnly && !isQueueMismatch(row)) return false;
+      return true;
+    });
+  }, [isQueueMismatch, queueMismatchOnly, queueRows, queueStageFilter, resolveQueueStage]);
+
   const handleQuickApprove = React.useCallback(async (upload: FinancePendingPOPRow) => {
     if (!orgId) return;
+    const selectedBillingMonth = queueMonthSelections[upload.id];
+    if (!selectedBillingMonth) {
+      console.info('finance.queue.month_required_block', { uploadId: upload.id, studentId: upload.student_id });
+      showAlert({
+        title: 'Month Required',
+        message: 'Select accounting month to continue.',
+        type: 'warning',
+      });
+      return;
+    }
     setProcessingPopId(upload.id);
     try {
-      const billingMonth = getMonthStartISO(upload.payment_for_month || upload.payment_date || monthIso, {
-        recoverUtcMonthBoundary: Boolean(upload.payment_for_month),
-      });
+      const billingMonth = selectedBillingMonth;
       const originalCategory = inferFeeCategoryCode(upload.category_code || upload.description || upload.title || 'tuition');
       const categoryCode = resolveQueueCategory(upload);
       const categoryCorrectionNote = categoryCode !== originalCategory
         ? `Category corrected from ${CATEGORY_LABELS[originalCategory]} to ${CATEGORY_LABELS[categoryCode]}`
         : `Category confirmed as ${CATEGORY_LABELS[categoryCode]}`;
+      console.info('finance.pop.approve.month_selected', {
+        uploadId: upload.id,
+        studentId: upload.student_id,
+        billingMonth,
+      });
       await FinancialDataService.approvePOPWithAllocations({
         uploadId: upload.id,
         billingMonth,
@@ -337,6 +462,11 @@ export default function FinanceControlCenterScreen() {
         notes: `Approved from Finance Control Center. ${categoryCorrectionNote}.`,
       });
       setQueueCategoryOverrides((prev) => {
+        const next = { ...prev };
+        delete next[upload.id];
+        return next;
+      });
+      setQueueMonthSelections((prev) => {
         const next = { ...prev };
         delete next[upload.id];
         return next;
@@ -351,7 +481,7 @@ export default function FinanceControlCenterScreen() {
     } finally {
       setProcessingPopId(null);
     }
-  }, [loadData, monthIso, orgId, resolveQueueCategory, showAlert]);
+  }, [loadData, orgId, queueMonthSelections, resolveQueueCategory, showAlert]);
 
   const rejectPaymentProof = React.useCallback(async (upload: FinancePendingPOPRow, reason: string) => {
     setProcessingPopId(upload.id);
@@ -662,7 +792,9 @@ export default function FinanceControlCenterScreen() {
             <TouchableOpacity
               key={row.student_id}
               style={styles.queueCard}
-              onPress={() => router.push(`/screens/principal-student-fees?studentId=${row.student_id}` as any)}
+              onPress={() => router.push(
+                `/screens/principal-student-fees?studentId=${row.student_id}&monthIso=${monthIso}&source=receivables` as any
+              )}
             >
               <View style={styles.rowBetween}>
                 <Text style={styles.queueTitle}>{fullName}</Text>
@@ -793,27 +925,95 @@ export default function FinanceControlCenterScreen() {
     <View style={styles.section}>
       <View style={styles.rowBetween}>
         <Text style={styles.sectionTitle}>Operational Queue</Text>
-        <TouchableOpacity onPress={() => router.push('/screens/pop-review' as any)}>
+        <TouchableOpacity onPress={() => router.push(`/screens/pop-review?monthIso=${monthIso}` as any)}>
           <Text style={styles.linkText}>Open Full Review</Text>
         </TouchableOpacity>
       </View>
       {renderSectionError(pickSectionError(bundle?.errors, 'queue'))}
-      {pendingPOPs.length === 0 ? (
+      <View style={styles.queueSummaryCard}>
+        <Text style={styles.queueSummaryTitle}>Queue Funnel ({monthLabel})</Text>
+        <View style={styles.queueSummaryChips}>
+          {queueStageSummary.map((summary) => {
+            const active = queueStageFilter === summary.stage;
+            return (
+              <TouchableOpacity
+                key={summary.stage}
+                style={[styles.queueStageChip, active && styles.queueStageChipActive]}
+                onPress={() =>
+                  setQueueStageFilter((prev) => (prev === summary.stage ? 'all' : summary.stage))
+                }
+              >
+                <Text style={[styles.queueStageChipLabel, active && styles.queueStageChipLabelActive]}>
+                  {QUEUE_STAGE_LABELS[summary.stage]}
+                </Text>
+                <Text style={[styles.queueStageChipMeta, active && styles.queueStageChipLabelActive]}>
+                  {summary.count} • {formatCurrency(summary.amount)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <TouchableOpacity
+          style={[styles.queueMismatchChip, queueMismatchOnly && styles.queueMismatchChipActive]}
+          onPress={() => setQueueMismatchOnly((prev) => !prev)}
+        >
+          <Ionicons name="alert-circle-outline" size={14} color={queueMismatchOnly ? '#fff' : theme.warning || '#F59E0B'} />
+          <Text style={[styles.queueMismatchChipText, queueMismatchOnly && styles.queueMismatchChipTextActive]}>
+            {queueMismatchOnly ? 'Mismatch filter on' : 'Show amount mismatches'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {visibleQueueRows.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No pending payment proofs for this school.</Text>
+          <Text style={styles.emptyText}>No payment proofs matched this queue filter.</Text>
         </View>
       ) : (
-        pendingPOPs.map((item) => {
+        visibleQueueRows.map((item) => {
           const processing = processingPopId === item.id;
           const studentName = `${item.student?.first_name || ''} ${item.student?.last_name || ''}`.trim() || 'Student';
+          const stage = resolveQueueStage(item);
           const categoryCode = resolveQueueCategory(item);
           const categoryColor = CATEGORY_COLORS[categoryCode] || theme.primary;
-          const displayMonth = getMonthStartISO(item.payment_for_month || item.payment_date || item.created_at, {
-            recoverUtcMonthBoundary: Boolean(item.payment_for_month),
-          });
+          const displayMonth = resolveQueueDisplayMonth(item);
+          const selectedMonth = queueMonthSelections[item.id];
+          const pendingApproval = String(item.status || '').toLowerCase() === 'pending';
+          const mismatch = isQueueMismatch(item);
           return (
             <View key={item.id} style={styles.queueCard}>
-              <Text style={styles.queueTitle}>{studentName}</Text>
+              <View style={styles.rowBetween}>
+                <Text style={styles.queueTitle}>{studentName}</Text>
+                <View style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor:
+                      stage === 'approved'
+                        ? theme.success + '20'
+                        : stage === 'rejected'
+                          ? theme.error + '20'
+                          : stage === 'ready_to_approve'
+                            ? theme.primary + '20'
+                            : (theme.warning || '#F59E0B') + '20',
+                  },
+                ]}>
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      {
+                        color:
+                          stage === 'approved'
+                            ? theme.success
+                            : stage === 'rejected'
+                              ? theme.error
+                              : stage === 'ready_to_approve'
+                                ? theme.primary
+                                : theme.warning || '#F59E0B',
+                      },
+                    ]}
+                  >
+                    {QUEUE_STAGE_LABELS[stage]}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.queueSubtext}>
                 {formatCurrency(item.payment_amount)} for{' '}
                 {new Date(displayMonth).toLocaleDateString('en-ZA', {
@@ -821,6 +1021,31 @@ export default function FinanceControlCenterScreen() {
                   year: 'numeric',
                 })}
               </Text>
+              {pendingApproval && (
+                <View style={styles.queueMonthRow}>
+                  <TouchableOpacity
+                    style={[styles.queueMonthSelector, !selectedMonth && styles.queueMonthSelectorMissing]}
+                    onPress={() => openQueueMonthPicker(item)}
+                    disabled={processing}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={13}
+                      color={selectedMonth ? theme.primary : theme.warning || '#F59E0B'}
+                    />
+                    <Text
+                      style={[
+                        styles.queueMonthSelectorText,
+                        { color: selectedMonth ? theme.primary : theme.warning || '#F59E0B' },
+                      ]}
+                    >
+                      {selectedMonth
+                        ? `Month: ${new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}`
+                        : 'Select accounting month'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <View style={styles.queueMetaRow}>
                 <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20', borderColor: categoryColor + '55' }]}>
                   <Text style={[styles.categoryBadgeText, { color: categoryColor }]}>
@@ -836,23 +1061,45 @@ export default function FinanceControlCenterScreen() {
                   <Text style={[styles.categoryEditText, { color: theme.textSecondary }]}>Change</Text>
                 </TouchableOpacity>
               </View>
+              {mismatch && (
+                <View style={styles.queueMismatchNotice}>
+                  <Ionicons name="warning-outline" size={14} color={theme.warning || '#F59E0B'} />
+                  <Text style={styles.queueMismatchNoticeText}>
+                    Submitted amount appears higher than current outstanding for this learner.
+                  </Text>
+                </View>
+              )}
               <Text style={styles.queueSubtext}>Ref: {item.payment_reference || 'N/A'}</Text>
-              <View style={styles.queueActions}>
-                <TouchableOpacity
-                  style={[styles.secondaryButton, processing && { opacity: 0.6 }]}
-                  onPress={() => handleQuickReject(item)}
-                  disabled={processing}
-                >
-                  <Text style={styles.secondaryButtonText}>Reject</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.primaryButton, processing && { opacity: 0.6 }]}
-                  onPress={() => handleQuickApprove(item)}
-                  disabled={processing}
-                >
-                  {processing ? <EduDashSpinner size="small" color="#fff" /> : <Text style={styles.primaryButtonText}>Approve</Text>}
-                </TouchableOpacity>
-              </View>
+              {pendingApproval ? (
+                <View style={styles.queueActions}>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, processing && { opacity: 0.6 }]}
+                    onPress={() => handleQuickReject(item)}
+                    disabled={processing}
+                  >
+                    <Text style={styles.secondaryButtonText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, (processing || !selectedMonth) && { opacity: 0.6 }]}
+                    onPress={() => handleQuickApprove(item)}
+                    disabled={processing || !selectedMonth}
+                  >
+                    {processing ? (
+                      <EduDashSpinner size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>
+                        {!selectedMonth ? 'Select month first' : 'Approve'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.queueActions}>
+                  <Text style={styles.queueSubtext}>
+                    Final status captured. Use Full Review for further notes.
+                  </Text>
+                </View>
+              )}
             </View>
           );
         })
@@ -1489,6 +1736,116 @@ const createStyles = (theme: any) =>
       marginTop: 10,
       flexDirection: 'row',
       gap: 8,
+    },
+    queueSummaryCard: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      padding: 12,
+      backgroundColor: theme.cardBackground,
+      gap: 10,
+    },
+    queueSummaryTitle: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    queueSummaryChips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    queueStageChip: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      backgroundColor: theme.surface,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      minWidth: 110,
+      gap: 2,
+    },
+    queueStageChipActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '18',
+    },
+    queueStageChipLabel: {
+      color: theme.text,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    queueStageChipLabelActive: {
+      color: theme.primary,
+    },
+    queueStageChipMeta: {
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '600',
+    },
+    queueMismatchChip: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: (theme.warning || '#F59E0B') + '55',
+      borderRadius: 999,
+      backgroundColor: (theme.warning || '#F59E0B') + '14',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    queueMismatchChipActive: {
+      backgroundColor: theme.warning || '#F59E0B',
+      borderColor: theme.warning || '#F59E0B',
+    },
+    queueMismatchChipText: {
+      color: theme.warning || '#F59E0B',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    queueMismatchChipTextActive: {
+      color: '#fff',
+    },
+    queueMonthRow: {
+      marginTop: 6,
+    },
+    queueMonthSelector: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'flex-start',
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.primary + '12',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    queueMonthSelectorMissing: {
+      borderColor: (theme.warning || '#F59E0B') + '55',
+      backgroundColor: (theme.warning || '#F59E0B') + '14',
+    },
+    queueMonthSelectorText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    queueMismatchNotice: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: (theme.warning || '#F59E0B') + '55',
+      borderRadius: 10,
+      backgroundColor: (theme.warning || '#F59E0B') + '12',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    queueMismatchNoticeText: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 11,
+      lineHeight: 15,
     },
     badgeRow: {
       flexDirection: 'row',

@@ -38,6 +38,10 @@ export const useUpdatePOPStatus = () => {
       let finalUpload = currentUpload as POPUpload;
       try {
         if (status === 'approved') {
+          const hasExplicitMonth = typeof billingMonth === 'string' && billingMonth.trim().length > 0;
+          if (!hasExplicitMonth) {
+            throw new Error('Select accounting month to continue');
+          }
           await processApproval(currentUpload, user.id, uploadId, {
             reviewNotes,
             billingMonth,
@@ -105,12 +109,12 @@ async function processApproval(
 ): Promise<void> {
   const parentName = await getParentName(data.uploaded_by);
   const isUniform = `${data.description || ''} ${data.title || ''}`.toLowerCase().includes('uniform');
-  const resolvedBillingMonth = (
-    getMonthStartISO(
-      options.billingMonth || data.payment_for_month || data.payment_date,
-      { recoverUtcMonthBoundary: true },
-    )
-  );
+  if (!options.billingMonth) {
+    throw new Error('Select accounting month to continue');
+  }
+  const resolvedBillingMonth = getMonthStartISO(options.billingMonth, {
+    recoverUtcMonthBoundary: true,
+  });
   const resolvedCategoryCode = (
     options.categoryCode ||
     data.category_code ||

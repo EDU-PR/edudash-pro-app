@@ -50,7 +50,7 @@ export async function changeStudentClass(
   };
 
   const tuitionSync = await syncPendingTuitionFees(tempStudent, organizationId, classes, newClass?.name || null);
-  await logFeeAssignmentCorrection(
+  const auditLogged = await logFeeAssignmentCorrection(
     {
       student: tempStudent,
       source: 'change_class',
@@ -75,6 +75,13 @@ export async function changeStudentClass(
     `Class set to ${newClass?.name || 'new class'} and registration fee updated to R${normalizedFee.toFixed(2)}.${tuitionSyncMessage}`,
     'success',
   );
+  if (!auditLogged) {
+    showAlert(
+      'Audit Warning',
+      'Class change was applied, but correction audit logging failed. Please refresh and retry if needed.',
+      'warning',
+    );
+  }
 
   const refreshed = await loadStudent();
   await loadFees(refreshed);
@@ -98,7 +105,7 @@ export async function syncTuitionFeesToClass(
   }
 
   const syncResult = await syncPendingTuitionFees(currentStudent, organizationId, classes);
-  await logFeeAssignmentCorrection(
+  const auditLogged = await logFeeAssignmentCorrection(
     {
       student: currentStudent,
       source: 'manual_sync',
@@ -126,6 +133,13 @@ export async function syncTuitionFeesToClass(
     );
   } else {
     showAlert('No Updates Needed', 'No unpaid tuition fees were eligible for automatic correction.', 'info');
+  }
+  if (!auditLogged) {
+    showAlert(
+      'Audit Warning',
+      'Tuition sync finished, but correction audit logging failed. Please refresh and retry if needed.',
+      'warning',
+    );
   }
 
   const refreshed = await loadStudent();

@@ -22,7 +22,7 @@ export const SCHOOL_ADMIN_DASH_TAB: ManifestTabConfig = {
   label: 'Dash',
   icon: 'sparkles-outline',
   activeIcon: 'sparkles',
-  route: '/screens/dash-voice',
+  route: '/screens/dash-assistant',
   isCenterTab: true,
 };
 

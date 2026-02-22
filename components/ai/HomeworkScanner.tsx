@@ -19,8 +19,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 import {
   FREE_AUTO_SCAN_BUDGET_PER_DAY,
-  PAID_AUTO_SCAN_BUDGET_PER_DAY,
   hasAutoScanBudget,
+  PAID_AUTO_SCAN_BUDGET_PER_DAY,
 } from '@/lib/dash-ai/imageBudget';
 
 export type HomeworkScanResult = {
@@ -37,6 +37,7 @@ interface HomeworkScannerProps {
   title?: string;
   tier?: string | null;
   remainingScans?: number | null;
+  userId?: string | null;
 }
 
 type HomeworkPreview = {
@@ -45,6 +46,58 @@ type HomeworkPreview = {
   height: number;
 };
 
+type CropCandidate = {
+  originX: number;
+  originY: number;
+  width: number;
+  height: number;
+  score: number;
+};
+
+const A4_PORTRAIT_ASPECT = 1 / Math.sqrt(2); // ~0.707
+
+function buildCenteredAspectCrop(
+  sourceWidth: number,
+  sourceHeight: number,
+  targetAspect: number,
+  coverage: number
+): CropCandidate {
+  const areaScale = Math.min(1, Math.max(0.7, coverage));
+  const targetArea = sourceWidth * sourceHeight * areaScale;
+  const cropWidth = Math.min(sourceWidth, Math.max(320, Math.floor(Math.sqrt(targetArea * targetAspect))));
+  const cropHeight = Math.min(sourceHeight, Math.max(420, Math.floor(cropWidth / Math.max(0.45, targetAspect))));
+  const clampedWidth = Math.min(sourceWidth, cropWidth);
+  const clampedHeight = Math.min(sourceHeight, cropHeight);
+  const originX = Math.max(0, Math.floor((sourceWidth - clampedWidth) / 2));
+  const originY = Math.max(0, Math.floor((sourceHeight - clampedHeight) / 2));
+  const resultingAspect = clampedWidth / Math.max(1, clampedHeight);
+  const actualCoverage = (clampedWidth * clampedHeight) / Math.max(1, sourceWidth * sourceHeight);
+  const aspectDelta = Math.abs(resultingAspect - targetAspect);
+  const score = aspectDelta * 2 + (1 - actualCoverage);
+
+  return {
+    originX,
+    originY,
+    width: clampedWidth,
+    height: clampedHeight,
+    score,
+  };
+}
+
+function pickDocumentCrop(sourceWidth: number, sourceHeight: number): CropCandidate {
+  const sourceAspect = sourceWidth / Math.max(1, sourceHeight);
+  const normalizedTarget = sourceAspect > 0.95
+    ? 0.78
+    : Math.min(0.82, Math.max(0.62, sourceAspect));
+  const candidates: CropCandidate[] = [
+    buildCenteredAspectCrop(sourceWidth, sourceHeight, A4_PORTRAIT_ASPECT, 0.9),
+    buildCenteredAspectCrop(sourceWidth, sourceHeight, A4_PORTRAIT_ASPECT, 0.84),
+    buildCenteredAspectCrop(sourceWidth, sourceHeight, normalizedTarget, 0.92),
+    buildCenteredAspectCrop(sourceWidth, sourceHeight, normalizedTarget, 0.86),
+  ];
+  return candidates.sort((left, right) => left.score - right.score)[0];
+}
+
 export default function HomeworkScanner({
   visible,
   onClose,
@@ -52,6 +105,7 @@ export default function HomeworkScanner({
   title = 'Homework Scanner',
   tier = 'free',
   remainingScans = null,
+  userId = null,
 }: HomeworkScannerProps) {
   const { theme } = useTheme();
   const cameraRef = useRef<CameraView | null>(null);
@@ -73,40 +127,42 @@ export default function HomeworkScanner({
     const initial = await ImageManipulator.manipulateAsync(
       uri,
       [],
-      { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      { compress: 0.94, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
-    // Step 1: normalize orientation to portrait-ish for notebook pages.
-    const orientationAdjusted = initial.width > initial.height * 1.2
+    // Step 1: normalize orientation so page-height is dominant.
+    const orientationAdjusted = initial.width > initial.height * 1.08
       ? await ImageManipulator.manipulateAsync(
           initial.uri,
           [{ rotate: 90 }],
-          { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+          { compress: 0.94, format: ImageManipulator.SaveFormat.JPEG, base64: false }
         )
       : initial;
 
-    // Step 2: adaptive crop; keep a larger center area for close shots and
-    // tighten more for wider frames to reduce desk/background noise.
-    const aspect = orientationAdjusted.width / Math.max(1, orientationAdjusted.height);
-    const widthRatio = aspect > 0.9 ? 0.88 : 0.93;
-    const heightRatio = aspect > 1.1 ? 0.82 : 0.9;
-    const cropWidth = Math.max(320, Math.floor(orientationAdjusted.width * widthRatio));
-    const cropHeight = Math.max(420, Math.floor(orientationAdjusted.height * heightRatio));
-    const originX = Math.max(0, Math.floor((orientationAdjusted.width - cropWidth) / 2));
-    const originY = Math.max(0, Math.floor((orientationAdjusted.height - cropHeight) / 2));
+    // Step 2: edge-aware centered crop candidates.
+    // NOTE: expo-image-manipulator currently does not provide true perspective
+    // correction/deskew APIs, so we optimize for a page-like aspect and coverage.
+    const cropCandidate = pickDocumentCrop(orientationAdjusted.width, orientationAdjusted.height);
 
     const cropped = await ImageManipulator.manipulateAsync(
       orientationAdjusted.uri,
-      [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }],
-      { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      [{
+        crop: {
+          originX: cropCandidate.originX,
+          originY: cropCandidate.originY,
+          width: cropCandidate.width,
+          height: cropCandidate.height,
+        },
+      }],
+      { compress: 0.94, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
-    // Step 3: upscale/downscale to OCR-friendly size while preserving details.
-    const targetWidth = Math.min(1800, Math.max(1200, cropped.width));
+    // Step 3: normalize to OCR-friendly width while preserving detail.
+    const targetWidth = Math.min(2000, Math.max(1300, cropped.width));
     const enhanced = await ImageManipulator.manipulateAsync(
       cropped.uri,
       [{ resize: { width: targetWidth } }],
-      { compress: 0.94, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+      { compress: 0.95, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
     return {
@@ -175,8 +231,8 @@ export default function HomeworkScanner({
     if (!preview?.uri || busy) return;
     setBusy(true);
     try {
-      const canScan = await hasAutoScanBudget(tier, 1);
-      if (!canScan) {
+      const budgetAvailable = await hasAutoScanBudget(tier, 1, userId);
+      if (!budgetAvailable) {
         const isFreeTier = String(tier || 'free').toLowerCase() === 'free';
         const dailyLimit = isFreeTier ? FREE_AUTO_SCAN_BUDGET_PER_DAY : PAID_AUTO_SCAN_BUDGET_PER_DAY;
         Alert.alert(
@@ -185,8 +241,8 @@ export default function HomeworkScanner({
         );
         return;
       }
-
       const compressed = await compressImageForAI(preview.uri, 4_000_000);
+
       onScanned({
         uri: compressed.uri,
         base64: compressed.base64,
@@ -200,7 +256,7 @@ export default function HomeworkScanner({
     } finally {
       setBusy(false);
     }
-  }, [busy, onScanned, preview]);
+  }, [busy, onScanned, preview, tier, userId]);
 
   const closeAndReset = useCallback(() => {
     setPreview(null);

@@ -90,6 +90,32 @@ export function needsWebSearch(text: string): boolean {
   return searchPatterns.some((p) => lower.includes(p));
 }
 
+export function shouldEnableVoiceTurnTools(input: string, options?: {
+  hasAttachment?: boolean;
+  ocrMode?: boolean;
+  criteriaIntent?: boolean;
+}): boolean {
+  const text = String(input || '').toLowerCase();
+  if (!text.trim()) return false;
+
+  // OCR and strict criteria flows are prompt-constrained and benefit from low-latency text generation.
+  if (options?.ocrMode) return false;
+  if (options?.criteriaIntent) return false;
+
+  const explicitPdfIntent = /\b(export|generate|create|make|download)\b/i.test(text) && /\bpdf\b/i.test(text);
+  if (explicitPdfIntent) return true;
+
+  const explicitToolIntent = /\b(export[_\s-]*pdf|generate[_\s-]*(pdf|worksheet|chart)|open\s+pdf|send email|email this|navigate|open screen)\b/i.test(text);
+  if (explicitToolIntent) return true;
+  if (needsWebSearch(text)) return true;
+
+  // Attachments can usually be handled directly in the model context without tool overhead.
+  // Keep tools off unless explicitly required by intent above.
+  if (options?.hasAttachment) return false;
+
+  return false;
+}
+
 // ── System Prompt Builder ────────────────────────────────────────────
 
 export interface SystemPromptOptions {

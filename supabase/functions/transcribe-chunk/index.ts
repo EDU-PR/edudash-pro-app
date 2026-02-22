@@ -21,9 +21,27 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 const OPENAI_API_KEY=REDACTED
 const DEEPGRAM_API_KEY = Deno.env.get('DEEPGRAM_API_KEY');
+const WHISPER_PROMPT_BASE =
+  'Transcribe school voice commands accurately with punctuation and capitalization. ' +
+  'Prefer these spellings: EduDash, Dash AI, superadmin, principal, CAPS, Grade R, PDF, worksheet, rubric, memorandum, phonics, letter sound, isiZulu, isiXhosa, isiNdebele, Sepedi, Sesotho, Setswana, SiSwati, Tshivenda, Xitsonga.';
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
+}
+
+function normalizeWhisperLanguage(input: unknown): string {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw || raw === 'auto') return 'en';
+  const base = raw.split('-')[0];
+  return /^[a-z]{2,3}$/.test(base) ? base : 'en';
+}
+
+function buildWhisperPrompt(input: unknown): string {
+  const custom = typeof input === 'string' ? input.trim() : '';
+  const merged = custom
+    ? `${WHISPER_PROMPT_BASE} ${custom}`
+    : WHISPER_PROMPT_BASE;
+  return merged.slice(0, 700);
 }
 
 serve(async (req: Request) => {
@@ -78,7 +96,9 @@ serve(async (req: Request) => {
     const audioFile = formData.get('audio') as File | null;
     const sessionId = formData.get('session_id') as string;
     const chunkIndex = formData.get('chunk_index') as string;
-    const language = (formData.get('language') as string) || 'en';
+    const languageRaw = (formData.get('language') as string) || 'en';
+    const language = normalizeWhisperLanguage(languageRaw);
+    const prompt = formData.get('prompt') as string | null;
 
     if (!audioFile) {
       return new Response(JSON.stringify({ error: 'Missing audio file' }), {
@@ -99,6 +119,8 @@ serve(async (req: Request) => {
         whisperForm.append('model', 'whisper-1');
         whisperForm.append('language', language);
         whisperForm.append('response_format', 'json');
+        whisperForm.append('temperature', '0');
+        whisperForm.append('prompt', buildWhisperPrompt(prompt));
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',

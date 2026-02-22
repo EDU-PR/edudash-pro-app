@@ -338,16 +338,39 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
 
       // Format response
       const rawContent = data?.content || data?.text || 'I received an empty response. Please resend or add a bit more detail.';
+      const parsedOcrFromContent =
+        typeof rawContent === 'string' ? extractOCRPayloadFromContent(rawContent) : null;
+      const normalizedOCR =
+        data?.ocr && typeof data.ocr === 'object'
+          ? data.ocr
+          : parsedOcrFromContent;
+      const mainResponseText =
+        typeof normalizedOCR?.analysis === 'string' && normalizedOCR.analysis.trim().length > 0
+          ? normalizedOCR.analysis
+          : typeof normalizedOCR?.extracted_text === 'string' && normalizedOCR.extracted_text.trim().length > 0
+            ? normalizedOCR.extracted_text
+            : String(rawContent);
       const confidenceScore = typeof data?.confidence_score === 'number'
         ? data.confidence_score
-        : typeof data?.ocr?.confidence === 'number'
-          ? data.ocr.confidence
+        : typeof normalizedOCR?.confidence === 'number'
+          ? normalizedOCR.confidence
           : null;
+      const unclearSpans =
+        Array.isArray(normalizedOCR?.unclear_spans)
+          ? normalizedOCR.unclear_spans
+              .map((value: unknown) => String(value || '').trim())
+              .filter((value: string) => value.length > 0)
+              .slice(0, 3)
+          : [];
       const lowConfidenceSuffix =
         ocrMode && typeof confidenceScore === 'number' && confidenceScore <= 0.75
           ? `\n\nScan clarity: ${Math.round(confidenceScore * 100)}%. Retake with brighter lighting and a flatter page for better OCR accuracy.`
           : '';
-      const content = formatAssistantContent(String(rawContent) + lowConfidenceSuffix);
+      const unclearSpansSuffix =
+        ocrMode && unclearSpans.length > 0
+          ? `\n\nUnclear text: ${unclearSpans.join(' | ')}`
+          : '';
+      const content = formatAssistantContent(`${mainResponseText}${lowConfidenceSuffix}${unclearSpansSuffix}`);
       const tokensIn = data?.usage?.tokens_in || data?.tokensIn || 0;
       const tokensOut = data?.usage?.tokens_out || data?.tokensOut || 0;
 
@@ -359,6 +382,32 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
         meta: {
           tokensUsed: tokensIn + tokensOut,
           model: data?.model || 'unknown',
+          suggested_actions: Array.isArray(data?.suggested_actions)
+            ? data.suggested_actions
+                .map((item: unknown) => String(item || '').trim())
+                .filter((item: string) => item.length > 0)
+            : undefined,
+          plan_mode:
+            data?.plan_mode && typeof data.plan_mode === 'object'
+              ? data.plan_mode
+              : undefined,
+          resolution_status: typeof data?.resolution_status === 'string' ? data.resolution_status : undefined,
+          confidence_score: typeof confidenceScore === 'number' ? confidenceScore : undefined,
+          escalation_offer: typeof data?.escalation_offer === 'boolean' ? data.escalation_offer : undefined,
+          resolution_meta:
+            data?.resolution_meta && typeof data.resolution_meta === 'object'
+              ? data.resolution_meta
+              : undefined,
+          ocr:
+            normalizedOCR && typeof normalizedOCR === 'object'
+              ? {
+                  extracted_text: typeof normalizedOCR.extracted_text === 'string' ? normalizedOCR.extracted_text : undefined,
+                  confidence: typeof normalizedOCR.confidence === 'number' ? normalizedOCR.confidence : undefined,
+                  document_type: typeof normalizedOCR.document_type === 'string' ? normalizedOCR.document_type : undefined,
+                  analysis: typeof normalizedOCR.analysis === 'string' ? normalizedOCR.analysis : undefined,
+                  unclear_spans: unclearSpans,
+                }
+              : undefined,
         },
       };
 
@@ -452,6 +501,21 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
     loadConversation,
     sendMessage,
   };
+}
+
+function extractOCRPayloadFromContent(content: string): Record<string, unknown> | null {
+  const normalized = String(content || '').trim();
+  if (!normalized) return null;
+  const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fencedMatch?.[1] || normalized).trim();
+  if (!candidate.startsWith('{') || !candidate.endsWith('}')) return null;
+  try {
+    const parsed = JSON.parse(candidate);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 // Helper: Format assistant content

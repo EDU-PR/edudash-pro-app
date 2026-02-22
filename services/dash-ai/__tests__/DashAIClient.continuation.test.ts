@@ -224,4 +224,60 @@ describe('DashAIClient continuation loop', () => {
     expect((result.metadata?.resolution_meta as any)?.stream_fallback_outcome).toBe('fallback_completed');
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });
+
+  it('replaces dangling pre-tool narration when continuation follow-up fails', async () => {
+    toClientToolDefsMock.mockReturnValue([
+      {
+        name: 'search_caps_curriculum',
+        description: 'Search CAPS curriculum',
+        input_schema: { type: 'object', properties: {} },
+      },
+    ]);
+    listMock.mockReturnValue([{ name: 'search_caps_curriculum' }]);
+
+    const invokeMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          content: 'Let me search from the South African CAPS curriculum now.',
+          tool_results: [],
+          pending_tool_calls: [{ id: 'tool-1', name: 'search_caps_curriculum', input: { query: 'grade 4 multiplication' } }],
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'continuation request failed' },
+      });
+
+    executeMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        count: 3,
+        results: [{ id: 'doc-1' }, { id: 'doc-2' }, { id: 'doc-3' }],
+      },
+      trace_id: 'trace-caps',
+    });
+
+    const client = new DashAIClient({
+      supabaseClient: { functions: { invoke: invokeMock } },
+      getUserProfile: () =>
+        ({
+          id: 'principal-1',
+          role: 'principal_admin',
+          tier: 'starter',
+          organization_id: 'org-1',
+        } as any),
+    });
+
+    const result = await client.callAIService({
+      messages: [{ role: 'user', content: 'Search CAPS for grade 4 multiplication guidance.' }],
+      serviceType: 'chat_message',
+    });
+
+    expect(result.content).toContain('searched CAPS and found 3');
+    expect(result.content.toLowerCase()).not.toContain('let me search from the south');
+    expect((result.metadata?.resolution_meta as any)?.continuation_pass_outcome).toBe('failed');
+  });
 });

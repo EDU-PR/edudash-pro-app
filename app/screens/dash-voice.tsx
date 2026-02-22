@@ -39,6 +39,8 @@ import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTele
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
 import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
+import { ToolRegistry } from '@/services/AgentTools';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/LanguageDropdown';
@@ -53,6 +55,7 @@ import {
   cleanForTTS,
   cleanRawJSON,
   createStreamingRequest,
+  shouldEnableVoiceTurnTools,
 } from '@/lib/dash-voice-utils';
 
 import { shouldUsePhonicsMode, detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
@@ -67,12 +70,39 @@ import {
 } from '@/lib/dash-ai/ocrPrompts';
 import { enforceCriteriaResponseWithSingleRewrite } from '@/features/dash-ai/criteriaEnforcement';
 import {
+  consumeAutoScanBudget,
   loadAutoScanBudget,
-  trackAutoScanUsage,
 } from '@/lib/dash-ai/imageBudget';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ORB_SIZE = Math.min(SCREEN_WIDTH * 0.78, 320);
+
+const PDF_INTENT_REGEX = /\b(pdf|worksheet|document)\b/i;
+const PDF_ACTION_REGEX = /\b(generate|create|make|export|regenerate|rebuild|produce|save)\b/i;
+
+const firstText = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+};
+
+const wantsPdfArtifact = (text: string): boolean => {
+  const normalized = String(text || '').trim();
+  if (!normalized) return false;
+  if (PDF_INTENT_REGEX.test(normalized) && PDF_ACTION_REGEX.test(normalized)) return true;
+  return /\bcan you generate me a pdf\b/i.test(normalized);
+};
+
+const buildPdfTitleFromPrompt = (prompt: string): string => {
+  const compact = String(prompt || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s-]/g, '')
+    .trim();
+  if (!compact) return 'Dash Voice Document';
+  const base = compact.slice(0, 64).trim();
+  return base.charAt(0).toUpperCase() + base.slice(1);
+};
 
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
@@ -88,9 +118,16 @@ type VoiceOrbRef = {
   isSpeaking: boolean;
 };
 
+type OrbPdfArtifact = {
+  url: string;
+  title: string;
+  filename?: string | null;
+};
+
 export default function DashVoiceScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
+  const autoScanUserId = String(user?.id || profile?.id || '').trim() || null;
   const insets = useSafeAreaInsets();
   const role = String(profile?.role || 'guest').toLowerCase();
   const aiScope = useMemo(() => resolveAIProxyScopeFromRole(role), [role]);
@@ -119,7 +156,11 @@ export default function DashVoiceScreen() {
   const [restartBlocked, setRestartBlocked] = useState(false);
   const [voiceErrorBanner, setVoiceErrorBanner] = useState<string | null>(null);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage>('en-ZA');
-  const [attachedImage, setAttachedImage] = useState<{ uri: string; base64: string } | null>(null);
+  const [attachedImage, setAttachedImage] = useState<{
+    uri: string;
+    base64: string;
+    source: 'scanner' | 'library';
+  } | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [remainingScans, setRemainingScans] = useState<number | null>(null);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -127,6 +168,7 @@ export default function DashVoiceScreen() {
   const [showTranscript, setShowTranscript] = useState(false);
   const [liveUserTranscript, setLiveUserTranscript] = useState('');
   const [lastUserTranscript, setLastUserTranscript] = useState('');
+  const [latestPdfArtifact, setLatestPdfArtifact] = useState<OrbPdfArtifact | null>(null);
 
   // Conversation history for context (prevents redundant greetings)
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -163,11 +205,15 @@ export default function DashVoiceScreen() {
       ).toLowerCase(),
     [profile]
   );
+  const normalizedToolTier = useMemo(
+    () => getCapabilityTier(normalizeTierName(activeTier || 'free')),
+    [activeTier]
+  );
 
   const refreshAutoScanBudget = useCallback(async () => {
-    const budget = await loadAutoScanBudget(activeTier || 'free');
+    const budget = await loadAutoScanBudget(activeTier || 'free', autoScanUserId);
     setRemainingScans(budget.remainingCount);
-  }, [activeTier]);
+  }, [activeTier, autoScanUserId]);
 
   useEffect(() => {
     void refreshAutoScanBudget();
@@ -367,7 +413,7 @@ export default function DashVoiceScreen() {
         mediaTypes: ['images'], allowsEditing: true, quality: 0.7, base64: true,
       });
       if (!result.canceled && result.assets[0]?.base64) {
-        setAttachedImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 });
+        setAttachedImage({ uri: result.assets[0].uri, base64: result.assets[0].base64, source: 'library' });
       }
     } catch { /* cancelled */ }
   }, []);
@@ -381,10 +427,11 @@ export default function DashVoiceScreen() {
     setAttachedImage({
       uri: result.uri,
       base64: result.base64,
+      source: 'scanner',
     });
-    void trackAutoScanUsage(activeTier || 'free', 1).then(() => refreshAutoScanBudget());
+    void refreshAutoScanBudget();
     setScannerVisible(false);
-  }, [activeTier, refreshAutoScanBudget]);
+  }, [refreshAutoScanBudget]);
 
   // ── Persist ORB messages to AsyncStorage for handoff to full chat ──
   const persistOrbMessages = useCallback(async (msgs: Array<{ role: 'user' | 'assistant'; content: string }>) => {
@@ -397,10 +444,95 @@ export default function DashVoiceScreen() {
     } catch { /* non-critical */ }
   }, [profile?.id, user?.id]);
 
+  const exportPdfFromVoiceResponse = useCallback(async (prompt: string, content: string): Promise<OrbPdfArtifact | null> => {
+    const safeContent = String(content || '').trim();
+    if (!safeContent) return null;
+
+    try {
+      const supabase = assertSupabase();
+      const execution = await ToolRegistry.execute(
+        'export_pdf',
+        {
+          title: buildPdfTitleFromPrompt(prompt),
+          content: safeContent,
+        },
+        {
+          profile,
+          user,
+          supabase,
+          supabaseClient: supabase,
+          role: String(profile?.role || role || 'parent').toLowerCase(),
+          tier: normalizedToolTier,
+          organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+          hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+          isGuest: !user?.id,
+          trace_id: `dash_voice_pdf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          tool_plan: {
+            source: 'dash_voice.auto_pdf_export',
+            intent: 'voice_pdf_request',
+          },
+        },
+      );
+
+      if (!execution?.success) {
+        logDashTrace('pdf_export_failed', {
+          error: execution?.error || 'unknown_error',
+          role,
+          tier: normalizedToolTier,
+        });
+        return null;
+      }
+
+      const payload = (execution.result && typeof execution.result === 'object')
+        ? execution.result as Record<string, any>
+        : {};
+      const nested = (payload.result && typeof payload.result === 'object')
+        ? payload.result as Record<string, any>
+        : {};
+      const merged = { ...payload, ...nested };
+      const url = firstText(
+        merged.downloadUrl,
+        merged.download_url,
+        merged.signedUrl,
+        merged.signed_url,
+        merged.publicUrl,
+        merged.public_url,
+        merged.uri,
+        merged.url,
+      );
+      if (!url) {
+        logDashTrace('pdf_export_missing_url', {
+          role,
+          tier: normalizedToolTier,
+        });
+        return null;
+      }
+
+      const filename = firstText(merged.filename, merged.file_name, merged.name);
+      const artifact: OrbPdfArtifact = {
+        url,
+        title: filename || 'Generated PDF',
+        filename,
+      };
+      setLatestPdfArtifact(artifact);
+      logDashTrace('pdf_export_ready', {
+        filename: artifact.filename,
+        urlPreview: artifact.url.slice(0, 140),
+      });
+      return artifact;
+    } catch (error) {
+      logDashTrace('pdf_export_error', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }, [logDashTrace, normalizedToolTier, profile, role, user]);
+
   // ── Send Message (streaming SSE) ──────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isProcessing) return;
+    const shouldAutoExportPdf = wantsPdfArtifact(trimmed);
 
     const flags = getFeatureFlagsSync();
     const handoffIntent = flags.dash_tutor_auto_handoff_v1 ? classifyFullChatIntent(trimmed) : null;
@@ -450,6 +582,7 @@ export default function DashVoiceScreen() {
       inputChars: trimmed.length,
       inputPreview: trimmed.slice(0, 140),
       hasImage: !!attachedImage?.base64,
+      autoPdfIntent: shouldAutoExportPdf,
     });
     activeRequestRef.current?.abort();
     resetStreamingSpeech();
@@ -482,17 +615,25 @@ export default function DashVoiceScreen() {
         ocrTask !== null ||
         isShortOrAttachmentOnlyPrompt(trimmed)
       );
+      const attachedImageSource = attachedImage?.source || null;
+      const shouldConsumeScannerQuota = ocrMode && attachedImageSource === 'scanner';
       const imageContext = hasImage
         ? '\n\nIMAGE PROCESSING: The user attached an image. Describe what you see and provide educational insights.'
         : '';
       const criteriaContext = getCriteriaResponsePrompt(trimmed);
       const criteriaContextBlock = criteriaContext ? `\n\n${criteriaContext}` : '';
       const criteriaHeadings = extractCriteriaHeadings(trimmed);
+      const criteriaIntent = criteriaHeadings.length > 0;
       const criteriaTemplate = buildCriteriaHeadingTemplate(criteriaHeadings);
       const criteriaTemplateBlock = criteriaTemplate ? `\n\n${criteriaTemplate}` : '';
       const ocrContext = ocrMode
         ? `\n\n${getOCRPromptForTask(ocrTask || 'document')}`
         : '';
+      const enableToolsForTurn = shouldEnableVoiceTurnTools(trimmed, {
+        hasAttachment: hasImage,
+        ocrMode,
+        criteriaIntent,
+      });
       // Send full conversation history (last 20 turns) so AI has context
       const recentHistory = updatedHistory.slice(-20);
       const payload: Record<string, any> = {
@@ -513,7 +654,8 @@ export default function DashVoiceScreen() {
         scope: aiScope,
         service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
         payload,
-        stream: !ocrMode, enable_tools: true,
+        stream: !ocrMode,
+        enable_tools: enableToolsForTurn,
         metadata: {
           role,
           source: 'dash_voice_orb',
@@ -523,6 +665,7 @@ export default function DashVoiceScreen() {
           has_image: hasImage,
           ocr_mode: ocrMode,
           ocr_task: ocrTask || undefined,
+          stream_tool_mode: enableToolsForTurn ? 'enabled' : 'deferred',
         },
       };
       const body = JSON.stringify(bodyPayload);
@@ -549,7 +692,7 @@ export default function DashVoiceScreen() {
                 context: payload.context,
               },
               stream: false,
-              enable_tools: true,
+              enable_tools: false,
               metadata: {
                 role,
                 source: 'dash_voice_orb.criteria_rewrite',
@@ -618,22 +761,38 @@ export default function DashVoiceScreen() {
         const displayText = (cleaned || 'I analyzed the image but did not find readable text.') + lowConfidenceHint;
         const criteriaGuard = await applyCriteriaGuardrails(displayText);
         const finalDisplayText = criteriaGuard.text || displayText;
+        let resolvedDisplayText = finalDisplayText;
+        let resolvedSpeechText = finalDisplayText;
+        if (shouldAutoExportPdf) {
+          const artifact = await exportPdfFromVoiceResponse(trimmed, finalDisplayText);
+          if (artifact?.url) {
+            resolvedDisplayText = `${finalDisplayText}\n\nPDF generated. Tap "Open latest PDF" below.`;
+            resolvedSpeechText = `${finalDisplayText}\n\nYour PDF is ready.`;
+          }
+        }
         logDashTrace('ocr_response', {
           turnId,
-          responseChars: finalDisplayText.length,
-          responsePreview: finalDisplayText.slice(0, 160),
+          responseChars: resolvedDisplayText.length,
+          responsePreview: resolvedDisplayText.slice(0, 160),
           ocrTask: ocrTask || 'document',
           criteriaWarning: criteriaGuard.warningCode || null,
         });
-        setLastResponse(finalDisplayText);
+        setLastResponse(resolvedDisplayText);
         setStreamingText('');
         setIsProcessing(false);
-        if (finalDisplayText) {
-          const withResponse = [...updatedHistory, { role: 'assistant' as const, content: finalDisplayText }];
+        if (resolvedDisplayText) {
+          const withResponse = [...updatedHistory, { role: 'assistant' as const, content: resolvedDisplayText }];
           conversationHistoryRef.current = withResponse;
           setConversationHistory(withResponse);
           persistOrbMessages(withResponse);
-          enqueueSpeech(finalDisplayText);
+          enqueueSpeech(resolvedSpeechText);
+        }
+        if (shouldConsumeScannerQuota) {
+          const consumeResult = await consumeAutoScanBudget(activeTier || 'free', 1, autoScanUserId);
+          if (!consumeResult.allowed) {
+            logDashTrace('auto_scan_budget_overrun', { turnId, source: attachedImageSource });
+          }
+          await refreshAutoScanBudget();
         }
         track(
           'dash.turn.completed',
@@ -684,29 +843,38 @@ export default function DashVoiceScreen() {
               ? { text: displayText }
               : await applyCriteriaGuardrails(displayText);
             const finalDisplayText = criteriaGuard.text || displayText;
+            let resolvedDisplayText = finalDisplayText;
+            let resolvedSpeechText = finalDisplayText;
+            if (shouldAutoExportPdf && !isSseArtifact) {
+              const artifact = await exportPdfFromVoiceResponse(trimmed, finalDisplayText);
+              if (artifact?.url) {
+                resolvedDisplayText = `${finalDisplayText}\n\nPDF generated. Tap "Open latest PDF" below.`;
+                resolvedSpeechText = `${finalDisplayText}\n\nYour PDF is ready.`;
+              }
+            }
             logDashTrace('stream_done', {
               turnId,
               latencyMs: Date.now() - turnStartedAt,
-              chars: finalDisplayText.length,
-              preview: finalDisplayText.slice(0, 160),
+              chars: resolvedDisplayText.length,
+              preview: resolvedDisplayText.slice(0, 160),
               artifact: isSseArtifact,
               criteriaWarning: criteriaGuard.warningCode || null,
             });
-            setLastResponse(finalDisplayText);
+            setLastResponse(resolvedDisplayText);
             setStreamingText('');
             setIsProcessing(false);
             // Add assistant response to history + persist
-            if (finalDisplayText && !isSseArtifact) {
-              const withResponse = [...updatedHistory, { role: 'assistant' as const, content: finalDisplayText }];
+            if (resolvedDisplayText && !isSseArtifact) {
+              const withResponse = [...updatedHistory, { role: 'assistant' as const, content: resolvedDisplayText }];
               conversationHistoryRef.current = withResponse;
               setConversationHistory(withResponse);
               persistOrbMessages(withResponse);
               if (STREAMING_TTS_ENABLED) {
-                const lcp = longestCommonPrefixLen(finalDisplayText, streamedPrefixQueuedRef.current);
-                const remaining = finalDisplayText.slice(lcp).trim();
+                const lcp = longestCommonPrefixLen(resolvedSpeechText, streamedPrefixQueuedRef.current);
+                const remaining = resolvedSpeechText.slice(lcp).trim();
                 if (remaining) enqueueSpeech(remaining);
               } else {
-                enqueueSpeech(finalDisplayText);
+                enqueueSpeech(resolvedSpeechText);
               }
             }
             track(
@@ -783,9 +951,13 @@ export default function DashVoiceScreen() {
     longestCommonPrefixLen,
     logDashTrace,
     persistOrbMessages,
+    exportPdfFromVoiceResponse,
     profile,
+    activeTier,
+    autoScanUserId,
     dashPolicy.defaultMode,
     dashPolicy.systemPromptAddendum,
+    refreshAutoScanBudget,
     STREAMING_TTS_ENABLED,
   ]);
 
@@ -1123,6 +1295,29 @@ export default function DashVoiceScreen() {
             </View>
           )}
 
+          {latestPdfArtifact?.url && (
+            <TouchableOpacity
+              style={[s.fullChatLink, { borderColor: theme.primary + '44', borderWidth: 1, backgroundColor: theme.primary + '12' }]}
+              onPress={() => {
+                router.push({
+                  pathname: '/screens/pdf-viewer',
+                  params: {
+                    title: latestPdfArtifact.title || 'Generated PDF',
+                    url: latestPdfArtifact.url,
+                  },
+                } as any);
+              }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open latest generated PDF"
+            >
+              <Ionicons name="document-text-outline" size={16} color={theme.primary} />
+              <Text style={[s.fullChatText, { color: theme.primary }]}>
+                Open latest PDF
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Full chat link */}
           <TouchableOpacity style={s.fullChatLink} onPress={async () => {
             const history = conversationHistoryRef.current;
@@ -1186,6 +1381,7 @@ export default function DashVoiceScreen() {
       title="Scan Homework"
       tier={activeTier}
       remainingScans={remainingScans}
+      userId={autoScanUserId}
     />
     </>
   );

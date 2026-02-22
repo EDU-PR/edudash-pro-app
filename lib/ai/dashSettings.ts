@@ -40,6 +40,10 @@ export type VoiceInputPrefs = {
   whisperFlowSummaryEnabled: boolean;
 };
 
+const VOICE_AUTO_SEND_SILENCE_MIN_MS = 700;
+const VOICE_AUTO_SEND_SILENCE_MAX_MS = 3000;
+const DEFAULT_VOICE_AUTO_SEND_SILENCE_MS = 900;
+
 const DEFAULT_CHAT_UI_PREFS: ChatUIPrefs = {
   enterToSend: true,
   showTypingIndicator: true,
@@ -49,7 +53,7 @@ const DEFAULT_CHAT_UI_PREFS: ChatUIPrefs = {
 
 const DEFAULT_VOICE_INPUT_PREFS: VoiceInputPrefs = {
   autoSend: false,
-  autoSendSilenceMs: 1800,
+  autoSendSilenceMs: DEFAULT_VOICE_AUTO_SEND_SILENCE_MS,
   whisperFlowEnabled: true,
   whisperFlowSummaryEnabled: true,
 };
@@ -158,7 +162,9 @@ export async function getVoiceInputPrefs(role?: string | null): Promise<VoiceInp
       const silenceMs = Number(parsed.autoSendSilenceMs);
       return {
         autoSend: typeof parsed.autoSend === 'boolean' ? parsed.autoSend : roleDefault,
-        autoSendSilenceMs: Number.isFinite(silenceMs) ? Math.max(1200, Math.min(8000, silenceMs)) : DEFAULT_VOICE_INPUT_PREFS.autoSendSilenceMs,
+        autoSendSilenceMs: Number.isFinite(silenceMs)
+          ? Math.max(VOICE_AUTO_SEND_SILENCE_MIN_MS, Math.min(VOICE_AUTO_SEND_SILENCE_MAX_MS, silenceMs))
+          : DEFAULT_VOICE_INPUT_PREFS.autoSendSilenceMs,
         whisperFlowEnabled:
           typeof parsed.whisperFlowEnabled === 'boolean'
             ? parsed.whisperFlowEnabled
@@ -186,7 +192,13 @@ export async function setVoiceInputPrefs(
   const next: VoiceInputPrefs = {
     ...current,
     ...prefs,
-    autoSendSilenceMs: Math.max(1200, Math.min(8000, Number(prefs.autoSendSilenceMs ?? current.autoSendSilenceMs))),
+    autoSendSilenceMs: Math.max(
+      VOICE_AUTO_SEND_SILENCE_MIN_MS,
+      Math.min(
+        VOICE_AUTO_SEND_SILENCE_MAX_MS,
+        Number(prefs.autoSendSilenceMs ?? current.autoSendSilenceMs),
+      ),
+    ),
   };
   try {
     await AsyncStorage.setItem(VOICE_INPUT_PREFS_KEY, JSON.stringify(next));

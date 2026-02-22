@@ -9,7 +9,7 @@
  * - View registration vs school fees summary
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,10 +25,37 @@ import { useStudentFeeData, useStudentFeeActions, formatCurrency, formatDate } f
 import { createStyles } from '@/lib/screen-styles/principal-student-fees.styles';
 import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
 import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
+import { assertSupabase } from '@/lib/supabase';
+
+interface FeeCorrectionTimelineRow {
+  id: string;
+  action: string;
+  reason: string;
+  before_snapshot?: Record<string, any> | null;
+  after_snapshot?: Record<string, any> | null;
+  created_by_role?: string | null;
+  source_screen?: string | null;
+  created_at: string;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  waive: 'Waive Fee',
+  adjust: 'Adjust Fee',
+  mark_paid: 'Mark Paid',
+  mark_unpaid: 'Mark Unpaid',
+  change_class: 'Change Class',
+  tuition_sync: 'Sync Tuition',
+  registration_paid: 'Registration Paid',
+  registration_unpaid: 'Registration Unpaid',
+};
 
 export default function StudentFeeManagementScreen() {
   const router = useRouter();
-  const { studentId } = useLocalSearchParams<{ studentId?: string }>();
+  const { studentId, monthIso, source } = useLocalSearchParams<{
+    studentId?: string;
+    monthIso?: string;
+    source?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const financeAccess = useFinanceAccessGuard();
@@ -45,7 +72,9 @@ export default function StudentFeeManagementScreen() {
     [showAlertConfig]
   );
 
-  const data = useStudentFeeData(studentId);
+  const data = useStudentFeeData(studentId, { monthIso, source });
+  const [correctionTimeline, setCorrectionTimeline] = useState<FeeCorrectionTimelineRow[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const actions = useStudentFeeActions({
     student: data.student,
     setStudent: data.setStudent,
@@ -59,6 +88,47 @@ export default function StudentFeeManagementScreen() {
   });
 
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
+  const receivablesMonthLabel = useMemo(() => {
+    if (!data.activeMonthIso) return null;
+    return new Date(data.activeMonthIso).toLocaleDateString('en-ZA', {
+      month: 'long',
+      year: 'numeric',
+    });
+  }, [data.activeMonthIso]);
+  const visibleFees = data.source === 'receivables' ? data.displayFeesForMonth : data.displayFees;
+  const loadCorrectionTimeline = useCallback(async () => {
+    if (!studentId) {
+      setCorrectionTimeline([]);
+      return;
+    }
+    setTimelineLoading(true);
+    try {
+      const supabase = assertSupabase();
+      const { data: rows, error } = await supabase
+        .from('fee_corrections_audit')
+        .select('id, action, reason, before_snapshot, after_snapshot, created_by_role, source_screen, created_at')
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (error) throw error;
+      setCorrectionTimeline((rows || []) as FeeCorrectionTimelineRow[]);
+    } catch (error) {
+      console.warn('[StudentFeeManagement] Failed to load correction timeline', error);
+      setCorrectionTimeline([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    if (financeAccess.needsPassword) return;
+    void loadCorrectionTimeline();
+  }, [financeAccess.needsPassword, loadCorrectionTimeline]);
+
+  const handleRefresh = useCallback(async () => {
+    await data.onRefresh();
+    await loadCorrectionTimeline();
+  }, [data.onRefresh, loadCorrectionTimeline]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -130,7 +200,7 @@ export default function StudentFeeManagementScreen() {
         refreshControl={
           <RefreshControl
             refreshing={data.refreshing}
-            onRefresh={data.onRefresh}
+            onRefresh={handleRefresh}
             colors={[theme.primary]}
             tintColor={theme.primary}
           />
@@ -356,12 +426,29 @@ export default function StudentFeeManagementScreen() {
 
         {/* Fees List */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Fee History</Text>
+          <Text style={styles.sectionTitle}>
+            {data.source === 'receivables' && receivablesMonthLabel
+              ? `Receivables (${receivablesMonthLabel})`
+              : 'Fee History'}
+          </Text>
 
-          {data.displayFees.length === 0 ? (
+          {data.source === 'receivables' && receivablesMonthLabel && (
+            <View style={styles.contextBanner}>
+              <Ionicons name="calendar-outline" size={14} color={theme.primary} />
+              <Text style={styles.contextBannerText}>
+                Showing unpaid fee rows due in {receivablesMonthLabel}. Open this screen directly for full history.
+              </Text>
+            </View>
+          )}
+
+          {visibleFees.length === 0 ? (
             <View style={styles.emptyFees}>
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
-              <Text style={styles.emptyFeesText}>No fees recorded</Text>
+              <Text style={styles.emptyFeesText}>
+                {data.source === 'receivables' && receivablesMonthLabel
+                  ? `No receivables for ${receivablesMonthLabel}`
+                  : 'No fees recorded'}
+              </Text>
               {data.feeSetupStatus === 'missing' && (
                 <Text style={styles.emptyFeesHint}>No tuition fee setup found for this school yet.</Text>
               )}
@@ -383,7 +470,7 @@ export default function StudentFeeManagementScreen() {
               )}
             </View>
           ) : (
-            data.displayFees.map(fee => {
+            visibleFees.map(fee => {
               const isMarkPaidBusy =
                 actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_paid';
               const isMarkUnpaidBusy =
@@ -504,6 +591,53 @@ export default function StudentFeeManagementScreen() {
                       </TouchableOpacity>
                     </View>
                   )}
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Correction Timeline</Text>
+          {timelineLoading ? (
+            <View style={styles.timelineLoadingCard}>
+              <EduDashSpinner size="small" color={theme.primary} />
+              <Text style={styles.timelineLoadingText}>Loading correction timeline...</Text>
+            </View>
+          ) : correctionTimeline.length === 0 ? (
+            <View style={styles.timelineEmptyCard}>
+              <Ionicons name="time-outline" size={20} color={theme.textSecondary} />
+              <Text style={styles.timelineEmptyText}>No correction actions recorded yet.</Text>
+            </View>
+          ) : (
+            correctionTimeline.map((entry) => {
+              const actionLabel = ACTION_LABELS[String(entry.action || '').toLowerCase()] || entry.action;
+              const beforeAmount = Number(entry.before_snapshot?.final_amount ?? entry.before_snapshot?.amount ?? Number.NaN);
+              const afterAmount = Number(entry.after_snapshot?.final_amount ?? entry.after_snapshot?.amount ?? Number.NaN);
+              return (
+                <View key={entry.id} style={styles.timelineCard}>
+                  <View style={styles.timelineHeader}>
+                    <Text style={styles.timelineAction}>{actionLabel}</Text>
+                    <Text style={styles.timelineDate}>
+                      {new Date(entry.created_at).toLocaleDateString('en-ZA', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                  <Text style={styles.timelineReason}>{entry.reason}</Text>
+                  {(Number.isFinite(beforeAmount) || Number.isFinite(afterAmount)) && (
+                    <Text style={styles.timelineMeta}>
+                      {Number.isFinite(beforeAmount) ? formatCurrency(beforeAmount) : '—'}
+                      {'  →  '}
+                      {Number.isFinite(afterAmount) ? formatCurrency(afterAmount) : '—'}
+                    </Text>
+                  )}
+                  <Text style={styles.timelineMeta}>
+                    {entry.created_by_role ? `Role: ${entry.created_by_role}` : 'Role: Unknown'}
+                    {entry.source_screen ? ` • Source: ${entry.source_screen}` : ''}
+                  </Text>
                 </View>
               );
             })

@@ -881,6 +881,12 @@ export class DashAICore {
       if ((response as any).metadata?.ocr) {
         responseMetadata.ocr = (response as any).metadata.ocr as Record<string, unknown>;
       }
+      if (ocrMode || Boolean((response as any).metadata?.ocr)) {
+        responseMetadata.ocr_mode = true;
+        if (ocrTask) {
+          responseMetadata.ocr_task = ocrTask;
+        }
+      }
       if (toolResults.length > 0) {
         responseMetadata.tool_results = toolResults;
         const primaryTool = toolResults[toolResults.length - 1] as Record<string, unknown>;

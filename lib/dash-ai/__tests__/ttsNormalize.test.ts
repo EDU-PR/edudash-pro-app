@@ -94,6 +94,14 @@ describe('ttsNormalize', () => {
     expect(out).not.toContain('E D U');
   });
 
+  it('keeps PDF acronym compact for natural speech pacing', () => {
+    const out = normalizeForTTS('Please open P. D. F. now and then share the PDF link.');
+    expect(out).toContain('open PDF now');
+    expect(out).toContain('share the PDF link');
+    expect(out).not.toContain('P. D. F.');
+    expect(out).not.toContain('P.D.F.');
+  });
+
   it('strips token usage footer lines from spoken output', () => {
     const out = normalizeForTTS('Great plan.\n📊 2,561 tokens used');
     expect(out).toContain('Great plan');

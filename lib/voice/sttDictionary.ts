@@ -113,8 +113,16 @@ export const STT_CORRECTIONS: Array<[RegExp, string]> = [
   [/\bclose bracket\b/gi, ')'],
   [/\bcomma\b/gi, ','],
 
+  // ── Acronym stabilization (avoid fragmented letter sequences) ──
+  [/\bp[\s.\-]*d[\s.\-]*f\b/gi, 'PDF'],
+  [/\bs[\s.\-]*t[\s.\-]*t\b/gi, 'STT'],
+  [/\bt[\s.\-]*t[\s.\-]*s\b/gi, 'TTS'],
+  [/\bc[\s.\-]*a[\s.\-]*p[\s.\-]*s\b/gi, 'CAPS'],
+
   // ── Generic misrecognitions ──
   [/\bit socks\b/gi, "it's socks"],
+  [/\bfonics\b/gi, 'phonics'],
+  [/\bpho?nics\b/gi, 'phonics'],
   [/\bsummeriz(e|ing|ed|er)\b/gi, 'summarize$1'],
   [/\bbreaking up junks\b/gi, 'breaking up chunks'],
   [/\bjunks\b/gi, 'chunks'],

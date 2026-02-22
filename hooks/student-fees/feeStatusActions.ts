@@ -11,13 +11,15 @@ import {
   fetchReceiptUrlForFee,
   openReceiptUrl,
 } from './feeHelpers';
-import { resolvePendingLikeStatus, getSupabaseErrorMessage, type ShowAlert } from './feeActionUtils';
+import { resolvePendingLikeStatus, type ShowAlert } from './feeActionUtils';
+import { writeFeeCorrectionAudit } from './feeCorrectionAudit';
 
 export async function markFeePaid(
   fee: StudentFee,
   student: Student,
   organizationId: string | undefined,
   profileId: string,
+  profileRole: string | null | undefined,
   showAlert: ShowAlert,
   loadFees: () => Promise<void>,
 ): Promise<void> {
@@ -25,6 +27,14 @@ export async function markFeePaid(
   const nowIso = new Date().toISOString();
   const paidDate = nowIso.split('T')[0];
   const amount = fee.final_amount || fee.amount;
+  const beforeSnapshot = {
+    status: fee.status,
+    paid_date: fee.paid_date || null,
+    amount: fee.amount,
+    final_amount: fee.final_amount,
+    amount_paid: Number(fee.amount_paid || 0),
+    amount_outstanding: Number(fee.amount_outstanding || 0),
+  };
 
   await supabase
     .from('student_fees')
@@ -43,6 +53,35 @@ export async function markFeePaid(
   await generateReceiptForFee(fee, amount, paidDate, student, { id: profileId } as any, organizationId);
 
   showAlert('Payment Updated', 'Fee marked as paid.', 'success');
+  const auditResult = await writeFeeCorrectionAudit({
+    organizationId: organizationId || student.preschool_id || null,
+    studentId: fee.student_id,
+    studentFeeId: fee.id,
+    action: 'mark_paid',
+    reason: 'Manually marked paid by school staff.',
+    beforeSnapshot,
+    afterSnapshot: {
+      status: 'paid',
+      paid_date: paidDate,
+      amount: fee.amount,
+      final_amount: amount,
+      amount_paid: amount,
+      amount_outstanding: 0,
+    },
+    metadata: {
+      payment_action: 'manual_mark_paid',
+    },
+    actorId: profileId,
+    actorRole: profileRole || null,
+    sourceScreen: 'principal-student-fees',
+  });
+  if (!auditResult.ok) {
+    showAlert(
+      'Audit Warning',
+      'Fee was marked paid, but correction audit logging failed. You can retry if needed.',
+      'warning',
+    );
+  }
   loadFees();
 }
 
@@ -51,6 +90,7 @@ export async function markFeeUnpaid(
   student: Student,
   organizationId: string | undefined,
   profileId: string,
+  profileRole: string | null | undefined,
   showAlert: ShowAlert,
   loadFees: () => Promise<void>,
 ): Promise<void> {
@@ -58,6 +98,14 @@ export async function markFeeUnpaid(
   const nowIso = new Date().toISOString();
   const amount = fee.final_amount || fee.amount;
   const nextStatus = resolvePendingLikeStatus(fee, amount, 0);
+  const beforeSnapshot = {
+    status: fee.status,
+    paid_date: fee.paid_date || null,
+    amount: fee.amount,
+    final_amount: fee.final_amount,
+    amount_paid: Number(fee.amount_paid || 0),
+    amount_outstanding: Number(fee.amount_outstanding || 0),
+  };
 
   await supabase
     .from('student_fees')
@@ -75,6 +123,35 @@ export async function markFeeUnpaid(
   await upsertFinancialTransaction(fee, 'voided', student, organizationId, profileId);
 
   showAlert('Payment Updated', 'Fee marked as unpaid.', 'success');
+  const auditResult = await writeFeeCorrectionAudit({
+    organizationId: organizationId || student.preschool_id || null,
+    studentId: fee.student_id,
+    studentFeeId: fee.id,
+    action: 'mark_unpaid',
+    reason: 'Manually reverted paid fee back to unpaid.',
+    beforeSnapshot,
+    afterSnapshot: {
+      status: nextStatus,
+      paid_date: null,
+      amount: fee.amount,
+      final_amount: amount,
+      amount_paid: 0,
+      amount_outstanding: amount,
+    },
+    metadata: {
+      payment_action: 'manual_mark_unpaid',
+    },
+    actorId: profileId,
+    actorRole: profileRole || null,
+    sourceScreen: 'principal-student-fees',
+  });
+  if (!auditResult.ok) {
+    showAlert(
+      'Audit Warning',
+      'Fee was marked unpaid, but correction audit logging failed. You can retry if needed.',
+      'warning',
+    );
+  }
   loadFees();
 }
 

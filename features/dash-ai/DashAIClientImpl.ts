@@ -319,6 +319,104 @@ export class DashAIClient {
     };
   }
 
+  private buildToolCompletionFallback(toolResult: any): string {
+    const toolName = String(toolResult?.name || '').trim().toLowerCase();
+    if (toolResult?.success === false) {
+      if (toolName === 'get_assignments') {
+        return 'I could not fetch assignments right now. Please try again in a moment.';
+      }
+      return 'I could not complete that action right now. Please try again in a moment.';
+    }
+
+    const output = toolResult?.output;
+    const outputObj = output && typeof output === 'object'
+      ? output as Record<string, any>
+      : null;
+
+    const readCount = (...values: unknown[]): number | null => {
+      for (const value of values) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed >= 0) return Math.round(parsed);
+      }
+      return null;
+    };
+
+    if (['export_pdf', 'generate_worksheet', 'generate_chart', 'generate_pdf_from_prompt'].includes(toolName)) {
+      const filename = String(
+        outputObj?.filename ||
+        outputObj?.file_name ||
+        ''
+      ).trim();
+      if (filename) {
+        return `Your PDF is ready. Tap Preview PDF to open ${filename}.`;
+      }
+      return 'Your PDF is ready. Tap Preview PDF to open it.';
+    }
+
+    if (toolName === 'search_caps_curriculum') {
+      const count = readCount(outputObj?.count, outputObj?.results?.length);
+      if (count !== null) {
+        return count > 0
+          ? `I searched CAPS and found ${count} matching item${count === 1 ? '' : 's'}.`
+          : 'I searched CAPS but found no direct matches yet. Try a more specific topic or grade.';
+      }
+      return 'I searched CAPS and returned the latest curriculum matches in the tool card.';
+    }
+
+    if (toolName === 'get_caps_documents') {
+      const count = readCount(outputObj?.count, outputObj?.documents?.length);
+      if (count !== null) {
+        return count > 0
+          ? `I found ${count} CAPS document${count === 1 ? '' : 's'} for this request.`
+          : 'I could not find CAPS documents for that exact filter yet.';
+      }
+      return 'I retrieved CAPS document information in the tool card below.';
+    }
+
+    if (toolName === 'get_assignments') {
+      const count = readCount(outputObj?.count, outputObj?.assignments?.length);
+      if (count !== null) {
+        return count > 0
+          ? `I found ${count} assignment${count === 1 ? '' : 's'} for this request.`
+          : 'No assignments matched that filter yet.';
+      }
+      return 'I checked assignments and added the result to the tool card below.';
+    }
+
+    return 'I completed the requested tool action. Check the tool card below for details.';
+  }
+
+  private shouldEnableToolsForStreaming(input: {
+    promptText: string;
+    serviceType?: string;
+    ocrMode?: boolean;
+    metadata?: Record<string, unknown>;
+  }): boolean {
+    const metadata = (input.metadata || {}) as Record<string, unknown>;
+    const explicitEnable = metadata.enable_tools === true;
+    const explicitDisable =
+      metadata.disable_tools_on_streaming === true ||
+      metadata.prefer_streaming_latency === true;
+    const source = String(metadata.source || '').toLowerCase();
+    const responseMode = String(metadata.response_mode || '').toLowerCase();
+    const prompt = String(input.promptText || '').toLowerCase();
+    const serviceType = String(input.serviceType || '').toLowerCase();
+    const voiceSource =
+      source.includes('voice') ||
+      source.includes('orb') ||
+      source.includes('speech');
+    const toolIntentPattern = /\b(export[_\s-]*pdf|generate[_\s-]*(pdf|worksheet|chart)|open\s+\w+|navigate|lookup|look up|web\s*search|search\b|latest\b|today\b|weather\b|price\b|send email|email\b)\b/i;
+    const shouldUseToolsForPrompt = toolIntentPattern.test(prompt);
+
+    if (explicitEnable) return true;
+    if (serviceType === 'image_analysis' || input.ocrMode) return false;
+    if (shouldUseToolsForPrompt) return true;
+    if (explicitDisable) return false;
+    if (voiceSource) return false;
+    if (responseMode === 'tutor_interactive') return false;
+    return true;
+  }
+
   private normalizeRequestedModelId(model?: string | null): string | undefined {
     const raw = String(model || '').trim();
     if (!raw) return undefined;
@@ -472,6 +570,12 @@ export class DashAIClient {
         const promptText = messagesArr.length > 0
           ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
           : String(params.content || params.userInput || '');
+        const enableToolsForStreaming = this.shouldEnableToolsForStreaming({
+          promptText,
+          serviceType: params.serviceType,
+          ocrMode: params.ocrMode,
+          metadata: (params.metadata || {}) as Record<string, unknown>,
+        });
         try {
           return await this.callAIServiceStreaming(
             {
@@ -485,7 +589,9 @@ export class DashAIClient {
               metadata: {
                 ...(params.metadata || {}),
                 trace_id: requestTraceId,
+                stream_tool_mode: enableToolsForStreaming ? 'enabled' : 'deferred',
               },
+              enableTools: enableToolsForStreaming,
               // Forward image data so streaming path can include vision payloads
               attachments: params.attachments,
               images: params.images,
@@ -822,6 +928,22 @@ export class DashAIClient {
           pendingToolCalls = [...overflow, ...followUpPending];
         } catch (contError) {
           console.warn('[DashAIClient] Tool continuation call failed:', contError);
+          const lastRequestedToolName = String(
+            [...currentBatch].reverse().map((entry: any) => entry?.name).find(Boolean) || ''
+          ).trim().toLowerCase();
+          const lastToolResult = [...toolResults]
+            .reverse()
+            .find((entry: any) => {
+              const entryName = String(entry?.name || '').trim().toLowerCase();
+              if (!entryName) return false;
+              if (!lastRequestedToolName) return true;
+              return entryName === lastRequestedToolName;
+            });
+          if (lastToolResult) {
+            assistantContent = this.buildToolCompletionFallback(lastToolResult);
+          } else if (!String(assistantContent || '').trim()) {
+            assistantContent = 'I completed the tool action, but final formatting failed. Check the tool card below.';
+          }
           continuationPassOutcome = 'failed';
           pendingToolCalls = [];
           break;
@@ -1075,6 +1197,9 @@ export class DashAIClient {
 
     const finalizeStreamOrThrow = (accumulatedText: string): AIServiceResponse => {
       if (streamErrorText) {
+        if (/requires continuation for tool calls/i.test(streamErrorText)) {
+          throw this.createStreamContinuationError(Array.from(pendingToolNames));
+        }
         throw new Error(streamErrorText);
       }
       if (sawPendingToolCalls) {
@@ -1108,6 +1233,7 @@ export class DashAIClient {
       const traceId = String((params?.metadata as any)?.trace_id || this.createTraceId('dash_ai_stream'));
       const toolPlan = this.buildToolPlanMetadata(userRole, userTier);
       const orchestration = this.getOrchestrationConfig();
+      const enableTools = params.enableTools !== false;
 
       // Build image payloads for streaming (vision support)
       const streamImages = await this.buildImagePayloads(params.attachments, params.images);
@@ -1133,8 +1259,8 @@ export class DashAIClient {
           model: normalizedModel,
         },
         stream: true,
-        enable_tools: true,
-        client_tools: clientToolDefs,
+        enable_tools: enableTools,
+        client_tools: enableTools ? clientToolDefs : undefined,
         metadata: {
           role: userRole,
           model: normalizedModel,
@@ -1330,7 +1456,12 @@ export class DashAIClient {
 
       return finalizeStreamOrThrow(accumulated);
     } catch (error) {
-      console.error('[DashAIClient] Streaming failed:', error);
+      const errorCode = String((error as any)?.code || '').toLowerCase();
+      if (errorCode === 'stream_requires_continuation') {
+        console.info('[DashAIClient] Streaming handoff to non-stream continuation is expected for pending tool calls.');
+      } else {
+        console.error('[DashAIClient] Streaming failed:', error);
+      }
       throw error;
     }
   }
@@ -1377,6 +1508,7 @@ export class DashAIClient {
         const toolPlan = this.buildToolPlanMetadata(role, userTier);
         const clientTools = this.getClientToolDefs(role, userTier);
         const orchestration = this.getOrchestrationConfig();
+        const enableTools = params.enableTools !== false;
         
         // Create WebSocket connection
         // Reference: https://reactnative.dev/docs/0.79/network#websocket-support
@@ -1426,8 +1558,8 @@ export class DashAIClient {
               ocr_response_format: params.ocrResponseFormat || undefined,
               model: normalizedModel,
             },
-            enable_tools: true,
-            client_tools: clientTools,
+            enable_tools: enableTools,
+            client_tools: enableTools ? clientTools : undefined,
             metadata: {
               role,
               model: normalizedModel,

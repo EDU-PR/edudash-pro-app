@@ -18,6 +18,21 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const [mermaidSvg, setMermaidSvg] = useState<string | null>(null);
   const [mermaidError, setMermaidError] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const resolutionStatus = String(message.meta?.resolution_status || '').toLowerCase();
+  const confidenceScore = typeof message.meta?.confidence_score === 'number'
+    ? message.meta.confidence_score
+    : Number.NaN;
+  const unclearSpans = Array.isArray(message.meta?.ocr?.unclear_spans)
+    ? message.meta.ocr.unclear_spans
+        .map((value) => String(value || '').trim())
+        .filter((value) => value.length > 0)
+        .slice(0, 3)
+    : [];
+  const showScanClarityWarning = !isUser && (
+    resolutionStatus === 'escalated' ||
+    resolutionStatus === 'needs_clarification' ||
+    (!Number.isNaN(confidenceScore) && confidenceScore <= 0.75)
+  );
   
   // Detect if message contains downloadable content (exam, flashcards, study guide)
   const hasDownloadableContent = !isUser && message.content && (
@@ -206,6 +221,34 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             </div>
           )}
         </div>
+
+        {showScanClarityWarning && (
+          <div
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(245, 158, 11, 0.45)',
+              background: 'rgba(245, 158, 11, 0.12)',
+              padding: '10px 12px',
+              fontSize: 12,
+              color: 'var(--text)',
+              lineHeight: 1.5,
+              maxWidth: '85%',
+              alignSelf: 'flex-start',
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Scan clarity check</div>
+            <div>
+              {Number.isNaN(confidenceScore)
+                ? 'Dash detected uncertain text in this image. Retake with brighter lighting and a flatter page, then resend.'
+                : `OCR confidence: ${Math.round(confidenceScore * 100)}%. Retake with brighter lighting and a flatter page, then resend.`}
+            </div>
+            {unclearSpans.length > 0 && (
+              <div style={{ marginTop: 6, color: 'var(--muted)' }}>
+                Unclear: {unclearSpans.join(' | ')}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Mermaid rendering (if present) */}
         {mermaidSvg && (

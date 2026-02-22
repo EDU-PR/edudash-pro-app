@@ -13,9 +13,9 @@ import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import type { DashAttachment } from '@/services/dash-ai/types';
 import { createSignedUrl } from '@/services/AttachmentService';
-
+import { CompactModelPicker } from '@/components/ai/model-picker/CompactModelPicker';
+import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-// Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
 if (!isWeb) {
@@ -77,6 +77,9 @@ interface ChatModalProps {
   wakeWordEnabled?: boolean;
   onToggleWakeWord?: () => void;
   onOpenSettings?: () => void;
+  models?: AIModelInfo[]; selectedModelId?: AIModelId | string;
+  canSelectModel?: (modelId: AIModelId) => boolean; onSelectModel?: (modelId: AIModelId) => void;
+  onLockedModelPress?: (modelId: AIModelId) => void;
   onOpenTools?: () => void;
   onAttachFile?: () => void;
   onTakePhoto?: () => void;
@@ -125,6 +128,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   wakeWordEnabled = false,
   onToggleWakeWord,
   onOpenSettings,
+  models = [], selectedModelId, canSelectModel, onSelectModel, onLockedModelPress,
   onOpenTools,
   onAttachFile,
   onTakePhoto,
@@ -320,7 +324,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 6 : 0)}
       >
         <View style={[styles.chatContainer, { backgroundColor: theme.surface }]}>
-          {/* Header */}
           <SafeAreaView edges={['top']} style={[styles.headerSafeArea, { backgroundColor: theme.surface }]}>
             <View style={[styles.chatHeader, { borderBottomColor: theme.border }]}>
               <View style={styles.headerLeft}>
@@ -441,6 +444,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   />
                 </TouchableOpacity>
               )}
+              {Array.isArray(models) && models.length > 0 && onSelectModel && selectedModelId ? <CompactModelPicker models={models} selectedModelId={selectedModelId} canSelectModel={canSelectModel} onSelectModel={onSelectModel} onLockedPress={onLockedModelPress} disabled={isProcessing} /> : null}
               <TouchableOpacity 
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -452,8 +456,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               </TouchableOpacity>
             </View>
           </SafeAreaView>
-          
-          {/* Wake Word Help Tooltip */}
           {showWakeWordHelp && (
             <View style={[styles.helpTooltip, { backgroundColor: theme.primary }]}>
               <Text style={styles.helpTooltipText}>
@@ -541,8 +543,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               </View>
             )}
           </View>
-
-          {/* Content */}
           {showQuickActions ? (
             <ScrollView
               ref={scrollViewRef}
@@ -619,7 +619,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                       {displayContent}
                     </Text>
                   ) : (
-                    // Use Markdown for assistant messages on native
                     Markdown ? (
                       <Markdown style={markdownStyles}>{displayContent}</Markdown>
                     ) : (
@@ -829,9 +828,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               ))}
             </ScrollView>
           )}
-          {/* Input */}
           <View style={[styles.inputContainer, { borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom) }]}>
-            {/* Voice controls */}
             <View style={styles.voiceControls}>
               {onMicPress && (
                 <TouchableOpacity

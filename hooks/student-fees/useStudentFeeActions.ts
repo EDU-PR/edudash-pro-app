@@ -111,7 +111,21 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     if (!selectedFee || !profile?.id) return;
     setSaving(true);
     try {
-      await waiveFee(selectedFee, waiveType, waiveAmount, waiveReason, showAlert, loadFees);
+      await waiveFee(
+        selectedFee,
+        student,
+        waiveType,
+        waiveAmount,
+        waiveReason,
+        showAlert,
+        loadFees,
+        {
+          organizationId,
+          actorId: profile.id,
+          actorRole: profile.role || null,
+          sourceScreen: 'principal-student-fees',
+        },
+      );
       setModalType(null); setSelectedFee(null); setWaiveAmount(''); setWaiveReason(''); setWaiveType('full');
     } catch (error: any) {
       console.error('[StudentFees] handleWaiveFee failed', { feeId: selectedFee.id, error });
@@ -123,7 +137,21 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     if (!selectedFee || !profile?.id) return;
     setSaving(true);
     try {
-      await adjustFee(selectedFee, adjustAmount, adjustReason, student, setStudent, showAlert, loadFees);
+      await adjustFee(
+        selectedFee,
+        adjustAmount,
+        adjustReason,
+        student,
+        setStudent,
+        showAlert,
+        loadFees,
+        {
+          organizationId,
+          actorId: profile.id,
+          actorRole: profile.role || null,
+          sourceScreen: 'principal-student-fees',
+        },
+      );
       setModalType(null); setSelectedFee(null); setAdjustAmount(''); setAdjustReason('');
     } catch (error: any) {
       console.error('[StudentFees] handleAdjustFee failed', { feeId: selectedFee.id, error });
@@ -193,7 +221,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     if (!profile?.id || !student || processingFeeId) return;
     setProcessingFeeId(fee.id); setProcessingFeeAction('mark_paid'); setSaving(true);
     try {
-      await markFeePaid(fee, student, organizationId, profile.id, showAlert, loadFees);
+      await markFeePaid(fee, student, organizationId, profile.id, profile.role || null, showAlert, loadFees);
     } catch (error: any) {
       console.error('[StudentFees] handleMarkPaid failed', { feeId: fee.id, error });
       showAlert('Error', getSupabaseErrorMessage(error, 'Failed to update fee status.'), 'error');
@@ -204,7 +232,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     if (!profile?.id || !student || processingFeeId) return;
     setProcessingFeeId(fee.id); setProcessingFeeAction('mark_unpaid'); setSaving(true);
     try {
-      await markFeeUnpaid(fee, student, organizationId, profile.id, showAlert, loadFees);
+      await markFeeUnpaid(fee, student, organizationId, profile.id, profile.role || null, showAlert, loadFees);
     } catch (error: any) {
       console.error('[StudentFees] handleMarkUnpaid failed', { feeId: fee.id, error });
       showAlert('Error', getSupabaseErrorMessage(error, 'Failed to update fee status.'), 'error');

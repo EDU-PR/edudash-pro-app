@@ -210,6 +210,16 @@ export interface FinancePendingPOPRow {
   } | null;
 }
 
+export type FinanceQueueStage = 'needs_month' | 'ready_to_approve' | 'approved' | 'rejected';
+
+export interface FinanceQueueStageSummary {
+  stage: FinanceQueueStage;
+  count: number;
+  amount: number;
+}
+
+export type FinanceStudentFeesRouteSource = 'receivables' | 'direct';
+
 export interface FinanceControlCenterBundle {
   month: string;
   snapshot: FinanceMonthSnapshot | null;
@@ -234,6 +244,8 @@ export interface FinanceControlCenterBundle {
     purposes: FinancePaymentPurposeRow[];
   } | null;
   pending_pops: FinancePendingPOPRow[];
+  queue_rows?: FinancePendingPOPRow[];
+  queue_stage_counts?: FinanceQueueStageSummary[];
   payroll: PayrollRosterBundle | null;
   payroll_fallback_used: boolean;
   errors?: Partial<Record<'snapshot' | 'receivables' | 'expenses' | 'breakdown' | 'queue' | 'payroll', string>>;

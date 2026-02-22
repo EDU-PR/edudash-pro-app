@@ -363,6 +363,14 @@ function normalizeChoiceLabelsForSpeech(input: string): string {
   return next.replace(/\bOption ([A-H])\.(?=\S)/g, (_m, label: string) => `Option ${label}. `);
 }
 
+function normalizeAcronymsForSpeech(input: string): string {
+  return String(input || '')
+    .replace(/\bP(?:\s*\.?\s*)D(?:\s*\.?\s*)F\b\.?/gi, 'PDF')
+    .replace(/\bA(?:\s*\.?\s*)I\b\.?/gi, 'AI')
+    .replace(/\bS(?:\s*\.?\s*)T(?:\s*\.?\s*)T\b\.?/gi, 'speech to text')
+    .replace(/\bT(?:\s*\.?\s*)T(?:\s*\.?\s*)S\b\.?/gi, 'text to speech');
+}
+
 function convertPhonicsMarkersToSSML(rawText: string): string {
   let text = escapeXml(normalizeChoiceLabelsForSpeech(rawText || ''));
 
@@ -1270,6 +1278,7 @@ Deno.serve(async (req) => {
       if (!text) {
         return jsonResponse(400, { error: 'Missing text' });
       }
+      const spokenText = normalizeAcronymsForSpeech(text);
 
       const languageRaw = String(body.language || body.lang || 'en');
       const { bcp47: streamBcp47 } = normalizeLanguage(languageRaw);
@@ -1284,12 +1293,12 @@ Deno.serve(async (req) => {
       const streamStyle = typeof body.style === 'string' ? body.style.trim() : 'friendly';
 
       const streamSSMLText = isPhonics
-        ? convertPhonicsMarkersToSSML(text)
-        : escapeXml(normalizeChoiceLabelsForSpeech(text));
+        ? convertPhonicsMarkersToSSML(spokenText)
+        : escapeXml(normalizeChoiceLabelsForSpeech(spokenText));
       const streamPronunciation = applyPronunciationToSSML(streamSSMLText);
       const streamLang = applyInlineLangSwitching(streamPronunciation);
       const streamProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${streamLang}</prosody>`;
-      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
+      const streamPlainProsody = `<prosody rate="${streamRate}%" pitch="${streamPitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(spokenText))}</prosody>`;
       const streamInner = streamStyle
         ? `<mstts:express-as style="${escapeXml(streamStyle)}">${streamProsody}</mstts:express-as>`
         : streamProsody;
@@ -1358,6 +1367,7 @@ Deno.serve(async (req) => {
     if (!text) {
       return jsonResponse(400, { error: 'Missing text' });
     }
+    const spokenText = normalizeAcronymsForSpeech(text);
 
     const languageRaw = String(body.language || body.lang || 'en');
     const { short: language, bcp47 } = normalizeLanguage(languageRaw);
@@ -1369,7 +1379,7 @@ Deno.serve(async (req) => {
       normalized: language,
       bcp47,
       selectedVoice: voiceId,
-      textPreview: text.substring(0, 50),
+      textPreview: spokenText.substring(0, 50),
     });
 
     const phonicsMode = body.phonics_mode === true;
@@ -1389,13 +1399,13 @@ Deno.serve(async (req) => {
     const style = styleOverride || (phonicsMode ? 'friendly' : '');
 
     const ssmlText = phonicsMode
-      ? convertPhonicsMarkersToSSML(text)
-      : escapeXml(normalizeChoiceLabelsForSpeech(text));
+      ? convertPhonicsMarkersToSSML(spokenText)
+      : escapeXml(normalizeChoiceLabelsForSpeech(spokenText));
     // Apply pronunciation dictionary (brand names, SA languages, <lang> switching)
     const ssmlWithPronunciation = applyPronunciationToSSML(ssmlText);
     const ssmlWithLang = applyInlineLangSwitching(ssmlWithPronunciation);
     const prosody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${ssmlWithLang}</prosody>`;
-    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(text))}</prosody>`;
+    const plainProsody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${escapeXml(normalizeChoiceLabelsForSpeech(spokenText))}</prosody>`;
     const inner = style
       ? `<mstts:express-as style="${escapeXml(style)}">${prosody}</mstts:express-as>`
       : prosody;
@@ -1441,7 +1451,7 @@ Deno.serve(async (req) => {
     const languageFallback = recoveredVoice ? (requestedLangPrefix !== actualLangPrefix) : false;
 
     const contentHash = await sha256(
-      `${text}|${language}|${voiceId}|${hasExplicitRate ? speakingRate : speakingRateRaw}|${pitch}|${outputFormat}|${phonicsMode ? 'phonics' : 'normal'}`
+      `${spokenText}|${language}|${voiceId}|${hasExplicitRate ? speakingRate : speakingRateRaw}|${pitch}|${outputFormat}|${phonicsMode ? 'phonics' : 'normal'}`
     );
     const extension = format;
     const objectPath = `tts/${userData.user.id}/${contentHash}.${extension}`;
@@ -1507,7 +1517,7 @@ Deno.serve(async (req) => {
         p_request_tokens: 0,
         p_response_tokens: 0,
         p_success: true,
-        p_metadata: { scope: 'tts_synthesize', voice_id: voiceId, language, text_length: text.length, cache_hit: false },
+        p_metadata: { scope: 'tts_synthesize', voice_id: voiceId, language, text_length: spokenText.length, cache_hit: false },
       });
     } catch (usageErr) {
       console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);

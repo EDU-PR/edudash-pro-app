@@ -20,6 +20,16 @@ describe('phonicsDetection', () => {
     expect(detectPhonicsIntent('m m m for monkey')).toBe(true);
   });
 
+  it('avoids broad false positives for normal speech phrasing', () => {
+    expect(detectPhonicsIntent('That sounds like a good plan for class tomorrow')).toBe(false);
+    expect(
+      shouldUsePhonicsMode('This sounds like a good idea', {
+        organizationType: 'preschool',
+        ageYears: 5,
+      })
+    ).toBe(false);
+  });
+
   it('enables phonics mode from explicit content or preschool reading cues', () => {
     expect(shouldUsePhonicsMode('Use /b/ and c-a-t markers')).toBe(true);
     expect(shouldUsePhonicsMode('Say s s s like a snake')).toBe(true);

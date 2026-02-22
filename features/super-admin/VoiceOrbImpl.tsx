@@ -155,16 +155,16 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const VOICE_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
   // Perceived latency is dominated by "silence → final transcript → send".
   // Keep preschool more forgiving, but default faster for staff/older learners.
-  const defaultLiveSilenceMs = preschoolMode ? 3200 : 2400;
+  const defaultLiveSilenceMs = preschoolMode ? 2200 : 1400;
   const liveSilenceTimeoutRaw = Number.parseInt(
     process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || String(defaultLiveSilenceMs),
     10
   );
-  const liveSilenceMin = preschoolMode ? 2200 : 2000;
+  const liveSilenceMin = preschoolMode ? 1800 : 900;
   const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
     ? Math.min(12000, Math.max(liveSilenceMin, liveSilenceTimeoutRaw))
     : defaultLiveSilenceMs;
-  const defaultFinalFallbackMs = preschoolMode ? 450 : 650;
+  const defaultFinalFallbackMs = preschoolMode ? 420 : 320;
   const liveFinalFallbackRaw = Number.parseInt(
     process.env.EXPO_PUBLIC_VOICE_LIVE_FINAL_FALLBACK_MS || String(defaultFinalFallbackMs),
     10
@@ -195,8 +195,8 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, []);
   
   const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected, preschoolMode
-    ? { speechThreshold: -35, silenceDuration: 4000 }
-    : undefined,
+    ? { speechThreshold: -35, silenceDuration: 3000 }
+    : { speechThreshold: -30, silenceDuration: 1400 },
   );
   const { transcribe, isTranscribing, error: sttError } = useVoiceSTT({ preschoolId: tenantId });
   const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking, error: ttsError } = useVoiceTTS();
