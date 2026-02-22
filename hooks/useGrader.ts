@@ -94,7 +94,7 @@ export function useGrader() {
           },
           body: JSON.stringify({
             scope: 'teacher',
-            service_type: 'grading',
+            service_type: 'grading_assistance',
             stream: true,
             payload: {
               prompt: gradingPrompt,
@@ -114,7 +114,7 @@ export function useGrader() {
           const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
             body: {
               scope: 'teacher',
-              service_type: 'grading',
+              service_type: 'grading_assistance',
               payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
               metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
             } as any,
@@ -173,7 +173,7 @@ export function useGrader() {
         const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
           body: {
             scope: 'teacher',
-            service_type: 'grading',
+            service_type: 'grading_assistance',
             payload: { prompt: gradingPrompt, model: callOpts?.model || defaultModel },
             metadata: { assignment_title: assignmentStr, grade_level: gradeLevelStr },
           } as any,

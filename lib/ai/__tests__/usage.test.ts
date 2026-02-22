@@ -25,6 +25,10 @@ jest.mock('../../../lib/supabase', () => ({
 }))
 
 describe('getCombinedUsage (server-authoritative)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   it('returns server usage when available', async () => {
     const usage = await import('../usage')
     const serverCounts: AIUsageRecord = {
@@ -52,5 +56,41 @@ describe('getCombinedUsage (server-authoritative)', () => {
     const result = await usage.getCombinedUsage()
 
     expect(result).toEqual({ lesson_generation: 0, grading_assistance: 0, homework_help: 0, homework_help_agentic: 0, transcription: 0 })
+  })
+
+  it('reads authoritative server totals after successful usage increment', async () => {
+    const usage = await import('../usage')
+    mockAuth.getUser.mockResolvedValueOnce({ data: { user: { id: 'user_1' } } })
+    mockFunctions.invoke
+      .mockResolvedValueOnce({ data: {}, error: null }) // incrementUsage -> logUsageEvent
+      .mockResolvedValueOnce({
+        data: {
+          monthly: {
+            lesson_generation: 11,
+            grading_assistance: 5,
+            homework_help: 2,
+            homework_help_agentic: 0,
+            transcription: 0,
+          },
+        },
+        error: null,
+      }) // getCombinedUsage -> getServerUsage
+
+    await usage.incrementUsage('lesson_generation', 1, 'claude-sonnet-4-20250514')
+    const result = await usage.getCombinedUsage()
+
+    expect(result.lesson_generation).toBe(11)
+    expect(mockFunctions.invoke).toHaveBeenCalledWith(
+      'ai-usage',
+      expect.objectContaining({
+        body: expect.objectContaining({ action: 'log' }),
+      }),
+    )
+    expect(mockFunctions.invoke).toHaveBeenCalledWith(
+      'ai-usage',
+      expect.objectContaining({
+        body: {},
+      }),
+    )
   })
 })

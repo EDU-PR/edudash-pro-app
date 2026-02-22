@@ -3,15 +3,14 @@
  * @module hooks/useAILessonGeneration
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
-import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { isAIEnabled } from '@/lib/ai/aiConfig';
 import { track } from '@/lib/analytics';
-import { getCombinedUsage, incrementUsage, logUsageEvent, getUsage } from '@/lib/ai/usage';
+import { getCombinedUsage, incrementUsage, logUsageEvent } from '@/lib/ai/usage';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { formatAIGatewayErrorMessage, invokeAIGatewayWithRetry } from '@/lib/ai-gateway/invokeWithRetry';
 import { toast } from '@/components/ui/ToastProvider';
@@ -51,6 +50,7 @@ interface UseAILessonGenerationReturn {
   setGenerated: React.Dispatch<React.SetStateAction<GeneratedLesson | null>>;
   pending: boolean;
   progress: number;
+  progressPhase: 'idle' | 'init' | 'quota_check' | 'request' | 'parse' | 'complete';
   progressMessage: string;
   errorMsg: string | null;
   lastPayload: Record<string, unknown> | null;
@@ -66,13 +66,14 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
   const [generated, setGenerated] = useState<GeneratedLesson | null>(null);
   const [pending, setPending] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressPhase, setProgressPhase] = useState<'idle' | 'init' | 'quota_check' | 'request' | 'parse' | 'complete'>('idle');
   const [progressMessage, setProgressMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastPayload, setLastPayload] = useState<Record<string, unknown> | null>(null);
   const [usage, setUsage] = useState<UsageState>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 });
   const [quotaStatus, setQuotaStatus] = useState<QuotaState | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [progressInterval, setProgressInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const flags = getFeatureFlagsSync();
   const AI_ENABLED = isAIEnabled();
@@ -95,9 +96,26 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
   useEffect(() => {
     return () => {
       if (abortController) abortController.abort();
-      if (progressInterval) clearInterval(progressInterval);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     };
-  }, [abortController, progressInterval]);
+  }, [abortController]);
+
+  const clearProgressTicker = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  }, []);
+
+  const startProgressTicker = useCallback((minIncrement: number, maxIncrement: number, intervalMs: number) => {
+    clearProgressTicker();
+    progressIntervalRef.current = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 90) return prev;
+        return Math.min(prev + (Math.random() * (maxIncrement - minIncrement) + minIncrement), 90);
+      });
+    }, intervalMs);
+  }, [clearProgressTicker]);
 
   const refreshUsage = useCallback(async () => {
     setUsage(await getCombinedUsage());
@@ -112,17 +130,15 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       abortController.abort();
       setAbortController(null);
     }
-    if (progressInterval) {
-      clearInterval(progressInterval);
-      setProgressInterval(null);
-    }
+    clearProgressTicker();
     setPending(false);
     setProgress(0);
+    setProgressPhase('idle');
     setProgressMessage('');
     setErrorMsg(null);
     toast.info('Generation cancelled');
     track('edudash.ai.lesson.generate_cancelled', {});
-  }, [abortController, progressInterval]);
+  }, [abortController, clearProgressTicker]);
 
   const invokeWithTimeout = useCallback(async <T,>(p: Promise<T>, ms = 30000): Promise<T> => {
     return await Promise.race([
@@ -150,24 +166,10 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       setAbortController(controller);
       setPending(true);
       setProgress(0);
+      setProgressPhase('init');
       setProgressMessage('Initializing...');
 
-      if (progressInterval) clearInterval(progressInterval);
-      const earlyInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 90) {
-            const next = Math.min(prev + (Math.random() * 6 + 2), 90);
-            if (next < 30) setProgressMessage('Preparing...');
-            else if (next < 50) setProgressMessage('Checking quota...');
-            else if (next < 70) setProgressMessage('Generating structure...');
-            else if (next < 85) setProgressMessage('Creating activities...');
-            else setProgressMessage('Finalizing...');
-            return next;
-          }
-          return prev;
-        });
-      }, 600);
-      setProgressInterval(earlyInterval);
+      startProgressTicker(2, 6, 600);
 
       if (!AI_ENABLED || flags.ai_lesson_generation === false) {
         toast.warn('AI Lesson Generator is disabled.');
@@ -175,6 +177,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       }
 
       setProgress(10);
+      setProgressPhase('quota_check');
       setProgressMessage('Checking quota...');
       setErrorMsg(null);
 
@@ -197,18 +200,46 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       }
 
       setProgress(20);
+      setProgressPhase('request');
       setProgressMessage('Preparing request...');
       track('edudash.ai.lesson.generate_started', {});
 
       const objectiveList = (objectives || '').split(';').map(s => s.trim()).filter(Boolean);
       const normalizedDuration = Number(duration) || 45;
+      const outputContract = [
+        'Return ONLY valid JSON. Do not return markdown, prose, or code fences.',
+        'Schema:',
+        '{',
+        '  "lessonPlan": {',
+        '    "title": "string",',
+        '    "summary": "string",',
+        '    "objectives": ["string"],',
+        '    "materials": ["string"],',
+        '    "steps": [',
+        '      {',
+        '        "title": "string",',
+        '        "minutes": 10,',
+        '        "objective": "string",',
+        '        "instructions": ["string"],',
+        '        "teacherPrompt": "string",',
+        '        "example": "string"',
+        '      }',
+        '    ],',
+        '    "assessment": ["string"],',
+        '    "differentiation": { "support": "string", "extension": "string" },',
+        '    "closure": "string",',
+        '    "durationMinutes": 45',
+        '  }',
+        '}',
+      ].join('\n');
       const lessonPrompt = [
         `Generate a ${normalizedDuration}-minute CAPS-aligned lesson plan.`,
         `Subject: ${subject || 'General Studies'}.`,
         `Topic: ${topic || 'Lesson Topic'}.`,
         `Grade level: ${Number(gradeLevel) || 3}.`,
         `Learning objectives: ${objectiveList.length ? objectiveList.join('; ') : 'Derive clear objectives from the topic.'}.`,
-        'Return a practical classroom-ready structure with: objectives, materials, warm-up, guided activity, independent practice, assessment, differentiation, and closure.',
+        'Include warm-up, guided activity, independent practice, assessment, differentiation, closure, and worked examples.',
+        outputContract,
         planningContext ? `Planning Alignment Context:\\n${planningContext}` : '',
       ]
         .filter(Boolean)
@@ -231,11 +262,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       setProgress(30);
       setProgressMessage('Connecting to AI...');
 
-      if (progressInterval) clearInterval(progressInterval);
-      const interval = setInterval(() => {
-        setProgress(prev => (prev < 90 ? Math.min(prev + (Math.random() * 8 + 4), 90) : prev));
-      }, 500);
-      setProgressInterval(interval);
+      startProgressTicker(4, 8, 500);
 
       if (controller.signal.aborted) throw new Error('Generation cancelled');
 
@@ -245,9 +272,9 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       });
       const { data, error } = await invokeWithTimeout(invokePromise, 30000);
 
-      clearInterval(interval);
-      setProgressInterval(null);
+      clearProgressTicker();
       setProgress(95);
+      setProgressPhase('parse');
       setProgressMessage('Processing results...');
 
       if (error) {
@@ -256,6 +283,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
 
       const lessonText = data?.content || '';
       setProgress(100);
+      setProgressPhase('complete');
       setProgressMessage('Complete!');
 
       // Store the AI-generated content in the 'content' field for proper display
@@ -292,21 +320,20 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       toast.error(`Generation failed: ${message}`);
     } finally {
       setAbortController(null);
-      if (progressInterval) {
-        try { clearInterval(progressInterval); } catch { /* non-fatal */ }
-        setProgressInterval(null);
-      }
+      clearProgressTicker();
       setPending(false);
       setProgress(0);
+      setProgressPhase('idle');
       setProgressMessage('');
     }
-  }, [AI_ENABLED, flags, invokeWithTimeout, progressInterval, refreshUsage]);
+  }, [AI_ENABLED, clearProgressTicker, flags, invokeWithTimeout, refreshUsage, startProgressTicker]);
 
   return {
     generated,
     setGenerated,
     pending,
     progress,
+    progressPhase,
     progressMessage,
     errorMsg,
     lastPayload,

@@ -135,6 +135,7 @@ interface NotificationTemplate {
 interface NotificationRequest {
   event_type: string;
   user_ids?: string[];
+  platform_filter?: Array<'android' | 'ios' | 'web'>;
   role_targets?: string[];
   preschool_id?: string;
   thread_id?: string;
@@ -210,6 +211,7 @@ interface PushDevice {
   user_id: string;
   expo_push_token: string;
   fcm_token?: string | null;
+  platform?: 'android' | 'ios' | 'web';
   language?: string;
   device_metadata?: Record<string, unknown> | null;
 }
@@ -1213,13 +1215,28 @@ function getExpoProjectIdFromMetadata(metadata: unknown): string {
   return normalizeExpoProjectId((metadata as Record<string, unknown>).expo_project_id);
 }
 
+type SupportedPushPlatform = 'android' | 'ios' | 'web';
+
+function normalizePlatformFilter(value: unknown): SupportedPushPlatform[] {
+  if (!Array.isArray(value)) return [];
+  const valid = new Set<SupportedPushPlatform>(['android', 'ios', 'web']);
+  const normalized = value
+    .map((item) => String(item || '').toLowerCase().trim() as SupportedPushPlatform)
+    .filter((item) => valid.has(item));
+  return Array.from(new Set(normalized));
+}
+
 async function getPushTokensForUsers(
   userIds: string[],
-  options?: { expectedExpoProjectId?: string; dedupeByUser?: boolean }
+  options?: {
+    expectedExpoProjectId?: string;
+    dedupeByUser?: boolean;
+    platformFilter?: SupportedPushPlatform[];
+  }
 ): Promise<PushDevice[]> {
   const { data, error } = await supabase
     .from('push_devices')
-    .select('user_id, expo_push_token, fcm_token, language, device_metadata')
+    .select('user_id, expo_push_token, fcm_token, language, device_metadata, platform')
     .in('user_id', userIds)
     .eq('is_active', true)
     .order('updated_at', { ascending: false });
@@ -1231,16 +1248,27 @@ async function getPushTokensForUsers(
 
   const expectedExpoProjectId = normalizeExpoProjectId(options?.expectedExpoProjectId);
   const dedupeByUser = options?.dedupeByUser === true;
+  const platformFilter = normalizePlatformFilter(options?.platformFilter || []);
   const rawCandidates = data || [];
 
   // Keep strict match for explicit project IDs, but allow legacy tokens with missing metadata.
   // This avoids dropping valid devices that were registered before expo_project_id was persisted.
-  const candidates = expectedExpoProjectId
+  const projectCandidates = expectedExpoProjectId
     ? rawCandidates.filter((device: PushDevice) => {
         const deviceProjectId = getExpoProjectIdFromMetadata(device.device_metadata);
         return deviceProjectId === expectedExpoProjectId || deviceProjectId.length === 0;
       })
     : rawCandidates;
+  const candidates = platformFilter.length > 0
+    ? projectCandidates.filter((device: PushDevice) => {
+        const platform = String(device.platform || '').toLowerCase().trim() as SupportedPushPlatform | '';
+        if (!platform) {
+          // Keep legacy rows without platform metadata deliverable.
+          return true;
+        }
+        return platformFilter.includes(platform);
+      })
+    : projectCandidates;
 
   // Deduplicate by token (not user).
   // A user can legitimately have multiple active devices, and all should receive push.
@@ -1256,6 +1284,11 @@ async function getPushTokensForUsers(
   if (expectedExpoProjectId) {
     console.log(
       `[push_tokens] users=${userIds.length} expected_project=${expectedExpoProjectId} raw=${rawCandidates.length} filtered=${candidates.length} unique_tokens=${uniqueTokens.size} dedupe_by_user=${dedupeByUser}`
+    );
+  }
+  if (platformFilter.length > 0) {
+    console.log(
+      `[push_tokens] platform_filter=${platformFilter.join(',')} filtered=${candidates.length} raw=${rawCandidates.length}`
     );
   }
 
@@ -3111,6 +3144,7 @@ async function dispatchNotification(request: Request): Promise<Response> {
       notificationRequest.custom_payload?.expo_project_id ||
       notificationRequest.custom_payload?.expected_expo_project_id
     );
+    const requestPlatformFilter = normalizePlatformFilter(notificationRequest.platform_filter);
 
     // Deduplication: prevent double-send for pop_uploaded (both DB trigger and client may fire)
     if (notificationRequest.event_type === 'pop_uploaded' && notificationRequest.pop_upload_id) {
@@ -3254,6 +3288,7 @@ async function dispatchNotification(request: Request): Promise<Response> {
           dedupeByUser:
             notificationRequest.event_type === 'build_update_available' ||
             notificationRequest.custom_payload?.dedupe_by_user === true,
+          platformFilter: requestPlatformFilter,
         })
       : [];
     console.log(`[dispatch] Event: ${notificationRequest.event_type}, UserIDs: ${filteredUserIds.length}, PushTokens: ${pushTokens.length}`);

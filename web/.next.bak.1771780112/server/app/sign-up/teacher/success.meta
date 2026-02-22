@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/sign-up/layout,_N_T_/sign-up/teacher/layout,_N_T_/sign-up/teacher/success/layout,_N_T_/sign-up/teacher/success/page,_N_T_/sign-up/teacher/success"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/sign-up/teacher/success/__PAGE__",
+    "/sign-up/teacher/success",
+    "/sign-up/teacher",
+    "/sign-up",
+    "/_index",
+    "/_head"
+  ]
+}

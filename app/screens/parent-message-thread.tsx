@@ -49,7 +49,20 @@ try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
 
 export default function ParentMessageThreadScreen() {
-  const params = useLocalSearchParams<{ threadId?: string; title?: string; teacherName?: string; parentName?: string; parentId?: string; recipientId?: string; isGroup?: string; threadType?: string }>();
+  const params = useLocalSearchParams<{
+    threadId?: string;
+    title?: string;
+    teacherName?: string;
+    parentName?: string;
+    parentId?: string;
+    parentid?: string;
+    teacherId?: string;
+    teacherid?: string;
+    recipientId?: string;
+    recipientid?: string;
+    isGroup?: string;
+    threadType?: string;
+  }>();
   const threadId = params.threadId || '';
   const contactName = params.teacherName || params.parentName || params.title || '';
   const isGroup = params.isGroup === '1';
@@ -79,9 +92,30 @@ export default function ParentMessageThreadScreen() {
   });
 
   // Thread options hook
-  const recipientId = h.otherParticipant?.sender_id || params.recipientId || params.parentId;
-  const recipientName = h.otherParticipant?.sender?.first_name || displayName;
-  const recipientRole = h.otherParticipant?.sender?.role || null;
+  const routeRecipientId =
+    params.recipientId ||
+    params.recipientid ||
+    params.parentId ||
+    params.parentid ||
+    params.teacherId ||
+    params.teacherid;
+  const participantRecipient = h.threadParticipants.find(
+    (participant) => participant?.user_id && participant.user_id !== user?.id
+  );
+  const messageSenderName = [
+    h.otherParticipant?.sender?.first_name || '',
+    h.otherParticipant?.sender?.last_name || '',
+  ].join(' ').trim();
+  const participantName = [
+    participantRecipient?.user_profile?.first_name || '',
+    participantRecipient?.user_profile?.last_name || '',
+  ].join(' ').trim();
+  const recipientId = routeRecipientId || participantRecipient?.user_id || h.otherParticipant?.sender_id || '';
+  const recipientName = messageSenderName || participantName || displayName;
+  const recipientRole =
+    h.otherParticipant?.sender?.role ||
+    participantRecipient?.user_profile?.role ||
+    null;
   // Call context
   const callContext = useCallSafe();
 
@@ -186,15 +220,17 @@ export default function ParentMessageThreadScreen() {
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) { toast.warn('Voice calling is not available.', 'Voice Call'); return; }
+    if (isGroup) { toast.info('Voice calling is currently available for one-to-one chats only.', 'Voice Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Voice Call'); return; }
     callContext.startVoiceCall(recipientId, recipientName, { threadId });
-  }, [callContext, recipientId, recipientName, threadId]);
+  }, [callContext, isGroup, recipientId, recipientName, threadId]);
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) { toast.warn('Video calling is not available.', 'Video Call'); return; }
+    if (isGroup) { toast.info('Video calling is currently available for one-to-one chats only.', 'Video Call'); return; }
     if (!recipientId) { toast.warn('Cannot identify recipient.', 'Video Call'); return; }
     callContext.startVideoCall(recipientId, recipientName, { threadId });
-  }, [callContext, recipientId, recipientName, threadId]);
+  }, [callContext, isGroup, recipientId, recipientName, threadId]);
 
   const handleCallEventPress = useCallback((event: CallEventContent) => {
     if (!callContext) {

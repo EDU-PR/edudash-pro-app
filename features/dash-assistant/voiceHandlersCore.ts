@@ -7,6 +7,7 @@ import type { DashMessage } from '@/services/dash-ai/types';
 import type { VoiceProvider, VoiceSession } from '@/lib/voice/unifiedProvider';
 import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
+import type { VoiceProbeMetrics } from '@/lib/voice/benchmark/types';
 import { track } from '@/lib/analytics';
 import { buildVoicePlaybackText, cleanForTTS, splitForTTS, TTS_CHUNK_MAX_LEN } from '@/lib/dash-voice-utils';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
@@ -563,7 +564,10 @@ export async function handleDashVoiceInputPress(params: {
   voiceWhisperFlowEnabled?: boolean;
   voiceWhisperFlowSummaryEnabled?: boolean;
   isPreschoolMode?: boolean;
-  onFinalTranscript?: (text: string, options: { autoSend: boolean; delayMs: number }) => void | Promise<void>;
+  onFinalTranscript?: (
+    text: string,
+    options: { autoSend: boolean; delayMs: number; probe?: VoiceProbeMetrics },
+  ) => void | Promise<void>;
   onVoiceActivity?: (active: boolean) => void;
   voiceRefs: VoiceRefs;
 }) {
@@ -626,6 +630,11 @@ export async function handleDashVoiceInputPress(params: {
 
   try {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const dictationProbe: VoiceProbeMetrics = {
+      platform: 'mobile',
+      source: 'dash_assistant',
+    };
+    const nowIso = () => new Date().toISOString();
 
     if (Platform.OS === 'android') {
       try {
@@ -788,7 +797,15 @@ export async function handleDashVoiceInputPress(params: {
           transcript_length: bufferedTranscript.length,
           user_tier: tier || 'free',
         });
-        onFinalTranscript?.(bufferedTranscript, { autoSend: !!voiceAutoSend, delayMs: finalizeDelayMs });
+        if (!dictationProbe.final_transcript_at) {
+          dictationProbe.final_transcript_at = nowIso();
+        }
+        dictationProbe.commit_at = nowIso();
+        onFinalTranscript?.(bufferedTranscript, {
+          autoSend: !!voiceAutoSend,
+          delayMs: finalizeDelayMs,
+          probe: { ...dictationProbe },
+        });
       }
 
       if (voiceRefs.sttTranscriptBufferRef) {
@@ -817,6 +834,9 @@ export async function handleDashVoiceInputPress(params: {
         if (!partial) {
           return;
         }
+        if (!dictationProbe.first_partial_at) {
+          dictationProbe.first_partial_at = nowIso();
+        }
         pulseVoiceActivity();
         const buffered = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
         const merged = mergeTranscriptFragments(buffered, partial);
@@ -840,6 +860,9 @@ export async function handleDashVoiceInputPress(params: {
         if (!chunk) {
           scheduleFinalize('partial');
           return;
+        }
+        if (!dictationProbe.final_transcript_at) {
+          dictationProbe.final_transcript_at = nowIso();
         }
         pulseVoiceActivity();
         const buffered = String(voiceRefs.sttTranscriptBufferRef?.current || '').trim();
@@ -896,6 +919,7 @@ export async function handleDashVoiceInputPress(params: {
         voiceRefs.sttTranscriptBufferRef.current = transcriptSeed;
       }
       voiceRefs.voiceInputStartAtRef.current = Date.now();
+      dictationProbe.stt_start_at = nowIso();
 
       track('edudash.voice.input_started', {
         user_tier: tier || 'free',

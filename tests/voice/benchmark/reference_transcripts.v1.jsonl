@@ -1,0 +1,120 @@
+{"sample_id":"en_001","language":"en","category":"short","reference_text":"Open the homework dashboard."}
+{"sample_id":"en_002","language":"en","category":"short","reference_text":"Show me today's assignments."}
+{"sample_id":"en_003","language":"en","category":"short","reference_text":"Send a reminder to parents."}
+{"sample_id":"en_004","language":"en","category":"short","reference_text":"Start a quick attendance check."}
+{"sample_id":"en_005","language":"en","category":"short","reference_text":"Read the latest class message."}
+{"sample_id":"en_006","language":"en","category":"short","reference_text":"Open Grade 6 mathematics."}
+{"sample_id":"en_007","language":"en","category":"short","reference_text":"Create a short spelling quiz."}
+{"sample_id":"en_008","language":"en","category":"short","reference_text":"Share this note with staff."}
+{"sample_id":"en_009","language":"en","category":"short","reference_text":"Mark this task as complete."}
+{"sample_id":"en_010","language":"en","category":"short","reference_text":"Save this response for later."}
+{"sample_id":"en_011","language":"en","category":"medium","reference_text":"Please summarize this learner progress report in two sentences."}
+{"sample_id":"en_012","language":"en","category":"medium","reference_text":"Draft a polite message to parents about tomorrow's test schedule."}
+{"sample_id":"en_013","language":"en","category":"medium","reference_text":"Generate three revision questions for natural sciences grade seven."}
+{"sample_id":"en_014","language":"en","category":"medium","reference_text":"Help me rewrite this instruction so younger learners can follow it."}
+{"sample_id":"en_015","language":"en","category":"medium","reference_text":"List the main errors in this paragraph and suggest corrections."}
+{"sample_id":"en_016","language":"en","category":"medium","reference_text":"Give me a short lesson opener for fractions and mixed numbers."}
+{"sample_id":"en_017","language":"en","category":"medium","reference_text":"Create a five minute warm up activity for reading comprehension."}
+{"sample_id":"en_018","language":"en","category":"medium","reference_text":"Suggest a parent meeting agenda focused on attendance and homework."}
+{"sample_id":"en_019","language":"en","category":"medium","reference_text":"Turn this bullet list into a clear classroom announcement."}
+{"sample_id":"en_020","language":"en","category":"medium","reference_text":"Explain the difference between area and perimeter with examples."}
+{"sample_id":"en_021","language":"en","category":"long","reference_text":"I need a complete but concise classroom plan for tomorrow that includes a five minute starter, a guided teaching segment, independent practice, and a short exit ticket for grade five mathematics."}
+{"sample_id":"en_022","language":"en","category":"long","reference_text":"Please analyze this assignment brief and rewrite it in plain language while keeping the original expectations, marking criteria, and submission deadline completely clear for parents and learners."}
+{"sample_id":"en_023","language":"en","category":"long","reference_text":"Create a structured intervention message for a learner who missed multiple homework tasks, including encouragement, specific next steps, and a request for parent confirmation by the end of the week."}
+{"sample_id":"en_024","language":"en","category":"long","reference_text":"Prepare a professional update I can share with staff explaining the latest assessment timeline changes, the moderation checkpoints, and the responsibilities expected from each grade level team."}
+{"sample_id":"en_025","language":"en","category":"long","reference_text":"Help me draft a short principal report that summarizes attendance trends, highlights at risk classes, and recommends two practical actions we can implement immediately next month."}
+{"sample_id":"en_026","language":"en","category":"long","reference_text":"Write a supportive feedback response for a parent who is worried about reading progress, and include one home activity, one classroom strategy, and one follow up check in date."}
+{"sample_id":"en_027","language":"en","category":"long","reference_text":"Generate a focused revision plan for grade eight science over the next seven days with daily goals, brief practice tasks, and a final confidence check before the assessment."}
+{"sample_id":"en_028","language":"en","category":"long","reference_text":"Convert these rough meeting notes into a clean communication update with clear headings, action owners, and realistic due dates so the team can execute without confusion."}
+{"sample_id":"en_029","language":"en","category":"long","reference_text":"I want a student friendly explanation of how to structure an argumentative paragraph with topic sentence, evidence, and conclusion using examples connected to school life."}
+{"sample_id":"en_030","language":"en","category":"long","reference_text":"Please produce a one page communication that outlines our homework policy, late submission process, and support channels for families who need help this term."}
+{"sample_id":"en_031","language":"en","category":"command","reference_text":"Open messages and start a new chat with the grade seven team."}
+{"sample_id":"en_032","language":"en","category":"command","reference_text":"Find the learner named Ava Mokoena and show current attendance."}
+{"sample_id":"en_033","language":"en","category":"command","reference_text":"Schedule a reminder for Friday at 2 PM for report moderation."}
+{"sample_id":"en_034","language":"en","category":"command","reference_text":"Switch to tutor mode and ask one diagnostic math question."}
+{"sample_id":"en_035","language":"en","category":"command","reference_text":"Export this response as a PDF and save it to my dashboard."}
+{"sample_id":"en_036","language":"en","category":"command","reference_text":"Search CAPS curriculum for grade six electricity outcomes."}
+{"sample_id":"en_037","language":"en","category":"command","reference_text":"Create a quick call room for staff planning now."}
+{"sample_id":"en_038","language":"en","category":"command","reference_text":"Open principal analytics and focus on attendance trend lines."}
+{"sample_id":"en_039","language":"en","category":"command","reference_text":"Start voice dictation and append to the current draft message."}
+{"sample_id":"en_040","language":"en","category":"names_acronyms","reference_text":"Send this update to Ms. Ndlovu at Young Eagles K-12."}
+{"sample_id":"en_041","language":"en","category":"names_acronyms","reference_text":"Share the CAPS memo with Grade 4 and Grade 5 teachers."}
+{"sample_id":"en_042","language":"en","category":"names_acronyms","reference_text":"Add PTA meeting notes to the PDF folder."}
+{"sample_id":"en_043","language":"en","category":"names_acronyms","reference_text":"Confirm whether STEM club starts at 15:30 tomorrow."}
+{"sample_id":"en_044","language":"en","category":"names_acronyms","reference_text":"Message Mr. Jacobs about the SASAMS import issue."}
+{"sample_id":"en_045","language":"en","category":"names_acronyms","reference_text":"Create a report for IQMS review and SGB follow up."}
+{"sample_id":"en_046","language":"en","category":"names_acronyms","reference_text":"Tag the note for HR, IT, and ICT support teams."}
+{"sample_id":"en_047","language":"en","category":"names_acronyms","reference_text":"Record that learner ID AB-2047 submitted task two."}
+{"sample_id":"en_048","language":"en","category":"names_acronyms","reference_text":"Reference room B12 and lab C3 in the safety notice."}
+{"sample_id":"af_001","language":"af","category":"short","reference_text":"Maak die huiswerkblad oop."}
+{"sample_id":"af_002","language":"af","category":"short","reference_text":"Wys vandag se take vir graad ses."}
+{"sample_id":"af_003","language":"af","category":"short","reference_text":"Stuur ’n boodskap aan ouers."}
+{"sample_id":"af_004","language":"af","category":"short","reference_text":"Begin ’n vinnige bywoningstoets."}
+{"sample_id":"af_005","language":"af","category":"short","reference_text":"Stoor hierdie antwoord asseblief."}
+{"sample_id":"af_006","language":"af","category":"medium","reference_text":"Som asseblief hierdie vorderingsverslag in twee sinne op."}
+{"sample_id":"af_007","language":"af","category":"medium","reference_text":"Skryf ’n vriendelike boodskap oor die toetsrooster vir môre."}
+{"sample_id":"af_008","language":"af","category":"medium","reference_text":"Gee drie hersieningsvrae vir natuurwetenskap graad sewe."}
+{"sample_id":"af_009","language":"af","category":"medium","reference_text":"Verduidelik die verskil tussen oppervlakte en omtrek eenvoudig."}
+{"sample_id":"af_010","language":"af","category":"medium","reference_text":"Maak hierdie aankondiging duidelik vir jong leerders."}
+{"sample_id":"af_011","language":"af","category":"long","reference_text":"Ek benodig ’n volledige maar kort klasplan vir môre met ’n inleiding, begeleide onderrig, onafhanklike oefening en ’n vinnige afsluitingsvraag vir graad vyf wiskunde."}
+{"sample_id":"af_012","language":"af","category":"long","reference_text":"Herskryf hierdie opdrag in eenvoudige taal maar behou die vereistes, assesseringskriteria en die sperdatum sodat ouers en leerders dit maklik kan verstaan."}
+{"sample_id":"af_013","language":"af","category":"long","reference_text":"Stel ’n professionele personeelopdatering op oor die nuwe assesseringstydlyn, moderasiekontrolepunte en elke span se verantwoordelikhede vir hierdie kwartaal."}
+{"sample_id":"af_014","language":"af","category":"long","reference_text":"Skryf ’n ondersteunende terugvoerboodskap vir ’n ouer wat bekommerd is oor leesvordering met een tuisaktiwiteit en ’n opvolgdatum."}
+{"sample_id":"af_015","language":"af","category":"long","reference_text":"Skep ’n sewe dae hersieningsplan vir graad agt wetenskap met daaglikse doelwitte, kort oefeninge en ’n finale gereedheidstoets."}
+{"sample_id":"af_016","language":"af","category":"command","reference_text":"Open boodskappe en begin ’n nuwe gesprek met die graad sewe span."}
+{"sample_id":"af_017","language":"af","category":"command","reference_text":"Soek die leerder met die naam Lwazi Maseko en wys bywoning."}
+{"sample_id":"af_018","language":"af","category":"command","reference_text":"Skeduleer ’n herinnering vir Vrydag om 14:00 vir moderasie."}
+{"sample_id":"af_019","language":"af","category":"command","reference_text":"Skakel na tutor-modus en vra een diagnostiese vraag."}
+{"sample_id":"af_020","language":"af","category":"command","reference_text":"Voer hierdie antwoord uit as ’n PDF en stoor dit."}
+{"sample_id":"af_021","language":"af","category":"names_acronyms","reference_text":"Stuur die CAPS-memo aan graad vier en vyf onderwysers."}
+{"sample_id":"af_022","language":"af","category":"names_acronyms","reference_text":"Bevestig die STEM-klub tyd vir môre om 15:30."}
+{"sample_id":"af_023","language":"af","category":"names_acronyms","reference_text":"Merk hierdie nota vir HR en ICT ondersteuning."}
+{"sample_id":"af_024","language":"af","category":"names_acronyms","reference_text":"Verwys na lokaal B12 en laboratorium C3 in die kennisgewing."}
+{"sample_id":"zu_001","language":"zu","category":"short","reference_text":"Vula ikhasi lomsebenzi wasekhaya."}
+{"sample_id":"zu_002","language":"zu","category":"short","reference_text":"Bonisa imisebenzi yanamuhla yebanga lesithupha."}
+{"sample_id":"zu_003","language":"zu","category":"short","reference_text":"Thumela umlayezo kubazali."}
+{"sample_id":"zu_004","language":"zu","category":"short","reference_text":"Qala ukuhlola ukubakhona okusheshayo."}
+{"sample_id":"zu_005","language":"zu","category":"short","reference_text":"Gcina le mpendulo manje."}
+{"sample_id":"zu_006","language":"zu","category":"medium","reference_text":"Ngicela ufingqe lo mbiko wenqubekela phambili ngemiusho emibili."}
+{"sample_id":"zu_007","language":"zu","category":"medium","reference_text":"Bhala umlayezo onobungane kubazali mayelana nohlelo lovivinyo lwakusasa."}
+{"sample_id":"zu_008","language":"zu","category":"medium","reference_text":"Nika imibuzo emithathu yokubuyekeza yesayensi yebanga lesikhombisa."}
+{"sample_id":"zu_009","language":"zu","category":"medium","reference_text":"Chaza umehluko phakathi kwendawo nomjikelezo ngendlela elula."}
+{"sample_id":"zu_010","language":"zu","category":"medium","reference_text":"Lungisa lesi saziso ukuze abafundi abancane basiqonde."}
+{"sample_id":"zu_011","language":"zu","category":"long","reference_text":"Ngidinga uhlelo lwekilasi oluphelele kodwa olufushane lwakusasa olunezethulo ezimfushane, ukufundisa okuqondisiwe, ukuzilolonga ngokuzimela kanye nombuzo wokuphetha webanga lesihlanu lezibalo."}
+{"sample_id":"zu_012","language":"zu","category":"long","reference_text":"Sicela ubhale kabusha lo myalelo ngolimi olulula kodwa ugcine okulindelekile, izindlela zokumaka, nosuku lokugcina ukuze abazali nabafundi baqonde kahle."}
+{"sample_id":"zu_013","language":"zu","category":"long","reference_text":"Lungiselela isibuyekezo sabasebenzi esichaza izinguquko zeshejuli yokuhlola, amaphuzu okuhlola ekumoderetheni, nemisebenzi yeqembu ngalinye kule kota."}
+{"sample_id":"zu_014","language":"zu","category":"long","reference_text":"Bhala impendulo esekelayo kumzali okhathazekile ngenqubekela phambili yokufunda bese ufaka umsebenzi wasekhaya owodwa nosuku lokulandela."}
+{"sample_id":"zu_015","language":"zu","category":"long","reference_text":"Dala uhlelo lokubuyekeza lwezinsuku eziyisikhombisa lwesayensi yebanga lesishiyagalombili olunemigomo yansuku zonke nemisebenzi emifushane."}
+{"sample_id":"zu_016","language":"zu","category":"command","reference_text":"Vula imiyalezo bese uqala ingxoxo entsha neqembu lebanga lesikhombisa."}
+{"sample_id":"zu_017","language":"zu","category":"command","reference_text":"Thola umfundi ogama lakhe lingu-Anele Dlamini bese ubonisa ukubakhona."}
+{"sample_id":"zu_018","language":"zu","category":"command","reference_text":"Hlela isikhumbuzi sangoLwesihlanu ngo-14:00 sokumoderetha."}
+{"sample_id":"zu_019","language":"zu","category":"command","reference_text":"Shintshela kumodi yomfundisi ubuze umbuzo owodwa wokuhlola."}
+{"sample_id":"zu_020","language":"zu","category":"command","reference_text":"Khipha le mpendulo njenge-PDF bese uyayigcina."}
+{"sample_id":"zu_021","language":"zu","category":"names_acronyms","reference_text":"Thumela i-CAPS memo kothisha bebanga lesine nelesihlanu."}
+{"sample_id":"zu_022","language":"zu","category":"names_acronyms","reference_text":"Qinisekisa isikhathi se-STEM club sakusasa ngo-15:30."}
+{"sample_id":"zu_023","language":"zu","category":"names_acronyms","reference_text":"Maka leli nothi le-HR ne-ICT support."}
+{"sample_id":"zu_024","language":"zu","category":"names_acronyms","reference_text":"Beka amareferensi egumbi B12 nelabhorethri C3 esazisweni."}
+{"sample_id":"xh_001","language":"xh","category":"short","reference_text":"Vula iphepha lomsebenzi wasekhaya."}
+{"sample_id":"xh_002","language":"xh","category":"short","reference_text":"Bonisa imisebenzi yanamhlanje yeBanga 6."}
+{"sample_id":"xh_003","language":"xh","category":"short","reference_text":"Thumela umyalezo kubazali."}
+{"sample_id":"xh_004","language":"xh","category":"short","reference_text":"Qalisa ukuhlola ukubakhona ngokukhawuleza."}
+{"sample_id":"xh_005","language":"xh","category":"short","reference_text":"Gcina le mpendulo ngoku."}
+{"sample_id":"xh_006","language":"xh","category":"medium","reference_text":"Nceda ushwankathele le ngxelo yenkqubela ngemigca emibini."}
+{"sample_id":"xh_007","language":"xh","category":"medium","reference_text":"Bhala umyalezo onobubele kubazali malunga neshedyuli yovavanyo lwangomso."}
+{"sample_id":"xh_008","language":"xh","category":"medium","reference_text":"Nika imibuzo emithathu yokuphinda yesayensi yeBanga 7."}
+{"sample_id":"xh_009","language":"xh","category":"medium","reference_text":"Chaza umahluko phakathi kommandla nomjikelezo ngendlela elula."}
+{"sample_id":"xh_010","language":"xh","category":"medium","reference_text":"Lungisa esi saziso ukuze abafundi abancinci basiqonde."}
+{"sample_id":"xh_011","language":"xh","category":"long","reference_text":"Ndifuna isicwangciso sekilasi esicacileyo kodwa esifutshane sangomso esiquka isingeniso semizuzu emihlanu, ukufundisa okukhokelwayo, umsebenzi ozimeleyo, kunye nombuzo wokuphela weBanga 5 lezibalo."}
+{"sample_id":"xh_012","language":"xh","category":"long","reference_text":"Nceda ubhale kwakhona lo myalelo ngolwimi olulula kodwa ugcine okulindelweyo, indlela yokumakisha, kunye nomhla wokugqibela ukuze abazali nabafundi baqonde kakuhle."}
+{"sample_id":"xh_013","language":"xh","category":"long","reference_text":"Lungiselela uhlaziyo lwabasebenzi oluchaza utshintsho kwishedyuli yovavanyo, amanqanaba omodereshini, kunye noxanduva lweqela ngalinye kule kota."}
+{"sample_id":"xh_014","language":"xh","category":"long","reference_text":"Bhala impendulo exhasayo kumzali oxhalabileyo ngenkqubela yokufunda uze ungeze umsebenzi wasekhaya omnye nomhla wokulandelela."}
+{"sample_id":"xh_015","language":"xh","category":"long","reference_text":"Yenza isicwangciso seentsuku ezisixhenxe sokuphinda isayensi yeBanga 8 esineenjongo zemihla ngemihla nemisebenzi emifutshane."}
+{"sample_id":"xh_016","language":"xh","category":"command","reference_text":"Vula imiyalezo uqalise incoko entsha neqela leBanga 7."}
+{"sample_id":"xh_017","language":"xh","category":"command","reference_text":"Fumana umfundi ogama linguLitha Mbeki ubonise ukubakhona."}
+{"sample_id":"xh_018","language":"xh","category":"command","reference_text":"Cwangcisa isikhumbuzi sangoLwesihlanu ngo-14:00 semodereshini."}
+{"sample_id":"xh_019","language":"xh","category":"command","reference_text":"Tshintshela kwi-tutor mode ubuze umbuzo omnye wokuhlola."}
+{"sample_id":"xh_020","language":"xh","category":"command","reference_text":"Khupha le mpendulo njenge-PDF uze uyigcine."}
+{"sample_id":"xh_021","language":"xh","category":"names_acronyms","reference_text":"Thumela i-CAPS memo kootitshala beBanga 4 neBanga 5."}
+{"sample_id":"xh_022","language":"xh","category":"names_acronyms","reference_text":"Qinisekisa ixesha le-STEM club langomso ngo-15:30."}
+{"sample_id":"xh_023","language":"xh","category":"names_acronyms","reference_text":"Maka le nqaku le-HR ne-ICT support."}
+{"sample_id":"xh_024","language":"xh","category":"names_acronyms","reference_text":"Bhekisa kwigumbi B12 nelab C3 kwisaziso sokhuseleko."}

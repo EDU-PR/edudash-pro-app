@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/principal/layout,_N_T_/dashboard/principal/teachers/layout,_N_T_/dashboard/principal/teachers/invite/layout,_N_T_/dashboard/principal/teachers/invite/page,_N_T_/dashboard/principal/teachers/invite"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/principal/teachers/invite/__PAGE__",
+    "/dashboard/principal/teachers/invite",
+    "/dashboard/principal/teachers",
+    "/dashboard/principal",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

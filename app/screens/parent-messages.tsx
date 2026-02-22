@@ -128,6 +128,7 @@ export default function ParentMessagesScreen() {
         threadId: thread.id,
         title: isGroupThread ? groupName : participantName,
         teacherId: otherParticipant?.user_id || '',
+        recipientId: otherParticipant?.user_id || '',
         teacherName: participantName,
         isGroup: isGroupThread ? '1' : '0',
         threadType: String((thread as any).group_type || thread.type || ''),

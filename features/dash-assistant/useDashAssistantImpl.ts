@@ -15,10 +15,12 @@ import * as Haptics from 'expo-haptics';
 
 import type { DashMessage, DashConversation, DashAttachment } from '@/services/dash-ai/types';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
+import type { DashRouteIntent } from '@/features/dash-assistant/types';
 import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { track } from '@/lib/analytics';
+import { DASH_TELEMETRY_EVENTS, trackDashTelemetry } from '@/lib/telemetry/events';
 import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTelemetry';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
@@ -76,6 +78,7 @@ import {
   sanitizeTutorUserContent,
   wantsLessonGenerator,
 } from '@/hooks/dash-assistant/assistantHelpers';
+import { resolveDashRouteIntent } from '@/features/dash-assistant/types';
 import type { TutorMode, TutorPayload, TutorSession } from '@/hooks/dash-assistant/tutorTypes';
 import {
   mergeAutoToolExecutionIntoResponse,
@@ -123,12 +126,14 @@ import {
   trackVoiceUsage,
 } from '@/lib/dash-ai/voiceBudget';
 import { buildTranscriptModelPrompt } from '@/lib/voice/formatTranscript';
+import type { VoiceProbeMetrics } from '@/lib/voice/benchmark/types';
 import { consumeAutoScanBudget } from '@/lib/dash-ai/imageBudget';
 import {
   countScannerAttachments,
   isSuccessfulOCRResponse,
 } from '@/lib/dash-ai/retakeFlow';
 import { useDashChatModelPreference } from '@/hooks/useDashChatModelPreference';
+import type { DashToolOutcome } from '@/services/tools/types';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -166,6 +171,7 @@ interface UseDashAssistantReturn {
   inputText: string;
   setInputText: (text: string) => void;
   isLoading: boolean;
+  hasActiveToolExecution: boolean;
   loadingStatus: 'uploading' | 'analyzing' | 'thinking' | 'responding' | null;
   streamingMessageId: string | null;
   streamingContent: string;
@@ -250,6 +256,15 @@ const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
 
 const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
+const GENERIC_ACK_PATTERN = /^(ok(?:ay)?|sure|got it|let me|working on|one moment|please wait)\b/i;
+
+type ResponseLifecycleState = 'idle' | 'draft_streaming' | 'committed' | 'finalized';
+
+interface ResponseLifecycleTracker {
+  requestId: string | null;
+  state: ResponseLifecycleState;
+  committedText: string | null;
+}
 
 const buildTutorKickoffPrompt = (
   mode: NonNullable<UseDashAssistantOptions['externalTutorMode']>,
@@ -411,7 +426,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const voiceAutoSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceAutoSendDeadlineRef = useRef<number | null>(null);
   const voiceAutoSendExpectedTranscriptRef = useRef('');
+  const voiceDictationProbeRef = useRef<VoiceProbeMetrics | null>(null);
   const nextVoiceTurnRef = useRef(false);
+  const activeRequestIdRef = useRef<string | null>(null);
+  const activeToolExecutionCountRef = useRef<number>(0);
+  const responseLifecycleRef = useRef<ResponseLifecycleTracker>({
+    requestId: null,
+    state: 'idle',
+    committedText: null,
+  });
+  const [hasActiveToolExecution, setHasActiveToolExecution] = useState(false);
 
   const { tutorSessionRef } = useDashTutorSessionPersistence({
     userId: user?.id,
@@ -473,6 +497,32 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     isNearBottomRef.current = isNearBottom;
   }, [isNearBottom]);
+
+  const beginToolExecution = useCallback(() => {
+    activeToolExecutionCountRef.current += 1;
+    if (activeToolExecutionCountRef.current === 1) {
+      setHasActiveToolExecution(true);
+    }
+  }, []);
+
+  const endToolExecution = useCallback(() => {
+    activeToolExecutionCountRef.current = Math.max(0, activeToolExecutionCountRef.current - 1);
+    if (activeToolExecutionCountRef.current === 0) {
+      setHasActiveToolExecution(false);
+    }
+  }, []);
+
+  const setResponseLifecycleState = useCallback(
+    (requestId: string, state: ResponseLifecycleState, committedText?: string | null) => {
+      if (activeRequestIdRef.current !== requestId) return;
+      responseLifecycleRef.current = {
+        requestId,
+        state,
+        committedText: committedText ?? responseLifecycleRef.current.committedText,
+      };
+    },
+    []
+  );
 
   // Save conversation ID whenever it changes for persistence
   useEffect(() => {
@@ -1057,6 +1107,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
     if (!dashInstance) return;
+    const requestId = `dash_req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    activeRequestIdRef.current = requestId;
+    responseLifecycleRef.current = {
+      requestId,
+      state: 'idle',
+      committedText: null,
+    };
+    const isCurrentRequest = () => activeRequestIdRef.current === requestId;
     const isVoiceTurn = nextVoiceTurnRef.current;
     nextVoiceTurnRef.current = false;
     const scannerAttachmentCount = countScannerAttachments(attachments);
@@ -1065,22 +1123,45 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const normalizedRole = String(profile?.role || '').toLowerCase();
     const isTeacherDashboardTutorEntry = handoffSource === 'teacher_dashboard';
     const isK12ParentDashEntry = handoffSource === 'k12_parent_tab';
-    const shouldForceTutorInteractive = isTeacherDashboardTutorEntry || !!externalTutorMode;
+    const intentRouterEnabled = getFeatureFlagsSync().dash_intent_router_v1 !== false;
+    const routeDecision = intentRouterEnabled
+      ? resolveDashRouteIntent({
+          text,
+          handoffSource,
+          externalTutorMode,
+        })
+      : { intent: 'tutor' as DashRouteIntent, reason: 'default_tutor' as const };
+    const routeIntent: DashRouteIntent = routeDecision.intent;
+    const plannerIntentActive = routeIntent !== 'tutor';
+    const shouldForceTutorInteractive =
+      routeIntent === 'tutor' && (isTeacherDashboardTutorEntry || !!externalTutorMode);
     const disableImplicitTutorInAdvisor = isK12ParentDashEntry && !shouldForceTutorInteractive;
     const tutorEntrySource: 'teacher_dashboard' | 'default' = isTeacherDashboardTutorEntry
       ? 'teacher_dashboard'
       : 'default';
-    const initialResponseMode = classifyResponseMode({
-      text,
-      hasAttachments: attachments.length > 0,
-      hasActiveTutorSession: disableImplicitTutorInAdvisor ? false : !!tutorSessionRef.current?.awaitingAnswer,
-      explicitTutorMode: shouldForceTutorInteractive,
-    });
+    const initialResponseMode = plannerIntentActive
+      ? 'direct_writing'
+      : classifyResponseMode({
+          text,
+          hasAttachments: attachments.length > 0,
+          hasActiveTutorSession: disableImplicitTutorInAdvisor
+            ? false
+            : !!tutorSessionRef.current?.awaitingAnswer,
+          explicitTutorMode: shouldForceTutorInteractive,
+        });
     const turnModeHint = initialResponseMode === 'tutor_interactive'
       ? 'tutor'
       : ['teacher', 'principal', 'principal_admin', 'admin', 'super_admin'].includes(normalizedRole)
         ? 'advisor'
         : 'assistant';
+    trackDashTelemetry(DASH_TELEMETRY_EVENTS.INTENT_ROUTE_SELECTED, {
+      route_intent: routeIntent,
+      route_reason: routeDecision.reason,
+      router_enabled: intentRouterEnabled,
+      handoff_source: handoffSource || null,
+      role: normalizedRole || null,
+      turn_id: turnId,
+    });
     const baseTurnTelemetry = buildDashTurnTelemetry({
       conversationId: resolveActiveConversationId(),
       turnId,
@@ -1112,9 +1193,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       let conversationIdForUpload = resolveActiveConversationId();
       if (!conversationIdForUpload) {
         const createdId = await dashInstance.startNewConversation('Chat with Dash');
+        if (!isCurrentRequest()) return;
         dashInstance.setCurrentConversationId?.(createdId);
         conversationIdForUpload = createdId;
         const createdConversation = await dashInstance.getConversation(createdId);
+        if (!isCurrentRequest()) return;
         if (createdConversation) {
           setConversation(createdConversation);
           persistConversationSnapshot(createdConversation).catch(() => {});
@@ -1123,6 +1206,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
       // Upload attachments using dashAttachments hook
       const uploadedAttachments = await dashAttachments.uploadAttachments(attachments, conversationIdForUpload);
+      if (!isCurrentRequest()) return;
       if (attachments.length > 0 && uploadedAttachments.length === 0) {
         throw new Error('All selected attachments failed to upload. Please retry; Dash can auto-compress JPG/PNG images.');
       }
@@ -1172,22 +1256,47 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         celebrationHint = '\n\n[HINT: The learner just showed understanding or made progress. Celebrate this! Use encouraging phrases like "Great job!", "You got it!", "Nice work!"]';
       }
 
+      const intentContextOverride =
+        routeIntent === 'lesson_generation'
+          ? [
+              'ROUTE INTENT: lesson_generation',
+              'Return a complete, classroom-ready lesson plan with objectives, materials, timed steps, worked examples, formative checks, and closure.',
+              'If grade/subject is missing, ask one concise clarifier and continue with a safe default.',
+            ].join('\n')
+          : routeIntent === 'weekly_theme_plan'
+            ? [
+                'ROUTE INTENT: weekly_theme_plan',
+                'Return a Monday-Friday themed plan with daily focus, objectives, activities, and assessment checkpoints.',
+                'Use clear headings and teacher-ready structure.',
+              ].join('\n')
+            : routeIntent === 'daily_routine_plan'
+              ? [
+                  'ROUTE INTENT: daily_routine_plan',
+                  'Return a practical daily program with time blocks, transitions, activity purpose, and required materials.',
+                  'Keep output structured and directly executable by school staff.',
+                ].join('\n')
+              : null;
+
       const activeSession = tutorSessionRef.current;
       const roleForTutor = String(profile?.role || '').toLowerCase();
       const isLearnerRole = ['parent', 'student', 'learner'].includes(roleForTutor);
-      const canRunTutorPipeline = (isLearnerRole || shouldForceTutorInteractive) && !disableImplicitTutorInAdvisor;
+      const canRunTutorPipeline =
+        routeIntent === 'tutor' &&
+        (isLearnerRole || shouldForceTutorInteractive) &&
+        !disableImplicitTutorInAdvisor;
       const phonicsRequested = isLearnerRole && detectPhonicsTutorRequest(userText);
       const hasLearningAttachment = attachments.some(
         (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
       );
-      const responseMode = classifyResponseMode({
+      const rawResponseMode = classifyResponseMode({
         text: userText,
         hasAttachments: hasLearningAttachment,
         hasActiveTutorSession: disableImplicitTutorInAdvisor ? false : !!activeSession?.awaitingAnswer,
         explicitTutorMode: shouldForceTutorInteractive,
       });
+      const responseMode = routeIntent === 'tutor' ? rawResponseMode : 'direct_writing';
       const stopTutor = isTutorStopIntent(userText);
-      const leaveTutorMode = activeSession && responseMode !== 'tutor_interactive';
+      const leaveTutorMode = activeSession && (routeIntent !== 'tutor' || responseMode !== 'tutor_interactive');
       if ((stopTutor || disableImplicitTutorInAdvisor) && activeSession) {
         setTutorSession(null);
       }
@@ -1257,11 +1366,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           tutorEntrySource: tutorEntrySource,
         });
       }
-      const mergedContextBase = [baseContextOverride, tutorContextOverride, attachmentContextOverride, languageDirective, celebrationHint]
+      const mergedContextBase = [
+        baseContextOverride,
+        tutorContextOverride,
+        attachmentContextOverride,
+        intentContextOverride,
+        languageDirective,
+        celebrationHint,
+      ]
         .filter(Boolean)
         .join('\n\n') || null;
 
       const aiAttachments = await prepareAttachmentsForAI(uploadedAttachments);
+      if (!isCurrentRequest()) return;
       const localUserMessage: DashMessage = {
         id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'user',
@@ -1274,12 +1391,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       };
       setMessages(prev => [...prev, localUserMessage]);
 
-      // Auto tool execution for low-risk tools (CAPS/data/navigation/PDF)
+      // Auto tool execution for low-risk tools (CAPS/data/navigation/PDF).
+      // Skip this in tutor-interactive flow to avoid tool-noise overwriting
+      // pedagogical responses and to reduce hard-fallback churn.
       let autoToolContext: string | null = null;
       let autoToolExecution: AutoToolExecution | null = null;
+      let autoToolOutcome: DashToolOutcome | null = null;
       let plannerIntent: 'tool' | 'plan_mode' | 'none' = 'none';
       let plannerIntentConfidence: number | null = null;
-      if (shouldAttemptToolPlan(outgoingText)) {
+      const allowAutoToolPlanner = responseMode !== 'tutor_interactive';
+      if (allowAutoToolPlanner && shouldAttemptToolPlan(outgoingText)) {
         try {
           let supabaseClient: any = null;
           try {
@@ -1303,28 +1424,31 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               plannerIntentConfidence = plan.intent_confidence;
             }
 
-            if (plan?.tool) {
-              const toolTraceId = `dash_assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-              const execution = await ToolRegistry.execute(plan.tool, plan.parameters || {}, {
-                profile,
-                user,
-                supabase: supabaseClient,
-                role: String(profile?.role || 'parent').toLowerCase(),
-                tier: tier || 'free',
-                organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
-                hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
-                isGuest: !user?.id,
-                trace_id: toolTraceId,
-                tool_plan: {
-                  source: 'useDashAssistant.auto_planner',
-                  tool: plan.tool,
-                },
-              });
-              const label = autoToolShortcuts.find((tool) => tool.name === plan.tool)?.label || plan.tool;
-              const toolMessageContent = formatToolResultMessage(label, execution);
-              const executionPayload = (execution?.result && typeof execution.result === 'object')
-                ? execution.result as Record<string, unknown>
-                : null;
+	            if (plan?.tool) {
+	              const toolTraceId = `dash_assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+	              beginToolExecution();
+	              const execution = await ToolRegistry.execute(plan.tool, plan.parameters || {}, {
+	                profile,
+	                user,
+	                supabase: supabaseClient,
+	                role: String(profile?.role || 'parent').toLowerCase(),
+	                tier: tier || 'free',
+	                organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+	                hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+	                isGuest: !user?.id,
+	                trace_id: toolTraceId,
+	                tool_plan: {
+	                  source: 'useDashAssistant.auto_planner',
+	                  tool: plan.tool,
+	                },
+	              }).finally(() => {
+	                endToolExecution();
+	              });
+	              if (!isCurrentRequest()) return;
+	              const label = autoToolShortcuts.find((tool) => tool.name === plan.tool)?.label || plan.tool;
+	              const executionPayload = (execution?.result && typeof execution.result === 'object')
+	                ? execution.result as Record<string, unknown>
+	                : null;
               const executionSummary = executionPayload
                 ? String(
                     executionPayload.summary
@@ -1333,19 +1457,46 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
                     || ''
                   ).trim()
                 : '';
-              autoToolContext = toolMessageContent;
-              autoToolExecution = {
-                toolName: plan.tool,
-                toolArgs: (plan.parameters || {}) as Record<string, unknown>,
-                execution,
-                summary: executionSummary || undefined,
-              };
+	              if (execution?.success !== false) {
+	                autoToolOutcome = {
+	                  status: 'success',
+	                  source: 'tool_registry',
+	                };
+	                const toolMessageContent = formatToolResultMessage(label, execution);
+	                autoToolContext = toolMessageContent;
+	                autoToolExecution = {
+                  toolName: plan.tool,
+                  toolArgs: (plan.parameters || {}) as Record<string, unknown>,
+                  execution,
+                  summary: executionSummary || undefined,
+                };
+	              } else {
+	                autoToolOutcome = {
+	                  status: 'degraded',
+	                  source: 'tool_registry',
+	                  errorCode: String(execution?.error || 'tool_execution_failed'),
+	                  userSafeNote: 'A helper tool failed, but Dash will continue with the current response.',
+	                  details: {
+	                    toolName: plan.tool,
+	                  },
+	                };
+	                logDashTrace('auto_tool_failed_skipped_context', {
+	                  tool: plan.tool,
+	                  error: execution?.error || 'tool_execution_failed',
+	                });
+	              }
             }
           }
-        } catch (toolErr) {
-          console.warn('[useDashAssistant] Auto tool failed:', toolErr);
-        }
-      }
+	        } catch (toolErr) {
+	          autoToolOutcome = {
+	            status: 'degraded',
+	            source: 'tool_registry',
+	            errorCode: toolErr instanceof Error ? toolErr.message : 'tool_execution_exception',
+	            userSafeNote: 'A helper tool failed, but Dash will continue with the current response.',
+	          };
+	          console.warn('[useDashAssistant] Auto tool failed:', toolErr);
+	        }
+	      }
 
       const guidedPlanModeActive = plannerIntent === 'plan_mode';
       if (guidedPlanModeActive) {
@@ -1384,16 +1535,31 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         maxMessages: contextWindow.maxMessages,
         maxTokens: contextWindow.maxTokens,
       });
+      const benchmarkRunId = String(process.env.EXPO_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim();
+      const voiceDictationProbe = voiceDictationProbeRef.current
+        ? {
+            ...voiceDictationProbeRef.current,
+            platform: 'mobile' as const,
+            source: 'dash_assistant',
+            ...(benchmarkRunId ? { run_id: benchmarkRunId } : {}),
+          }
+        : undefined;
+      if (voiceDictationProbe) {
+        voiceDictationProbeRef.current = null;
+      }
+
       const requestMetadata = {
         response_mode: responseMode,
+        dash_route_intent: routeIntent,
         language_source: requestLanguage.source || (languageOverride ? 'explicit_override' : 'preference'),
         detected_language: requestLanguage.locale || undefined,
         tutor_entry_source: tutorEntrySource,
         source: isVoiceTurn ? 'dash_assistant_voice' : 'dash_assistant_chat',
         voice_turn: isVoiceTurn || undefined,
+        voice_dictation_probe: voiceDictationProbe,
         prefer_streaming_latency: isVoiceTurn || undefined,
         planning_mode: guidedPlanModeActive ? 'guided' : undefined,
-        planning_intent: guidedPlanModeActive || undefined,
+        planning_intent: guidedPlanModeActive ? plannerIntent : undefined,
         planning_intent_confidence: plannerIntentConfidence ?? undefined,
         plan_mode_stage: guidedPlanModeActive ? 'discover' : undefined,
       };
@@ -1408,6 +1574,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         let streamPaintFrame: number | null = null;
         let lastStreamAutoScrollAt = 0;
         const instantPlaceholder = 'Got it. Let me work on that now...';
+        setResponseLifecycleState(requestId, 'draft_streaming', instantPlaceholder);
         setStreamingMessageId(tempStreamingMsgId);
         setStreamingContent(instantPlaceholder);
         
@@ -1428,6 +1595,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         } as const;
 
         const flushStreamDraft = () => {
+          if (!isCurrentRequest()) return;
           const currentDraft = streamTextDraft;
           setStreamingContent(currentDraft);
           setMessages((prevMessages) => {
@@ -1443,6 +1611,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         };
 
         const handleStreamChunk = (chunk: string) => {
+          if (!isCurrentRequest()) return;
           if (firstChunkAt === null) {
             firstChunkAt = Date.now();
             if (__DEV__) {
@@ -1489,6 +1658,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             handleStreamChunk,
             sendOptions
           );
+          if (!isCurrentRequest()) return;
         } catch (streamError) {
           const aborted = streamError instanceof Error
             && (streamError.name === 'AbortError' || streamError.message === 'Aborted');
@@ -1508,6 +1678,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             undefined,
             sendOptions
           );
+          if (!isCurrentRequest()) return;
         } finally {
           if (__DEV__) {
             const totalMs = Date.now() - streamStartAt;
@@ -1523,8 +1694,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             cancelAnimationFrame(streamPaintFrame);
             streamPaintFrame = null;
           }
-          setStreamingMessageId(null);
-          setStreamingContent('');
+          if (isCurrentRequest()) {
+            setStreamingMessageId(null);
+            setStreamingContent('');
+          }
           setMessages(prev => prev.filter(msg => msg.id !== tempStreamingMsgId));
         }
       } else {
@@ -1541,12 +1714,18 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             signal: controller.signal,
           }
         );
+        if (!isCurrentRequest()) return;
       }
 
       response = mergeAutoToolExecutionIntoResponse(response, autoToolExecution);
       {
         const metadata = { ...((response.metadata || {}) as Record<string, unknown>) };
         metadata.turn_id = turnId;
+        metadata.dash_route_intent = routeIntent;
+        metadata.response_lifecycle_state = 'committed';
+        if (autoToolOutcome) {
+          metadata.tool_outcome = autoToolOutcome;
+        }
         if (!metadata.tool_origin && metadata.tool_name) {
           metadata.tool_origin = autoToolExecution ? 'auto_planner' : 'server_tool';
         }
@@ -1595,6 +1774,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           scannerAttachmentCount,
           autoScanUserId
         );
+        if (!isCurrentRequest()) return;
         if (!consumeResult.allowed) {
           logDashTrace('auto_scan_budget_overrun', {
             scannerAttachmentCount,
@@ -1604,6 +1784,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
         if (typeof onAutoScanConsumed === 'function') {
           await Promise.resolve(onAutoScanConsumed());
+          if (!isCurrentRequest()) return;
         }
       }
 
@@ -1737,46 +1918,91 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           });
         }
       } else if (!tutorPayload && tutorAction && sessionForTutorAction) {
-        const fallbackFromResponse = extractTutorQuestionFromText(response?.content || '');
-        const fallbackQuestion = fallbackFromResponse || (() => {
-          // If the learner sent an image, use whatever Claude said (it likely
-          // analysed the image). Only fall back to grade/subject questions
-          // when there is genuinely no attachment to look at.
-          if (hasLearningAttachment) {
-            return response?.content || 'I can see your work! Let me take a closer look — which question would you like me to check?';
-          }
-          if (!sessionForTutorAction.grade) return 'What grade are you in?';
-          if (!sessionForTutorAction.subject) return 'Which subject is this?';
-          return 'What exact question do you need help with?';
-        })();
+        const rawResponseText = String(response?.content || '').trim();
+        const extractedQuestion = extractTutorQuestionFromText(rawResponseText);
+        const looksLikeAckOnly = GENERIC_ACK_PATTERN.test(rawResponseText);
+        const hasUsefulResponse =
+          rawResponseText.length >= 24 ||
+          /[.!?]/.test(rawResponseText) ||
+          rawResponseText.includes('\n');
+        const preserveModelResponse =
+          hasUsefulResponse ||
+          (!!extractedQuestion && rawResponseText.length >= 12);
 
-        tutorOverridesRef.current[response.id] = fallbackQuestion;
-        response = {
-          ...response,
-          content: fallbackQuestion,
-          metadata: {
-            ...(response.metadata || {}),
-            tutor_phase: tutorModeForMetadata
-              ? getTutorPhaseLabel(tutorModeForMetadata)
-              : getTutorPhaseLabel(sessionForTutorAction.mode),
-            tutor_question: true,
-            tutor_question_text: fallbackQuestion,
-          },
-        };
+        if (preserveModelResponse && !looksLikeAckOnly) {
+          setTutorSession(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              awaitingAnswer: !!extractedQuestion,
+              currentQuestion: extractedQuestion || prev.currentQuestion,
+              expectedAnswer: null,
+            };
+          });
+        } else {
+          const fallbackFromResponse = extractedQuestion;
+          const fallbackQuestion = fallbackFromResponse || (() => {
+            // If the learner sent an image, use whatever Claude said (it likely
+            // analysed the image). Only fall back to grade/subject questions
+            // when there is genuinely no attachment to look at.
+            if (hasLearningAttachment) {
+              return response?.content || 'I can see your work! Let me take a closer look — which question would you like me to check?';
+            }
+            if (!sessionForTutorAction.grade) return 'What grade are you in?';
+            if (!sessionForTutorAction.subject) return 'Which subject is this?';
+            return 'What exact question do you need help with?';
+          })();
 
-        setTutorSession(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            subject: prev.subject,
-            grade: prev.grade,
-            topic: prev.topic,
-            awaitingAnswer: true,
-            currentQuestion: fallbackQuestion,
-            expectedAnswer: null,
-            questionIndex: tutorAction === 'start' ? prev.questionIndex + 1 : prev.questionIndex,
+          tutorOverridesRef.current[response.id] = fallbackQuestion;
+          response = {
+            ...response,
+            content: fallbackQuestion,
+            metadata: {
+              ...(response.metadata || {}),
+              tutor_phase: tutorModeForMetadata
+                ? getTutorPhaseLabel(tutorModeForMetadata)
+                : getTutorPhaseLabel(sessionForTutorAction.mode),
+              tutor_question: true,
+              tutor_question_text: fallbackQuestion,
+            },
           };
+
+          setTutorSession(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              subject: prev.subject,
+              grade: prev.grade,
+              topic: prev.topic,
+              awaitingAnswer: true,
+              currentQuestion: fallbackQuestion,
+              expectedAnswer: null,
+              questionIndex: tutorAction === 'start' ? prev.questionIndex + 1 : prev.questionIndex,
+            };
+          });
+        }
+      }
+
+      if (!isCurrentRequest()) return;
+
+      const normalizedResponseText = String(response?.content || '').trim();
+      if (normalizedResponseText.length > 0) {
+        setResponseLifecycleState(requestId, 'committed', normalizedResponseText);
+        trackDashTelemetry(DASH_TELEMETRY_EVENTS.RESPONSE_COMMITTED, {
+          turn_id: turnId,
+          route_intent: routeIntent,
+          response_chars: normalizedResponseText.length,
+          model: selectedModel,
+          response_mode: responseMode,
         });
+        if (autoToolOutcome?.status === 'degraded') {
+          trackDashTelemetry(DASH_TELEMETRY_EVENTS.RESPONSE_PRESERVED_AFTER_TOOL_ERROR, {
+            turn_id: turnId,
+            route_intent: routeIntent,
+            tool_source: autoToolOutcome.source,
+            tool_error_code: autoToolOutcome.errorCode || null,
+          });
+        }
       }
 
       // Add assistant message locally for immediate UI feedback
@@ -1824,6 +2050,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       
       // Update messages
       const updatedConv = await dashInstance.getConversation(dashInstance.getCurrentConversationId()!);
+      if (!isCurrentRequest()) return;
       if (updatedConv && Array.isArray(updatedConv.messages) && updatedConv.messages.length > 0) {
         const overrideMap = tutorOverridesRef.current;
         const merged = normalizeMessagesByTurn(updatedConv.messages.map(msg => {
@@ -1837,8 +2064,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           }
           return msg;
         }));
-        setMessages(prev => (merged.length >= prev.length ? merged : prev));
+        setMessages(prev => {
+          const candidate = merged.length >= prev.length ? merged : prev;
+          const committedText = String(responseLifecycleRef.current.committedText || '').trim();
+          if (!committedText) {
+            return candidate;
+          }
+          const hasCommittedInCandidate = candidate.some(
+            (msg) => msg.type === 'assistant' && String(msg.content || '').trim() === committedText
+          );
+          return hasCommittedInCandidate ? candidate : prev;
+        });
         setConversation(updatedConv);
+        setResponseLifecycleState(requestId, 'finalized');
         if (isNearBottomRef.current) {
           scrollToBottom({ animated: true, delay: 150 });
         }
@@ -1917,6 +2155,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         void speakResponse(response);
       }
 
+      if (responseLifecycleRef.current.state === 'committed') {
+        setResponseLifecycleState(requestId, 'finalized');
+      }
+
       track(
         'dash.turn.completed',
         buildDashTurnTelemetry({
@@ -1932,6 +2174,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Aborted')) {
         return;
       }
+      if (!isCurrentRequest()) return;
       console.error('Failed to send message:', error);
       logDashTrace('assistant_error', {
         error: error instanceof Error ? error.message : String(error),
@@ -1957,9 +2200,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         buttons: [{ text: 'OK', style: 'default' }]
       });
     } finally {
-      abortControllerRef.current = null;
-      setIsLoading(false);
-      setLoadingStatus(null);
+      if (isCurrentRequest()) {
+        activeRequestIdRef.current = null;
+        responseLifecycleRef.current = {
+          requestId: null,
+          state: 'idle',
+          committedText: null,
+        };
+        abortControllerRef.current = null;
+        setIsLoading(false);
+        setLoadingStatus(null);
+      }
     }
   }, [
     dashInstance,
@@ -2005,6 +2256,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     tier,
     capabilityTier,
     autoScanUserId,
+    beginToolExecution,
+    endToolExecution,
+    setResponseLifecycleState,
   ]);
 
   // Process queue
@@ -2026,8 +2280,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [sendMessageInternal]);
 
   const handleVoiceFinalTranscript = useCallback(
-    (transcript: string, options: { autoSend: boolean; delayMs: number }) => {
+    (transcript: string, options: { autoSend: boolean; delayMs: number; probe?: VoiceProbeMetrics }) => {
       cancelVoiceAutoSend();
+      if (options.probe) {
+        voiceDictationProbeRef.current = {
+          ...options.probe,
+          platform: 'mobile',
+          source: options.probe.source || 'dash_assistant',
+        };
+      }
 
       const trimmed = transcript.trim();
       if (!trimmed || !options.autoSend) return;
@@ -2375,7 +2636,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         },
       };
 
-      const execution = await ToolRegistry.execute(toolName, params, context);
+      beginToolExecution();
+      const execution = await ToolRegistry.execute(toolName, params, context).finally(() => {
+        endToolExecution();
+      });
       const content = formatToolResultMessage(label, execution);
 
       const toolMessage: DashMessage = {
@@ -2388,6 +2652,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           tool_result: execution,
           tool_args: params || {},
           tool_origin: 'manual_tool',
+          tool_outcome: execution?.success === false
+            ? {
+                status: 'failed',
+                source: 'tool_registry',
+                errorCode: String(execution?.error || 'manual_tool_failed'),
+              }
+            : {
+                status: 'success',
+                source: 'tool_registry',
+              },
         },
       };
 
@@ -2402,7 +2676,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
       }
     },
-    [dashInstance, profile, user, showAlert, tier]
+    [dashInstance, profile, user, showAlert, tier, beginToolExecution, endToolExecution]
   );
 
   // Initialize Dash AI
@@ -2773,6 +3047,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     inputText,
     setInputText,
     isLoading,
+    hasActiveToolExecution,
     loadingStatus,
     streamingMessageId,
     streamingContent,

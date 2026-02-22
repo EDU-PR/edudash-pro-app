@@ -26,7 +26,6 @@ export interface DashAssistantMessagesProps {
   unreadCount: number;
   setUnreadCount: (n: number) => void;
   scrollToBottom: (opts: { animated?: boolean; delay?: number; force?: boolean }) => void;
-  renderTypingIndicator: () => React.ReactElement | null;
   renderSuggestedActions: () => React.ReactElement | null;
   onSendMessage?: (text: string) => void;
   onAgeBandChange?: (ageBand: string) => void;
@@ -61,7 +60,6 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   setIsNearBottom,
   setUnreadCount,
   scrollToBottom,
-  renderTypingIndicator,
   renderSuggestedActions,
   onSendMessage,
   onAgeBandChange,
@@ -265,12 +263,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
         ) : null
       }
       ListEmptyComponent={messages.length === 0 ? renderEmptyState : null}
-      ListFooterComponent={
-        <>
-          {renderTypingIndicator()}
-          {renderSuggestedActions()}
-        </>
-      }
+      ListFooterComponent={renderSuggestedActions()}
     />
   );
 };

@@ -45,6 +45,22 @@ export interface ToolExecutionResult {
   trace_id?: string;
 }
 
+export type DashToolOutcomeStatus = 'success' | 'degraded' | 'failed';
+
+export type DashToolOutcomeSource =
+  | 'caps_rpc'
+  | 'caps_documents_fallback'
+  | 'caps_runtime'
+  | 'tool_registry';
+
+export interface DashToolOutcome {
+  status: DashToolOutcomeStatus;
+  source: DashToolOutcomeSource;
+  errorCode?: string;
+  userSafeNote?: string;
+  details?: Record<string, unknown>;
+}
+
 export interface UnifiedClientToolDef {
   name: string;
   description: string;

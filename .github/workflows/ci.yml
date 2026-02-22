@@ -38,6 +38,24 @@ jobs:
         
       - name: Run tests
         run: npm test
+
+      - name: Voice benchmark gate check (if present)
+        run: |
+          GATE_FILE="$(find scripts/artifacts/voice-benchmark -name gate_result.json -print 2>/dev/null | sort | tail -n 1 || true)"
+          if [ -z "$GATE_FILE" ]; then
+            echo "No voice benchmark gate_result.json found. Skipping optional gate check."
+            exit 0
+          fi
+          npm run benchmark:voice:check -- --input "$GATE_FILE"
+
+      - name: Upload voice benchmark artifacts (if present)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-benchmark-artifacts-${{ github.run_id }}
+          path: scripts/artifacts/voice-benchmark/**
+          if-no-files-found: ignore
+          retention-days: 14
         
       - name: Build check
         run: npx expo export --platform web

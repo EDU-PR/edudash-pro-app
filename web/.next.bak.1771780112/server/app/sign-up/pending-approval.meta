@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/sign-up/layout,_N_T_/sign-up/pending-approval/layout,_N_T_/sign-up/pending-approval/page,_N_T_/sign-up/pending-approval"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/sign-up/pending-approval/__PAGE__",
+    "/sign-up/pending-approval",
+    "/sign-up",
+    "/_index",
+    "/_head"
+  ]
+}

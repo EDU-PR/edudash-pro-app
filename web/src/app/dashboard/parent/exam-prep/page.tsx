@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
-import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
+import { getGradeNumber, isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { BookOpen, Target, FileText, Sparkles } from 'lucide-react';
 
 const GRADES = [
@@ -61,6 +61,19 @@ export default function ExamPrepPage() {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [examType, setExamType] = useState<'practice_test' | 'revision_notes'>('practice_test');
 
+  const resolveActiveChildGradeParam = (): string => {
+    const gradeNumber = getGradeNumber(activeChild?.grade);
+    if (gradeNumber >= 4 && gradeNumber <= 12) {
+      return `grade_${gradeNumber}`;
+    }
+    return '';
+  };
+
+  const quickLaunchGradeParam = resolveActiveChildGradeParam() || selectedGrade || 'grade_6';
+  const quickLaunchGradeLabel =
+    GRADES.find((grade) => grade.value === quickLaunchGradeParam)?.label || 'Selected Grade';
+  const quickLaunchSubjectLabel = selectedSubject || 'Afrikaans';
+
   const handleGenerate = () => {
     if (!selectedGrade || !selectedSubject) {
       alert('Please select both grade and subject');
@@ -85,6 +98,27 @@ export default function ExamPrepPage() {
 
   const handleViewHistory = () => {
     router.push('/dashboard/parent/my-exams');
+  };
+
+  const handleQuickStartAfrikaansLive = () => {
+    const params = new URLSearchParams();
+    const activeChildGrade = resolveActiveChildGradeParam();
+    const gradeToUse = activeChildGrade || selectedGrade || 'grade_6';
+    params.set('grade', gradeToUse);
+    params.set('subject', selectedSubject || 'Afrikaans');
+    params.set('type', 'practice_test');
+    params.set('language', 'af-ZA');
+    params.set('useTeacherContext', '1');
+
+    if (activeChild?.id) params.set('studentId', activeChild.id);
+    if (activeChild?.classId) params.set('classId', activeChild.classId);
+    if (profile?.organizationId || profile?.preschoolId) {
+      params.set('schoolId', profile.organizationId || profile.preschoolId || '');
+    }
+    const childName = [activeChild?.firstName, activeChild?.lastName].filter(Boolean).join(' ').trim();
+    if (childName) params.set('childName', childName);
+
+    router.push(`/dashboard/parent/generate-exam?${params.toString()}`);
   };
 
   if (loading) {
@@ -142,6 +176,32 @@ export default function ExamPrepPage() {
 
         {/* Main Card */}
         <div className="card" style={{ padding: 'var(--space-4)' }}>
+          <div
+            style={{
+              marginBottom: 'var(--space-4)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '14px',
+              background: 'var(--surface-1)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Sparkles className="icon16" />
+              <span style={{ fontWeight: 700, fontSize: '14px' }}>Quick Live Session</span>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '10px' }}>
+              Open interactive in-canvas practice for {quickLaunchGradeLabel} • {quickLaunchSubjectLabel} with instant correct/incorrect markers and explanations.
+            </p>
+            <button
+              onClick={handleQuickStartAfrikaansLive}
+              className="btn btnPrimary"
+              style={{ width: '100%' }}
+            >
+              <Sparkles className="icon16" />
+              Start Live Practice: {quickLaunchGradeLabel}
+            </button>
+          </div>
+
           <div style={{ marginBottom: 'var(--space-4)' }}>
             <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px' }}>
               Grade Level

@@ -132,9 +132,18 @@ export interface DashMessage {
     tool_result?: any;
     tool_args?: any;
     tool_summary?: string;
+    tool_outcome?: {
+      status?: 'success' | 'degraded' | 'failed';
+      source?: string;
+      errorCode?: string;
+      userSafeNote?: string;
+      [key: string]: any;
+    };
     turn_id?: string;
     tool_origin?: 'auto_planner' | 'server_tool' | 'manual_tool';
     auto_tool_merged?: boolean;
+    dash_route_intent?: 'tutor' | 'lesson_generation' | 'weekly_theme_plan' | 'daily_routine_plan';
+    response_lifecycle_state?: 'draft_streaming' | 'committed' | 'finalized';
     pdf_artifact?: {
       storagePath?: string;
       downloadUrl?: string;

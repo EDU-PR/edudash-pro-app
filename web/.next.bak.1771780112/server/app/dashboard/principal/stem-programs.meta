@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/principal/layout,_N_T_/dashboard/principal/stem-programs/layout,_N_T_/dashboard/principal/stem-programs/page,_N_T_/dashboard/principal/stem-programs"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/principal/stem-programs/__PAGE__",
+    "/dashboard/principal/stem-programs",
+    "/dashboard/principal",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

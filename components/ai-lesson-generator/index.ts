@@ -10,3 +10,4 @@ export { GenerationProgress } from './GenerationProgress';
 export { ErrorRetrySection } from './ErrorRetrySection';
 export { GeneratedContentCard } from './GeneratedContentCard';
 export { QuotaBar } from './QuotaBar';
+export { LessonGenerationFullscreen } from './LessonGenerationFullscreen';

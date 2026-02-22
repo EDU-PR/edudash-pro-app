@@ -1,9 +1,10 @@
 'use client';
 
-import { useQuotaCheck, type QuotaUsage } from '@/hooks/useQuotaCheck';
+import { useQuotaCheck } from '@/hooks/useQuotaCheck';
 import { useEffect, useState } from 'react';
 import { TrendingUp, MessageSquare, FileText, HelpCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { FeatureQuotaBar } from '@/components/ui/FeatureQuotaBar';
 
 interface QuotaCardProps {
   userId: string;
@@ -72,34 +73,8 @@ const TIER_LIMITS: Record<string, TierLimits> = {
 export function QuotaCard({ userId }: QuotaCardProps) {
   const { usage, loading, refreshUsage } = useQuotaCheck(userId);
   const [limits, setLimits] = useState<TierLimits | null>(null);
-  const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysLeft: number } | null>(null);
   const [schoolType, setSchoolType] = useState<'preschool' | 'k12' | 'unknown'>('preschool');
   const supabase = createClient();
-
-  // Fetch trial status from profile
-  useEffect(() => {
-    if (!userId) return;
-    
-    const fetchTrialStatus = async () => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_trial, trial_ends_at')
-        .eq('id', userId)
-        .single();
-      
-      if (profile?.is_trial && profile.trial_ends_at) {
-        const trialEnd = new Date(profile.trial_ends_at);
-        const now = new Date();
-        const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (daysLeft > 0) {
-          setTrialInfo({ isActive: true, daysLeft });
-        }
-      }
-    };
-    
-    fetchTrialStatus();
-  }, [userId, supabase]);
 
   useEffect(() => {
     if (!userId) return;
@@ -113,14 +88,14 @@ export function QuotaCard({ userId }: QuotaCardProps) {
           .eq('id', userId)
           .maybeSingle();
 
-        const profileSchoolType = (profile as any)?.school_type;
+        const profileSchoolType = profile?.school_type;
         if (profileSchoolType && !cancelled) {
           const normalized = String(profileSchoolType).toLowerCase();
           setSchoolType(normalized.includes('k12') ? 'k12' : 'preschool');
           return;
         }
 
-        const schoolId = (profile as any)?.preschool_id || (profile as any)?.organization_id;
+        const schoolId = profile?.preschool_id || profile?.organization_id;
         if (!schoolId) {
           if (!cancelled) setSchoolType('preschool');
           return;
@@ -144,7 +119,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
           .eq('id', schoolId)
           .maybeSingle();
 
-        const orgType = org?.school_type || (org as any)?.organization_type || org?.type;
+        const orgType = org?.school_type || org?.organization_type || org?.type;
         if (!cancelled) {
           const normalized = String(orgType || 'preschool').toLowerCase();
           setSchoolType(normalized.includes('k12') ? 'k12' : 'preschool');
@@ -356,25 +331,13 @@ export function QuotaCard({ userId }: QuotaCardProps) {
                 </span>
               </div>
               
-              {!isUnlimited && (
-                <div 
-                  style={{
-                    height: 8,
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: 4,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${percentage}%`,
-                      backgroundColor: statusColor,
-                      transition: 'width 0.3s ease',
-                    }}
-                  />
-                </div>
-              )}
+              <FeatureQuotaBar
+                feature={item.label}
+                used={item.used}
+                limit={isUnlimited ? -1 : item.limit}
+                remaining={isUnlimited ? Number.POSITIVE_INFINITY : Math.max(0, item.limit - item.used)}
+                periodLabel={item.period === 'this month' ? 'month' : item.period}
+              />
             </div>
           );
         })}

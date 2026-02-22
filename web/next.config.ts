@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(configDir, '..');
 const envAllowedDevOrigins =
   process.env.NEXT_PUBLIC_ALLOWED_DEV_ORIGINS ||
   process.env.ALLOWED_DEV_ORIGINS ||
@@ -27,11 +28,14 @@ const nextConfig: NextConfig = {
   // Turbopack configuration (Next.js 16+ default bundler)
   // Using empty config to acknowledge Turbopack while webpack config exists for fallback
   turbopack: {
-    root: configDir,
+    root: repoRoot,
     resolveAlias: {
       // Add any module aliases here if needed
     },
   },
+
+  // Keep tracing root aligned with turbopack.root to avoid Next.js warning.
+  outputFileTracingRoot: repoRoot,
   
   // Webpack configuration (fallback for non-Turbopack builds)
   webpack: (config, { isServer }) => {

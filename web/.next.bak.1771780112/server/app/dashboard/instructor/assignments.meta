@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/instructor/layout,_N_T_/dashboard/instructor/assignments/layout,_N_T_/dashboard/instructor/assignments/page,_N_T_/dashboard/instructor/assignments"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/instructor/assignments/__PAGE__",
+    "/dashboard/instructor/assignments",
+    "/dashboard/instructor",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

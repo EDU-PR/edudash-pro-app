@@ -173,6 +173,33 @@ describe('WeeklyProgramCopilotService', () => {
     expect(mockInvoke.mock.calls[1][1]?.body?.service_type).toBe('lesson_generation');
   });
 
+  it('backfills omitted weekdays so Thursday never remains empty', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      error: null,
+      data: {
+        content: JSON.stringify({
+          title: 'Incomplete Week',
+          summary: 'Thursday omitted by model',
+          days: {
+            monday: [{ title: 'Arrival Routine', block_type: 'transition' }],
+            tuesday: [{ title: 'Math Warmup', block_type: 'learning' }],
+            wednesday: [{ title: 'Story Circle', block_type: 'circle_time' }],
+            friday: [{ title: 'Music Movement', block_type: 'movement' }],
+          },
+        }),
+      },
+    });
+
+    const draft = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm(baseInput);
+    const thursdayBlocks = draft.blocks.filter((block) => block.day_of_week === 4);
+
+    for (const day of [1, 2, 3, 4, 5]) {
+      expect(draft.blocks.filter((block) => block.day_of_week === day).length).toBeGreaterThan(0);
+    }
+
+    expect(thursdayBlocks.some((block) => /routine starter/i.test(block.title))).toBe(true);
+  });
+
   it('enforces weather repetition across Monday-Friday blocks', async () => {
     mockInvoke.mockResolvedValueOnce({
       error: null,

@@ -24,6 +24,7 @@ import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBub
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
 import { getMessageDisplayText, type CallEventContent } from '@/lib/messaging/messageContent';
 import { resolveReactionProfiles } from '@/lib/messaging/reactionProfiles';
+import { clampPercent } from '@/lib/ui/clampPercent';
 import { 
   type MessageThread,
   type ParticipantProfile,
@@ -870,7 +871,9 @@ function PrincipalMessagesPage() {
   };
 
   const fetchThreads = useCallback(async () => {
-    if (!userId || !schoolId) return;
+    if (!userId || !schoolId) {
+      return;
+    }
 
     setThreadsLoading(true);
     setError(null);
@@ -2664,7 +2667,7 @@ function PrincipalMessagesPage() {
                     <div className="w-full h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-[var(--primary)] transition-all duration-300 rounded-full"
-                        style={{ width: `${uploadProgress}%` }}
+                        style={{ width: `${clampPercent(uploadProgress)}%` }}
                       />
                     </div>
                   </div>

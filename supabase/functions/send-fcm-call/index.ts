@@ -21,32 +21,27 @@ declare const Deno: {
 
 // @ts-ignore - Deno URL import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.12';
+import {
+  buildSignedJwt,
+  exchangeAccessToken,
+  loadServiceAccount,
+  resolveFirebaseProjectId,
+  type AuthErrorCode,
+  type FirebaseServiceAccount,
+} from './auth-utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 
-// Firebase project ID from google-services.json
-const FIREBASE_PROJECT_ID = 'edudashpro';
+const serviceAccountLoad = loadServiceAccount((key) => Deno.env.get(key));
+const serviceAccount: FirebaseServiceAccount | null = serviceAccountLoad.serviceAccount;
+const FIREBASE_PROJECT_ID = resolveFirebaseProjectId(serviceAccount, (key) => Deno.env.get(key));
 
-// Parse the service account key from environment variable
-let serviceAccountKey: {
-  type: string;
-  project_id: string;
-  private_key_id: string;
-  private_key: string;
-  client_email: string;
-  client_id: string;
-  auth_uri: string;
-  token_uri: string;
-} | null = null;
-
-try {
-  const keyJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY');
-  if (keyJson) {
-    serviceAccountKey = JSON.parse(keyJson);
-  }
-} catch (e) {
-  console.error('[SendFCMCall] Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:', e);
+if (serviceAccountLoad.errorCode) {
+  console.error('[SendFCMCall] Service account load issue:', {
+    code: serviceAccountLoad.errorCode,
+    message: serviceAccountLoad.errorMessage,
+  });
 }
 
 interface FCMCallRequest {
@@ -65,6 +60,13 @@ interface FCMDeliveryResult {
   messageId?: string;
 }
 
+type FailureReason =
+  | 'SERVICE_ACCOUNT_PARSE_FAILED'
+  | 'PRIVATE_KEY_INVALID'
+  | 'ACCESS_TOKEN_EXCHANGE_FAILED'
+  | 'NO_ACTIVE_FCM_TOKENS'
+  | 'FCM_DELIVERY_FAILED';
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,102 +74,58 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+function structuredFailure(
+  reason: FailureReason,
+  callData: Pick<FCMCallRequest, 'call_id' | 'callee_user_id'>,
+  attemptedTokens: number,
+  errorMessage?: string,
+) {
+  const failedTokens = attemptedTokens;
+  return {
+    success: false,
+    fallback_to_expo: true,
+    fcm_project_id: FIREBASE_PROJECT_ID,
+    attempted_tokens: attemptedTokens,
+    successful_tokens: 0,
+    failed_tokens: failedTokens,
+    error_codes: [reason],
+    message_ids: [],
+    call_id: callData.call_id,
+    callee_user_id: callData.callee_user_id,
+    fcm_attempted: attemptedTokens,
+    fcm_success_count: 0,
+    fallback_reason: reason,
+    error: errorMessage || reason,
+  };
+}
+
 /**
  * Get an OAuth2 access token using the service account credentials
  * This is required for FCM HTTP v1 API
  */
-async function getAccessToken(): Promise<string | null> {
-  if (!serviceAccountKey) {
-    console.error('[SendFCMCall] No service account key configured');
-    return null;
-  }
-
-  try {
-    // Create a JWT for OAuth2 authentication
-    const now = Math.floor(Date.now() / 1000);
-    const exp = now + 3600; // 1 hour expiry
-
-    const header = {
-      alg: 'RS256',
-      typ: 'JWT',
+async function getAccessToken(): Promise<{
+  accessToken: string | null;
+  errorCode?: AuthErrorCode;
+  errorMessage?: string;
+}> {
+  if (!serviceAccount) {
+    return {
+      accessToken: null,
+      errorCode: serviceAccountLoad.errorCode || 'SERVICE_ACCOUNT_PARSE_FAILED',
+      errorMessage: serviceAccountLoad.errorMessage || 'service_account_missing',
     };
+  }
 
-    const payload = {
-      iss: serviceAccountKey.client_email,
-      scope: 'https://www.googleapis.com/auth/firebase.messaging',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: exp,
-      iat: now,
+  const jwtResult = await buildSignedJwt(serviceAccount);
+  if (!jwtResult.accessToken) {
+    return {
+      accessToken: null,
+      errorCode: jwtResult.errorCode || 'PRIVATE_KEY_INVALID',
+      errorMessage: jwtResult.errorMessage || 'jwt_build_failed',
     };
-
-    // Base64url encode header and payload
-    const encoder = new TextEncoder();
-    const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    
-    const signatureInput = `${headerB64}.${payloadB64}`;
-
-    // Import the private key and sign
-    const privateKeyPem = serviceAccountKey.private_key;
-    const privateKeyDer = pemToDer(privateKeyPem);
-    
-    const cryptoKey = await crypto.subtle.importKey(
-      'pkcs8',
-      privateKeyDer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
-      cryptoKey,
-      encoder.encode(signatureInput)
-    );
-
-    const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-      .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-    const jwt = `${signatureInput}.${signatureB64}`;
-
-    // Exchange JWT for access token
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-    });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.text();
-      console.error('[SendFCMCall] Token exchange failed:', error);
-      return null;
-    }
-
-    const tokenData = await tokenResponse.json();
-    return tokenData.access_token;
-  } catch (error) {
-    console.error('[SendFCMCall] Failed to get access token:', error);
-    return null;
   }
-}
 
-/**
- * Convert PEM private key to DER format for Web Crypto API
- */
-function pemToDer(pem: string): ArrayBuffer {
-  // Remove PEM header/footer and newlines
-  const b64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\n/g, '');
-  
-  // Decode base64
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
+  return await exchangeAccessToken(jwtResult.accessToken);
 }
 
 /**
@@ -175,11 +133,12 @@ function pemToDer(pem: string): ArrayBuffer {
  */
 async function sendFCMDataMessage(
   accessToken: string,
+  projectId: string,
   fcmToken: string,
   callData: FCMCallRequest
 ): Promise<FCMDeliveryResult> {
   // FCM HTTP v1 API endpoint
-  const url = `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`;
+  const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
   // Data-only message with high priority
   // This format is critical for waking killed apps:
@@ -292,7 +251,8 @@ Deno.serve(async (req: Request) => {
     // Allow unauthenticated health checks via GET
     return new Response(JSON.stringify({ 
       status: 'ok',
-      hasServiceAccount: !!serviceAccountKey,
+      hasServiceAccount: !!serviceAccount,
+      serviceAccountErrorCode: serviceAccountLoad.errorCode || null,
       projectId: FIREBASE_PROJECT_ID,
       timestamp: new Date().toISOString(),
     }), {
@@ -356,85 +316,60 @@ Deno.serve(async (req: Request) => {
     if (deviceError || allTokens.length === 0) {
       console.warn('[SendFCMCall] No active Android FCM tokens for user:', body.callee_user_id);
       return new Response(
-        JSON.stringify({ 
-          success: false,
-          fallback_to_expo: true,
-          attempted_tokens: 0,
-          successful_tokens: 0,
-          failed_tokens: 0,
-          error_codes: ['NO_ACTIVE_FCM_TOKENS'],
-          message_ids: [],
-          call_id: body.call_id,
-          callee_user_id: body.callee_user_id,
-          fcm_attempted: 0,
-          fcm_success_count: 0,
-          fallback_reason: 'NO_ACTIVE_FCM_TOKENS',
-          error: 'No active Android FCM tokens for callee',
-        }),
+        JSON.stringify(
+          structuredFailure(
+            'NO_ACTIVE_FCM_TOKENS',
+            { call_id: body.call_id, callee_user_id: body.callee_user_id },
+            0,
+            'No active Android FCM tokens for callee',
+          ),
+        ),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check if service account is configured
-    if (!serviceAccountKey) {
-      console.error('[SendFCMCall] GOOGLE_SERVICE_ACCOUNT_KEY not configured');
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          fallback_to_expo: true,
-          attempted_tokens: allTokens.length,
-          successful_tokens: 0,
-          failed_tokens: allTokens.length,
-          error_codes: ['SERVICE_ACCOUNT_NOT_CONFIGURED'],
-          message_ids: [],
-          call_id: body.call_id,
-          callee_user_id: body.callee_user_id,
-          fcm_attempted: allTokens.length,
-          fcm_success_count: 0,
-          fallback_reason: 'SERVICE_ACCOUNT_NOT_CONFIGURED',
-          error: 'FCM not configured on server - add GOOGLE_SERVICE_ACCOUNT_KEY',
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const accessToken = await getAccessToken();
+    const accessTokenResult = await getAccessToken();
+    const accessToken = accessTokenResult.accessToken;
     if (!accessToken) {
-      console.error('[SendFCMCall] Failed to get FCM access token');
+      const failureReason: FailureReason =
+        accessTokenResult.errorCode === 'SERVICE_ACCOUNT_PARSE_FAILED'
+          ? 'SERVICE_ACCOUNT_PARSE_FAILED'
+          : accessTokenResult.errorCode === 'PRIVATE_KEY_INVALID'
+          ? 'PRIVATE_KEY_INVALID'
+          : 'ACCESS_TOKEN_EXCHANGE_FAILED';
+      console.error('[SendFCMCall] Failed to get FCM access token', {
+        errorCode: failureReason,
+        message: accessTokenResult.errorMessage,
+      });
       return new Response(
-        JSON.stringify({ 
-          success: false,
-          fallback_to_expo: true,
-          attempted_tokens: allTokens.length,
-          successful_tokens: 0,
-          failed_tokens: allTokens.length,
-          error_codes: ['ACCESS_TOKEN_UNAVAILABLE'],
-          message_ids: [],
-          call_id: body.call_id,
-          callee_user_id: body.callee_user_id,
-          fcm_attempted: allTokens.length,
-          fcm_success_count: 0,
-          fallback_reason: 'ACCESS_TOKEN_UNAVAILABLE',
-          error: 'Failed to get FCM access token',
-        }),
+        JSON.stringify(
+          structuredFailure(
+            failureReason,
+            { call_id: body.call_id, callee_user_id: body.callee_user_id },
+            allTokens.length,
+            accessTokenResult.errorMessage || 'Failed to get FCM access token',
+          ),
+        ),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Send FCM data message to all known tokens in parallel.
     const results = await Promise.all(
-      allTokens.map((token) => sendFCMDataMessage(accessToken, token, body)),
+      allTokens.map((token) => sendFCMDataMessage(accessToken, FIREBASE_PROJECT_ID, token, body)),
     );
 
     const successful = results.filter((result) => result.success);
     const failed = results.filter((result) => !result.success);
-    const errorCodes = Array.from(
-      new Set(
-        failed
-          .map((result) => result.errorCode || '')
-          .filter((code) => code.length > 0),
-      ),
+    const errorCodeSet = new Set(
+      failed
+        .map((result) => result.errorCode || '')
+        .filter((code) => code.length > 0),
     );
+    if (successful.length === 0) {
+      errorCodeSet.add('FCM_DELIVERY_FAILED');
+    }
+    const errorCodes = Array.from(errorCodeSet);
     const messageIds = successful
       .map((result) => result.messageId || '')
       .filter((id) => id.length > 0);
@@ -457,6 +392,7 @@ Deno.serve(async (req: Request) => {
     const structuredResult = {
       success: successful.length > 0,
       fallback_to_expo: successful.length === 0,
+      fcm_project_id: FIREBASE_PROJECT_ID,
       attempted_tokens: allTokens.length,
       successful_tokens: successful.length,
       failed_tokens: failed.length,
@@ -466,7 +402,7 @@ Deno.serve(async (req: Request) => {
       callee_user_id: body.callee_user_id,
       fcm_attempted: allTokens.length,
       fcm_success_count: successful.length,
-      fallback_reason: successful.length > 0 ? null : 'FCM_DELIVERY_FAILED',
+      fallback_reason: successful.length > 0 ? null : ('FCM_DELIVERY_FAILED' as FailureReason),
       error: successful.length > 0 ? undefined : (failed[0]?.error || 'FCM_DELIVERY_FAILED'),
     };
 

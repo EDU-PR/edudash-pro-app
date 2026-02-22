@@ -9,6 +9,7 @@ import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { dashAIThrottler } from '@/lib/dash-ai-throttle';
 import type { ChatMessage, SelectedImage, ExamContext } from '@/components/dash-chat/types';
+import type { VoiceDictationProbe } from '@/hooks/useVoiceRecording';
 import {
   detectOCRTask,
   getOCRPromptForTask,
@@ -109,7 +110,7 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
   const sendMessage = useCallback(async (
     textToSend: string,
     selectedImages: SelectedImage[],
-    voiceData?: { blob: Blob; base64: string }
+    voiceData?: { blob: Blob; base64: string; probe?: VoiceDictationProbe }
   ) => {
     if (!textToSend && selectedImages.length === 0 && !voiceData) return;
 
@@ -252,33 +253,47 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
       }
 
       const result: any = await dashAIThrottler.enqueue(() =>
-        supabase.functions.invoke('ai-proxy', {
-          body: {
-            scope,
-            service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
-            payload: {
-              prompt: payload.prompt,
-              conversationHistory: payload.conversationHistory,
-              images: payload.images,
-              image_context: payload.image_context,
-              voice_data: payload.voice_data,
-              ocr_mode: payload.ocr_mode,
-              ocr_task: payload.ocr_task,
-              ocr_response_format: payload.ocr_response_format,
+        {
+          const voiceDictationProbe = voiceData?.probe
+            ? {
+                ...voiceData.probe,
+                platform: 'web' as const,
+                source: voiceData.probe.source || 'dash_chat_web',
+                commit_at: new Date().toISOString(),
+                ...(String(process.env.NEXT_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim()
+                  ? { run_id: String(process.env.NEXT_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim() }
+                  : {}),
+              }
+            : undefined;
+          return supabase.functions.invoke('ai-proxy', {
+            body: {
+              scope,
+              service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
+              payload: {
+                prompt: payload.prompt,
+                conversationHistory: payload.conversationHistory,
+                images: payload.images,
+                image_context: payload.image_context,
+                voice_data: payload.voice_data,
+                ocr_mode: payload.ocr_mode,
+                ocr_task: payload.ocr_task,
+                ocr_response_format: payload.ocr_response_format,
+              },
+              enable_tools: true,
+              prefer_openai: true,
+              stream: false,
+              metadata: {
+                role: scope,
+                supports_images: true,
+                allow_diagrams: true,
+                voice_dictation_probe: voiceDictationProbe,
+                ocr_mode: ocrMode,
+                ocr_task: ocrTask || undefined,
+              },
             },
-            enable_tools: true,
-            prefer_openai: true,
-            stream: false,
-            metadata: {
-              role: scope,
-              supports_images: true,
-              allow_diagrams: true,
-              ocr_mode: ocrMode,
-              ocr_task: ocrTask || undefined,
-            },
-          },
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          });
+        }
       );
 
       const { data, error } = result as any;

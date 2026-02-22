@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -18,6 +18,7 @@ import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips'
 import { toast } from '@/components/ui/ToastProvider'
 import { useHomeworkHelperModels } from '@/hooks/useAIModelSelection'
 import { useTheme } from '@/contexts/ThemeContext'
+import { FeatureQuotaBar } from '@/components/ai/FeatureQuotaBar'
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function AIHomeworkHelperScreen() {
@@ -32,15 +33,33 @@ export default function AIHomeworkHelperScreen() {
     grading_assistance: 0,
     homework_help: 0,
   })
+  const [quotaStatus, setQuotaStatus] = useState<{ used: number; limit: number; remaining: number } | null>(null)
+  const [quotaRefreshKey, setQuotaRefreshKey] = useState(0)
 
   const flags = getFeatureFlagsSync()
   const { availableModels, selectedModel, setSelectedModel, quotas } = useHomeworkHelperModels()
   const AI_ENABLED = (process.env.EXPO_PUBLIC_AI_ENABLED === 'true') || (process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true')
   const aiHelperEnabled = AI_ENABLED && flags.ai_homework_help !== false
 
+  const refreshQuotaStatus = useCallback(async () => {
+    try {
+      const status = await getQuotaStatus('homework_help')
+      const effectiveLimit = quotas.ai_requests && quotas.ai_requests > 0 ? quotas.ai_requests : status.limit
+      const remaining = effectiveLimit < 0 ? Number.POSITIVE_INFINITY : Math.max(0, effectiveLimit - status.used)
+      setQuotaStatus({
+        used: status.used,
+        limit: effectiveLimit,
+        remaining,
+      })
+    } catch {
+      // non-fatal
+    }
+  }, [quotas.ai_requests])
+
   const handleRefresh = async () => {
     try {
       setUsage(await getCombinedUsage())
+      await refreshQuotaStatus()
     } catch (error) {
       console.error('Error refreshing AI homework helper data:', error)
     }
@@ -50,7 +69,8 @@ export default function AIHomeworkHelperScreen() {
 
   useEffect(() => {
     getCombinedUsage().then(setUsage).catch(() => {})
-  }, [])
+    void refreshQuotaStatus()
+  }, [refreshQuotaStatus])
 
   const onAskAI = async () => {
     setPending(true)
@@ -69,6 +89,7 @@ export default function AIHomeworkHelperScreen() {
     const gate = await canUseFeature('homework_help', 1)
     if (!gate.allowed) {
       const status = await getQuotaStatus('homework_help')
+      setQuotaStatus(status)
       Alert.alert(
         'Monthly limit reached',
         `You have used ${status.used} of ${status.limit} homework help sessions this month. ${gate.requiresPrepay ? 'Please upgrade or purchase more to continue.' : ''}`,
@@ -95,6 +116,8 @@ export default function AIHomeworkHelperScreen() {
       const responseText = response?.text || (typeof response === 'string' ? response : String(response || ''))
       setAnswer(responseText)
       setUsage(await getCombinedUsage())
+      await refreshQuotaStatus()
+      setQuotaRefreshKey((prev) => prev + 1)
       track('edudash.ai.helper.completed', { subject })
     } catch (e: any) {
       const msg = String(e?.message || 'Unknown error')
@@ -173,7 +196,15 @@ export default function AIHomeworkHelperScreen() {
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Response</Text>
           <Text style={[styles.usage, { color: theme.textSecondary }]}>Monthly usage (local/server): Helper {usage.homework_help}</Text>
-          <QuotaBar feature="homework_help" planLimit={quotas.ai_requests} />
+          <FeatureQuotaBar
+            feature="homework_help"
+            used={quotaStatus?.used ?? usage.homework_help}
+            limit={quotaStatus?.limit ?? (quotas.ai_requests || 0)}
+            remaining={quotaStatus?.remaining ?? 0}
+            periodLabel="month"
+            refreshKey={quotaRefreshKey}
+            onRefresh={refreshQuotaStatus}
+          />
           {result?.__fallbackUsed && (
             <View style={[styles.fallbackChip, { borderColor: theme.border, backgroundColor: theme.accent + '20' }]}>
               <Ionicons name="information-circle" size={16} color={theme.accent} />
@@ -188,35 +219,6 @@ export default function AIHomeworkHelperScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  )
-}
-
-function QuotaBar({ feature, planLimit }: { feature: 'lesson_generation' | 'grading_assistance' | 'homework_help'; planLimit?: number }) {
-  const { theme } = useTheme()
-  const [status, setStatus] = React.useState<{ used: number; limit: number; remaining: number } | null>(null)
-  React.useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const s = await getQuotaStatus(feature)
-        const limit = planLimit && planLimit > 0 ? planLimit : s.limit
-        if (mounted) setStatus({ used: s.used, limit, remaining: Math.max(0, (limit === -1 ? 0 : limit) - s.used) })
-      } catch {
-        if (mounted) setStatus(null)
-      }
-    })()
-    return () => { mounted = false }
-  }, [feature, planLimit])
-  if (!status) return null
-  if (status.limit === -1) return <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>Quota: Unlimited</Text>
-  const pct = Math.max(0, Math.min(100, Math.round((status.used / Math.max(1, status.limit)) * 100)))
-  return (
-    <View style={{ marginTop: 4 }}>
-      <View style={{ height: 8, borderRadius: 4, backgroundColor: theme.border }}>
-        <View style={{ width: `${pct}%`, height: 8, borderRadius: 4, backgroundColor: theme.primary }} />
-      </View>
-      <Text style={{ color: theme.textSecondary, marginTop: 4, fontSize: 12 }}>Quota: {status.used}/{status.limit} used · {Math.max(0, status.limit - status.used)} remaining</Text>
-    </View>
   )
 }
 
