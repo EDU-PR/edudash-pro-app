@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { DisplayData } from '@/lib/display/types';
 
-const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const REFRESH_INTERVAL_MS = 60 * 1000; // 1 minute
 
 export interface UseDisplayDataOptions {
   orgId: string | null;

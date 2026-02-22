@@ -492,7 +492,7 @@ const normalizeWeeklyProgramErrorMessage = (message: string | null | undefined):
     normalized.includes('api usage limits') ||
     normalized.includes('will regain access on')
   ) {
-    const regain = raw.match(/regain access on ([0-9-]{10} [0-9:]{8} UTC)/i)?.[1];
+    const regain = raw.match(/regain access on ([0-9-]{10}(?: at)? [0-9:]{4,8} UTC)/i)?.[1];
     return regain
       ? `AI provider usage limit reached. Retry after ${regain}, or switch to another configured provider.`
       : 'AI provider usage limit reached. Please retry later or switch to another configured provider.';

@@ -33,7 +33,7 @@ function EmptySectionNotice({ message }: { message: string }) {
 }
 
 const SECTION_ROTATION_SEC = 45;
-const DISPLAY_DATA_REFRESH_MS = 10 * 60 * 1000;
+const DISPLAY_DATA_REFRESH_MS = 60 * 1000;
 const SECTIONS = ['routine', 'lessons', 'menu', 'announcements', 'insights'] as const;
 type DisplaySection = (typeof SECTIONS)[number];
 const DISPLAY_UI_VERSION_LABEL = 'Next-Gen UI';
@@ -793,6 +793,22 @@ function DisplayPageClient() {
     ? (usePairFlow ? fetchByPair : (useCodeFlow ? fetchByCode : fetchByToken))
     : refetchSession;
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const refresh = () => {
+      void refetch();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refetch]);
+
   const dataHealth = useMemo(() => {
     if (!data) {
       return {
@@ -1121,7 +1137,7 @@ function DisplayPageClient() {
             Room Display
           </h1>
           <p className="mt-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
-            Show routine, lessons, menu and announcements on a TV. This page does not auto-refresh.
+            Show routine, lessons, menu and announcements on a TV. This page auto-refreshes every minute.
           </p>
 
           <div className="mt-8 rounded-2xl p-5" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
@@ -1589,7 +1605,7 @@ function DisplayPageClient() {
         </div>
 
         <footer className="mt-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-          {useTvFlow ? 'Data refreshes every 10 minutes. ' : 'Preview updates with your live dashboard data. '}
+          {useTvFlow ? 'Data refreshes every minute. ' : 'Preview refreshes every minute with your live dashboard data. '}
           15/10/5 reminder pattern is active for upcoming routine and lesson starts. Use fullscreen (F11) for TV.
         </footer>
       </div>
