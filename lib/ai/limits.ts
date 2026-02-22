@@ -23,9 +23,9 @@ export type QuotaMap = Record<AIQuotaFeature, number>
  * Aligned with TIER_QUOTAS in `@/lib/tiers` for the shared fields.
  */
 const DEFAULT_MONTHLY_QUOTAS: Record<CapabilityTier, QuotaMap> = {
-  free: { lesson_generation: 5, grading_assistance: 5, homework_help: 30, transcription: 60 },         // ~30 minutes of voice
-  starter: { lesson_generation: 10, grading_assistance: 10, homework_help: 100, transcription: 120 },   // ~60 minutes
-  premium: { lesson_generation: 50, grading_assistance: 100, homework_help: 300, transcription: 300 },   // ~2.5 hours
+  free: { lesson_generation: 5, grading_assistance: 10, homework_help: 20, transcription: 5 },
+  starter: { lesson_generation: 30, grading_assistance: 60, homework_help: 120, transcription: 30 },
+  premium: { lesson_generation: 120, grading_assistance: 240, homework_help: 480, transcription: 120 },
   enterprise: { lesson_generation: 5000, grading_assistance: 10000, homework_help: 30000, transcription: 36000 }, // ~300 hours
 }
 

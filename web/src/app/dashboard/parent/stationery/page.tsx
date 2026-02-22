@@ -9,9 +9,42 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
 import { ClipboardCheck, RefreshCw } from 'lucide-react';
 
+type ChildSchoolAware = {
+  preschoolId?: string | null;
+  organizationId?: string | null;
+  preschool_id?: string | null;
+  organization_id?: string | null;
+};
+
+function getChildSchoolIds(child: ChildSchoolAware): string[] {
+  const ids = [
+    child.organizationId,
+    child.preschoolId,
+    child.organization_id,
+    child.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
+function getCurrentAcademicYear(): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+      }).format(new Date())
+    );
+  } catch {
+    return new Date().getFullYear();
+  }
+}
+
 export default function ParentStationeryPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const academicYear = useMemo(() => getCurrentAcademicYear(), []);
 
   const [userId, setUserId] = useState<string | undefined>(undefined);
   const [featureLoading, setFeatureLoading] = useState(false);
@@ -38,7 +71,7 @@ export default function ParentStationeryPage() {
   useEffect(() => {
     let cancelled = false;
     const loadFeature = async () => {
-      const schoolIds = Array.from(new Set(childrenCards.map((child) => child.preschoolId).filter(Boolean))) as string[];
+      const schoolIds = Array.from(new Set(childrenCards.flatMap((child) => getChildSchoolIds(child)))) as string[];
       if (!schoolIds.length) {
         if (!cancelled) {
           setStationeryEnabled(false);
@@ -49,9 +82,16 @@ export default function ParentStationeryPage() {
 
       setFeatureLoading(true);
       try {
-        const [{ data: preschools }, { data: orgs }] = await Promise.all([
+        const [{ data: preschools }, { data: orgs }, { data: publishedLists }] = await Promise.all([
           supabase.from('preschools').select('id, settings').in('id', schoolIds),
           supabase.from('organizations').select('id, settings').in('id', schoolIds),
+          supabase
+            .from('stationery_lists')
+            .select('school_id')
+            .in('school_id', schoolIds)
+            .eq('academic_year', academicYear)
+            .eq('is_visible', true)
+            .eq('is_published', true),
         ]);
 
         const ids = new Set<string>();
@@ -59,6 +99,9 @@ export default function ParentStationeryPage() {
           if (row?.settings?.features?.stationery?.enabled) {
             ids.add(String(row.id));
           }
+        });
+        (publishedLists || []).forEach((row: any) => {
+          if (row?.school_id) ids.add(String(row.school_id));
         });
 
         if (!cancelled) {
@@ -75,10 +118,13 @@ export default function ParentStationeryPage() {
     return () => {
       cancelled = true;
     };
-  }, [childrenCards, supabase]);
+  }, [academicYear, childrenCards, supabase]);
 
   const visibleChildren = useMemo(
-    () => childrenCards.filter((child) => child.preschoolId && enabledSchoolIds.includes(child.preschoolId)),
+    () =>
+      childrenCards.filter((child) =>
+        getChildSchoolIds(child).some((schoolId) => enabledSchoolIds.includes(schoolId))
+      ),
     [childrenCards, enabledSchoolIds]
   );
 
@@ -135,4 +181,3 @@ export default function ParentStationeryPage() {
     </ParentShell>
   );
 }
-

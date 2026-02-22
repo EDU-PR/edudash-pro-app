@@ -40,10 +40,48 @@ import { useParentInsights } from '@/lib/hooks/parent/useParentInsights';
 import { createClient } from '@/lib/supabase/client';
 import { getParentDashboardCopy } from './parentDashboardCopy';
 
+type ChildSchoolAware = {
+  preschoolId?: string | null;
+  organizationId?: string | null;
+  preschool_id?: string | null;
+  organization_id?: string | null;
+};
+
+function getChildSchoolIds(child: ChildSchoolAware): string[] {
+  const ids = [
+    child.organizationId,
+    child.preschoolId,
+    child.organization_id,
+    child.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
+function childBelongsToEnabledSchool(child: ChildSchoolAware, enabledSchoolIds: string[]): boolean {
+  if (!enabledSchoolIds.length) return false;
+  return getChildSchoolIds(child).some((schoolId) => enabledSchoolIds.includes(schoolId));
+}
+
+function getCurrentAcademicYear(): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-ZA', {
+        timeZone: 'Africa/Johannesburg',
+        year: 'numeric',
+      }).format(new Date())
+    );
+  } catch {
+    return new Date().getFullYear();
+  }
+}
+
 export default function ParentDashboard() {
   const router = useRouter();
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
+  const academicYear = useMemo(() => getCurrentAcademicYear(), []);
   const COPY = useMemo(() => getParentDashboardCopy(t), [t]);
   
   // Get all data from custom hook
@@ -97,11 +135,11 @@ export default function ParentDashboard() {
   useEffect(() => {
     let cancelled = false;
     const loadUniformEnabled = async () => {
-      const preschoolIds = Array.from(
-        new Set(childrenCards.map((child) => child.preschoolId).filter(Boolean))
+      const schoolIds = Array.from(
+        new Set(childrenCards.flatMap((child) => getChildSchoolIds(child)))
       ) as string[];
 
-      if (!preschoolIds.length) {
+      if (!schoolIds.length) {
         if (!cancelled) {
           setUniformEnabled(false);
           setUniformSchoolIds([]);
@@ -113,14 +151,22 @@ export default function ParentDashboard() {
         const { data: preschoolSettings, error: preschoolError } = await supabase
           .from('preschools')
           .select('id, settings')
-          .in('id', preschoolIds);
+          .in('id', schoolIds);
         if (preschoolError) throw preschoolError;
 
         const { data: organizationSettings, error: organizationError } = await supabase
           .from('organizations')
           .select('id, settings')
-          .in('id', preschoolIds);
+          .in('id', schoolIds);
         if (organizationError) throw organizationError;
+
+        const { data: publishedStationeryLists } = await supabase
+          .from('stationery_lists')
+          .select('school_id')
+          .in('school_id', schoolIds)
+          .eq('academic_year', academicYear)
+          .eq('is_visible', true)
+          .eq('is_published', true);
 
         const enabledIds = new Set<string>();
         const stationeryIds = new Set<string>();
@@ -135,6 +181,9 @@ export default function ParentDashboard() {
           const stationery = row?.settings?.features?.stationery?.enabled;
           if (enabled) enabledIds.add(row.id);
           if (stationery) stationeryIds.add(row.id);
+        });
+        (publishedStationeryLists || []).forEach((row: any) => {
+          if (row?.school_id) stationeryIds.add(String(row.school_id));
         });
 
         if (!cancelled) {
@@ -157,7 +206,7 @@ export default function ParentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [childrenCards, supabase]);
+  }, [academicYear, childrenCards, supabase]);
 
   // Auth guard
   useEffect(() => {
@@ -502,9 +551,7 @@ export default function ParentDashboard() {
           >
             {hasOrganization && hasChildren ? (
               <UniformSizesWidget
-                childrenCards={childrenCards.filter((child) =>
-                  child.preschoolId ? uniformSchoolIds.includes(child.preschoolId) : false
-                )}
+                childrenCards={childrenCards.filter((child) => childBelongsToEnabledSchool(child, uniformSchoolIds))}
               />
             ) : (
               <SectionEmptyState
@@ -528,9 +575,7 @@ export default function ParentDashboard() {
           >
             {hasOrganization && hasChildren ? (
               <StationeryChecklistWidget
-                childrenCards={childrenCards.filter((child) =>
-                  child.preschoolId ? stationerySchoolIds.includes(child.preschoolId) : false
-                )}
+                childrenCards={childrenCards.filter((child) => childBelongsToEnabledSchool(child, stationerySchoolIds))}
               />
             ) : (
               <SectionEmptyState

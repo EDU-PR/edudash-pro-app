@@ -176,6 +176,10 @@ export interface WeeklyProgramPublishInput {
 export interface WeeklyProgramGenerationConstraints {
   dailyMinutes?: number;
   budgetLevel?: 'low' | 'medium' | 'high';
+  arrivalStartTime?: string;
+  arrivalCutoffTime?: string;
+  pickupStartTime?: string;
+  pickupCutoffTime?: string;
   indoorOnly?: boolean;
   includeAssessmentBlock?: boolean;
   includeParentTipPerDay?: boolean;
