@@ -114,9 +114,6 @@ const CATEGORY_ORDER: FeeCategoryCode[] = [
 ];
 
 export default function POPReviewScreen() {
-  // #region agent log
-  logger.debug('POPReview', 'POPReviewScreen-MOUNTED', JSON.stringify({timestamp:Date.now()}));
-  // #endregion
   const { theme } = useTheme();
   const { profile } = useAuth();
   const financeAccess = useFinanceAccessGuard();

@@ -15,6 +15,8 @@ export interface ChatMessage {
   meta?: {
     tokensUsed?: number;
     model?: string;
+    suggested_actions?: string[];
+    plan_mode?: Record<string, unknown>;
     resolution_status?: 'resolved' | 'needs_clarification' | 'escalated' | string;
     confidence_score?: number;
     escalation_offer?: boolean;

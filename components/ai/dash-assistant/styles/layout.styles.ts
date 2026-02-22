@@ -59,7 +59,7 @@ export const layoutStyles = StyleSheet.create({
     right: 18,
     zIndex: 140,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 9,
     flexDirection: 'row',

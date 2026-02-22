@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/principal/layout,_N_T_/dashboard/principal/reports/layout,_N_T_/dashboard/principal/reports/create/layout,_N_T_/dashboard/principal/reports/create/page,_N_T_/dashboard/principal/reports/create"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/principal/reports/create/__PAGE__",
+    "/dashboard/principal/reports/create",
+    "/dashboard/principal/reports",
+    "/dashboard/principal",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

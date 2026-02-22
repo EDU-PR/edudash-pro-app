@@ -33,6 +33,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
 import { getPrewarmedCallObject } from '@/lib/calls/CallPrewarming';
+import { sendIncomingCallPush } from '@/lib/calls/sendIncomingCallPush';
 import { track } from '@/lib/analytics';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 import { useCallBackgroundHandler } from './hooks';
@@ -910,67 +911,30 @@ export function WhatsAppStyleVideoCall({
               meeting_url: roomUrl,
             });
 
-            // CRITICAL: Send FCM data-only message to wake callee's app when killed (Android)
-            // FCM data-only messages with high priority can wake killed apps
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-fcm-call`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                callee_user_id: calleeId,
-                call_id: newCallId,
-                caller_id: user.id,
-                caller_name: callerName,
-                call_type: 'video',
-                meeting_url: roomUrl,
-                thread_id: threadId,
-              }),
-            }).then(res => res.json()).then(result => {
-              if (result.success) {
-                console.log('[VideoCall] ✅ FCM wake-on-call message sent');
-              } else if (result?.fallback_to_expo) {
-                console.log('[VideoCall] ℹ️ FCM fallback active', {
-                  attempted: result?.attempted_tokens,
-                  successful: result?.successful_tokens,
-                  errorCodes: result?.error_codes,
+            // Keep call setup non-blocking while dispatching wake/push notifications.
+            void sendIncomingCallPush({
+              accessToken,
+              calleeUserId: calleeId,
+              callId: newCallId,
+              callerId: user.id,
+              callerName,
+              callType: 'video',
+              meetingUrl: roomUrl,
+              threadId,
+              source: 'VideoCall',
+            })
+              .then((pushResult) => {
+                console.log('[VideoCall] incoming_call_push_dispatch', {
+                  call_id: newCallId,
+                  fcm_success_count: pushResult.fcmSuccessCount,
+                  expo_fallback_sent: pushResult.expoFallbackSent,
+                  platform_filter_used: pushResult.expoPlatformFilter,
+                  error_codes: pushResult.errorCodes,
                 });
-              } else {
-                console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
-              }
-            }).catch(err => {
-              console.warn('[VideoCall] FCM call failed:', err);
-            });
-
-            // Send Expo push notification (visible banner + sound for backgrounded apps)
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                event_type: 'incoming_call',
-                user_ids: [calleeId],
-                call_id: newCallId,
-                caller_id: user.id,
-                caller_name: callerName,
-                call_type: 'video',
-                meeting_url: roomUrl,
-                thread_id: threadId,
-              }),
-            }).then(res => {
-              if (res.ok) {
-                console.log('[VideoCall] ✅ Push notification sent to callee');
-              } else {
-                res.text().then(text => {
-                  console.warn('[VideoCall] Push notification failed:', text);
-                });
-              }
-            }).catch(err => {
-              console.warn('[VideoCall] Failed to send push notification:', err);
-            });
+              })
+              .catch((err) => {
+                console.warn('[VideoCall] incoming call push dispatch failed:', err);
+              });
 
             await getSupabase().from('call_signals').insert({
               call_id: newCallId,

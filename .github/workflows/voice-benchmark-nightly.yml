@@ -1,0 +1,41 @@
+name: Voice Benchmark Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  gate-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run latest voice benchmark gate (if present)
+        run: |
+          GATE_FILE="$(find scripts/artifacts/voice-benchmark -name gate_result.json -print 2>/dev/null | sort | tail -n 1 || true)"
+          if [ -z "$GATE_FILE" ]; then
+            echo "No gate_result.json found. Nightly job exiting without failure."
+            exit 0
+          fi
+          npm run benchmark:voice:check -- --input "$GATE_FILE"
+
+      - name: Upload voice benchmark artifacts (if present)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-benchmark-nightly-${{ github.run_id }}
+          path: scripts/artifacts/voice-benchmark/**
+          if-no-files-found: ignore
+          retention-days: 30

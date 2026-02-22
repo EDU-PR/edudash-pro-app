@@ -318,7 +318,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   const autoSendProgress = showAutoSendCountdown
     ? Math.max(0, Math.min(1, voiceAutoSendCountdownMs / autoSendTotalMs))
     : 0;
-  const showVoiceStatus = isRecording || hasPartialTranscript || isLoading || isSpeaking || showAutoSendCountdown;
+  // Avoid duplicate "thinking" UI: loading state is rendered by the
+  // floating bottom thinking dock in DashAssistant shell.
+  const showVoiceStatus = isRecording || hasPartialTranscript || isSpeaking || showAutoSendCountdown;
   const waveformActive = isRecording && recordingVoiceActivity;
   const statusToneColor = isRecording ? theme.error : (isLoading ? theme.primary : theme.textSecondary);
   const voiceStatusLabel = isRecording

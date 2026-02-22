@@ -124,6 +124,16 @@ type OrbPdfArtifact = {
   filename?: string | null;
 };
 
+type DashVoiceDictationProbe = {
+  run_id?: string;
+  platform: 'mobile' | 'web';
+  source: string;
+  stt_start_at?: string;
+  first_partial_at?: string;
+  final_transcript_at?: string;
+  commit_at?: string;
+};
+
 export default function DashVoiceScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -178,6 +188,7 @@ export default function DashVoiceScreen() {
   const voiceOrbRef = useRef<VoiceOrbRef>(null);
   const inputRef = useRef<TextInput>(null);
   const ccScrollRef = useRef<ScrollView>(null);
+  const voiceDictationProbeRef = useRef<DashVoiceDictationProbe | null>(null);
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
@@ -529,7 +540,10 @@ export default function DashVoiceScreen() {
   }, [logDashTrace, normalizedToolTier, profile, role, user]);
 
   // ── Send Message (streaming SSE) ──────────────────────────────────
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    options?: { dictationProbe?: DashVoiceDictationProbe },
+  ) => {
     const trimmed = text.trim();
     if (!trimmed || isProcessing) return;
     const shouldAutoExportPdf = wantsPdfArtifact(trimmed);
@@ -659,6 +673,7 @@ export default function DashVoiceScreen() {
         metadata: {
           role,
           source: 'dash_voice_orb',
+          voice_dictation_probe: options?.dictationProbe,
           org_type: orgType,
           dash_mode: dashPolicy.defaultMode,
           language: preferredLanguage || undefined,
@@ -1021,9 +1036,20 @@ export default function DashVoiceScreen() {
     if (language) setPreferredLanguage(language);
     const cleaned = formatted.trim();
     if (!cleaned) return;
+    const nowIso = new Date().toISOString();
+    const benchmarkRunId = String(process.env.EXPO_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim();
+    const dictationProbe: DashVoiceDictationProbe = {
+      ...(voiceDictationProbeRef.current || { platform: 'mobile', source: 'dash_voice_orb' }),
+      platform: 'mobile',
+      source: 'dash_voice_orb',
+      final_transcript_at: voiceDictationProbeRef.current?.final_transcript_at || nowIso,
+      commit_at: nowIso,
+      ...(benchmarkRunId ? { run_id: benchmarkRunId } : {}),
+    };
+    voiceDictationProbeRef.current = null;
     setLiveUserTranscript('');
     setLastUserTranscript(cleaned);
-    sendMessage(cleaned);
+    sendMessage(cleaned, { dictationProbe });
   }, [isProcessing, isSpeaking, logDashTrace, orgType, preferredLanguage, sendMessage]);
 
   const handleSubmit = useCallback(() => {
@@ -1150,9 +1176,32 @@ export default function DashVoiceScreen() {
                 isListening={isListening}
                 isSpeaking={isSpeaking}
                 isParentProcessing={isProcessing}
-                onStartListening={() => setIsListening(true)}
                 onStopListening={() => setIsListening(false)}
-                onPartialTranscript={(text) => setLiveUserTranscript(text)}
+                onStartListening={() => {
+                  setIsListening(true);
+                  if (!voiceDictationProbeRef.current) {
+                    voiceDictationProbeRef.current = {
+                      platform: 'mobile',
+                      source: 'dash_voice_orb',
+                      stt_start_at: new Date().toISOString(),
+                    };
+                  } else if (!voiceDictationProbeRef.current.stt_start_at) {
+                    voiceDictationProbeRef.current.stt_start_at = new Date().toISOString();
+                  }
+                }}
+                onPartialTranscript={(text) => {
+                  setLiveUserTranscript(text);
+                  if (!voiceDictationProbeRef.current) {
+                    voiceDictationProbeRef.current = {
+                      platform: 'mobile',
+                      source: 'dash_voice_orb',
+                      stt_start_at: new Date().toISOString(),
+                    };
+                  }
+                  if (!voiceDictationProbeRef.current.first_partial_at && String(text || '').trim()) {
+                    voiceDictationProbeRef.current.first_partial_at = new Date().toISOString();
+                  }
+                }}
                 onTranscript={handleVoiceInput}
                 onVoiceError={handleVoiceError}
                 onTTSStart={() => setIsSpeaking(true)}

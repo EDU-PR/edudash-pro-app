@@ -54,17 +54,6 @@ export async function proxy(request: NextRequest) {
   const accessToken = searchParams.get('access_token')
   const refreshToken = searchParams.get('refresh_token')
 
-  // Console log for debugging (only in development)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Middleware Debug]', {
-      pathname,
-      tokenHash: !!tokenHash,
-      type,
-      hasAccessToken: !!accessToken,
-      hasRefreshToken: !!refreshToken,
-    })
-  }
-
   // Password reset link clicked - redirect to reset-password page
   // This handles both token_hash and access_token flows
   if (pathname !== '/reset-password') {

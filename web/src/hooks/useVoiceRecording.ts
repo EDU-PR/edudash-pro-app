@@ -14,6 +14,17 @@ export interface VoiceRecordingState {
   audioBlob: Blob | null;
   error: string | null;
   permissionState: 'prompt' | 'granted' | 'denied' | 'unknown';
+  probe: VoiceDictationProbe | null;
+}
+
+export interface VoiceDictationProbe {
+  run_id?: string;
+  platform: 'web';
+  source: string;
+  stt_start_at?: string;
+  first_partial_at?: string;
+  final_transcript_at?: string;
+  commit_at?: string;
 }
 
 export interface UseVoiceRecordingReturn {
@@ -35,6 +46,7 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
     audioBlob: null,
     error: null,
     permissionState: 'unknown',
+    probe: null,
   });
 
   // Initialize isSupported as false to match server render, then update on mount
@@ -91,6 +103,17 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
+          setState((prev) => {
+            if (prev.probe?.first_partial_at) return prev;
+            if (!prev.probe) return prev;
+            return {
+              ...prev,
+              probe: {
+                ...prev.probe,
+                first_partial_at: new Date().toISOString(),
+              },
+            };
+          });
           chunksRef.current.push(event.data);
         }
       };
@@ -132,6 +155,14 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
         error: null,
         audioBlob: null,
         permissionState: 'granted',
+        probe: {
+          platform: 'web',
+          source: 'dash_chat_web',
+          stt_start_at: new Date().toISOString(),
+          ...(String(process.env.NEXT_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim()
+            ? { run_id: String(process.env.NEXT_PUBLIC_VOICE_BENCHMARK_RUN_ID || '').trim() }
+            : {}),
+        },
       }));
       return true;
 
@@ -148,6 +179,7 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
         error: errorMessage,
         isRecording: false,
         permissionState: error.name === 'NotAllowedError' ? 'denied' : 'unknown',
+        probe: null,
       }));
       return false;
     }
@@ -215,6 +247,7 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
         audioBlob: null,
         error: null,
         permissionState: 'unknown',
+        probe: null,
       });
     }
   }, []);

@@ -1,0 +1,395 @@
+import { Dimensions, Platform, StyleSheet } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SUBJECT_CARD_WIDTH = Math.max(140, Math.floor((SCREEN_WIDTH - 16 * 2 - 12) / 2));
+
+export const examPrepWizardStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  disabledContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  disabledText: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  disabledSubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  backButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  header: {
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  headerBadge: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  headerBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  progressSteps: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 20,
+  },
+  progressStep: {
+    alignItems: 'center',
+  },
+  progressDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressLabel: {
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  content: {
+    flex: 1,
+  },
+  contentInner: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  quickLaunchCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  quickLaunchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickLaunchTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  quickLaunchSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  quickLaunchButton: {
+    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  quickLaunchButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepContainer: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  stepSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  backStepButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  backStepText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  gradeScroll: {
+    paddingVertical: 8,
+  },
+  gradeCard: {
+    width: 102,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginRight: 12,
+    alignItems: 'center',
+  },
+  gradeLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  gradeAge: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  categoryScroll: {
+    paddingBottom: 10,
+    paddingTop: 2,
+  },
+  categoryChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  subjectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  subjectCard: {
+    width: SUBJECT_CARD_WIDTH,
+    minHeight: 112,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+    justifyContent: 'space-between',
+  },
+  subjectLabel: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  emptySubjects: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  emptySubjectsText: {
+    fontSize: 13,
+  },
+  nextButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nextButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  examTypeGrid: {
+    gap: 10,
+  },
+  examTypeCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+  },
+  examTypeLabel: {
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  examTypeDesc: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  languageSection: {
+    marginTop: 14,
+  },
+  languageLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  languageScroll: {
+    paddingBottom: 4,
+  },
+  languageChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  languageChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  reviewCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  reviewLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  reviewValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 10,
+  },
+  contextToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  contextToggle: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  contextCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  contextLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  contextSubLabel: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  summaryChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summaryChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  topicBlock: {
+    marginTop: 4,
+  },
+  topicHeading: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  generateButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  generateButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryGenerateButton: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryGenerateText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});

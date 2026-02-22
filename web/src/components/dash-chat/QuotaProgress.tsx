@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Sparkles, TrendingUp, Zap, Crown, Building2 } from 'lucide-react';
+import { FeatureQuotaBar } from '@/components/ui/FeatureQuotaBar';
 
 interface QuotaProgressProps {
   userId: string;
@@ -23,13 +24,15 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchQuota();
-  }, [userId, refreshTrigger]); // Re-fetch when refreshTrigger changes
-
   // Map display tier to ai_usage_tiers tier_name
   const mapTierToDbTier = (tier: string, role?: string): string => {
     const tierLower = tier.toLowerCase().replace(/[\s-]/g, '_');
+    const roleLower = String(role || '').toLowerCase();
+    const scope = roleLower.includes('parent')
+      ? 'parent'
+      : roleLower.includes('teacher')
+        ? 'teacher'
+        : 'school';
     
     // If already in correct format (e.g., school_starter), return as-is
     if (tierLower.startsWith('school_') || tierLower.startsWith('parent_') || tierLower.startsWith('teacher_')) {
@@ -38,11 +41,11 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
     
     // Map simple tier names to full tier names based on context
     // For school/organization members, use school_ prefix
-    if (tierLower === 'starter') return 'school_starter';
-    if (tierLower === 'premium') return 'school_premium';
-    if (tierLower === 'pro') return 'school_pro';
+    if (tierLower === 'starter') return scope === 'parent' ? 'parent_starter' : `${scope}_starter`;
+    if (tierLower === 'premium') return scope === 'parent' ? 'parent_plus' : scope === 'teacher' ? 'teacher_pro' : 'school_premium';
+    if (tierLower === 'pro') return scope === 'parent' ? 'parent_plus' : scope === 'teacher' ? 'teacher_pro' : 'school_pro';
     if (tierLower === 'enterprise') return 'school_enterprise';
-    if (tierLower === 'basic') return 'school_starter';
+    if (tierLower === 'basic') return scope === 'parent' ? 'parent_starter' : `${scope}_starter`;
     if (tierLower === 'free') return 'free';
     if (tierLower === 'trial') return 'trial';
     
@@ -72,7 +75,7 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
     return 20; // free
   };
 
-  const fetchQuota = async () => {
+  const fetchQuota = useCallback(async () => {
     if (!userId) return;
 
     try {
@@ -142,14 +145,18 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, userId]);
+
+  useEffect(() => {
+    void fetchQuota();
+  }, [fetchQuota, refreshTrigger]); // Re-fetch when refreshTrigger changes
 
   if (loading || !quota) return null;
 
   // Enterprise tier (999999 or -1) is unlimited
   const isUnlimited = quota.limit === -1 || quota.limit >= 999999;
   const percentage = !isUnlimited && quota.limit > 0 ? Math.min((quota.used / quota.limit) * 100, 100) : 0;
-  const remaining = !isUnlimited ? quota.limit - quota.used : Infinity;
+  const remaining = !isUnlimited ? Math.max(0, quota.limit - quota.used) : Infinity;
   const isLow = !isUnlimited && percentage > 80;
   const isExceeded = !isUnlimited && quota.used >= quota.limit;
 
@@ -194,35 +201,14 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
             </span>
           </div>
         ) : (
-          <div className="flex-1 flex items-center gap-2">
-            <div className="relative flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-              {/* Glow effect */}
-              <div 
-                className={`absolute inset-y-0 left-0 blur-sm opacity-50 ${
-                  isExceeded ? 'bg-red-500' : isLow ? 'bg-orange-500' : `bg-gradient-to-r ${tierInfo.color}`
-                }`}
-                style={{ width: `${percentage}%` }}
-              />
-              {/* Actual progress */}
-              <div
-                className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out ${
-                  isExceeded
-                    ? 'bg-gradient-to-r from-red-500 to-red-400'
-                    : isLow
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-400'
-                    : `bg-gradient-to-r ${tierInfo.color}`
-                }`}
-                style={{ width: `${percentage}%` }}
-              />
-            </div>
-            
-            {/* Count */}
-            <span className={`text-[10px] sm:text-xs font-mono tabular-nums whitespace-nowrap ${
-              isExceeded ? 'text-red-400' : isLow ? 'text-orange-400' : 'text-gray-400'
-            }`}>
-              {remaining > 0 ? `${remaining}` : '0'}
-              <span className="hidden sm:inline"> left</span>
-            </span>
+          <div className="flex-1">
+            <FeatureQuotaBar
+              feature="chat messages"
+              used={quota.used}
+              limit={quota.limit}
+              remaining={remaining}
+              periodLabel="month"
+            />
           </div>
         )}
 

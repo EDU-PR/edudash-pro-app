@@ -9,13 +9,18 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Send, Camera, Mic, Square, Loader2 } from 'lucide-react';
-import { useVoiceRecording, formatDuration, blobToBase64 } from '@/hooks/useVoiceRecording';
+import {
+  useVoiceRecording,
+  formatDuration,
+  blobToBase64,
+  type VoiceDictationProbe,
+} from '@/hooks/useVoiceRecording';
 
 interface ChatInputProps {
   input: string;
   setInput: (value: string) => void;
   isLoading: boolean;
-  onSend: (text?: string, voiceData?: { blob: Blob; base64: string }) => Promise<void>;
+  onSend: (text?: string, voiceData?: { blob: Blob; base64: string; probe?: VoiceDictationProbe }) => Promise<void>;
   onCameraClick: () => void;
   selectedImagesCount: number;
 }
@@ -62,11 +67,23 @@ export function ChatInput({
     if (voiceState.isRecording) {
       // Stop recording and send
       setIsSendingVoice(true);
+      const probeBase: VoiceDictationProbe = {
+        ...(voiceState.probe || { platform: 'web', source: 'dash_chat_web' }),
+        platform: 'web',
+        source: 'dash_chat_web',
+      };
       const blob = await stopRecording();
       if (blob) {
         try {
           const base64 = await blobToBase64(blob);
-          await onSend(undefined, { blob, base64 });
+          await onSend(undefined, {
+            blob,
+            base64,
+            probe: {
+              ...probeBase,
+              final_transcript_at: new Date().toISOString(),
+            },
+          });
         } catch (error) {
           console.error('Error sending voice:', error);
         }

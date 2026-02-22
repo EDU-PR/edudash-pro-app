@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-02-22",
+  "total_samples": 120,
+  "languages": {
+    "en": 48,
+    "af": 24,
+    "zu": 24,
+    "xh": 24
+  },
+  "platforms": [
+    "mobile",
+    "web"
+  ],
+  "categories": [
+    "short",
+    "medium",
+    "long",
+    "command",
+    "names_acronyms"
+  ],
+  "schema": {
+    "sample_id": "string",
+    "language": "en|af|zu|xh",
+    "category": "short|medium|long|command|names_acronyms",
+    "reference_text": "string"
+  }
+}

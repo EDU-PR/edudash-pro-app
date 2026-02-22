@@ -67,7 +67,9 @@ export default function PrincipalNewMessageScreen() {
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
 
   const loadDirectory = useCallback(async () => {
-    if (!organizationId) return;
+    if (!organizationId) {
+      return;
+    }
     setLoading(true);
     try {
       const { data: studentRows, error } = await assertSupabase()

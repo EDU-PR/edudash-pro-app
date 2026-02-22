@@ -928,6 +928,10 @@ export class DashAIClient {
           pendingToolCalls = [...overflow, ...followUpPending];
         } catch (contError) {
           console.warn('[DashAIClient] Tool continuation call failed:', contError);
+          const existingContent = String(assistantContent || '').trim();
+          const hasCommittedContent =
+            existingContent.length > 0 &&
+            !/^(ok(?:ay)?|sure|got it|let me|working on|one moment|please wait)\b/i.test(existingContent);
           const lastRequestedToolName = String(
             [...currentBatch].reverse().map((entry: any) => entry?.name).find(Boolean) || ''
           ).trim().toLowerCase();
@@ -939,7 +943,11 @@ export class DashAIClient {
               if (!lastRequestedToolName) return true;
               return entryName === lastRequestedToolName;
             });
-          if (lastToolResult) {
+          if (hasCommittedContent) {
+            // Preserve a meaningful response that already exists rather than replacing
+            // it with a generic tool fallback sentence.
+            assistantContent = existingContent;
+          } else if (lastToolResult) {
             assistantContent = this.buildToolCompletionFallback(lastToolResult);
           } else if (!String(assistantContent || '').trim()) {
             assistantContent = 'I completed the tool action, but final formatting failed. Check the tool card below.';

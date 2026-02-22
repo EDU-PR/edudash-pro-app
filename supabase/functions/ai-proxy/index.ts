@@ -1926,10 +1926,22 @@ function buildProviderConversationMessages(messages: Array<JsonRecord>): Array<J
   return normalized;
 }
 
+function hasQuotaOrRateLimitSignal(message: string): boolean {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('insufficient_quota') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('workspace api usage limits') ||
+    normalized.includes('api usage limits') ||
+    normalized.includes('will regain access on') ||
+    normalized.includes(' 429 ') ||
+    normalized.includes('status":429')
+  );
+}
+
 function isNonRetryableInvalidRequest(message: string): boolean {
   const normalized = String(message || '').toLowerCase();
   return (
-    normalized.includes('invalid_request_error') ||
     normalized.includes('invalid_request_no_user_message') ||
     normalized.includes('messages: at least one message is required') ||
     normalized.includes('please send a question or attach a file')
@@ -1943,7 +1955,7 @@ function shouldAttemptCrossProviderFallback(message: string): boolean {
 function mapProviderErrorStatus(message: string): number {
   const normalized = String(message || '').toLowerCase();
   if (isNonRetryableInvalidRequest(message)) return 400;
-  if (normalized.includes('insufficient_quota') || normalized.includes('rate limit') || normalized.includes(' 429 ')) {
+  if (hasQuotaOrRateLimitSignal(message)) {
     return 429;
   }
   if (

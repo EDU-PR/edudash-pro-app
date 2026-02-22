@@ -19,6 +19,7 @@ import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
 import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator'
 import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips'
+import { FeatureQuotaBar } from '@/components/ai/FeatureQuotaBar'
 import EduDashSpinner from '@/components/ui/EduDashSpinner'
 
 /** Parsed grading result from AI */
@@ -51,6 +52,8 @@ export default function AIHomeworkGraderLive() {
   const [jsonBuffer, setJsonBuffer] = useState('')
   const [parsed, setParsed] = useState<ParsedResult | null>(null)
   const [usage, setUsage] = useState({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
+  const [quotaStatus, setQuotaStatus] = useState<{ used: number; limit: number; remaining: number } | null>(null)
+  const [quotaRefreshKey, setQuotaRefreshKey] = useState(0)
   const [recordStatus, setRecordStatus] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; id?: string; message?: string }>({ state: 'idle' })
   const bufferRef = useRef('')
   const pulseAnim = useRef(new Animated.Value(1)).current
@@ -90,6 +93,25 @@ export default function AIHomeworkGraderLive() {
   }, [params.assignmentTitle, params.gradeLevel, params.submissionContent])
 
   React.useEffect(() => { getCombinedUsage().then(setUsage).catch(() => {}) }, [])
+
+  const refreshQuotaStatus = React.useCallback(async () => {
+    try {
+      const status = await getQuotaStatus('grading_assistance')
+      const effectiveLimit = quotas.ai_requests && quotas.ai_requests > 0 ? quotas.ai_requests : status.limit
+      const remaining = effectiveLimit < 0 ? Number.POSITIVE_INFINITY : Math.max(0, effectiveLimit - status.used)
+      setQuotaStatus({
+        used: status.used,
+        limit: effectiveLimit,
+        remaining,
+      })
+    } catch {
+      // non-fatal
+    }
+  }, [quotas.ai_requests])
+
+  React.useEffect(() => {
+    void refreshQuotaStatus()
+  }, [refreshQuotaStatus])
 
   const parseResult = React.useCallback((text: string, summary?: Partial<ParsedResult> | null): ParsedResult => {
     const make = (o: any): ParsedResult => ({
@@ -136,6 +158,7 @@ export default function AIHomeworkGraderLive() {
     const gate = await canUseFeature('grading_assistance', 1)
     if (!gate.allowed) {
       const status = await getQuotaStatus('grading_assistance')
+      setQuotaStatus(status)
       toast.warn(`Monthly limit reached: ${status.used}/${status.limit} used.`)
       setPending(false); return
     }
@@ -160,14 +183,16 @@ export default function AIHomeworkGraderLive() {
       setRecordStatus({ state: 'saving' })
       try {
         const saved = await persistGradingRecord(finalParsed, text)
-        setRecordStatus({ state: 'saved', id: saved.id })
-      } catch (persistErr: unknown) {
+      setRecordStatus({ state: 'saved', id: saved.id })
+    } catch (persistErr: unknown) {
         const msg = persistErr instanceof Error ? persistErr.message : 'Failed to save'
         setRecordStatus({ state: 'error', message: msg })
         toast.warn(`Grading done, but save failed: ${msg}`)
       }
       setIsStreaming(false); setPending(false)
       setUsage(await getCombinedUsage())
+      await refreshQuotaStatus()
+      setQuotaRefreshKey((prev) => prev + 1)
       track('edudash.ai.grader.ui_completed', { score: finalParsed.score })
     } catch (e: unknown) {
       setIsStreaming(false); setPending(false)
@@ -253,7 +278,15 @@ export default function AIHomeworkGraderLive() {
             <Text style={[s.sectionTitle, { color: theme.text }]}>Live Stream</Text>
             {isStreaming && <View style={s.liveChip}><Text style={s.liveText}>LIVE</Text></View>}
           </View>
-          <QuotaBar feature="grading_assistance" planLimit={quotas.ai_requests} theme={theme} isDark={isDark} />
+          <FeatureQuotaBar
+            feature="grading_assistance"
+            used={quotaStatus?.used ?? usage.grading_assistance}
+            limit={quotaStatus?.limit ?? (quotas.ai_requests || 0)}
+            remaining={quotaStatus?.remaining ?? 0}
+            periodLabel="month"
+            refreshKey={quotaRefreshKey}
+            onRefresh={refreshQuotaStatus}
+          />
           {result?.__fallbackUsed && (
             <View style={[s.fallbackChip, { backgroundColor: theme.accent + '18', borderColor: theme.accent + '40' }]}>
               <Ionicons name="information-circle" size={14} color={theme.accent} />
@@ -342,31 +375,6 @@ function DetailList({ icon, color, title, items, theme }: { icon: string; color:
     <View style={{ marginTop: 14 }}>
       <View style={s.row}><Ionicons name={icon as any} size={15} color={color} /><Text style={[s.detailTitle, { color: theme.text }]}> {title}</Text></View>
       {items.map((item, i) => <Text key={i} style={[s.detailItem, { color: theme.textSecondary }]}>  •  {item}</Text>)}
-    </View>
-  )
-}
-
-function QuotaBar({ feature, planLimit, theme, isDark }: { feature: 'lesson_generation' | 'grading_assistance' | 'homework_help'; planLimit?: number; theme: any; isDark: boolean }) {
-  const [status, setStatus] = React.useState<{ used: number; limit: number } | null>(null)
-  React.useEffect(() => {
-    let mounted = true
-    getQuotaStatus(feature).then(s => {
-      const limit = planLimit && planLimit > 0 ? planLimit : s.limit
-      if (mounted) setStatus({ used: s.used, limit })
-    }).catch(() => {})
-    return () => { mounted = false }
-  }, [feature, planLimit])
-  if (!status) return null
-  if (status.limit === -1) return <Text style={{ color: theme.textTertiary, marginBottom: 8, fontSize: 12 }}>Quota: Unlimited</Text>
-  const pct = Math.min(100, Math.round((status.used / Math.max(1, status.limit)) * 100))
-  const remaining = Math.max(0, status.limit - status.used)
-  return (
-    <View style={{ marginBottom: 10 }}>
-      <View style={[s.quotaTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
-        <LinearGradient colors={['#6366F1', '#A78BFA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={[s.quotaFill, { width: `${pct}%` }]} />
-      </View>
-      <Text style={{ color: theme.textTertiary, fontSize: 11, marginTop: 3 }}>{status.used}/{status.limit} used · {remaining} remaining</Text>
     </View>
   )
 }

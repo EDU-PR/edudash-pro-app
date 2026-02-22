@@ -98,16 +98,25 @@ export function useHomeworkGenerator() {
       } catch (gatewayError) {
         logger.warn('[useHomeworkGenerator] AI gateway failed, trying ai-proxy fallback:', gatewayError);
         
-        // Fallback to ai-proxy edge function
+        // Fallback to ai-proxy edge function with normalized payload contract.
         try {
           const fallbackResponse = await client.functions.invoke('ai-proxy', {
             body: {
-              model: opts.model || 'claude-3-haiku-20240307',
-              messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages
-              ],
-              max_tokens: 2048
+              scope: 'parent',
+              service_type: 'homework_help',
+              payload: {
+                model: opts.model || 'claude-3-haiku-20240307',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  ...messages,
+                ],
+                prompt: opts.question,
+              },
+              metadata: {
+                subject: opts.subject,
+                grade_level: opts.gradeLevel,
+                student_id: opts.studentId || null,
+              },
             }
           });
 
@@ -116,10 +125,14 @@ export function useHomeworkGenerator() {
           }
 
           data = {
-            content: fallbackResponse.data?.content?.[0]?.text || 
-                     fallbackResponse.data?.message?.content ||
-                     fallbackResponse.data?.text ||
-                     'No response received'
+            content:
+              fallbackResponse.data?.content?.[0]?.text ||
+              fallbackResponse.data?.content ||
+              fallbackResponse.data?.message?.content ||
+              fallbackResponse.data?.text ||
+              'No response received',
+            usage: fallbackResponse.data?.usage,
+            model: fallbackResponse.data?.model,
           };
           usedFallback = true;
         } catch (fallbackError) {

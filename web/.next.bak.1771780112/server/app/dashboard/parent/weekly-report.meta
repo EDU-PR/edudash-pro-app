@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/parent/layout,_N_T_/dashboard/parent/weekly-report/layout,_N_T_/dashboard/parent/weekly-report/page,_N_T_/dashboard/parent/weekly-report"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/parent/weekly-report/__PAGE__",
+    "/dashboard/parent/weekly-report",
+    "/dashboard/parent",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

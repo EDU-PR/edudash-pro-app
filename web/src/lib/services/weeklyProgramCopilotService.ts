@@ -482,6 +482,29 @@ const extractFunctionErrorMessage = async (error: unknown): Promise<string | nul
   return maybeError?.message || null;
 };
 
+const normalizeWeeklyProgramErrorMessage = (message: string | null | undefined): string | null => {
+  const raw = String(message || '').trim();
+  if (!raw) return null;
+
+  const normalized = raw.toLowerCase();
+  if (
+    normalized.includes('workspace api usage limits') ||
+    normalized.includes('api usage limits') ||
+    normalized.includes('will regain access on')
+  ) {
+    const regain = raw.match(/regain access on ([0-9-]{10} [0-9:]{8} UTC)/i)?.[1];
+    return regain
+      ? `AI provider usage limit reached. Retry after ${regain}, or switch to another configured provider.`
+      : 'AI provider usage limit reached. Please retry later or switch to another configured provider.';
+  }
+
+  if (normalized.includes('insufficient_quota') || normalized.includes('rate limit') || normalized.includes('http 429')) {
+    return 'AI provider rate/quota limit reached. Please retry shortly.';
+  }
+
+  return raw;
+};
+
 const extractAIContent = (data: unknown): string => {
   if (typeof data === 'string') return data;
   if (!data || typeof data !== 'object') return JSON.stringify(data || {});
@@ -690,6 +713,14 @@ const WEATHER_KEYWORDS = [
   'rain',
   'cloud',
 ];
+const WEEKDAY_SEQUENCE = [1, 2, 3, 4, 5] as const;
+const WEEKDAY_LABELS: Record<number, string> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+};
 
 const CAPS_HOME_LANGUAGE_KEYWORDS = [
   'home language',
@@ -738,17 +769,67 @@ const hasWeatherSignal = (block: DailyProgramBlock): boolean => {
   return WEATHER_KEYWORDS.some((keyword) => haystack.includes(keyword));
 };
 
-const ensureDailyWeatherRepetition = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
+const createFallbackWeekdayBlock = (day: number): DailyProgramBlock => ({
+  day_of_week: clampDayOfWeek(day),
+  block_order: 1,
+  block_type: 'transition',
+  title: `${WEEKDAY_LABELS[day] || 'Weekday'} Routine Starter`,
+  start_time: null,
+  end_time: null,
+  objectives: ['Predictable classroom routine', 'Calm transition into learning'],
+  materials: ['Routine chart'],
+  transition_cue: 'Welcome learners, review the routine, and begin the first guided activity.',
+  notes: 'Auto-filled when AI omits a weekday so the weekly plan remains complete.',
+  parent_tip: null,
+});
+
+const ensureWeekdayCoverage = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
   const grouped = new Map<number, DailyProgramBlock[]>();
-  for (const day of [1, 2, 3, 4, 5]) grouped.set(day, []);
+  for (const day of WEEKDAY_SEQUENCE) grouped.set(day, []);
 
   blocks.forEach((block) => {
     const day = clampDayOfWeek(block.day_of_week);
-    if (!grouped.has(day)) grouped.set(day, []);
+    if (day < 1 || day > 5) return;
     grouped.get(day)?.push({ ...block, day_of_week: day });
   });
 
-  for (const day of [1, 2, 3, 4, 5]) {
+  for (const day of WEEKDAY_SEQUENCE) {
+    const dayBlocks = (grouped.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order);
+    if (dayBlocks.length > 0) {
+      grouped.set(day, dayBlocks);
+      continue;
+    }
+    grouped.set(day, [createFallbackWeekdayBlock(day)]);
+  }
+
+  const normalized: DailyProgramBlock[] = [];
+  for (const day of WEEKDAY_SEQUENCE) {
+    const dayBlocks = (grouped.get(day) || []).map((block, index) => ({
+      ...block,
+      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      block_order: index + 1,
+    }));
+    normalized.push(...dayBlocks);
+  }
+
+  return normalized.sort((a, b) =>
+    a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week,
+  );
+};
+
+const ensureDailyWeatherRepetition = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
+  const grouped = new Map<number, DailyProgramBlock[]>();
+  for (const day of WEEKDAY_SEQUENCE) grouped.set(day, []);
+
+  blocks.forEach((block) => {
+    const day = clampDayOfWeek(block.day_of_week);
+    if (day < 1 || day > 5) return;
+    grouped.get(day)?.push({ ...block, day_of_week: day });
+  });
+
+  for (const day of WEEKDAY_SEQUENCE) {
     const dayBlocks = (grouped.get(day) || [])
       .slice()
       .sort((a, b) => a.block_order - b.block_order);
@@ -793,7 +874,7 @@ const ensureDailyWeatherRepetition = (blocks: DailyProgramBlock[]): DailyProgram
   }
 
   const normalized: DailyProgramBlock[] = [];
-  for (const day of [1, 2, 3, 4, 5]) {
+  for (const day of WEEKDAY_SEQUENCE) {
     const dayBlocks = (grouped.get(day) || [])
       .slice()
       .sort((a, b) => a.block_order - b.block_order)
@@ -839,7 +920,7 @@ const hasKeyword = (source: string, keywords: string[]): boolean =>
 
 const computeCapsCoverage = (blocks: DailyProgramBlock[]): CapsCoverageSummary => {
   const grouped = new Map<number, DailyProgramBlock[]>();
-  for (const day of [1, 2, 3, 4, 5]) grouped.set(day, []);
+  for (const day of WEEKDAY_SEQUENCE) grouped.set(day, []);
   for (const block of blocks) {
     const day = clampDayOfWeek(block.day_of_week);
     if (day >= 1 && day <= 5) grouped.get(day)?.push(block);
@@ -854,7 +935,7 @@ const computeCapsCoverage = (blocks: DailyProgramBlock[]): CapsCoverageSummary =
   let passChecks = 0;
   const totalChecks = 20;
 
-  for (const day of [1, 2, 3, 4, 5]) {
+  for (const day of WEEKDAY_SEQUENCE) {
     const dayBlocks = grouped.get(day) || [];
     const dayText = dayBlocks.map(blockText).join(' ');
     const missingStrands: string[] = [];
@@ -965,7 +1046,8 @@ const normalizeAIResponse = (
     throw new Error('AI response did not include any daily program blocks');
   }
 
-  const normalizedBlocks = ensureDailyWeatherRepetition(blocks);
+  const weekdayCoveredBlocks = ensureWeekdayCoverage(blocks);
+  const normalizedBlocks = ensureDailyWeatherRepetition(weekdayCoveredBlocks);
   const initialCoverage = computeCapsCoverage(normalizedBlocks);
   const correctedBlocks = applyCapsCoverageMetadata(normalizedBlocks, initialCoverage);
   const finalCoverage = computeCapsCoverage(correctedBlocks);
@@ -1124,7 +1206,11 @@ export class WeeklyProgramCopilotService {
 
     if (error) {
       const detailedMessage = await extractFunctionErrorMessage(error);
-      throw new Error(detailedMessage || error.message || 'Failed to generate weekly program');
+      const friendlyDetailed = normalizeWeeklyProgramErrorMessage(detailedMessage);
+      const friendlyFallback = normalizeWeeklyProgramErrorMessage(
+        error instanceof Error ? error.message : null,
+      );
+      throw new Error(friendlyDetailed || friendlyFallback || 'Failed to generate weekly program');
     }
 
     const content = extractAIContent(data);

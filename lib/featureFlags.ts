@@ -60,6 +60,11 @@ export interface FeatureFlags {
   send_fcm_call_v2_enabled: boolean;
   push_device_rpc_enabled: boolean;
   build_update_push_enabled: boolean;
+  progress_contract_v1: boolean;
+  lesson_fullscreen_v1: boolean;
+  dash_intent_router_v1: boolean;
+  dash_caps_fail_open_v1: boolean;
+  dash_single_thinking_indicator_v1: boolean;
   
   // Language Features
   enableMultilanguageSupport: boolean;
@@ -190,6 +195,11 @@ const DEFAULT_FLAGS: FeatureFlags = {
   send_fcm_call_v2_enabled: process.env.EXPO_PUBLIC_SEND_FCM_CALL_V2_ENABLED !== 'false',
   push_device_rpc_enabled: process.env.EXPO_PUBLIC_PUSH_DEVICE_RPC_ENABLED !== 'false',
   build_update_push_enabled: process.env.EXPO_PUBLIC_BUILD_UPDATE_PUSH_ENABLED !== 'false',
+  progress_contract_v1: process.env.EXPO_PUBLIC_PROGRESS_CONTRACT_V1 !== 'false',
+  lesson_fullscreen_v1: process.env.EXPO_PUBLIC_LESSON_FULLSCREEN_V1 !== 'false',
+  dash_intent_router_v1: process.env.EXPO_PUBLIC_DASH_INTENT_ROUTER_V1 !== 'false',
+  dash_caps_fail_open_v1: process.env.EXPO_PUBLIC_DASH_CAPS_FAIL_OPEN_V1 !== 'false',
+  dash_single_thinking_indicator_v1: process.env.EXPO_PUBLIC_DASH_SINGLE_THINKING_INDICATOR_V1 !== 'false',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',
@@ -362,6 +372,16 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
         flags.push_device_rpc_enabled ?? DEFAULT_FLAGS.push_device_rpc_enabled,
       build_update_push_enabled:
         flags.build_update_push_enabled ?? DEFAULT_FLAGS.build_update_push_enabled,
+      progress_contract_v1:
+        flags.progress_contract_v1 ?? DEFAULT_FLAGS.progress_contract_v1,
+      lesson_fullscreen_v1:
+        flags.lesson_fullscreen_v1 ?? DEFAULT_FLAGS.lesson_fullscreen_v1,
+      dash_intent_router_v1:
+        flags.dash_intent_router_v1 ?? DEFAULT_FLAGS.dash_intent_router_v1,
+      dash_caps_fail_open_v1:
+        flags.dash_caps_fail_open_v1 ?? DEFAULT_FLAGS.dash_caps_fail_open_v1,
+      dash_single_thinking_indicator_v1:
+        flags.dash_single_thinking_indicator_v1 ?? DEFAULT_FLAGS.dash_single_thinking_indicator_v1,
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,

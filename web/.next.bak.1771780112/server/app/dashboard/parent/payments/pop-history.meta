@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/parent/layout,_N_T_/dashboard/parent/payments/layout,_N_T_/dashboard/parent/payments/pop-history/layout,_N_T_/dashboard/parent/payments/pop-history/page,_N_T_/dashboard/parent/payments/pop-history"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/parent/payments/pop-history/__PAGE__",
+    "/dashboard/parent/payments/pop-history",
+    "/dashboard/parent/payments",
+    "/dashboard/parent",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

@@ -16,6 +16,7 @@ import { ImageUpload } from './ImageUpload';
 import { ExamBuilderLauncher } from './ExamBuilderLauncher';
 import { useChatLogic } from '@/hooks/useChatLogic';
 import type { ChatMessage, SelectedImage } from './types';
+import type { VoiceDictationProbe } from '@/hooks/useVoiceRecording';
 
 interface ChatInterfaceProps {
   scope: 'parent' | 'teacher' | 'principal';
@@ -84,7 +85,10 @@ export function ChatInterface({
   }, [conversationId, initialPrompt, messages.length, sendMessage]);
 
   // Handle send
-  const handleSend = async (messageText?: string, voiceData?: { blob: Blob; base64: string }) => {
+  const handleSend = async (
+    messageText?: string,
+    voiceData?: { blob: Blob; base64: string; probe?: VoiceDictationProbe },
+  ) => {
     const textToSend = messageText || input.trim();
     
     await sendMessage(textToSend, selectedImages, voiceData);

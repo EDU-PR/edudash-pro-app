@@ -3,6 +3,7 @@
 import { useAIQuota } from '@/lib/hooks/useAIQuota';
 import { Zap, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { FeatureQuotaBar } from '@/components/ui/FeatureQuotaBar';
 
 interface AIQuotaWarningProps {
   requestType: 'exam_generation' | 'explanation' | 'chat_message';
@@ -12,6 +13,7 @@ interface AIQuotaWarningProps {
 export function AIQuotaWarning({ requestType, compact = false }: AIQuotaWarningProps) {
   const { usage, loading } = useAIQuota();
   const router = useRouter();
+  const usageWithMonthlyChat = usage as (typeof usage & { chat_messages_this_month?: number }) | null;
 
   if (loading || !usage) return null;
 
@@ -32,10 +34,12 @@ export function AIQuotaWarning({ requestType, compact = false }: AIQuotaWarningP
           icon: TrendingUp
         };
       case 'chat_message':
+        const chatUsed = usageWithMonthlyChat?.chat_messages_this_month ?? usage.chat_messages_today;
+        const chatPeriod = usageWithMonthlyChat?.chat_messages_this_month != null ? 'month' : 'day';
         return {
-          used: usage.chat_messages_today,
+          used: chatUsed,
           label: 'Chat Messages',
-          period: 'day',
+          period: chatPeriod,
           icon: AlertTriangle
         };
     }
@@ -46,13 +50,20 @@ export function AIQuotaWarning({ requestType, compact = false }: AIQuotaWarningP
 
   // Get limits based on tier
   const limits: Record<string, { exams: number; explanations: number; chat: number }> = {
-    free: { exams: 3, explanations: 5, chat: 10 },
-    trial: { exams: 10, explanations: 20, chat: 50 },
-    basic: { exams: 30, explanations: 100, chat: 200 },
-    premium: { exams: 100, explanations: 500, chat: 1000 },
+    free: { exams: 70, explanations: 1500, chat: 300 },
+    trial: { exams: 10, explanations: 20, chat: 1500 },
+    parent_starter: { exams: 30, explanations: 100, chat: 6000 },
+    parent_plus: { exams: 100, explanations: 500, chat: 30000 },
+    teacher_starter: { exams: 50, explanations: 200, chat: 9000 },
+    teacher_pro: { exams: 200, explanations: 1000, chat: 60000 },
+    school_starter: { exams: 999999, explanations: 999999, chat: 999999 },
+    school_premium: { exams: 999999, explanations: 999999, chat: 999999 },
+    school_pro: { exams: 999999, explanations: 999999, chat: 999999 },
+    school_enterprise: { exams: 999999, explanations: 999999, chat: 999999 },
   };
 
-  const tierLimits = limits[usage.current_tier] || limits.free;
+  const tierKey = String(usage.current_tier || '').toLowerCase();
+  const tierLimits = limits[tierKey] || limits.free;
   let limit = 0;
   
   if (requestType === 'exam_generation') limit = tierLimits.exams;
@@ -60,7 +71,6 @@ export function AIQuotaWarning({ requestType, compact = false }: AIQuotaWarningP
   if (requestType === 'chat_message') limit = tierLimits.chat;
 
   const remaining = Math.max(0, limit - quotaInfo.used);
-  const percentage = (quotaInfo.used / limit) * 100;
   const isWarning = remaining <= 3 && remaining > 0;
   const isExceeded = remaining === 0;
 
@@ -108,22 +118,13 @@ export function AIQuotaWarning({ requestType, compact = false }: AIQuotaWarningP
         }
       </p>
 
-      {/* Progress Bar */}
-      <div style={{
-        width: '100%',
-        height: 8,
-        background: 'var(--surface-2)',
-        borderRadius: 4,
-        overflow: 'hidden',
-        marginBottom: 'var(--space-3)',
-      }}>
-        <div style={{
-          width: `${Math.min(percentage, 100)}%`,
-          height: '100%',
-          background: isExceeded ? '#FF453A' : '#FF9F0A',
-          transition: 'width 0.3s ease',
-        }} />
-      </div>
+      <FeatureQuotaBar
+        feature={quotaInfo.label}
+        used={quotaInfo.used}
+        limit={limit}
+        remaining={remaining}
+        periodLabel={quotaInfo.period}
+      />
 
       {/* Current Tier */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>

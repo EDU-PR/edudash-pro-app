@@ -9,7 +9,7 @@
  * - useDashAssistant hook for business logic
  * - DashMessageBubble for message rendering
  * - DashInputBar for input handling
- * - DashTypingIndicator for loading states
+ * - Single floating thinking dock for loading states
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,7 +22,6 @@ import {
   DashAssistantMessages, 
   DashMessageBubble,
   DashInputBar,
-  DashTypingIndicator,
   AttachmentOptionsSheet,
   DashOptionsSheet,
 } from '@/components/ai/dash-assistant';
@@ -42,6 +41,8 @@ import { resolveSpeechControlsLayoutState } from '@/features/dash-ai/speechContr
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { canAccessModel, getDefaultModels, type AIModelId } from '@/lib/ai/models';
 import { normalizeTierToSubscription } from '@/lib/ai/modelForTier';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { DASH_TELEMETRY_EVENTS, trackDashTelemetry } from '@/lib/telemetry/events';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -136,6 +137,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   } | null>(null);
   const retakeAutoSendRef = useRef(false);
   const tierRef = useRef<string | undefined>(undefined);
+  const duplicateThinkingLoggedRef = useRef(false);
+  const singleThinkingIndicatorEnabled = useMemo(
+    () => getFeatureFlagsSync().dash_single_thinking_indicator_v1 !== false,
+    []
+  );
 
   const refreshScanBudget = useCallback(async (tierOverride?: string | null) => {
     const activeTier = String(tierOverride || tierRef.current || 'free');
@@ -164,6 +170,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     inputText,
     setInputText,
     isLoading,
+    hasActiveToolExecution,
     loadingStatus,
     streamingMessageId,
     isSpeaking,
@@ -312,7 +319,24 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const showMiniSpeechControls = speechControlsLayout.showMiniControls;
   const showFullSpeechControls = speechControlsLayout.showFullControls;
   const bottomThinkingLabel = getBottomThinkingLabel(loadingStatus);
-  const showBottomThinkingDock = isTypingActive && !isRecording;
+  const showBottomThinkingDock =
+    singleThinkingIndicatorEnabled &&
+    !streamingMessageId &&
+    !isRecording &&
+    (isTypingActive || hasActiveToolExecution);
+
+  useEffect(() => {
+    if (!singleThinkingIndicatorEnabled) return;
+    if (isTypingActive && !duplicateThinkingLoggedRef.current) {
+      duplicateThinkingLoggedRef.current = true;
+      trackDashTelemetry(DASH_TELEMETRY_EVENTS.DUPLICATE_THINKING_INDICATOR_BLOCKED, {
+        source: 'message_footer',
+      });
+    }
+    if (!isTypingActive) {
+      duplicateThinkingLoggedRef.current = false;
+    }
+  }, [isTypingActive, singleThinkingIndicatorEnabled]);
 
   const handleNewChat = useCallback(async () => {
     await stopAllActivity();
@@ -540,12 +564,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       onRetakeForClarity={handleRetakeForClarity}
     />
   ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, handleRetakeForClarity]);
-
-  const renderTypingIndicator = useCallback(() => {
-    if (streamingMessageId) return null;
-    if (!isTypingActive) return null;
-    return <DashTypingIndicator isLoading={isTypingActive} loadingStatus={loadingStatus} />;
-  }, [isTypingActive, loadingStatus, streamingMessageId]);
 
   // Loading state
   if (!isInitialized) {
@@ -867,7 +885,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               unreadCount={unreadCount}
               setUnreadCount={setUnreadCount}
               scrollToBottom={scrollToBottom}
-              renderTypingIndicator={renderTypingIndicator}
               renderSuggestedActions={() => null}
               onSendMessage={(text) => sendMessage(text)}
               bottomInset={0}
@@ -913,7 +930,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                 {
                   bottom: keyboardHeight + safeComposerHeight + COMPOSER_FLOAT_GAP + composerExtraBottom + 10,
                   backgroundColor: theme.surface + 'EE',
-                  borderColor: theme.border,
                 },
               ]}
               pointerEvents="none"

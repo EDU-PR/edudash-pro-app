@@ -46,6 +46,10 @@ import { SuccessModal } from '@/components/ui/SuccessModal';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { track } from '@/lib/analytics';
 import { formatAIGatewayErrorMessage, invokeAIGatewayWithRetry } from '@/lib/ai-gateway/invokeWithRetry';
+import { parseLessonPlanResponse } from '@/lib/ai/parseLessonPlan';
+import type { LessonPlanV2 } from '@/lib/ai/lessonPlanSchema';
+import { LessonGenerationFullscreen } from '@/components/ai-lesson-generator';
+import { clampPercent } from '@/lib/progress/clampPercent';
 import {
   buildQuickLessonThemeHint,
   loadQuickLessonThemeContext,
@@ -197,13 +201,16 @@ export default function PreschoolLessonGeneratorScreen() {
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
   const [pending, setPending] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressPhase, setProgressPhase] = useState<'idle' | 'init' | 'quota_check' | 'request' | 'parse' | 'complete'>('idle');
   const [progressMessage, setProgressMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'lesson' | 'insights' | 'homework'>('lesson');
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
+  const [showFullscreenLesson, setShowFullscreenLesson] = useState(false);
   const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
   const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Usage state
   const [usage, setUsage] = useState({ lesson_generation: 0 });
@@ -215,6 +222,8 @@ export default function PreschoolLessonGeneratorScreen() {
   const isQuotaExhausted = Boolean(quotaStatus && quotaStatus.limit !== -1 && quotaStatus.used >= quotaStatus.limit);
   const AI_ENABLED = process.env.EXPO_PUBLIC_AI_ENABLED === 'true' || process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true';
   const flags = getFeatureFlagsSync();
+  const progressContractEnabled = flags.progress_contract_v1 !== false;
+  const lessonFullscreenEnabled = flags.lesson_fullscreen_v1 !== false;
 
   const categoriesQuery = useQuery({
     queryKey: ['lesson_categories'],
@@ -248,6 +257,35 @@ export default function PreschoolLessonGeneratorScreen() {
       setQuotaStatus(s);
     } catch { /* non-fatal */ }
   }, []);
+
+  const clearProgressTimer = useCallback(() => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  }, []);
+
+  const startProgressTimer = useCallback((minIncrement: number, maxIncrement: number, intervalMs: number) => {
+    clearProgressTimer();
+    progressTimerRef.current = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 90) return prev;
+        const next = Math.min(prev + (Math.random() * (maxIncrement - minIncrement) + minIncrement), 90);
+        if (next < 20) setProgressMessage('Preparing lesson structure...');
+        else if (next < 40) setProgressMessage('Creating activities...');
+        else if (next < 60) setProgressMessage('Generating teaching insights...');
+        else if (next < 80) setProgressMessage('Designing take-home activity...');
+        else setProgressMessage('Finalizing...');
+        return next;
+      });
+    }, intervalMs);
+  }, [clearProgressTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearProgressTimer();
+    };
+  }, [clearProgressTimer]);
 
   const { refreshing, onRefreshHandler } = useSimplePullToRefresh(refreshUsage, 'preschool_lesson_generator');
 
@@ -320,8 +358,75 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
       prompt += `\n\n## 🏠 TAKE-HOME ACTIVITY (Homework)\n\nCreate a simple take-home activity for parents:\n\n### Activity Name\n[Fun, engaging name]\n\n### Parent Instructions\n[Clear, simple instructions parents can follow]\n[Maximum 3-4 steps]\n\n### Materials at Home\n[Only common household items]\n\n### Learning Connection\n[Brief explanation of what child is learning]\n\n### Conversation Starters\n[3 questions parents can ask their child about the activity]\n\n### Photo Opportunity\n[Suggest a photo moment to share with teacher]`;
     }
 
+    prompt += `\n\nIMPORTANT OUTPUT CONTRACT (REQUIRED): Return ONLY valid JSON with no markdown, no prose, and no code fences.
+Schema:
+{
+  "lessonPlan": {
+    "title": "string",
+    "summary": "string",
+    "objectives": ["string"],
+    "materials": ["string"],
+    "steps": [
+      {
+        "title": "string",
+        "minutes": 8,
+        "objective": "string",
+        "instructions": ["string"],
+        "teacherPrompt": "string",
+        "example": "string"
+      }
+    ],
+    "assessment": ["string"],
+    "differentiation": { "support": "string", "extension": "string" },
+    "closure": "string",
+    "durationMinutes": ${durationNum}
+  },
+  "teacherInsights": "string (optional)",
+  "takeHomeActivity": "string (optional)"
+}`;
+
     return prompt;
   }, [topic, selectedSubject, selectedAgeGroup, duration, language, includeInsights, includeHomework, selectedSubjectInfo, selectedAgeGroupInfo, isQuickMode, quickLessonContext]);
+
+  const parsedLessonPlan: LessonPlanV2 | null = useMemo(() => {
+    const lessonText = generated?.lesson?.trim();
+    if (!lessonText) return null;
+    try {
+      return parseLessonPlanResponse(lessonText);
+    } catch (error) {
+      logger.warn(TAG, 'Failed to parse lesson plan to structured format', error);
+      return null;
+    }
+  }, [generated?.lesson]);
+  const supplementarySections = useMemo(() => {
+    const sections: Array<{ title: string; body: string }> = [];
+    if (generated?.insights?.trim()) {
+      sections.push({ title: 'Teacher Insights', body: generated.insights.trim() });
+    }
+    if (generated?.homework?.trim()) {
+      sections.push({ title: 'Take-Home Activity', body: generated.homework.trim() });
+    }
+    return sections;
+  }, [generated?.homework, generated?.insights]);
+  const combinedGeneratedContent = useMemo(() => {
+    if (!generated) return '';
+    return [generated.lesson, generated.insights, generated.homework]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }, [generated]);
+  const safeProgress = clampPercent(progress, {
+    source: 'app/screens/preschool-lesson-generator.progress',
+  });
+  const showInlineProgress = pending && !lessonFullscreenEnabled;
+  const showInlineGenerated = !!generated && !lessonFullscreenEnabled;
+
+  useEffect(() => {
+    if (!lessonFullscreenEnabled) return;
+    if (pending || generated?.lesson) {
+      setShowFullscreenLesson(true);
+    }
+  }, [generated?.lesson, lessonFullscreenEnabled, pending]);
 
   const handleGenerate = useCallback(async () => {
     if (isQuotaExhausted) {
@@ -342,33 +447,27 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
     try {
       setPending(true);
       setProgress(0);
+      setProgressPhase('init');
       setProgressMessage('Initializing...');
       setErrorMsg(null);
       setGenerated(null);
+      if (lessonFullscreenEnabled) {
+        setShowFullscreenLesson(true);
+      }
 
       if (!AI_ENABLED || flags.ai_lesson_generation === false) {
         toast.warn('AI Lesson Generator is disabled.');
-        setPending(false);
         return;
       }
 
-      // Simulated progress
-      const progressTimer = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 90) {
-            const next = Math.min(prev + (Math.random() * 6 + 2), 90);
-            if (next < 20) setProgressMessage('Preparing lesson structure...');
-            else if (next < 40) setProgressMessage('Creating activities...');
-            else if (next < 60) setProgressMessage('Generating teaching insights...');
-            else if (next < 80) setProgressMessage('Designing take-home activity...');
-            else setProgressMessage('Finalizing...');
-            return next;
-          }
-          return prev;
-        });
-      }, 500);
+      if (progressContractEnabled) {
+        startProgressTimer(2, 6, 500);
+      }
 
       // Check quota
+      setProgressPhase('quota_check');
+      setProgress(12);
+      setProgressMessage('Checking quota...');
       let gate: { allowed: boolean } | null = null;
       try {
         gate = await canUseFeature('lesson_generation', 1);
@@ -377,17 +476,19 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
       }
 
       if (!gate?.allowed) {
-        clearInterval(progressTimer);
+        clearProgressTimer();
         const status = await getQuotaStatus('lesson_generation');
         Alert.alert('Monthly limit reached', `You have used ${status.used} of ${status.limit} generations.`, [
           { text: 'Cancel', style: 'cancel' },
           { text: 'See plans', onPress: () => router.push('/pricing') },
         ]);
-        setPending(false);
         return;
       }
 
       track('edudash.ai.preschool_lesson.generate_started', { subject: selectedSubject, ageGroup: selectedAgeGroup });
+      setProgressPhase('request');
+      setProgress(28);
+      setProgressMessage('Preparing request...');
 
       const prompt = buildPrompt();
       const isSTEMSubject = selectedSubject === 'ai' || selectedSubject === 'robotics' || selectedSubject === 'computer_literacy';
@@ -411,13 +512,18 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
         lessonType: isSTEMSubject ? (selectedSubject === 'ai' ? 'ai_enhanced' : selectedSubject === 'robotics' ? 'robotics' : 'computer_literacy') : 'standard',
       };
 
+      if (progressContractEnabled) {
+        startProgressTimer(4, 8, 450);
+      }
+
       const { data, error } = await invokeAIGatewayWithRetry(payload, {
         retries: 1,
         retryDelayMs: 1200,
       });
 
-      clearInterval(progressTimer);
+      clearProgressTimer();
       setProgress(95);
+      setProgressPhase('parse');
       setProgressMessage('Processing results...');
 
       if (error) {
@@ -426,6 +532,7 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
 
       const content = data?.content || '';
       setProgress(100);
+      setProgressPhase('complete');
       setProgressMessage('Complete!');
 
       // Debug: Log raw content for troubleshooting
@@ -437,11 +544,28 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
       const lessonMatch = content.match(/##\s*📚?\s*LESSON\s*PLAN[\s\S]*?(?=##\s*🔍?\s*TEACHER|##\s*🏠?\s*TAKE[-\s]?HOME|$)/i);
       const insightsMatch = content.match(/##\s*🔍?\s*TEACHER\s*INSIGHTS[\s\S]*?(?=##\s*🏠?\s*TAKE[-\s]?HOME|$)/i);
       const homeworkMatch = content.match(/##\s*🏠?\s*TAKE[-\s]?HOME[\s\S]*$/i);
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      let jsonPayload: Record<string, unknown> | null = null;
+      try {
+        const candidate = (jsonMatch?.[1] || content).trim();
+        if (candidate.startsWith('{') || candidate.startsWith('[')) {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === 'object') {
+            jsonPayload = parsed as Record<string, unknown>;
+          }
+        }
+      } catch {
+        jsonPayload = null;
+      }
 
       // Fallback: If no structured sections found, treat entire content as lesson
       const parsedLesson = lessonMatch ? lessonMatch[0].trim() : content.trim();
-      const parsedInsights = insightsMatch ? insightsMatch[0].trim() : '';
-      const parsedHomework = homeworkMatch ? homeworkMatch[0].trim() : '';
+      const parsedInsights = insightsMatch
+        ? insightsMatch[0].trim()
+        : String(jsonPayload?.teacherInsights || '').trim();
+      const parsedHomework = homeworkMatch
+        ? homeworkMatch[0].trim()
+        : String(jsonPayload?.takeHomeActivity || '').trim();
 
       logger.debug(TAG, 'Parsed sections:', {
         lessonLength: parsedLesson.length,
@@ -480,11 +604,32 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
       setErrorMsg(message);
       toast.error(`Generation failed: ${message}`);
     } finally {
+      clearProgressTimer();
       setPending(false);
       setProgress(0);
+      setProgressPhase('idle');
       setProgressMessage('');
     }
-  }, [isQuotaExhausted, selectedSubject, selectedAgeGroup, AI_ENABLED, flags, buildPrompt, topic, selectedSubjectInfo, duration, language, selectedModel, includeHomework, includeInsights, refreshUsage]);
+  }, [
+    AI_ENABLED,
+    buildPrompt,
+    clearProgressTimer,
+    duration,
+    flags,
+    includeHomework,
+    includeInsights,
+    isQuotaExhausted,
+    language,
+    lessonFullscreenEnabled,
+    progressContractEnabled,
+    refreshUsage,
+    selectedAgeGroup,
+    selectedModel,
+    selectedSubject,
+    selectedSubjectInfo,
+    startProgressTimer,
+    topic,
+  ]);
 
   const onSave = useCallback(async () => {
     if (!generated?.lesson) {
@@ -817,17 +962,6 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
           />
         )}
 
-        {/* Model Selector */}
-        {!modelsLoading && (
-          <ModelSelectorChips
-            availableModels={availableModels}
-            selectedModel={selectedModel}
-            onSelect={setSelectedModel}
-            feature="lesson_generation"
-            onPersist={async (modelId, feat) => { await setPreferredModel(modelId, feat as 'lesson_generation'); }}
-            title="AI Model"
-          />
-        )}
         {/* Generate Button */}
         <TouchableOpacity
           onPress={handleGenerate}
@@ -848,9 +982,26 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
             </>
           )}
         </TouchableOpacity>
+        {lessonFullscreenEnabled && !!generated?.lesson && (
+          <TouchableOpacity
+            onPress={() => setShowFullscreenLesson(true)}
+            style={[
+              styles.generateButton,
+              {
+                marginTop: 8,
+                backgroundColor: theme.primary + '20',
+                borderWidth: 1,
+                borderColor: theme.primary,
+              },
+            ]}
+          >
+            <Ionicons name="expand-outline" size={18} color={theme.primary} />
+            <Text style={[styles.generateButtonText, { color: theme.primary }]}>Open Fullscreen Lesson</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Progress */}
-        {pending && (
+        {showInlineProgress && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: '#FF6B6B', marginTop: 16 }]}>
             <View style={styles.progressHeader}>
               <EduDashSpinner color="#FF6B6B" />
@@ -858,9 +1009,11 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
             </View>
             <Text style={{ color: palette.textSec, fontSize: 13 }}>{progressMessage}</Text>
             <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              <View style={[styles.progressFill, { width: `${safeProgress}%` }]} />
             </View>
-            <Text style={[styles.progressPercent, { color: palette.textSec }]}>{Math.round(progress)}%</Text>
+            <Text style={[styles.progressPercent, { color: palette.textSec }]}>
+              {Math.round(safeProgress)}% • {progressPhase.replace('_', ' ')}
+            </Text>
           </View>
         )}
 
@@ -882,7 +1035,7 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
         )}
 
         {/* Generated Content */}
-        {generated && (
+        {showInlineGenerated && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: '#10B981', borderWidth: 2, marginTop: 16 }]}>
             <View style={styles.successHeader}>
               <Ionicons name="checkmark-circle" size={20} color="#10B981" />
@@ -998,6 +1151,31 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {lessonFullscreenEnabled && (
+        <LessonGenerationFullscreen
+          visible={showFullscreenLesson && (pending || !!generated?.lesson)}
+          isGenerating={pending}
+          progress={progressContractEnabled ? safeProgress : 0}
+          phase={progressPhase}
+          progressMessage={progressMessage}
+          plan={parsedLessonPlan}
+          rawContent={combinedGeneratedContent}
+          supplementarySections={supplementarySections}
+          onClose={() => setShowFullscreenLesson(false)}
+          footerActions={
+            pending
+              ? undefined
+              : [
+                  { label: 'Save', onPress: onSave, disabled: saving, tone: 'primary' as const },
+                  ...(generated?.homework
+                    ? [{ label: 'Share Homework', onPress: onShareHomework, tone: 'secondary' as const }]
+                    : []),
+                  { label: 'PDF', onPress: onExportPDF, tone: 'secondary' as const },
+                ]
+          }
+        />
+      )}
 
       {/* Success Modal for Save */}
       <SuccessModal

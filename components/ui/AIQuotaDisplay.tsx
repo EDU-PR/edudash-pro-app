@@ -21,6 +21,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAIQuota, useAIUserLimits } from '@/hooks/useAI';
 import { track } from '@/lib/analytics';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
+import { clampPercent } from '@/lib/progress/clampPercent';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface AIQuotaDisplayProps {
@@ -47,11 +48,17 @@ interface QuotaBarProps {
  * Visual progress bar for quota usage
  */
 const QuotaBar: React.FC<QuotaBarProps> = ({ used, limit, color, showLabel = true }) => {
-  const percentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  const percentage = limit > 0
+    ? clampPercent((used / limit) * 100, { source: 'components/ui/AIQuotaDisplay.QuotaBar' })
+    : 0;
   
   return (
     <View style={styles.quotaBarContainer}>
-      <View style={styles.quotaBarBackground}>
+      <View
+        style={styles.quotaBarBackground}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(percentage) }}
+      >
         <LinearGradient
           colors={[color, color + '80']}
           start={{ x: 0, y: 0 }}

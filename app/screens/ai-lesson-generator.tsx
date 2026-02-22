@@ -14,6 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
 import { setPreferredModel } from '@/lib/ai/preferences';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useLessonGeneratorModels, useTierInfo } from '@/hooks/useAIModelSelection';
 import { useAILessonGeneration } from '@/hooks/useAILessonGeneration';
@@ -22,9 +23,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/ToastProvider';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
-import { QuotaBar } from '@/components/ai-lesson-generator';
+import { LessonGenerationFullscreen, QuotaBar } from '@/components/ai-lesson-generator';
 import { ModelInUseIndicator } from '@/components/ai/ModelInUseIndicator';
 import { ModelSelectorChips } from '@/components/ai/ModelSelectorChips';
+import { parseLessonPlanResponse } from '@/lib/ai/parseLessonPlan';
+import type { LessonPlanV2 } from '@/lib/ai/lessonPlanSchema';
+import { clampPercent } from '@/lib/progress/clampPercent';
 import {
   buildQuickLessonThemeHint,
   loadQuickLessonThemeContext,
@@ -89,7 +93,11 @@ export default function AILessonGeneratorScreen() {
   const [resultViewMode, setResultViewMode] = useState<'cards' | 'raw'>('cards');
   const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
   const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
+  const [showFullscreenLesson, setShowFullscreenLesson] = useState(false);
   const quickDefaultsApplied = useRef(false);
+  const flags = getFeatureFlagsSync();
+  const progressContractEnabled = flags.progress_contract_v1 !== false;
+  const lessonFullscreenEnabled = flags.lesson_fullscreen_v1 !== false;
 
   // Search params for prefill
   const searchParams = useLocalSearchParams<{ topic?: string; subject?: string; gradeLevel?: string; duration?: string; objectives?: string; model?: string; language?: string; mode?: string }>();
@@ -98,9 +106,31 @@ export default function AILessonGeneratorScreen() {
   const schoolId = profile?.organization_id || profile?.preschool_id || null;
 
   // Hooks
-  const { generated, setGenerated, pending, progress, progressMessage, errorMsg, lastPayload, usage, quotaStatus, isQuotaExhausted, onGenerate, onCancel, refreshUsage } = useAILessonGeneration();
+  const { generated, setGenerated, pending, progress, progressPhase, progressMessage, errorMsg, lastPayload, usage, quotaStatus, isQuotaExhausted, onGenerate, onCancel, refreshUsage } = useAILessonGeneration();
   const { availableModels, selectedModel, setSelectedModel, isLoading: modelsLoading } = useLessonGeneratorModels();
   const { tierInfo } = useTierInfo();
+  const generatedContentText = useMemo(() => {
+    if (typeof generated?.content === 'string' && generated.content.trim()) {
+      return generated.content.trim();
+    }
+    if (generated?.content && typeof generated.content === 'object') {
+      return JSON.stringify(generated.content, null, 2);
+    }
+    return String(generated?.description || '').trim();
+  }, [generated?.content, generated?.description]);
+  const parsedLessonPlan: LessonPlanV2 | null = useMemo(() => {
+    if (!generatedContentText) return null;
+    try {
+      return parseLessonPlanResponse(generatedContentText);
+    } catch {
+      return null;
+    }
+  }, [generatedContentText]);
+  const safeProgress = clampPercent(progress, {
+    source: 'app/screens/ai-lesson-generator.progress',
+  });
+  const showInlineProgress = pending && !lessonFullscreenEnabled;
+  const showInlineGenerated = !!generatedContentText && !lessonFullscreenEnabled;
 
   const categoriesQuery = useQuery({
     queryKey: ['lesson_categories'],
@@ -197,14 +227,17 @@ export default function AILessonGeneratorScreen() {
   }, [buildDashPrompt]);
 
   const onExportPDF = useCallback(async () => {
-    const content = (generated?.description || '').trim();
+    const content = generatedContentText;
     if (!content) { Alert.alert('Export PDF', 'Generate a lesson first.'); return; }
     try { await EducationalPDFService.generateTextPDF(`${subject}: ${topic}`, content); toast.success('PDF generated'); }
     catch { toast.error('Failed to generate PDF'); }
-  }, [subject, topic, generated]);
+  }, [subject, topic, generatedContentText]);
 
   const handleGenerate = useCallback(() => {
     if (isQuotaExhausted) { router.push('/pricing'); return; }
+    if (lessonFullscreenEnabled) {
+      setShowFullscreenLesson(true);
+    }
     onGenerate({
       topic,
       subject,
@@ -226,7 +259,18 @@ export default function AILessonGeneratorScreen() {
     language,
     selectedModel,
     quickLessonContext,
+    lessonFullscreenEnabled,
   ]);
+
+  useEffect(() => {
+    if (!lessonFullscreenEnabled) return;
+    if (pending) setShowFullscreenLesson(true);
+  }, [lessonFullscreenEnabled, pending]);
+
+  useEffect(() => {
+    if (!lessonFullscreenEnabled) return;
+    if (generatedContentText) setShowFullscreenLesson(true);
+  }, [generatedContentText, lessonFullscreenEnabled]);
 
   const onSave = useCallback(async () => {
     try {
@@ -346,21 +390,30 @@ export default function AILessonGeneratorScreen() {
           <TouchableOpacity onPress={handleGenerate} style={[styles.btn, { backgroundColor: isQuotaExhausted ? '#9CA3AF' : theme.primary, flex: 1 }]} disabled={pending}>
             {pending ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>{isQuotaExhausted ? 'Upgrade' : 'Generate'}</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: (generated?.content || generated?.description) ? theme.accent : palette.outline, flex: 1 }]} disabled={saving || !(generated?.content || generated?.description)}>
-            {saving ? <EduDashSpinner color={theme.onAccent} /> : <Text style={[styles.btnText, { color: (generated?.content || generated?.description) ? theme.onAccent : palette.textSec }]}>Save</Text>}
+          <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: generatedContentText ? theme.accent : palette.outline, flex: 1 }]} disabled={saving || !generatedContentText}>
+            {saving ? <EduDashSpinner color={theme.onAccent} /> : <Text style={[styles.btnText, { color: generatedContentText ? theme.onAccent : palette.textSec }]}>Save</Text>}
           </TouchableOpacity>
         </View>
+        {lessonFullscreenEnabled && !!generatedContentText && (
+          <TouchableOpacity
+            onPress={() => setShowFullscreenLesson(true)}
+            style={[styles.btn, { backgroundColor: theme.primary + '20', borderWidth: 1, borderColor: theme.primary, marginTop: 8 }]}
+          >
+            <Ionicons name="expand-outline" size={16} color={theme.primary} />
+            <Text style={[styles.btnText, { color: theme.primary, marginLeft: 8 }]}>Open Fullscreen Lesson</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Progress */}
-        {pending && (
+        {showInlineProgress && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.primary, marginTop: 16 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}><EduDashSpinner color={theme.primary} /><Text style={{ color: theme.primary, marginLeft: 8, fontWeight: '600' }}>Generating...</Text></View>
               <TouchableOpacity style={{ backgroundColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }} onPress={onCancel}><Text style={{ color: '#FFF', fontSize: 12 }}>Cancel</Text></TouchableOpacity>
             </View>
-            <Text style={{ color: palette.textSec, fontSize: 13 }}>{progressMessage}</Text>
-            <View style={{ height: 6, borderRadius: 3, backgroundColor: '#E5E7EB', marginTop: 8 }}><View style={{ width: `${progress}%`, height: 6, borderRadius: 3, backgroundColor: theme.primary }} /></View>
-            <Text style={{ color: palette.textSec, fontSize: 11, textAlign: 'center', marginTop: 4 }}>{Math.round(progress)}%</Text>
+            <Text style={{ color: palette.textSec, fontSize: 13 }}>{progressMessage || 'Generating lesson...'}</Text>
+            <View style={{ height: 6, borderRadius: 3, backgroundColor: '#E5E7EB', marginTop: 8 }}><View style={{ width: `${safeProgress}%`, height: 6, borderRadius: 3, backgroundColor: theme.primary }} /></View>
+            <Text style={{ color: palette.textSec, fontSize: 11, textAlign: 'center', marginTop: 4 }}>{Math.round(safeProgress)}% • {progressPhase.replace('_', ' ')}</Text>
           </View>
         )}
 
@@ -377,7 +430,7 @@ export default function AILessonGeneratorScreen() {
         )}
 
         {/* Generated Content - No maxHeight to allow full scrolling */}
-        {(generated?.content || generated?.description) && (
+        {showInlineGenerated && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16, marginBottom: 100 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Lesson Generated!</Text></View>
             <View style={styles.resultViewToggleRow}>
@@ -402,11 +455,7 @@ export default function AILessonGeneratorScreen() {
             </View>
             <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10, minHeight: 100 }}>
               {(() => {
-                const contentText = typeof generated.content === 'string' && generated.content.trim()
-                  ? generated.content
-                  : typeof generated.content === 'object' && generated.content
-                    ? JSON.stringify(generated.content, null, 2)
-                    : generated.description || 'No content generated';
+                const contentText = generatedContentText || 'No content generated';
 
                 if (resultViewMode === 'cards') {
                   const sections = parseLessonSections(contentText);
@@ -439,6 +488,41 @@ export default function AILessonGeneratorScreen() {
           </View>
         )}
       </ScrollView>
+      {lessonFullscreenEnabled && (
+        <LessonGenerationFullscreen
+          visible={showFullscreenLesson && (pending || !!generatedContentText)}
+          isGenerating={pending}
+          progress={progressContractEnabled ? safeProgress : 0}
+          phase={progressPhase}
+          progressMessage={progressMessage}
+          plan={parsedLessonPlan}
+          rawContent={generatedContentText || generated?.description || ''}
+          supplementarySections={[]}
+          onCancel={pending ? onCancel : undefined}
+          onClose={() => {
+            if (pending) {
+              onCancel();
+            }
+            setShowFullscreenLesson(false);
+          }}
+          footerActions={
+            pending
+              ? undefined
+              : [
+                  { label: 'Save', onPress: onSave, disabled: saving, tone: 'primary' as const },
+                  { label: 'PDF', onPress: onExportPDF, tone: 'secondary' as const },
+                  {
+                    label: 'Clear',
+                    onPress: () => {
+                      setGenerated(null);
+                      setShowFullscreenLesson(false);
+                    },
+                    tone: 'danger' as const,
+                  },
+                ]
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }

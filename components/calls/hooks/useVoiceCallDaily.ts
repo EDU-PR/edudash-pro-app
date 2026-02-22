@@ -73,6 +73,7 @@ import {
   disposePrewarmedCallObject,
   hasValidSession,
 } from '@/lib/calls/CallPrewarming';
+import { sendIncomingCallPush } from '@/lib/calls/sendIncomingCallPush';
 
 // Daily.co SDK - conditionally imported (worked before expo-audio changes)
 let Daily: any = null;
@@ -387,69 +388,30 @@ export function useVoiceCallDaily({
               throw callError;
             }
 
-            // CRITICAL: Send FCM data message to wake callee's app when killed (Android)
-            // FCM data-only messages with high priority can wake killed apps
-            // This is non-blocking to not delay call setup
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-fcm-call`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                callee_user_id: calleeId,
-                call_id: newCallId,
-                caller_id: user.id,
-                caller_name: callerName,
-                call_type: 'voice',
-                meeting_url: roomUrl,
-                thread_id: threadId,
-              }),
-            }).then(res => res.json()).then(result => {
-              if (result.success) {
-                console.log('[VoiceCallDaily] ✅ FCM wake-on-call message sent');
-              } else if (result?.fallback_to_expo) {
-                console.log('[VoiceCallDaily] ℹ️ FCM fallback active', {
-                  attempted: result?.attempted_tokens,
-                  successful: result?.successful_tokens,
-                  errorCodes: result?.error_codes,
+            // Keep call setup non-blocking while dispatching wake/push notifications.
+            void sendIncomingCallPush({
+              accessToken,
+              calleeUserId: calleeId,
+              callId: newCallId,
+              callerId: user.id,
+              callerName,
+              callType: 'voice',
+              meetingUrl: roomUrl,
+              threadId,
+              source: 'VoiceCallDaily',
+            })
+              .then((pushResult) => {
+                console.log('[VoiceCallDaily] incoming_call_push_dispatch', {
+                  call_id: newCallId,
+                  fcm_success_count: pushResult.fcmSuccessCount,
+                  expo_fallback_sent: pushResult.expoFallbackSent,
+                  platform_filter_used: pushResult.expoPlatformFilter,
+                  error_codes: pushResult.errorCodes,
                 });
-              } else {
-                console.warn('[VoiceCallDaily] FCM failed, falling back to Expo push:', result.error);
-              }
-            }).catch(err => {
-              console.warn('[VoiceCallDaily] FCM call failed:', err);
-            });
-
-            // Send push notification via notifications-dispatcher
-            // This provides the visible notification banner and wakes the app
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                event_type: 'incoming_call',
-                user_ids: [calleeId],
-                call_id: newCallId,
-                caller_id: user.id,
-                caller_name: callerName,
-                call_type: 'voice',
-                meeting_url: roomUrl,
-                thread_id: threadId,
-              }),
-            }).then(res => {
-              if (res.ok) {
-                console.log('[VoiceCallDaily] ✅ Push notification sent to callee');
-              } else {
-                res.text().then(text => {
-                  console.warn('[VoiceCallDaily] Push notification failed:', text);
-                });
-              }
-            }).catch(err => {
-              console.warn('[VoiceCallDaily] Failed to send push notification:', err);
-            });
+              })
+              .catch((err) => {
+                console.warn('[VoiceCallDaily] incoming call push dispatch failed:', err);
+              });
 
             // NOTE: CallKeep removed - library broken with Expo SDK 54+ (duplicate method exports)
             // Incoming calls now rely on push notifications + WhatsAppStyleIncomingCall UI

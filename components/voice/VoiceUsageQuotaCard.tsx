@@ -12,6 +12,7 @@ import { useVoiceUsageLimits } from '@/lib/voice/useVoiceUsageLimits';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { clampPercent } from '@/lib/progress/clampPercent';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface VoiceUsageQuotaCardProps {
@@ -59,8 +60,14 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
   const tierColor = tierColors[quota.tier];
   
   // Calculate usage percentages
-  const dailySttUsagePercent = ((quota.daily.stt_minutes_total - quota.daily.stt_minutes_remaining) / quota.daily.stt_minutes_total) * 100;
-  const monthlySttUsagePercent = ((quota.monthly.stt_minutes_total - quota.monthly.stt_minutes_remaining) / quota.monthly.stt_minutes_total) * 100;
+  const dailySttUsagePercent = clampPercent(
+    ((quota.daily.stt_minutes_total - quota.daily.stt_minutes_remaining) / Math.max(1, quota.daily.stt_minutes_total)) * 100,
+    { source: 'components/voice/VoiceUsageQuotaCard.daily' },
+  );
+  const monthlySttUsagePercent = clampPercent(
+    ((quota.monthly.stt_minutes_total - quota.monthly.stt_minutes_remaining) / Math.max(1, quota.monthly.stt_minutes_total)) * 100,
+    { source: 'components/voice/VoiceUsageQuotaCard.monthly' },
+  );
   
   // Determine warning level
   const showWarning = isNearDailyLimit || isNearMonthlyLimit;
@@ -111,7 +118,11 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
           </Text>
         </View>
         
-        <View style={styles.progressBarContainer}>
+        <View
+          style={styles.progressBarContainer}
+          accessibilityRole="progressbar"
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(dailySttUsagePercent) }}
+        >
           <View 
             style={[
               styles.progressBarFill, 
@@ -142,7 +153,11 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
           </Text>
         </View>
         
-        <View style={styles.progressBarContainer}>
+        <View
+          style={styles.progressBarContainer}
+          accessibilityRole="progressbar"
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(monthlySttUsagePercent) }}
+        >
           <View 
             style={[
               styles.progressBarFill, 

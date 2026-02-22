@@ -1,0 +1,19 @@
+{
+  "status": 307,
+  "headers": {
+    "location": "/dashboard/parent",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/parent/layout,_N_T_/dashboard/parent/generate-resource/layout,_N_T_/dashboard/parent/generate-resource/page,_N_T_/dashboard/parent/generate-resource"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/parent/generate-resource/__PAGE__",
+    "/dashboard/parent/generate-resource",
+    "/dashboard/parent",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}

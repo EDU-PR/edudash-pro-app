@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -92,7 +92,7 @@ function csvEscape(value: unknown): string {
   return text;
 }
 
-export default function PrincipalStationeryPage() {
+function PrincipalStationeryPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
@@ -691,5 +691,13 @@ export default function PrincipalStationeryPage() {
         )}
       </div>
     </PrincipalShell>
+  );
+}
+
+export default function PrincipalStationeryPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading stationery workspace...</div>}>
+      <PrincipalStationeryPageContent />
+    </Suspense>
   );
 }

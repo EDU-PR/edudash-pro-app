@@ -1,0 +1,18 @@
+{
+  "status": 307,
+  "headers": {
+    "location": "/dashboard/parent",
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/ecd/layout,_N_T_/ecd/play/layout,_N_T_/ecd/play/page,_N_T_/ecd/play"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/ecd/play/__PAGE__",
+    "/ecd/play",
+    "/ecd",
+    "/_index",
+    "/_head"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/teacher/layout,_N_T_/dashboard/teacher/lessons/layout,_N_T_/dashboard/teacher/lessons/create/layout,_N_T_/dashboard/teacher/lessons/create/page,_N_T_/dashboard/teacher/lessons/create"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/dashboard/teacher/lessons/create/__PAGE__",
+    "/dashboard/teacher/lessons/create",
+    "/dashboard/teacher/lessons",
+    "/dashboard/teacher",
+    "/dashboard",
+    "/_index",
+    "/_head"
+  ]
+}
