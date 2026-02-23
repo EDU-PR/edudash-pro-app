@@ -273,6 +273,39 @@ function getEnv(name: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+function extractBearerToken(authHeader: string | null): string | null {
+  if (!authHeader) return null;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match || !match[1]) return null;
+  const token = match[1].trim();
+  return token.length > 0 ? token : null;
+}
+
+function decodeBase64Url(value: string): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padLength = (4 - (normalized.length % 4)) % 4;
+  const padded = `${normalized}${'='.repeat(padLength)}`;
+  try {
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+function inferJwtRole(token: string): string | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  const payloadText = decodeBase64Url(parts[1]);
+  if (!payloadText) return null;
+  try {
+    const payload = JSON.parse(payloadText) as Record<string, unknown>;
+    return typeof payload.role === 'string' ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
 function getBooleanFlag(name: string, fallback = true): boolean {
   const raw = (getEnv(name) || getEnv(`EXPO_PUBLIC_${name}`) || '').trim().toLowerCase();
   if (!raw) return fallback;
@@ -1157,7 +1190,7 @@ function normalizeRequestedModel(raw?: string | null): string | null {
   const key = trimmed.toLowerCase();
   const sonnet4 = getEnv('ANTHROPIC_SONNET_4_MODEL') || 'claude-sonnet-4-20250514';
   const sonnet45 = getEnv('ANTHROPIC_SONNET_4_5_MODEL') || 'claude-sonnet-4-5-20250514';
-  const sonnet37 = getEnv('ANTHROPIC_SONNET_3_7_MODEL') || 'claude-3-7-sonnet-20250219';
+  const sonnet35 = getEnv('ANTHROPIC_SONNET_3_5_MODEL') || 'claude-3-5-sonnet-20241022';
   const aliases: Record<string, string> = {
     'claude-3-haiku': 'claude-3-haiku-20240307',
     'claude-3-haiku-latest': 'claude-3-haiku-20240307',
@@ -1167,11 +1200,10 @@ function normalizeRequestedModel(raw?: string | null): string | null {
     'claude-3-sonnet-latest': 'claude-3-sonnet-20240229',
     'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
     'claude-3-5-haiku-latest': 'claude-3-5-haiku-20241022',
-    // Claude 3.5 Sonnet aliases are remapped to an actively supported Sonnet model
-    // to avoid not_found retries that increase first-token latency.
-    'claude-3-5-sonnet': sonnet37,
-    'claude-3-5-sonnet-latest': sonnet37,
-    'claude-3-5-sonnet-20241022': sonnet37,
+    // Keep 3.5 Sonnet aliases configurable so environments can pin to a cheaper/equivalent model.
+    'claude-3-5-sonnet': sonnet35,
+    'claude-3-5-sonnet-latest': sonnet35,
+    'claude-3-5-sonnet-20241022': sonnet35,
     'claude-3-7-sonnet': 'claude-3-7-sonnet-20250219',
     'claude-3-7-sonnet-latest': 'claude-3-7-sonnet-20250219',
     'claude-sonnet-4': sonnet4,
@@ -3236,7 +3268,27 @@ serve(async (req) => {
     }
 
     const payload = parsed.data;
-    const authHeader = req.headers.get('Authorization') || '';
+    const accessToken = extractBearerToken(req.headers.get('Authorization'));
+    if (!accessToken) {
+      return new Response(JSON.stringify({
+        error: 'unauthorized',
+        message: 'Missing bearer token. Please sign in again and retry.',
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const tokenRole = inferJwtRole(accessToken);
+    if (tokenRole === 'service_role' || tokenRole === 'anon') {
+      return new Response(JSON.stringify({
+        error: 'invalid_auth_token',
+        message: 'API keys cannot be used as user bearer tokens for ai-proxy.',
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const supabaseUrl = getEnv('SUPABASE_URL') || getEnv('EXPO_PUBLIC_SUPABASE_URL');
     const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY') || getEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
@@ -3253,14 +3305,17 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
-          Authorization: authHeader,
+          Authorization: `Bearer ${accessToken}`,
         },
       },
     });
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
     if (userError || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({
+        error: 'unauthorized',
+        message: 'Invalid or expired session. Please sign in again.',
+      }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

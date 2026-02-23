@@ -22,6 +22,7 @@ import {
   WeeklyProgramService,
   type ProgramTimeRules,
 } from '@/lib/services/weeklyProgramService';
+import { canUseFeature, getQuotaStatus, type QuotaStatus } from '@/lib/ai/limits';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 const DAY_ORDER = [1, 2, 3, 4, 5] as const;
@@ -436,6 +437,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [sharingTeachers, setSharingTeachers] = useState(false);
   const [saveAdvisory, setSaveAdvisory] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [lessonQuota, setLessonQuota] = useState<QuotaStatus | null>(null);
 
   const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
   const [programs, setPrograms] = useState<WeeklyProgramDraft[]>([]);
@@ -462,11 +464,24 @@ export default function PrincipalDailyProgramPlannerScreen() {
     void loadPrograms();
   }, [loadPrograms]);
 
+  const refreshLessonQuota = useCallback(async () => {
+    try {
+      const status = await getQuotaStatus('lesson_generation');
+      setLessonQuota(status);
+    } catch (error) {
+      console.warn('[PrincipalDailyProgramPlanner] Failed to load lesson_generation quota:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLessonQuota();
+  }, [refreshLessonQuota]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadPrograms();
+    await Promise.all([loadPrograms(), refreshLessonQuota()]);
     setRefreshing(false);
-  }, [loadPrograms]);
+  }, [loadPrograms, refreshLessonQuota]);
 
   const runGeneration = useCallback(async (mode: 'generate' | 'regenerate') => {
     if (!organizationId || !userId) {
@@ -499,6 +514,22 @@ export default function PrincipalDailyProgramPlannerScreen() {
         'Complete Preflight First',
         `Answer all five preflight questions before generation:\n\n${missing}`,
       );
+      return;
+    }
+
+    try {
+      const gate = await canUseFeature('lesson_generation', 1);
+      setLessonQuota(gate.status);
+      if (!gate.allowed) {
+        const message = gate.status.limit > 0
+          ? `You have used ${gate.status.used} of ${gate.status.limit} AI routine generations this month.`
+          : 'Your monthly AI routine generation limit is reached.';
+        Alert.alert('Monthly AI limit reached', message);
+        return;
+      }
+    } catch (error) {
+      console.warn('[PrincipalDailyProgramPlanner] Quota check failed:', error);
+      Alert.alert('Quota check unavailable', 'Could not verify your routine generation quota. Please try again.');
       return;
     }
 
@@ -574,6 +605,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     } finally {
       setGenerating(false);
       setGenerationMode('generate');
+      void refreshLessonQuota();
     }
   }, [
     ageGroup,
@@ -597,6 +629,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     preflight,
     preflightComplete,
     confirmedAssumptions,
+    refreshLessonQuota,
   ]);
 
   const generateProgram = useCallback(() => {
@@ -1093,8 +1126,14 @@ export default function PrincipalDailyProgramPlannerScreen() {
               <Text style={styles.statValue}>{programStats.totalBlocks}</Text>
             </View>
             <View style={styles.statPill}>
-              <Text style={styles.statLabel}>Timed Blocks</Text>
-              <Text style={styles.statValue}>{programStats.withTimesCount}</Text>
+              <Text style={styles.statLabel}>AI Remaining</Text>
+              <Text style={styles.statValue}>
+                {lessonQuota
+                  ? lessonQuota.limit < 0
+                    ? 'Unlimited'
+                    : `${Math.max(0, lessonQuota.remaining)}/${lessonQuota.limit}`
+                  : '--'}
+              </Text>
             </View>
             <View style={styles.statPill}>
               <Text style={styles.statLabel}>Saved Plans</Text>
@@ -1115,6 +1154,11 @@ export default function PrincipalDailyProgramPlannerScreen() {
                 ? 'Ready to share with parents.'
                 : 'Complete setup, validate rules, and review blocks to publish confidently.'}
             </Text>
+            {lessonQuota && lessonQuota.limit > 0 && (
+              <Text style={styles.readinessHint}>
+                AI usage this month: {lessonQuota.used}/{lessonQuota.limit}
+              </Text>
+            )}
           </View>
         </LinearGradient>
 

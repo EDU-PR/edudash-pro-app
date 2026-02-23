@@ -23,16 +23,16 @@ export function isAIEnabled(): boolean {
  *
  * | Tier   | Model                          | Use Case                      | Cost (input/MTok) |
  * |--------|--------------------------------|-------------------------------|--------------------|
- * | fast   | claude-3-5-haiku-20241022      | Summaries, suggestions, chat  | $0.25              |
- * | balanced | claude-sonnet-4-20250514     | Lessons, grading, reports     | $3.00              |
- * | premium | claude-opus-4-20250514        | Complex multi-student analysis| $15.00             |
+ * | fast   | claude-3-haiku-20240307        | Summaries, suggestions, chat  | low                |
+ * | balanced | claude-3-5-haiku-20241022    | Most classroom workflows      | low-medium         |
+ * | premium | claude-3-5-sonnet-20241022    | Higher-accuracy generation    | medium             |
  *
  * @see https://docs.anthropic.com/en/docs/about-claude/models
  */
 export const AI_MODELS = {
-  fast: 'claude-3-5-haiku-20241022',
-  balanced: 'claude-sonnet-4-20250514',
-  premium: 'claude-opus-4-20250514',
+  fast: 'claude-3-haiku-20240307',
+  balanced: 'claude-3-5-haiku-20241022',
+  premium: 'claude-3-5-sonnet-20241022',
 } as const;
 
 export type AIModelTier = keyof typeof AI_MODELS;
@@ -67,7 +67,7 @@ export const AI_QUOTA_DEFAULTS = {
   /** Max grading operations per day per user (free tier) */
   free_daily_grading: 10,
   /** Max lesson generations per day per user (premium tier) */
-  premium_daily_lessons: 50,
+  premium_daily_lessons: 120,
   /** Max grading operations per day per user (premium tier) */
   premium_daily_grading: 200,
   /** Network timeout for quota check (ms) — fail CLOSED on timeout */
