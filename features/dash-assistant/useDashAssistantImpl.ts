@@ -149,6 +149,7 @@ interface UseDashAssistantOptions {
     grade?: string;
     topic?: string;
     difficulty?: 1 | 2 | 3 | 4 | 5;
+    slowLearner?: boolean;
   };
 }
 
@@ -279,9 +280,12 @@ const buildTutorKickoffPrompt = (
   const contextBlock = contextParts.length > 0 ? `\n${contextParts.join('\n')}` : '';
   return [
     `Start a ${modeLabel} tutor session for me.${contextBlock}`,
+    config?.slowLearner
+      ? 'Use slow-learner supportive pacing: one concept at a time, one question at a time, with worked examples and confidence checks.'
+      : null,
     'Use Diagnose → Teach → Practice flow.',
     'Ask one question at a time and adapt based on my answer.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 };
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
@@ -1332,9 +1336,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } else if (tutorIntent && !stopTutor) {
         const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
         const phonicsMode = phonicsRequested;
+        const enforcedSlowLearnerMode = tutorConfig?.slowLearner === true;
         const newSession: TutorSession = {
           id: createTutorSessionId(),
           mode: tutorIntent,
+          slowLearner: enforcedSlowLearnerMode,
           subject: context.subject,
           grade: context.grade,
           topic: context.topic,
@@ -1867,7 +1873,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             const followUp = adjustedPayload.follow_up_question || null;
             const followExpected = adjustedPayload.next_expected_answer || null;
             let nextDifficulty = prev.difficulty || 1;
-            if (!isCorrect && nextIncorrectStreak >= 2) {
+            if (prev.slowLearner) {
+              // In slow learner mode keep challenge intentionally gentle.
+              if (!isCorrect && nextIncorrectStreak >= 1) {
+                nextDifficulty = 1;
+              } else if (isCorrect && nextCorrectStreak >= 3) {
+                nextDifficulty = Math.min(2, nextDifficulty + 1);
+              } else {
+                nextDifficulty = Math.min(2, nextDifficulty);
+              }
+            } else if (!isCorrect && nextIncorrectStreak >= 2) {
               nextDifficulty = Math.max(1, nextDifficulty - 1);
             } else if (isCorrect && nextCorrectStreak >= 2) {
               nextDifficulty = Math.min(3, nextDifficulty + 1);
