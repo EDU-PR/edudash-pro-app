@@ -3461,10 +3461,13 @@ serve(async (req) => {
     }
 
     // Check if dev mode is enabled to bypass quota checks
-    // SECURITY: Only allow bypass in explicit development environments, never in production
+    // SECURITY: Never allow bypass in production (ENVIRONMENT or VERCEL_ENV)
     const environment = Deno.env.get('ENVIRONMENT') || 'production';
-    const devModeBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' && 
-                          (environment === 'development' || environment === 'local');
+    const vercelEnv = Deno.env.get('VERCEL_ENV') || '';
+    const isProduction = environment === 'production' || vercelEnv === 'production';
+    const devModeBypass = !isProduction &&
+      Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+      (environment === 'development' || environment === 'local');
     
     if (devModeBypass) {
       console.warn('[ai-proxy] ⚠️ QUOTA BYPASS ACTIVE - Development mode only');
@@ -3478,7 +3481,15 @@ serve(async (req) => {
       });
 
       if (quota.error) {
-        console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
+        console.error('[ai-proxy] check_ai_usage_limit failed, blocking request:', quota.error);
+        return new Response(JSON.stringify({
+          error: 'quota_check_failed',
+          message: 'AI service is temporarily unavailable. Please try again in a few minutes.',
+          trace_id: crypto.randomUUID(),
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       } else {
         const quotaData = quota.data as JsonRecord | null;
         quotaDataForRequest = quotaData;

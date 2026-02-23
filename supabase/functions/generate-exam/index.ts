@@ -1653,6 +1653,43 @@ serve(async (req: Request) => {
       );
     }
 
+    // Quota check — prevent unbounded exam generation
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: user.id,
+        p_request_type: 'exam_generation',
+      });
+
+      if (quota.error) {
+        console.error('[generate-exam] check_ai_usage_limit failed:', quota.error);
+        return jsonResponse(
+          {
+            error: 'quota_check_failed',
+            message: 'Unable to verify AI usage quota. Please try again in a few minutes.',
+          },
+          503,
+          corsHeaders,
+        );
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return jsonResponse(
+          {
+            error: 'quota_exceeded',
+            message: "You've reached your AI usage limit for this period. Upgrade for more.",
+            details: quotaData,
+          },
+          429,
+          corsHeaders,
+        );
+      }
+    }
+
     const { data: tierData } = await supabase.rpc('get_user_subscription_tier', {
       user_id: scope.profile.id,
     });
@@ -1871,6 +1908,20 @@ serve(async (req: Request) => {
       warningParts.push('Exam generated, but cloud save failed. You can still continue with this attempt.');
     } else if (savedExam?.id) {
       persistedExamId = String(savedExam.id);
+    }
+
+    // Record usage after successful generation
+    if (!devBypass) {
+      try {
+        await supabase.rpc('increment_ai_usage', {
+          p_user_id: user.id,
+          p_request_type: 'exam_generation',
+          p_status: 'success',
+          p_metadata: { scope: 'generate_exam', model_used: modelUsed, exam_id: persistedExamId },
+        });
+      } catch (usageErr) {
+        console.warn('[generate-exam] increment_ai_usage failed (non-fatal):', usageErr);
+      }
     }
 
     const persistenceWarning = warningParts.length > 0 ? warningParts.join(' ') : undefined;

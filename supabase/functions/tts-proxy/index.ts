@@ -1040,15 +1040,21 @@ Deno.serve(async (req) => {
         p_request_type: 'tts',
       });
 
-      if (!quota.error) {
-        const quotaData = quota.data as Record<string, unknown> | null;
-        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
-          return jsonResponse(429, {
-            error: 'quota_exceeded',
-            message: 'Text-to-speech usage quota exceeded for this billing period',
-            details: quotaData,
-          });
-        }
+      if (quota.error) {
+        console.error('[tts-proxy] check_ai_usage_limit failed:', quota.error);
+        return jsonResponse(503, {
+          error: 'quota_check_failed',
+          message: 'AI service is temporarily unavailable. Please try again in a few minutes.',
+        });
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return jsonResponse(429, {
+          error: 'quota_exceeded',
+          message: "You've reached your AI usage limit for this period. Upgrade for more.",
+          details: quotaData,
+        });
       }
     }
 
@@ -1334,7 +1340,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Record usage (non-fatal)
+      // Record usage (non-fatal) — audit log + quota counter
       try {
         await supabase.rpc('record_ai_usage', {
           p_user_id: userData.user.id,
@@ -1346,8 +1352,14 @@ Deno.serve(async (req) => {
           p_success: true,
           p_metadata: { scope: 'tts_stream', voice_id: streamVoice },
         });
+        await supabase.rpc('increment_ai_usage', {
+          p_user_id: userData.user.id,
+          p_request_type: 'tts',
+          p_status: 'success',
+          p_metadata: { scope: 'tts_stream' },
+        });
       } catch (usageErr) {
-        console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
+        console.warn('[tts-proxy] usage recording failed (non-fatal):', usageErr);
       }
 
       // Return audio response directly.
@@ -1507,7 +1519,7 @@ Deno.serve(async (req) => {
 
     const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
 
-    // Record usage (non-fatal)
+    // Record usage (non-fatal) — audit log + quota counter
     try {
       await supabase.rpc('record_ai_usage', {
         p_user_id: userData.user.id,
@@ -1519,8 +1531,14 @@ Deno.serve(async (req) => {
         p_success: true,
         p_metadata: { scope: 'tts_synthesize', voice_id: voiceId, language, text_length: spokenText.length, cache_hit: false },
       });
+      await supabase.rpc('increment_ai_usage', {
+        p_user_id: userData.user.id,
+        p_request_type: 'tts',
+        p_status: 'success',
+        p_metadata: { scope: 'tts_synthesize' },
+      });
     } catch (usageErr) {
-      console.warn('[tts-proxy] record_ai_usage failed (non-fatal):', usageErr);
+      console.warn('[tts-proxy] usage recording failed (non-fatal):', usageErr);
     }
 
     return jsonResponse(200, {

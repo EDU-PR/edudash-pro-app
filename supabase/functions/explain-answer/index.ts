@@ -71,6 +71,41 @@ serve(async (req: Request) => {
     const { data: tier } = await supabase.rpc('get_user_subscription_tier', { user_id: user.id });
     const model = bodyModel || getDefaultModelForTier(tier);
 
+    // Quota check — prevent unbounded explanation requests
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: user.id,
+        p_request_type: 'explanation',
+      });
+
+      if (quota.error) {
+        console.error('[explain-answer] check_ai_usage_limit failed:', quota.error);
+        return new Response(
+          JSON.stringify({
+            error: 'quota_check_failed',
+            message: 'Unable to verify AI usage quota. Please try again in a few minutes.',
+          }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'quota_exceeded',
+            message: "You've reached your AI usage limit for this period. Upgrade for more.",
+            details: quotaData,
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     if (!questionText || !correctAnswer) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
@@ -137,6 +172,20 @@ Provide a clear, age-appropriate explanation (2-4 sentences):
 
     const aiData = await aiResponse.json();
     const explanation = aiData.content?.[0]?.text || 'Unable to generate explanation.';
+
+    // Record usage after successful generation
+    if (!devBypass) {
+      try {
+        await supabase.rpc('increment_ai_usage', {
+          p_user_id: user.id,
+          p_request_type: 'explanation',
+          p_status: 'success',
+          p_metadata: { scope: 'explain_answer', model },
+        });
+      } catch (usageErr) {
+        console.warn('[explain-answer] increment_ai_usage failed (non-fatal):', usageErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({ explanation }),
