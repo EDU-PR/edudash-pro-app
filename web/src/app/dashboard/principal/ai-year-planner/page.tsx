@@ -128,6 +128,18 @@ const MONTH_BUCKET_LABELS: Record<YearPlanMonthlyBucket, string> = {
 const MOCK_FALLBACK_ENABLED =
   process.env.NEXT_PUBLIC_AI_YEAR_PLANNER_MOCK_FALLBACK === 'true' && process.env.NODE_ENV !== 'production';
 
+function isAuthFailureMessage(message: string): boolean {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('bad_jwt') ||
+    normalized.includes('invalid jwt') ||
+    normalized.includes('session expired') ||
+    normalized.includes('sign in again')
+  );
+}
+
 function parseMonthIndex(value: unknown, fallback: number): number {
   const asNumber = Number(value);
   if (Number.isFinite(asNumber)) {
@@ -361,7 +373,9 @@ Always respond with valid JSON that matches the requested structure. Output only
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result?.message || result?.error || 'Failed to generate year plan');
+        const invokeError = new Error(result?.message || result?.error || 'Failed to generate year plan');
+        (invokeError as any).isAuthFailure = response.status === 401 || response.status === 403;
+        throw invokeError;
       }
       
       // Parse the AI response
@@ -388,7 +402,14 @@ Always respond with valid JSON that matches the requested structure. Output only
       setExpandedTerms([1]); // Expand first term by default
     } catch (err: any) {
       console.error('Error generating year plan:', err);
-      setError(err.message || 'Failed to generate year plan. Please try again.');
+      const message = err?.message || 'Failed to generate year plan. Please try again.';
+      const isAuthFailure = Boolean(err?.isAuthFailure) || isAuthFailureMessage(message);
+      if (isAuthFailure) {
+        setGeneratedPlan(null);
+        setError('Your session expired. Please sign in again, then retry year planner.');
+        return;
+      }
+      setError(message);
       if (MOCK_FALLBACK_ENABLED) {
         setGeneratedPlan(normalizeYearPlanModel(generateMockPlan(config, preschoolName), preschoolName));
       } else {

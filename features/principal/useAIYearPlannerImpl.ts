@@ -66,6 +66,18 @@ const MONTHLY_BUCKETS: YearPlanMonthlyBucket[] = [
   'donations_fundraisers',
 ];
 
+function isAuthRelatedErrorMessage(message: string): boolean {
+  const normalized = String(message || '').toLowerCase();
+  return (
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('bad_jwt') ||
+    normalized.includes('invalid jwt') ||
+    normalized.includes('auth token') ||
+    normalized.includes('session')
+  );
+}
+
 function toStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
@@ -872,6 +884,12 @@ export function useAIYearPlanner({
 
     try {
       const supabase = assertSupabase();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (sessionError || !accessToken) {
+        throw new Error('Session expired. Please sign in again.');
+      }
+
       const prompt = [
         buildYearPlanUserPrompt(config),
         '',
@@ -883,6 +901,9 @@ export function useAIYearPlanner({
       ].join('\n');
 
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: {
           scope: 'principal',
           // Use lesson_generation token budget (larger than chat_message) to reduce JSON truncation.
@@ -905,14 +926,19 @@ export function useAIYearPlanner({
       });
 
       if (error) {
+        const invokeStatus = Number((error as any)?.context?.status) || null;
+        const invokeMessage = error.message || 'Failed to generate plan';
         if (__DEV__) {
           console.warn('[AI Year Planner] ai-proxy invoke error:', {
-            message: error.message || null,
+            message: invokeMessage,
             name: (error as any)?.name || null,
             context: (error as any)?.context || null,
           });
         }
-        throw new Error(error.message || 'Failed to generate plan');
+        if (invokeStatus === 401 || invokeStatus === 403 || isAuthRelatedErrorMessage(invokeMessage)) {
+          throw new Error('Session expired. Please sign in again.');
+        }
+        throw new Error(invokeMessage);
       }
 
       const content =
@@ -946,6 +972,15 @@ export function useAIYearPlanner({
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
       console.error('AI generation error:', error);
+      if (isAuthRelatedErrorMessage(errorMessage)) {
+        showPlannerAlert({
+          title: 'Session expired',
+          message: 'Please sign in again, then generate the year plan again.',
+          type: 'error',
+          buttons: [{ text: 'OK' }],
+        });
+        return;
+      }
       if (__DEV__) {
         console.warn('[AI Year Planner] Falling back to demo plan due to generation error:', errorMessage);
       }
