@@ -412,6 +412,37 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     fontWeight: '600',
     lineHeight: 17,
   },
+  contextBannerAction: {
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: theme.primary + '1A',
+  },
+  contextBannerActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.primary,
+  },
+  roleScopeNotice: {
+    marginBottom: 14,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: theme.warning + '12',
+    borderWidth: 1,
+    borderColor: theme.warning + '30',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roleScopeNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.warning,
+    lineHeight: 17,
+  },
   emptyFees: {
     backgroundColor: theme.card,
     borderRadius: 12,
@@ -533,6 +564,9 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     paddingVertical: 10,
     borderRadius: 8,
   },
+  controlDisabled: {
+    opacity: 0.5,
+  },
   waiveButton: {
     backgroundColor: '#6B7280' + '15',
   },
@@ -572,6 +606,14 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     fontSize: 14,
     fontWeight: '600',
     color: theme.warning,
+  },
+  deleteButton: {
+    backgroundColor: theme.error + '14',
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.error,
   },
   modalOverlay: {
     flex: 1,

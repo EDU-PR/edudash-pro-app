@@ -123,7 +123,7 @@ function CreateReportPageContent() {
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const userName = profile?.firstName || 'Teacher';
 
   // Calculate completion percentage

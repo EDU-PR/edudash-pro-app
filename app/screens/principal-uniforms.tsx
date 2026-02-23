@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { derivePreschoolId } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
@@ -13,7 +14,7 @@ import {
   SIZE_OPTIONS, isUniformPaymentRecord,
   deriveUniformData, exportUniformPdf, useUniformMessaging, hasAssignedBackNumber, needsGeneratedBackNumber,
 } from '@/hooks/principal-uniforms';
-import type { UniformRow, StudentRow, DisplayRow } from '@/hooks/principal-uniforms';
+import type { UniformRow, StudentRow, DisplayRow, ParentProfile } from '@/hooks/principal-uniforms';
 
 export default function PrincipalUniformsScreen() {
   const { user, profile } = useAuth();
@@ -24,7 +25,7 @@ export default function PrincipalUniformsScreen() {
   const autoAction = Array.isArray(params.autoAction) ? params.autoAction[0] : params.autoAction;
   const handledAutoActionRef = useRef<string | null>(null);
 
-  const schoolId = (profile?.organization_id as string) || (profile as any)?.preschool_id || null;
+  const schoolId = derivePreschoolId(profile);
 
   const [rows, setRows] = useState<UniformRow[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -40,6 +41,7 @@ export default function PrincipalUniformsScreen() {
   const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
     () => new Map()
   );
+  const [parentProfilesById, setParentProfilesById] = useState<Record<string, ParentProfile>>({});
 
   const {
     bulkMessaging,
@@ -62,22 +64,45 @@ export default function PrincipalUniformsScreen() {
       const [{ data, error }, { data: studentData, error: studentError }] = await Promise.all([
         supabase
           .from('uniform_requests')
-          .select('id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, tshirt_number, is_returning, sample_supplied, created_at, updated_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(id, first_name,last_name,email,phone)')
+          .select('id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, tshirt_number, is_returning, sample_supplied, created_at, updated_at, student_id, parent_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(id, first_name,last_name,email,phone)')
           .eq('preschool_id', schoolId)
           .order('created_at', { ascending: false }),
         supabase
           .from('students')
-          .select('id, first_name, last_name, student_id, class_id, classroom:classes(id,name), parent:profiles!students_parent_id_fkey(id, first_name,last_name,email,phone), guardian:profiles!students_guardian_id_fkey(id, first_name,last_name,email,phone)')
-          .eq('preschool_id', schoolId)
+          .select('id, first_name, last_name, student_id, class_id, parent_id, guardian_id, classroom:classes(id,name), parent:profiles!students_parent_id_fkey(id, first_name,last_name,email,phone), guardian:profiles!students_guardian_id_fkey(id, first_name,last_name,email,phone)')
+          .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
           .eq('is_active', true)
           .order('first_name'),
       ]);
       if (error) throw error;
       if (studentError) throw studentError;
-      setRows((data as any) || []);
-      setStudents((studentData as any) || []);
+      const uniformRows = ((data as any) || []) as UniformRow[];
+      const studentRows = ((studentData as any) || []) as StudentRow[];
+      setRows(uniformRows);
+      setStudents(studentRows);
 
-      const studentIds = (studentData as any[] | null)?.map((s: any) => s.id).filter(Boolean) || [];
+      const candidateParentIds = Array.from(new Set([
+        ...uniformRows.map((row) => row.parent?.id || row.parent_id || '').filter(Boolean),
+        ...studentRows.map((student) => student.parent?.id || student.parent_id || '').filter(Boolean),
+        ...studentRows.map((student) => student.guardian?.id || student.guardian_id || '').filter(Boolean),
+      ]));
+
+      if (candidateParentIds.length > 0) {
+        const { data: parentProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email, phone')
+          .in('id', candidateParentIds);
+        const parentMap: Record<string, ParentProfile> = {};
+        (parentProfiles || []).forEach((profileRow: any) => {
+          if (!profileRow?.id) return;
+          parentMap[profileRow.id] = profileRow as ParentProfile;
+        });
+        setParentProfilesById(parentMap);
+      } else {
+        setParentProfilesById({});
+      }
+
+      const studentIds = (studentRows as any[] | null)?.map((s: any) => s.id).filter(Boolean) || [];
       if (studentIds.length) {
         const [{ data: popData }, { data: paymentsData }] = await Promise.all([
           supabase.from('pop_uploads')
@@ -130,8 +155,8 @@ export default function PrincipalUniformsScreen() {
   }, [load]);
 
   const derived = useMemo(
-    () => deriveUniformData(rows, students, paymentStatusByStudent),
-    [rows, students, paymentStatusByStudent]
+    () => deriveUniformData(rows, students, paymentStatusByStudent, parentProfilesById),
+    [rows, students, paymentStatusByStudent, parentProfilesById]
   );
 
   const { submittedRows, missingRows, submittedCount, missingCount,

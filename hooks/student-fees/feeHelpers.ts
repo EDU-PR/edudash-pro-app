@@ -51,6 +51,7 @@ export function mapFeeRow(f: any): StudentFee {
     id: f.id,
     student_id: f.student_id,
     fee_structure_id: f.fee_structure_id,
+    billing_month: f.billing_month || null,
     amount,
     final_amount: finalAmount,
     discount_amount: discountAmount,

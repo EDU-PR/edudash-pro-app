@@ -199,7 +199,7 @@ export interface TierQuotas {
  */
 export const TIER_QUOTAS: Record<CapabilityTier, TierQuotas> = {
   free: {
-    lesson_generation: 5,
+    lesson_generation: 10,
     grading_assistance: 10,
     homework_help: 20,
     transcription: 5,

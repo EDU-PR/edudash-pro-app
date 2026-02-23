@@ -54,6 +54,9 @@ export default function SchoolSettingsScreen() {
   const [uniformOrdersEnabled, setUniformOrdersEnabled] = useState(false);
   const [stationeryEnabled, setStationeryEnabled] = useState(false);
   const [feesPrivateModeEnabled, setFeesPrivateModeEnabled] = useState(false);
+  const [financeAdminControls, setFinanceAdminControls] = useState(
+    DEFAULT_SCHOOL_SETTINGS.permissions.financeAdminControls
+  );
   const [financialReportsSettings, setFinancialReportsSettings] = useState(
     DEFAULT_SCHOOL_SETTINGS.features.financialReports
   );
@@ -112,6 +115,10 @@ export default function SchoolSettingsScreen() {
           setStationeryEnabled(Boolean((mergedSettings as any)?.features?.stationery?.enabled));
           const financePrivacy = resolveFinancePrivacySettings((mergedSettings as any) || {});
           setFeesPrivateModeEnabled(financePrivacy.hideFeesOnDashboards && financePrivacy.requireAppPasswordForFees);
+          setFinanceAdminControls(
+            mergedSettings?.permissions?.financeAdminControls ||
+              DEFAULT_SCHOOL_SETTINGS.permissions.financeAdminControls
+          );
           setFinancialReportsSettings(
             mergedSettings?.features?.financialReports || DEFAULT_SCHOOL_SETTINGS.features.financialReports
           );
@@ -281,13 +288,24 @@ export default function SchoolSettingsScreen() {
             privateModeEnabled: feesPrivateModeEnabled,
           },
         },
+        permissions: {
+          financeAdminControls,
+        },
+        // Legacy compatibility for older readers.
+        ...( {
+          finance_permissions: {
+            admin_can_manage_fees: financeAdminControls.canManageFees,
+            admin_can_manage_student_profile: financeAdminControls.canManageStudentProfile,
+            admin_can_delete_fees: financeAdminControls.canDeleteFees,
+          },
+        } as any),
       } as any);
       setSuccessModal({
         visible: true,
         title: '✓ Saved',
         message: feesPrivateModeEnabled
-          ? 'Fees are now hidden on dashboards and protected with app password.'
-          : 'Fees are visible again on dashboards.',
+          ? 'Fee privacy and admin permissions were updated. Dashboards are now private-fee mode.'
+          : 'Fee privacy and admin permissions were updated.',
       });
     } catch (e: any) {
       showError('Error', e?.message || 'Failed to save fee privacy setting');
@@ -635,7 +653,7 @@ export default function SchoolSettingsScreen() {
                   <Text style={styles.sectionTitle}>Fee Privacy</Text>
                 </View>
                 <Text style={styles.sectionHint}>
-                  Hide fees and payment widgets on principal/admin dashboards. Opening fees will require app password.
+                  Hide fees and payment widgets on principal/admin dashboards, and control how much finance power school admins have.
                 </Text>
 
                 <View style={styles.switchRow}>
@@ -650,13 +668,60 @@ export default function SchoolSettingsScreen() {
                   </TouchableOpacity>
                 </View>
 
+                <Text style={styles.subsectionLabel}>Admin finance controls</Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Admins can mark/waive/adjust fees</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, financeAdminControls.canManageFees && styles.switchPillActive]}
+                    onPress={() =>
+                      setFinanceAdminControls((prev) => ({ ...prev, canManageFees: !prev.canManageFees }))
+                    }
+                  >
+                    <Text style={[styles.switchPillText, financeAdminControls.canManageFees && styles.switchPillTextActive]}>
+                      {financeAdminControls.canManageFees ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Admins can change class/start date/lifecycle</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, financeAdminControls.canManageStudentProfile && styles.switchPillActive]}
+                    onPress={() =>
+                      setFinanceAdminControls((prev) => ({
+                        ...prev,
+                        canManageStudentProfile: !prev.canManageStudentProfile,
+                      }))
+                    }
+                  >
+                    <Text style={[styles.switchPillText, financeAdminControls.canManageStudentProfile && styles.switchPillTextActive]}>
+                      {financeAdminControls.canManageStudentProfile ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Admins can delete fee rows</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, financeAdminControls.canDeleteFees && styles.switchPillActive]}
+                    onPress={() =>
+                      setFinanceAdminControls((prev) => ({ ...prev, canDeleteFees: !prev.canDeleteFees }))
+                    }
+                  >
+                    <Text style={[styles.switchPillText, financeAdminControls.canDeleteFees && styles.switchPillTextActive]}>
+                      {financeAdminControls.canDeleteFees ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity style={styles.btn} onPress={saveFinancePrivacyPolicy} disabled={savingFinancePrivacy}>
                   {savingFinancePrivacy ? (
                     <EduDashSpinner color={theme.onPrimary} />
                   ) : (
                     <>
                       <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
-                      <Text style={styles.btnText}>Save Fee Privacy Setting</Text>
+                      <Text style={styles.btnText}>Save Fee Privacy & Admin Controls</Text>
                     </>
                   )}
                 </TouchableOpacity>

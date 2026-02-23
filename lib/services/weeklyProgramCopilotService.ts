@@ -505,6 +505,21 @@ const normalizeWeeklyProgramErrorMessage = (message: string | null | undefined):
   return raw;
 };
 
+const isProviderCapacityError = (message: string | null | undefined): boolean => {
+  const normalized = String(message || '').toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes('workspace api usage limits') ||
+    normalized.includes('api provider usage limit reached') ||
+    normalized.includes('provider usage limit reached') ||
+    normalized.includes('insufficient_quota') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('http 429') ||
+    normalized.includes(' status: 429') ||
+    normalized.includes('will regain access on')
+  );
+};
+
 const extractAIContent = (data: unknown): string => {
   if (typeof data === 'string') return data;
   if (!data || typeof data !== 'object') return JSON.stringify(data || {});
@@ -592,6 +607,9 @@ const repairWeeklyProgramJson = async (
       body: {
         service_type: 'lesson_generation',
         payload: { prompt: repairPrompt },
+        // Prefer OpenAI first for recovery flows to avoid hard-stop when
+        // Anthropic workspace caps are temporarily exhausted.
+        prefer_openai: true,
         stream: false,
         enable_tools: false,
         metadata: { source: 'weekly_program_copilot_repair' },
@@ -1092,6 +1110,144 @@ const normalizeAIResponse = (
   };
 };
 
+const DEFAULT_DAY_FOCUS: Record<number, { language: string; math: string; lifeSkill: string }> = {
+  1: {
+    language: 'Home Language: Story sequencing and key vocabulary',
+    math: 'Mathematics: Counting objects to 20 and number matching',
+    lifeSkill: 'Life Skills: Classroom rules, sharing, and turn-taking',
+  },
+  2: {
+    language: 'Home Language: Listening comprehension and retelling',
+    math: 'Mathematics: Shape recognition and sorting',
+    lifeSkill: 'Life Skills: Fine-motor art and self-help routines',
+  },
+  3: {
+    language: 'Home Language: Phonics sounds and oral language games',
+    math: 'Mathematics: Pattern extension and comparison',
+    lifeSkill: 'Life Skills: Movement coordination and hygiene habits',
+  },
+  4: {
+    language: 'Home Language: Vocabulary revision and shared reading',
+    math: 'Mathematics: Measurement words (long/short, heavy/light)',
+    lifeSkill: 'Life Skills: Outdoor cooperation and safety awareness',
+  },
+  5: {
+    language: 'Home Language: Guided speaking and weekly reflection',
+    math: 'Mathematics: Number revision and practical problem-solving',
+    lifeSkill: 'Life Skills: Creative expression and calm transitions',
+  },
+};
+
+const buildDeterministicFallbackResponse = (
+  input: GenerateWeeklyProgramFromTermInput,
+): WeeklyProgramAIResponse => {
+  const constraints = input.constraints || {};
+  const preflight = input.preflightAnswers;
+  const includeMeal = constraints.includeMealBlocks !== false;
+  const includeOutdoor = constraints.includeOutdoorPlay !== false;
+  const includeStory = constraints.includeStoryCircle !== false;
+  const includeNap = constraints.includeNapTime === true;
+  const includeToilet = constraints.includeToiletRoutine !== false;
+  const includeHygiene = constraints.includeHygieneChecks !== false;
+
+  const days = WEEKDAY_SEQUENCE.map((day) => {
+    const focus = DEFAULT_DAY_FOCUS[day];
+    const dayBlocks: WeeklyProgramAIResponse['days'][number]['blocks'] = [
+      {
+        block_order: 1,
+        block_type: 'circle_time',
+        title: 'Community Circle & Weather Report',
+        start_time: '08:00',
+        end_time: '08:30',
+        objectives: ['Daily weather observation', 'Calendar talk', 'Oral language confidence'],
+        materials: ['Weather chart', 'Calendar cards'],
+        transition_cue: 'Sing the welcome routine and prepare for focused learning.',
+        notes: `${preflight?.nonNegotiableAnchors ? `Anchors: ${preflight.nonNegotiableAnchors}. ` : ''}CAPS focus: ${focus.language}`,
+      },
+      {
+        block_order: 2,
+        block_type: 'learning',
+        title: 'Language Learning Block',
+        start_time: '08:30',
+        end_time: '09:05',
+        objectives: ['Home Language development', 'Listening and speaking', 'Vocabulary reinforcement'],
+        materials: ['Story cards', 'Picture prompts'],
+        transition_cue: 'Review key words and transition to mathematics with a counting song.',
+        notes: `${preflight?.fixedWeeklyEvents ? `Fixed events: ${preflight.fixedWeeklyEvents}. ` : ''}CAPS focus: ${focus.language}`,
+      },
+      {
+        block_order: 3,
+        block_type: 'learning',
+        title: 'Mathematics Confidence Block',
+        start_time: '09:05',
+        end_time: '09:40',
+        objectives: ['Number sense', 'Pattern and shape exposure', 'Practical problem solving'],
+        materials: ['Counters', 'Shape cards'],
+        transition_cue: 'Pack away resources and prepare for snack/transition.',
+        notes: `${preflight?.resourceConstraints ? `Resource constraints: ${preflight.resourceConstraints}. ` : ''}CAPS focus: ${focus.math}`,
+      },
+    ];
+
+    if (includeMeal || includeToilet) {
+      dayBlocks.push({
+        block_order: dayBlocks.length + 1,
+        block_type: 'meal',
+        title: includeToilet ? 'Snack & Toilet Routine' : 'Snack Routine',
+        start_time: '09:40',
+        end_time: '10:10',
+        objectives: ['Healthy routine consistency', includeToilet ? 'Toilet independence support' : 'Nutrition break'],
+        materials: ['Snack station', includeToilet ? 'Toilet routine chart' : 'Water bottles'],
+        transition_cue: 'Guide handwashing and line-up for movement/outdoor learning.',
+        notes: `${preflight?.safetyCompliance ? `Safety: ${preflight.safetyCompliance}. ` : ''}${includeHygiene ? 'Include handwashing and hygiene checks before and after snack.' : 'Routine snack break.'}`,
+      });
+    }
+
+    dayBlocks.push({
+      block_order: dayBlocks.length + 1,
+      block_type: includeOutdoor ? 'outdoor' : 'movement',
+      title: includeOutdoor ? 'Outdoor Play & Gross Motor' : 'Indoor Movement Circuit',
+      start_time: '10:10',
+      end_time: '10:50',
+      objectives: ['Life Skills movement', 'Social cooperation', 'Self-regulation'],
+      materials: includeOutdoor ? ['Outdoor cones', 'Balls'] : ['Movement cards', 'Music'],
+      transition_cue: preflight?.afterLunchPattern
+        ? `After-lunch pattern: ${preflight.afterLunchPattern}. Cool down, hydrate, and transition to final reflective learning block.`
+        : 'Cool down, hydrate, and transition to final reflective learning block.',
+      notes: `CAPS focus: ${focus.lifeSkill}`,
+    });
+
+    dayBlocks.push({
+      block_order: dayBlocks.length + 1,
+      block_type: includeNap ? 'nap' : includeStory ? 'assessment' : 'transition',
+      title: includeNap
+        ? 'Rest Time & Story Reflection'
+        : includeStory
+          ? 'Story Reflection & Learning Documentation'
+          : 'Reflection & Calm Transition',
+      start_time: '10:50',
+      end_time: '11:30',
+      objectives: includeNap
+        ? ['Calm regulation', 'Listening to story recap']
+        : ['Reflection on the day', 'Language recap'],
+      materials: includeNap ? ['Rest mats', 'Story book'] : ['Reflection cards', 'Class discussion board'],
+      transition_cue: 'Close with gratitude, recap key learning, and prepare for departure routines.',
+      notes: `CAPS consolidation: ${focus.language}; ${focus.math}; ${focus.lifeSkill}`,
+    });
+
+    return {
+      day_of_week: day,
+      blocks: dayBlocks,
+    };
+  });
+
+  return {
+    title: `${input.schoolName ? `${input.schoolName} ` : ''}${input.theme} Weekly Program`.trim(),
+    summary:
+      'Generated from fallback planner due temporary provider limits. CAPS/ECD coverage, weather repetition, healthy school routines, and preflight constraints are preserved.',
+    days,
+  };
+};
+
 const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
   const constraints = input.constraints || {};
   const objectivesText = (input.weeklyObjectives || []).join('; ') || 'Age-appropriate learning outcomes';
@@ -1196,6 +1352,9 @@ export class WeeklyProgramCopilotService {
         payload: {
           prompt,
         },
+        // Prefer OpenAI first for routine generation. ai-proxy still falls back
+        // to Anthropic automatically when OpenAI is not configured or fails.
+        prefer_openai: true,
         stream: false,
         enable_tools: false,
         metadata: {
@@ -1210,7 +1369,12 @@ export class WeeklyProgramCopilotService {
       const friendlyFallback = normalizeWeeklyProgramErrorMessage(
         error instanceof Error ? error.message : null,
       );
-      throw new Error(friendlyDetailed || friendlyFallback || 'Failed to generate weekly program');
+      const combinedMessage = friendlyDetailed || friendlyFallback || 'Failed to generate weekly program';
+      if (isProviderCapacityError(combinedMessage)) {
+        console.warn('[WeeklyProgramCopilot] Provider capacity reached, using deterministic fallback generator.');
+        return normalizeAIResponse(buildDeterministicFallbackResponse(input), input);
+      }
+      throw new Error(combinedMessage);
     }
 
     const content = extractAIContent(data);

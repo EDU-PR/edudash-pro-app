@@ -698,7 +698,7 @@ export async function fetchDisplayDataServer(
   let insights: DisplayInsight | null = null;
   try {
     const { data: insightsData } = await supabase.functions.invoke('ai-insights', {
-      body: { scope: 'teacher', period_days: 7 },
+      body: { scope: 'teacher', period_days: 7, context: { organization_id: orgId } },
     });
     if (insightsData?.bullets?.length && Array.isArray(insightsData.bullets)) {
       const bullets = insightsData.bullets

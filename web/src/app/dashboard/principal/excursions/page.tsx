@@ -49,7 +49,7 @@ export default function ExcursionsPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
 
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const preschoolName = profile?.preschoolName;
 
   const [formData, setFormData] = useState<{

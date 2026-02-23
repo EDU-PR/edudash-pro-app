@@ -9,6 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useDisplayData } from '@/lib/display/useDisplayData';
 import type { DisplayData, DisplayRoutineBlock, DisplayLessonWithDetails } from '@/lib/display/types';
 import { buildOfflineTvPackPayload, exportOfflineTvPack } from '@/lib/display/offlineTvPack';
+import { clampPercent, ratioToPercent } from '@/lib/ui/clampPercent';
 import {
   BookOpen,
   UtensilsCrossed,
@@ -975,7 +976,7 @@ function DisplayPageClient() {
   }, [data, nowMs]);
 
   const currentLiveProgressPct = currentLiveItem
-    ? Math.max(0, Math.min(100, ((nowMs - currentLiveItem.startMs) / (currentLiveItem.endMs - currentLiveItem.startMs)) * 100))
+    ? ratioToPercent(nowMs - currentLiveItem.startMs, currentLiveItem.endMs - currentLiveItem.startMs)
     : 0;
 
   const dismissReminderOverlay = useCallback(() => {
@@ -1484,7 +1485,7 @@ function DisplayPageClient() {
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800/80">
                     <div
                       className="current-block-progress h-full rounded-full bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 transition-all"
-                      style={{ width: `${currentLiveProgressPct}%` }}
+                      style={{ width: `${clampPercent(currentLiveProgressPct)}%` }}
                     />
                   </div>
                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>

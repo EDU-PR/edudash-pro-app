@@ -43,6 +43,7 @@ const ACTION_LABELS: Record<string, string> = {
   adjust: 'Adjust Fee',
   mark_paid: 'Mark Paid',
   mark_unpaid: 'Mark Unpaid',
+  delete: 'Delete Fee',
   change_class: 'Change Class',
   tuition_sync: 'Sync Tuition',
   registration_paid: 'Registration Paid',
@@ -75,6 +76,7 @@ export default function StudentFeeManagementScreen() {
   const data = useStudentFeeData(studentId, { monthIso, source });
   const [correctionTimeline, setCorrectionTimeline] = useState<FeeCorrectionTimelineRow[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [showFullHistory, setShowFullHistory] = useState(false);
   const actions = useStudentFeeActions({
     student: data.student,
     setStudent: data.setStudent,
@@ -95,7 +97,7 @@ export default function StudentFeeManagementScreen() {
       year: 'numeric',
     });
   }, [data.activeMonthIso]);
-  const visibleFees = data.source === 'receivables' ? data.displayFeesForMonth : data.displayFees;
+  const visibleFees = data.source === 'receivables' && !showFullHistory ? data.displayFeesForMonth : data.displayFees;
   const loadCorrectionTimeline = useCallback(async () => {
     if (!studentId) {
       setCorrectionTimeline([]);
@@ -258,7 +260,17 @@ export default function StudentFeeManagementScreen() {
 
           <View style={styles.enrollmentRow}>
             <Text style={styles.enrollmentLabel}>Start Date</Text>
-            <TouchableOpacity style={styles.enrollmentButton} onPress={() => actions.setShowEnrollmentPicker(true)}>
+            <TouchableOpacity
+              style={[
+                styles.enrollmentButton,
+                !actions.canManageStudentProfile && styles.controlDisabled,
+              ]}
+              onPress={() => {
+                if (!actions.canManageStudentProfile) return;
+                actions.setShowEnrollmentPicker(true);
+              }}
+              disabled={!actions.canManageStudentProfile}
+            >
               <Ionicons name="calendar" size={16} color={theme.primary} />
               <Text style={styles.enrollmentButtonText}>
                 {student.enrollment_date ? formatDate(student.enrollment_date) : 'Set Date'}
@@ -304,9 +316,10 @@ export default function StudentFeeManagementScreen() {
                 style={[
                   styles.registrationActionButton,
                   styles.registrationMarkPaidButton,
+                  !actions.canManageFees && styles.controlDisabled,
                   (actions.saving || actions.updatingRegistrationStatus || registrationMarkedPaid) && { opacity: 0.6 },
                 ]}
-                disabled={actions.saving || actions.updatingRegistrationStatus || registrationMarkedPaid}
+                disabled={!actions.canManageFees || actions.saving || actions.updatingRegistrationStatus || registrationMarkedPaid}
                 onPress={() => void actions.handleSetRegistrationPaidStatus(true)}
               >
                 {actions.updatingRegistrationStatus && !registrationMarkedPaid ? (
@@ -320,9 +333,10 @@ export default function StudentFeeManagementScreen() {
                 style={[
                   styles.registrationActionButton,
                   styles.registrationMarkUnpaidButton,
+                  !actions.canManageFees && styles.controlDisabled,
                   (actions.saving || actions.updatingRegistrationStatus || !registrationMarkedPaid) && { opacity: 0.6 },
                 ]}
-                disabled={actions.saving || actions.updatingRegistrationStatus || !registrationMarkedPaid}
+                disabled={!actions.canManageFees || actions.saving || actions.updatingRegistrationStatus || !registrationMarkedPaid}
                 onPress={() => void actions.handleSetRegistrationPaidStatus(false)}
               >
                 {actions.updatingRegistrationStatus && registrationMarkedPaid ? (
@@ -336,10 +350,13 @@ export default function StudentFeeManagementScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.changeClassButton, isStudentInactive && styles.changeClassButtonDisabled]}
-            disabled={isStudentInactive}
+            style={[
+              styles.changeClassButton,
+              (isStudentInactive || !actions.canManageStudentProfile) && styles.changeClassButtonDisabled,
+            ]}
+            disabled={isStudentInactive || !actions.canManageStudentProfile}
             onPress={() => {
-              if (isStudentInactive) return;
+              if (isStudentInactive || !actions.canManageStudentProfile) return;
               actions.setNewClassId(student.class_id || '');
               actions.setClassRegistrationFee(Number(student.registration_fee_amount || 0).toFixed(2));
               actions.setClassFeeHint('Update class and registration fee together to fix parent-facing amount mismatches.');
@@ -353,9 +370,14 @@ export default function StudentFeeManagementScreen() {
           <TouchableOpacity
             style={[
               styles.syncTuitionButton,
-              (isStudentInactive || actions.syncingTuitionFees || actions.saving) && styles.changeClassButtonDisabled,
+              (
+                isStudentInactive ||
+                !actions.canManageStudentProfile ||
+                actions.syncingTuitionFees ||
+                actions.saving
+              ) && styles.changeClassButtonDisabled,
             ]}
-            disabled={isStudentInactive || actions.syncingTuitionFees || actions.saving}
+            disabled={isStudentInactive || !actions.canManageStudentProfile || actions.syncingTuitionFees || actions.saving}
             onPress={() => void actions.handleSyncTuitionFeesToClass()}
           >
             {actions.syncingTuitionFees ? (
@@ -372,10 +394,11 @@ export default function StudentFeeManagementScreen() {
             <TouchableOpacity
               style={[
                 styles.markInactiveButton,
+                !actions.canManageStudentProfile && styles.controlDisabled,
                 (actions.saving || actions.deactivatingStudent) && { opacity: 0.7 },
               ]}
               onPress={actions.handleDeactivateStudent}
-              disabled={actions.saving || actions.deactivatingStudent}
+              disabled={!actions.canManageStudentProfile || actions.saving || actions.deactivatingStudent}
             >
               {actions.deactivatingStudent ? (
                 <EduDashSpinner size="small" color={theme.warning} />
@@ -395,6 +418,15 @@ export default function StudentFeeManagementScreen() {
             </View>
           )}
         </View>
+
+        {!actions.canManageStudentProfile && actions.canManageFees && (
+          <View style={styles.roleScopeNotice}>
+            <Ionicons name="information-circle-outline" size={14} color={theme.warning} />
+            <Text style={styles.roleScopeNoticeText}>
+              Admin mode: fee updates are enabled, but class/lifecycle changes require principal access.
+            </Text>
+          </View>
+        )}
 
         {actions.showEnrollmentPicker && (
           <DateTimePicker
@@ -436,8 +468,18 @@ export default function StudentFeeManagementScreen() {
             <View style={styles.contextBanner}>
               <Ionicons name="calendar-outline" size={14} color={theme.primary} />
               <Text style={styles.contextBannerText}>
-                Showing unpaid fee rows due in {receivablesMonthLabel}. Open this screen directly for full history.
+                {showFullHistory
+                  ? `Showing full fee history. Month scope (${receivablesMonthLabel}) can be restored anytime.`
+                  : `Showing unpaid fee rows scoped to ${receivablesMonthLabel}. Billing month is used first, with due date fallback.`}
               </Text>
+              <TouchableOpacity
+                onPress={() => setShowFullHistory((prev) => !prev)}
+                style={styles.contextBannerAction}
+              >
+                <Text style={styles.contextBannerActionText}>
+                  {showFullHistory ? 'Back to month scope' : 'Show full history'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -445,7 +487,7 @@ export default function StudentFeeManagementScreen() {
             <View style={styles.emptyFees}>
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
               <Text style={styles.emptyFeesText}>
-                {data.source === 'receivables' && receivablesMonthLabel
+                {data.source === 'receivables' && receivablesMonthLabel && !showFullHistory
                   ? `No receivables for ${receivablesMonthLabel}`
                   : 'No fees recorded'}
               </Text>
@@ -517,9 +559,13 @@ export default function StudentFeeManagementScreen() {
                     <>
                       <View style={styles.feeActions}>
                         <TouchableOpacity
-                          style={[styles.actionButton, styles.paidButton, (actions.saving || isMarkPaidBusy) && { opacity: 0.7 }]}
+                          style={[
+                            styles.actionButton,
+                            styles.paidButton,
+                            (!actions.canManageFees || actions.saving || isMarkPaidBusy) && { opacity: 0.7 },
+                          ]}
                           onPress={() => actions.handleMarkPaid(fee)}
-                          disabled={actions.saving || isMarkPaidBusy}
+                          disabled={!actions.canManageFees || actions.saving || isMarkPaidBusy}
                         >
                           {isMarkPaidBusy ? (
                             <EduDashSpinner size="small" color={theme.success} />
@@ -531,8 +577,8 @@ export default function StudentFeeManagementScreen() {
                       </View>
                       <View style={styles.feeActions}>
                         <TouchableOpacity
-                          style={[styles.actionButton, styles.waiveButton, actions.saving && { opacity: 0.7 }]}
-                          disabled={actions.saving}
+                          style={[styles.actionButton, styles.waiveButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
+                          disabled={!actions.canManageFees || actions.saving}
                           onPress={() => {
                             actions.setSelectedFee(fee);
                             actions.setWaiveType('full');
@@ -545,8 +591,8 @@ export default function StudentFeeManagementScreen() {
                           <Text style={styles.waiveButtonText}>Waive</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.actionButton, styles.adjustButton, actions.saving && { opacity: 0.7 }]}
-                          disabled={actions.saving}
+                          style={[styles.actionButton, styles.adjustButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
+                          disabled={!actions.canManageFees || actions.saving}
                           onPress={() => {
                             actions.setSelectedFee(fee);
                             actions.setAdjustAmount(fee.final_amount.toString());
@@ -558,6 +604,38 @@ export default function StudentFeeManagementScreen() {
                           <Text style={styles.adjustButtonText}>Adjust</Text>
                         </TouchableOpacity>
                       </View>
+                      {actions.canDeleteFees && (
+                        <View style={styles.feeActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.actionButton,
+                              styles.deleteButton,
+                              (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
+                            ]}
+                            onPress={() => showAlert(
+                              'Delete Fee Row',
+                              'This will permanently remove the fee row and any linked allocations. Continue?',
+                              'warning',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
+                              ],
+                            )}
+                            disabled={actions.saving || actions.processingFeeId === fee.id}
+                          >
+                            {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
+                              <EduDashSpinner size="small" color={theme.error} />
+                            ) : (
+                              <Ionicons name="trash-outline" size={16} color={theme.error} />
+                            )}
+                            <Text style={styles.deleteButtonText}>
+                              {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
+                                ? 'Deleting...'
+                                : 'Delete Fee'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </>
                   )}
 
@@ -575,10 +653,11 @@ export default function StudentFeeManagementScreen() {
                         style={[
                           styles.actionButton,
                           styles.unpaidButton,
+                          !actions.canManageFees && styles.controlDisabled,
                           (actions.saving || isMarkUnpaidBusy) && { opacity: 0.7 },
                         ]}
                         onPress={() => actions.handleMarkUnpaid(fee)}
-                        disabled={actions.saving || isMarkUnpaidBusy}
+                        disabled={!actions.canManageFees || actions.saving || isMarkUnpaidBusy}
                       >
                         {isMarkUnpaidBusy ? (
                           <EduDashSpinner size="small" color={theme.warning} />
@@ -587,6 +666,38 @@ export default function StudentFeeManagementScreen() {
                         )}
                         <Text style={styles.unpaidButtonText}>
                           {isMarkUnpaidBusy ? 'Marking Unpaid...' : 'Mark Unpaid'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {fee.status === 'paid' && actions.canDeleteFees && (
+                    <View style={styles.feeActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionButton,
+                          styles.deleteButton,
+                          (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
+                        ]}
+                        onPress={() => showAlert(
+                          'Delete Paid Fee',
+                          'This is destructive and should only be used for incorrect duplicates. Continue?',
+                          'warning',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
+                          ],
+                        )}
+                        disabled={actions.saving || actions.processingFeeId === fee.id}
+                      >
+                        {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
+                          <EduDashSpinner size="small" color={theme.error} />
+                        ) : (
+                          <Ionicons name="trash-outline" size={16} color={theme.error} />
+                        )}
+                        <Text style={styles.deleteButtonText}>
+                          {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
+                            ? 'Deleting...'
+                            : 'Delete Fee'}
                         </Text>
                       </TouchableOpacity>
                     </View>

@@ -21,6 +21,7 @@ export interface UniformRow {
   created_at: string;
   updated_at?: string | null;
   student_id: string;
+  parent_id?: string | null;
   student?: {
     first_name?: string | null;
     last_name?: string | null;
@@ -34,6 +35,8 @@ export interface StudentRow {
   first_name: string;
   last_name: string;
   student_id?: string | null;
+  parent_id?: string | null;
+  guardian_id?: string | null;
   class_id?: string | null;
   classroom?: { id?: string | null; name?: string | null } | null;
   parent?: ParentProfile | null;

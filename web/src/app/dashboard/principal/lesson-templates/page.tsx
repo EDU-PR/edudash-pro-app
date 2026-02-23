@@ -20,7 +20,7 @@ export default function LessonTemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<LessonTemplate | null>(null);
 
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const { templates, loading: templatesLoading, createTemplate, updateTemplate, deleteTemplate, refetch } =
     useLessonTemplates(preschoolId);
 

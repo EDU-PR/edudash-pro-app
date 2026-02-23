@@ -12,6 +12,7 @@ import {
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -124,6 +125,19 @@ type PreflightAnswers = {
   safetyCompliance: string;
 };
 
+type PlannerPreferences = {
+  themeTitle: string;
+  ageGroup: string;
+  weeklyObjectives: string;
+  dailyMinutes: string;
+  budgetLevel: 'low' | 'medium' | 'high';
+  includeAssessment: boolean;
+  routineOptions: RoutineOptionState;
+  preflight: PreflightAnswers;
+  rules: ProgramTimeRules;
+  selectedPresetId: PlannerPreset['id'] | null;
+};
+
 const SMART_PRESETS: PlannerPreset[] = [
   {
     id: 'half_day',
@@ -233,6 +247,53 @@ const DEFAULT_PREFLIGHT: PreflightAnswers = {
   resourceConstraints: '',
   safetyCompliance: '',
 };
+
+const DEFAULT_PLANNER_PREFS: PlannerPreferences = {
+  themeTitle: 'Healthy Habits',
+  ageGroup: '3-6',
+  weeklyObjectives: 'Routine consistency, self-help skills, social confidence',
+  dailyMinutes: '300',
+  budgetLevel: 'medium',
+  includeAssessment: true,
+  routineOptions: { ...DEFAULT_ROUTINE_OPTIONS },
+  preflight: { ...DEFAULT_PREFLIGHT },
+  rules: buildDefaultRules(),
+  selectedPresetId: null,
+};
+
+const PLANNER_PREFERENCE_KEY_PREFIX = '@edudash:daily_program_preferences';
+
+function normalizeRoutineOptions(value: any): RoutineOptionState {
+  return {
+    toiletRoutine: Boolean(value?.toiletRoutine ?? DEFAULT_ROUTINE_OPTIONS.toiletRoutine),
+    napTime: Boolean(value?.napTime ?? DEFAULT_ROUTINE_OPTIONS.napTime),
+    mealBreaks: Boolean(value?.mealBreaks ?? DEFAULT_ROUTINE_OPTIONS.mealBreaks),
+    outdoorPlay: Boolean(value?.outdoorPlay ?? DEFAULT_ROUTINE_OPTIONS.outdoorPlay),
+    storyCircle: Boolean(value?.storyCircle ?? DEFAULT_ROUTINE_OPTIONS.storyCircle),
+    transitionCues: Boolean(value?.transitionCues ?? DEFAULT_ROUTINE_OPTIONS.transitionCues),
+    hygieneChecks: Boolean(value?.hygieneChecks ?? DEFAULT_ROUTINE_OPTIONS.hygieneChecks),
+  };
+}
+
+function normalizePreflight(value: any): PreflightAnswers {
+  return {
+    nonNegotiableAnchors: String(value?.nonNegotiableAnchors || ''),
+    fixedWeeklyEvents: String(value?.fixedWeeklyEvents || ''),
+    afterLunchPattern: String(value?.afterLunchPattern || ''),
+    resourceConstraints: String(value?.resourceConstraints || ''),
+    safetyCompliance: String(value?.safetyCompliance || ''),
+  };
+}
+
+function normalizeRules(value: any): ProgramTimeRules {
+  const fallback = buildDefaultRules();
+  return {
+    arrivalStartTime: normalizeTime(String(value?.arrivalStartTime || fallback.arrivalStartTime)),
+    arrivalCutoffTime: normalizeTime(String(value?.arrivalCutoffTime || fallback.arrivalCutoffTime)),
+    pickupStartTime: normalizeTime(String(value?.pickupStartTime || fallback.pickupStartTime)),
+    pickupCutoffTime: normalizeTime(String(value?.pickupCutoffTime || fallback.pickupCutoffTime)),
+  };
+}
 
 const routineOptionsForPreset = (presetId: PlannerPreset['id']): RoutineOptionState => {
   if (presetId === 'aftercare') {
@@ -429,12 +490,14 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [selectedPresetId, setSelectedPresetId] = useState<PlannerPreset['id'] | null>(null);
 
   const [rules, setRules] = useState<ProgramTimeRules>(buildDefaultRules());
+  const [plannerPreferencesReady, setPlannerPreferencesReady] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [generationMode, setGenerationMode] = useState<'generate' | 'regenerate'>('generate');
   const [saving, setSaving] = useState(false);
   const [sharingParents, setSharingParents] = useState(false);
   const [sharingTeachers, setSharingTeachers] = useState(false);
+  const [deletingProgramId, setDeletingProgramId] = useState<string | null>(null);
   const [saveAdvisory, setSaveAdvisory] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lessonQuota, setLessonQuota] = useState<QuotaStatus | null>(null);
@@ -442,6 +505,99 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
   const [programs, setPrograms] = useState<WeeklyProgramDraft[]>([]);
   const [draftViewMode, setDraftViewMode] = useState<'edit' | 'cards'>('edit');
+
+  const plannerPreferenceKey = useMemo(() => {
+    if (!organizationId || !userId) return null;
+    return `${PLANNER_PREFERENCE_KEY_PREFIX}:${organizationId}:${userId}`;
+  }, [organizationId, userId]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!plannerPreferenceKey) {
+      setPlannerPreferencesReady(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setPlannerPreferencesReady(false);
+    const hydratePreferences = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(plannerPreferenceKey);
+        if (!isActive || !stored) return;
+        const parsed = JSON.parse(stored) as Partial<PlannerPreferences>;
+
+        setThemeTitle(String(parsed.themeTitle || DEFAULT_PLANNER_PREFS.themeTitle));
+        setAgeGroup(String(parsed.ageGroup || DEFAULT_PLANNER_PREFS.ageGroup));
+        setWeeklyObjectives(String(parsed.weeklyObjectives || DEFAULT_PLANNER_PREFS.weeklyObjectives));
+        setDailyMinutes(String(parsed.dailyMinutes || DEFAULT_PLANNER_PREFS.dailyMinutes));
+        setBudgetLevel(
+          parsed.budgetLevel === 'low' || parsed.budgetLevel === 'high'
+            ? parsed.budgetLevel
+            : 'medium',
+        );
+        setIncludeAssessment(
+          typeof parsed.includeAssessment === 'boolean'
+            ? parsed.includeAssessment
+            : DEFAULT_PLANNER_PREFS.includeAssessment,
+        );
+        setRoutineOptions(normalizeRoutineOptions(parsed.routineOptions));
+        setPreflight(normalizePreflight(parsed.preflight));
+        setRules(normalizeRules(parsed.rules));
+        setSelectedPresetId(
+          parsed.selectedPresetId === 'half_day' || parsed.selectedPresetId === 'full_day' || parsed.selectedPresetId === 'aftercare'
+            ? parsed.selectedPresetId
+            : null,
+        );
+      } catch (error) {
+        console.warn('[PrincipalDailyProgramPlanner] Failed to hydrate planner preferences:', error);
+      } finally {
+        if (isActive) {
+          setPlannerPreferencesReady(true);
+        }
+      }
+    };
+
+    void hydratePreferences();
+    return () => {
+      isActive = false;
+    };
+  }, [plannerPreferenceKey]);
+
+  useEffect(() => {
+    if (!plannerPreferenceKey || !plannerPreferencesReady) return;
+
+    const payload: PlannerPreferences = {
+      themeTitle,
+      ageGroup,
+      weeklyObjectives,
+      dailyMinutes,
+      budgetLevel,
+      includeAssessment,
+      routineOptions,
+      preflight,
+      rules,
+      selectedPresetId,
+    };
+
+    void AsyncStorage.setItem(plannerPreferenceKey, JSON.stringify(payload)).catch((error) => {
+      console.warn('[PrincipalDailyProgramPlanner] Failed to persist planner preferences:', error);
+    });
+  }, [
+    ageGroup,
+    budgetLevel,
+    dailyMinutes,
+    includeAssessment,
+    plannerPreferenceKey,
+    plannerPreferencesReady,
+    preflight,
+    routineOptions,
+    rules,
+    selectedPresetId,
+    themeTitle,
+    weeklyObjectives,
+  ]);
 
   const loadPrograms = useCallback(async () => {
     if (!organizationId) {
@@ -811,6 +967,50 @@ export default function PrincipalDailyProgramPlannerScreen() {
       setSharingTeachers(false);
     }
   }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
+
+  const deleteSavedProgram = useCallback((program: WeeklyProgramDraft) => {
+    const programId = String(program.id || '').trim();
+    if (!programId || !organizationId) {
+      Alert.alert('Delete unavailable', 'This saved routine could not be identified. Refresh and try again.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete saved plan?',
+      'This will permanently remove the saved daily routine and its block schedule from the planner.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setDeletingProgramId(programId);
+              try {
+                await WeeklyProgramService.deleteWeeklyProgram({
+                  weeklyProgramId: programId,
+                  preschoolId: organizationId,
+                });
+
+                setDraft((prev) => (prev?.id === programId ? null : prev));
+                setPrograms((prev) => prev.filter((entry) => entry.id !== programId));
+                setSaveAdvisory(null);
+                await loadPrograms();
+                Alert.alert('Deleted', 'Saved daily routine deleted.');
+              } catch (error: unknown) {
+                Alert.alert(
+                  'Delete failed',
+                  error instanceof Error ? error.message : 'Could not delete this saved routine.',
+                );
+              } finally {
+                setDeletingProgramId((prev) => (prev === programId ? null : prev));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [loadPrograms, organizationId]);
 
   const applyPreset = useCallback((preset: 'half_day' | 'full_day' | 'aftercare') => {
     if (preset === 'half_day') {
@@ -1798,6 +1998,20 @@ export default function PrincipalDailyProgramPlannerScreen() {
                     <Ionicons name="megaphone-outline" size={14} color={theme.primary} />
                     <Text style={styles.inlineBtnText}>Share Parents</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.inlineBtn, styles.inlineBtnDanger, deletingProgramId === program.id && styles.buttonDisabled]}
+                    onPress={() => deleteSavedProgram(program)}
+                    disabled={deletingProgramId === program.id}
+                  >
+                    {deletingProgramId === program.id ? (
+                      <EduDashSpinner size="small" color={theme.error} />
+                    ) : (
+                      <Ionicons name="trash-outline" size={14} color={theme.error} />
+                    )}
+                    <Text style={styles.inlineBtnDangerText}>
+                      {deletingProgramId === program.id ? 'Deleting...' : 'Delete'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))
@@ -2534,6 +2748,15 @@ const createStyles = (theme: any) =>
     },
     inlineBtnText: {
       color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    inlineBtnDanger: {
+      borderColor: theme.error + '55',
+      backgroundColor: theme.error + '12',
+    },
+    inlineBtnDangerText: {
+      color: theme.error,
       fontWeight: '700',
       fontSize: 12,
     },

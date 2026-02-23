@@ -72,7 +72,7 @@ export default function TeacherPayrollPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const organizationId = profile?.organizationId;
   const orgId = organizationId || preschoolId;
 

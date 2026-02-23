@@ -1417,6 +1417,48 @@ export class FinancialDataService {
     return status === 'active';
   }
 
+  private static getReceivableEligibility(
+    student: any,
+    monthIso: string,
+    nextMonthIso: string,
+  ): 'eligible' | 'inactive' | 'future_enrollment' | 'unverified_registration' {
+    if (!this.isStudentActiveForReceivables(student)) return 'inactive';
+
+    const monthStart = parseDateValue(monthIso);
+    const nextMonthStart = parseDateValue(nextMonthIso);
+    const enrollmentDate = parseDateValue(student?.enrollment_date || null);
+    if (
+      enrollmentDate &&
+      nextMonthStart &&
+      !Number.isNaN(enrollmentDate.getTime()) &&
+      !Number.isNaN(nextMonthStart.getTime()) &&
+      enrollmentDate >= nextMonthStart
+    ) {
+      return 'future_enrollment';
+    }
+
+    const hasRegistrationFlags = (
+      student?.payment_verified !== null &&
+      student?.payment_verified !== undefined
+    ) || (
+      student?.registration_fee_paid !== null &&
+      student?.registration_fee_paid !== undefined
+    );
+    const registrationVerified = Boolean(student?.payment_verified) || Boolean(student?.registration_fee_paid);
+    const isNewEnrollmentWindow = Boolean(
+      enrollmentDate &&
+      monthStart &&
+      !Number.isNaN(enrollmentDate.getTime()) &&
+      !Number.isNaN(monthStart.getTime()) &&
+      enrollmentDate >= monthStart
+    );
+    if (hasRegistrationFlags && !registrationVerified && isNewEnrollmentWindow) {
+      return 'unverified_registration';
+    }
+
+    return 'eligible';
+  }
+
   private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
     if (!dueDate || !paidDate) return false;
     const due = new Date(dueDate);
@@ -1933,6 +1975,9 @@ export class FinancialDataService {
           last_name,
           is_active,
           status,
+          enrollment_date,
+          registration_fee_paid,
+          payment_verified,
           preschool_id,
           organization_id
         )
@@ -1964,6 +2009,9 @@ export class FinancialDataService {
             last_name,
             is_active,
             status,
+            enrollment_date,
+            registration_fee_paid,
+            payment_verified,
             preschool_id,
             organization_id
           )
@@ -1985,6 +2033,9 @@ export class FinancialDataService {
     const studentMap = new Map<string, FinanceReceivableStudentRow>();
     const overdueStudents = new Set<string>();
     const pendingStudents = new Set<string>();
+    const excludedInactiveStudents = new Set<string>();
+    const excludedFutureEnrollmentStudents = new Set<string>();
+    const excludedUnverifiedStudents = new Set<string>();
     let overdueAmount = 0;
     let pendingAmount = 0;
     let overdueCount = 0;
@@ -1997,7 +2048,14 @@ export class FinancialDataService {
       const studentData = Array.isArray(fee?.students) ? fee.students[0] : fee?.students;
       const studentId = String(fee?.student_id || studentData?.id || '').trim();
       if (!studentId) continue;
-      if (!this.isStudentActiveForReceivables(studentData)) continue;
+
+      const eligibility = this.getReceivableEligibility(studentData, month, nextMonth);
+      if (eligibility !== 'eligible') {
+        if (eligibility === 'inactive') excludedInactiveStudents.add(studentId);
+        if (eligibility === 'future_enrollment') excludedFutureEnrollmentStudents.add(studentId);
+        if (eligibility === 'unverified_registration') excludedUnverifiedStudents.add(studentId);
+        continue;
+      }
 
       const amount = this.getOutstandingAmountForFee(fee);
       if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -2061,6 +2119,9 @@ export class FinancialDataService {
         overdue_students: overdueStudents.size,
         outstanding_students: studentMap.size,
         outstanding_amount: Number((pendingAmount + overdueAmount).toFixed(2)),
+        excluded_inactive_students: excludedInactiveStudents.size,
+        excluded_future_enrollment_students: excludedFutureEnrollmentStudents.size,
+        excluded_unverified_students: excludedUnverifiedStudents.size,
       },
       students,
     };

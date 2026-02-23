@@ -47,6 +47,24 @@ const formatMessageTime = (timestamp: string): string => {
   return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
+const normalizeNameToken = (value?: string | null): string => {
+  const token = String(value || '').trim();
+  if (!token) return '';
+  const lowered = token.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined' || lowered === 'n/a') return '';
+  return token;
+};
+
+const formatParticipantName = (
+  profile?: { first_name?: string | null; last_name?: string | null } | null,
+  fallback = 'Contact',
+): string => {
+  const first = normalizeNameToken(profile?.first_name);
+  const last = normalizeNameToken(profile?.last_name);
+  const full = `${first} ${last}`.trim();
+  return full || fallback;
+};
+
 interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
@@ -62,9 +80,10 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, onL
   const { t } = useTranslation();
 
   const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== currentUserId);
-  const participantName = otherParticipant?.user_profile
-    ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-    : t('principal.contactLabel', { defaultValue: 'Contact' });
+  const participantName = formatParticipantName(
+    otherParticipant?.user_profile,
+    t('principal.contactLabel', { defaultValue: 'Contact' }),
+  );
 
   const participantRole = otherParticipant?.user_profile?.role || 'contact';
   const studentName = thread.student
@@ -77,7 +96,7 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, onL
     .map((n) => n.charAt(0))
     .join('')
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || 'CT';
 
   const styles = StyleSheet.create({
     container: {
@@ -330,9 +349,10 @@ export default function PrincipalMessagesScreen() {
       return;
     }
     const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== user?.id);
-    const participantName = otherParticipant?.user_profile
-      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-      : t('principal.contactLabel', { defaultValue: 'Contact' });
+    const participantName = formatParticipantName(
+      otherParticipant?.user_profile,
+      t('principal.contactLabel', { defaultValue: 'Contact' }),
+    );
 
     router.push({
       pathname: '/screens/principal-message-thread',
@@ -397,9 +417,7 @@ export default function PrincipalMessagesScreen() {
     const query = searchQuery.toLowerCase();
     return threads.filter((thread) => {
       const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== user?.id);
-      const participantName = otherParticipant?.user_profile
-        ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-        : '';
+      const participantName = formatParticipantName(otherParticipant?.user_profile, '');
       const studentName = thread.student
         ? `${thread.student.first_name} ${thread.student.last_name}`.trim()
         : '';

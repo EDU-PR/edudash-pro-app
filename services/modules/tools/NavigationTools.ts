@@ -307,7 +307,7 @@ Do not include \`\`\`mermaid code fences or explanations.`;
         }
 
         const response = await anthropicClient.messages.create({
-          model: process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+          model: process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022',
           max_tokens: 2000,
           messages: [{
             role: 'user',

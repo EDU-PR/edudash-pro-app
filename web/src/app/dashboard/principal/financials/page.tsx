@@ -32,10 +32,11 @@ export default function FinancialsPage() {
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const schoolId = profile?.preschoolId || profile?.organizationId;
+  const preschoolId = schoolId;
 
   // Use the comprehensive financials hook
-  const { data: financials, loading, error, refresh } = usePrincipalFinancials(preschoolId);
+  const { data: financials, loading, error, refresh } = usePrincipalFinancials(schoolId);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -51,7 +52,7 @@ export default function FinancialsPage() {
 
   // Load recent payments for the transaction table
   useEffect(() => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
 
     const loadRecentPayments = async () => {
       setPaymentsLoading(true);
@@ -59,7 +60,7 @@ export default function FinancialsPage() {
         const { data: registrations } = await supabase
           .from('registration_requests')
           .select('id, student_first_name, student_last_name, registration_fee_amount, registration_fee_paid, payment_date, created_at, status')
-          .eq('organization_id', preschoolId)
+          .eq('organization_id', schoolId)
           .order('created_at', { ascending: false })
           .limit(20);
 
@@ -72,7 +73,7 @@ export default function FinancialsPage() {
     };
 
     loadRecentPayments();
-  }, [preschoolId, supabase]);
+  }, [schoolId, supabase]);
 
   const formatCurrency = (amount: number) => {
     return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -143,6 +144,15 @@ export default function FinancialsPage() {
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
               {financials?.overdueFeesCount || 0} overdue
             </div>
+            {((financials?.excludedInactiveStudents || 0) +
+              (financials?.excludedFutureEnrollmentStudents || 0) +
+              (financials?.excludedUnverifiedStudents || 0)) > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                Excluded: {financials?.excludedFutureEnrollmentStudents || 0} not started,{' '}
+                {financials?.excludedUnverifiedStudents || 0} unverified new registrations,{' '}
+                {financials?.excludedInactiveStudents || 0} inactive.
+              </div>
+            )}
           </div>
 
           <div className="card tile">
