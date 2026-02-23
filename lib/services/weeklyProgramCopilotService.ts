@@ -1,4 +1,5 @@
 import { assertSupabase } from '@/lib/supabase';
+import { getSACalendarForYear } from '@/lib/data/saSchoolCalendar';
 import type {
   DailyProgramBlock,
   DailyProgramBlockType,
@@ -1248,11 +1249,31 @@ const buildDeterministicFallbackResponse = (
   };
 };
 
+/** Get SA public holidays falling within the given week (Mon–Fri) for prompt context */
+function getHolidaysInWeek(weekStart: string): Array<{ date: string; name: string; dayOfWeek: number }> {
+  const start = new Date(`${weekStart}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return [];
+  const year = start.getUTCFullYear();
+  const { holidays } = getSACalendarForYear(year);
+  const result: Array<{ date: string; name: string; dayOfWeek: number }> = [];
+  for (let d = 0; d < 5; d++) {
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + d);
+    const dateStr = date.toISOString().slice(0, 10);
+    const dayOfWeek = date.getUTCDay() === 0 ? 7 : date.getUTCDay();
+    const match = holidays.find((h) => h.date === dateStr);
+    if (match) result.push({ date: dateStr, name: match.name, dayOfWeek });
+  }
+  return result;
+}
+
 const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
   const constraints = input.constraints || {};
   const objectivesText = (input.weeklyObjectives || []).join('; ') || 'Age-appropriate learning outcomes';
   const routineRequirements: string[] = [];
   const preflight = input.preflightAnswers;
+  const weekStart = startOfWeekMonday(input.weekStartDate);
+  const holidaysInWeek = getHolidaysInWeek(weekStart);
 
   if (constraints.includeToiletRoutine) {
     routineRequirements.push('Include a toilet or bathroom routine support moment each day.');
@@ -1281,7 +1302,14 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     ...(input.schoolName ? [`School name: ${input.schoolName}`] : []),
     `Theme: ${input.theme}`,
     `Age group: ${input.ageGroup}`,
-    `Week start: ${startOfWeekMonday(input.weekStartDate)}`,
+    `Week start: ${weekStart}`,
+    ...(holidaysInWeek.length > 0
+      ? [
+          `South African public holidays in this week (day_of_week 1=Mon..5=Fri): ${holidaysInWeek
+            .map((h) => `Day ${h.dayOfWeek} (${h.date}): ${h.name}`)
+            .join('; ')}. For each holiday weekday, plan a themed activity, learning block, or special event (e.g., Human Rights Day discussion, Heritage Day celebration, fundraiser, community project). Do not skip holidays—include purposeful blocks that honour the occasion or use the day for enrichment.`,
+        ]
+      : []),
     `Weekly objectives: ${objectivesText}`,
     `Constraints: ${JSON.stringify(constraints)}`,
     ...(preflight
@@ -1311,8 +1339,8 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     '- 4-6 blocks per day.',
     '- Keep objectives/materials concise (max 3 short items each).',
     '- Keep notes brief and classroom-focused.',
-    'Do not include markdown fences, comments, or any text before/after the JSON object.',
-    'Return STRICT JSON only with shape:',
+    'Return ONLY valid JSON. No markdown fences, no comments, no text before/after. No trailing commas in arrays or objects.',
+    'Return STRICT JSON with this exact shape:',
     '{',
     '  "title": "string",',
     '  "summary": "string",',
