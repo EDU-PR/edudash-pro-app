@@ -39,27 +39,62 @@ export type EffectiveLimits = {
   canOrgAllocate: boolean
 }
 
+type ProfileTierRow = {
+  id: string
+  auth_user_id?: string | null
+  subscription_tier?: string | null
+  preschool_id?: string | null
+  organization_id?: string | null
+  role?: string | null
+}
+
+async function getAuthenticatedProfileRow(): Promise<{ authUserId: string | null; user: any | null; profile: ProfileTierRow | null }> {
+  try {
+    const client = assertSupabase()
+    const { data, error } = await client.auth.getUser()
+    if (error || !data?.user) {
+      return { authUserId: null, user: null, profile: null }
+    }
+
+    const authUserId = data.user.id
+    const profileSelect = 'id, auth_user_id, subscription_tier, preschool_id, organization_id, role'
+
+    const { data: byAuthUserId } = await client
+      .from('profiles')
+      .select(profileSelect)
+      .eq('auth_user_id', authUserId)
+      .maybeSingle()
+
+    if (byAuthUserId) {
+      return { authUserId, user: data.user, profile: byAuthUserId as ProfileTierRow }
+    }
+
+    const { data: byProfileId } = await client
+      .from('profiles')
+      .select(profileSelect)
+      .eq('id', authUserId)
+      .maybeSingle()
+
+    return { authUserId, user: data.user, profile: (byProfileId as ProfileTierRow | null) || null }
+  } catch {
+    return { authUserId: null, user: null, profile: null }
+  }
+}
+
 async function getUserTier(): Promise<CapabilityTier> {
   try {
     const client = assertSupabase()
-    const { data } = await client.auth.getUser()
-    const userId = data?.user?.id
+    const { user, profile } = await getAuthenticatedProfileRow()
     
     // First try user_metadata (fastest)
-    const metaTier = String((data?.user?.user_metadata as any)?.subscription_tier || '').toLowerCase()
+    const metaTier = String((user?.user_metadata as any)?.subscription_tier || '').toLowerCase()
     const normalizedMetaTier = getCapabilityTier(normalizeTierName(metaTier))
     if (normalizedMetaTier !== 'free') {
       return normalizedMetaTier
     }
     
     // Fallback: Check profiles.subscription_tier (single source of truth)
-    if (userId) {
-      const { data: profile } = await client
-        .from('profiles')
-        .select('subscription_tier, preschool_id, role')
-        .eq('id', userId)
-        .maybeSingle()
-      
+    if (profile) {
       if (profile?.subscription_tier) {
         const profileTier = getCapabilityTier(normalizeTierName(String(profile.subscription_tier).toLowerCase()))
         if (profileTier !== 'free') {
@@ -68,16 +103,29 @@ async function getUserTier(): Promise<CapabilityTier> {
       }
       
       // For staff with 'free' tier, inherit from school
-      const isStaff = ['teacher', 'principal', 'admin', 'principal_admin'].includes(profile?.role || '')
-      if (isStaff && profile?.preschool_id) {
+      const role = String(profile?.role || '').toLowerCase()
+      const isStaff = ['teacher', 'principal', 'admin', 'principal_admin'].includes(role)
+      const schoolId = profile?.preschool_id || profile?.organization_id
+      if (isStaff && schoolId) {
         const { data: school } = await client
           .from('preschools')
           .select('subscription_tier')
-          .eq('id', profile.preschool_id)
+          .eq('id', schoolId)
           .maybeSingle()
         
         if (school?.subscription_tier) {
           return getCapabilityTier(normalizeTierName(String(school.subscription_tier).toLowerCase()))
+        }
+
+        const { data: org } = await client
+          .from('organizations')
+          .select('subscription_tier, plan_tier')
+          .eq('id', schoolId)
+          .maybeSingle()
+
+        const inheritedTier = String(org?.subscription_tier || org?.plan_tier || '').toLowerCase()
+        if (inheritedTier) {
+          return getCapabilityTier(normalizeTierName(inheritedTier))
         }
       }
     }
@@ -113,8 +161,11 @@ async function getServerLimits(): Promise<Partial<EffectiveLimits> | null> {
 
 async function getUserRole(): Promise<string | null> {
   try {
-    const { data } = await assertSupabase().auth.getUser()
-    return (data?.user?.user_metadata as any)?.role || null
+    const { user, profile } = await getAuthenticatedProfileRow()
+    const userRole = String((user?.user_metadata as any)?.role || '').trim().toLowerCase()
+    if (userRole) return userRole
+    const profileRole = String(profile?.role || '').trim().toLowerCase()
+    return profileRole || null
   } catch {
     return null
   }
@@ -203,30 +254,13 @@ export async function canUseFeature(feature: AIQuotaFeature, count = 1): Promise
 export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<QuotaStatus | null> {
   try {
     console.log(`[Teacher Quota] Starting check for ${feature}`);
-    
-    const { assertSupabase } = await import('@/lib/supabase')
-    const client = assertSupabase()
-    
-    // Get current user
-    const { data: { user }, error: authError } = await client.auth.getUser()
-    if (authError || !user) {
-      console.log(`[Teacher Quota] No authenticated user:`, authError);
+    const { authUserId, profile } = await getAuthenticatedProfileRow()
+    if (!authUserId) {
+      console.log(`[Teacher Quota] No authenticated user`);
       return null;
     }
     
-    console.log(`[Teacher Quota] User authenticated:`, user.id);
-    
-    // Get user profile from profiles table (not deprecated users table)
-    const { data: profile, error: profileError } = await client
-      .from('profiles')
-      .select('id, preschool_id, organization_id, role')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-    
-    if (profileError) {
-      console.warn(`[Teacher Quota] Profile lookup error:`, profileError);
-      return null;
-    }
+    console.log(`[Teacher Quota] User authenticated:`, authUserId);
     
     if (!profile) {
       console.log(`[Teacher Quota] No profile found for user`);

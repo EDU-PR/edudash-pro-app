@@ -55,15 +55,15 @@ type ProviderResponse = {
 
 const DEFAULT_OPENAI_ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o'];
 const DEFAULT_ANTHROPIC_ALLOWED_MODELS = [
+  'claude-3-haiku-20240307',
+  'claude-3-5-haiku-20241022',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-7-sonnet-20250219',
   'claude-sonnet-4-20250514',
   'claude-sonnet-4-5-20250514',
   'claude-opus-4-20250514',
-  'claude-3-7-sonnet-20250219',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku-20241022',
   'claude-3-sonnet-20240229',
   'claude-3-opus-20240229',
-  'claude-3-haiku-20240307',
 ];
 const DEFAULT_SUPERADMIN_ALLOWED_MODELS = [
   'claude-sonnet-4-20250514',
@@ -422,11 +422,11 @@ function normalizeTierName(input: unknown): string {
 /** Default model ID by tier when client does not send model. Aligned with lib/ai/models.ts getDefaultModelForTier. */
 function getDefaultModelIdForTierProxy(tierRaw: string): string {
   const tier = normalizeTierName(tierRaw);
-  const sonnet37 = getEnv('ANTHROPIC_SONNET_3_7_MODEL') || 'claude-3-7-sonnet-20250219';
+  const haiku35 = getEnv('ANTHROPIC_HAIKU_3_5_MODEL') || 'claude-3-5-haiku-20241022';
   const sonnet4 = getEnv('ANTHROPIC_SONNET_4_MODEL') || 'claude-sonnet-4-20250514';
   if (tier.includes('enterprise') || tier === 'superadmin' || tier === 'super_admin') return sonnet4;
-  if (tier.includes('premium') || tier.includes('pro') || tier.includes('plus') || tier.includes('basic')) return sonnet37;
-  if (tier.includes('starter') || tier === 'trial') return sonnet37;
+  if (tier.includes('premium') || tier.includes('pro') || tier.includes('plus') || tier.includes('basic')) return haiku35;
+  if (tier.includes('starter') || tier === 'trial') return haiku35;
   return 'claude-3-haiku-20240307';
 }
 

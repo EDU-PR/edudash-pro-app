@@ -70,6 +70,14 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T | void> =>
 
 const FREEMIUM_CLOUD_ACTIVITY_LIMIT = 3;
 const FREEMIUM_ACTIVITY_USAGE_KEY_PREFIX = '@dash_playground_cloud_voice_usage_';
+const QUICK_COUNT_WORD_RE = /^(one|two|three|four|five|six|seven|eight|nine|ten)[!.]?$/i;
+const QUICK_PROMPT_HINTS = [
+  'tap each one',
+  'great counting',
+  'next round',
+  'well done',
+  'you counted',
+];
 
 const getMonthKey = (): string => {
   const date = new Date();
@@ -79,6 +87,16 @@ const getMonthKey = (): string => {
 
 const getFreemiumUsageStorageKey = (): string =>
   `${FREEMIUM_ACTIVITY_USAGE_KEY_PREFIX}${getMonthKey()}`;
+
+const isLatencyCriticalUtterance = (text: string): boolean => {
+  const cleaned = cleanForSpeech(text).toLowerCase();
+  if (!cleaned) return false;
+  if (QUICK_COUNT_WORD_RE.test(cleaned)) return true;
+  if (cleaned.length <= 40) return true;
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length <= 6) return true;
+  return QUICK_PROMPT_HINTS.some((hint) => cleaned.includes(hint));
+};
 
 const loadFreemiumCloudUsage = async (): Promise<string[]> => {
   try {
@@ -116,6 +134,7 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
   const isProcessing = useRef(false);
   const mounted = useRef(true);
   const cloudEnabledForCurrentSessionRef = useRef(true);
+  const firstSpeechInSessionRef = useRef(true);
   const voiceControllerRef = useRef<DashVoiceController | null>(null);
 
   const capabilityTier = useMemo(() => getCapabilityTier(String(tier || 'free')), [tier]);
@@ -123,6 +142,9 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
 
   useEffect(() => {
     mounted.current = true;
+    if (Speech && typeof Speech.getAvailableVoicesAsync === 'function') {
+      void Speech.getAvailableVoicesAsync().catch(() => {});
+    }
     return () => {
       mounted.current = false;
       if (voiceControllerRef.current) {
@@ -206,6 +228,7 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
 
   const beginActivitySession = useCallback(async (activitySessionId: string): Promise<VoiceSessionResult> => {
     const previousMode = cloudEnabledForCurrentSessionRef.current;
+    firstSpeechInSessionRef.current = true;
 
     if (!isFreemiumTier) {
       cloudEnabledForCurrentSessionRef.current = true;
@@ -255,9 +278,14 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
 
       const estimatedMs = Math.max(1500, Math.round((cleaned.length / 12.5) * 1000));
       if (mounted.current) setIsSpeaking(true);
+      const firstSpeechInSession = firstSpeechInSessionRef.current;
+      if (firstSpeechInSession) {
+        firstSpeechInSessionRef.current = false;
+      }
+      const preferDeviceForLatency = firstSpeechInSession || isLatencyCriticalUtterance(cleaned);
 
       try {
-        if (cloudEnabledForCurrentSessionRef.current) {
+        if (cloudEnabledForCurrentSessionRef.current && !preferDeviceForLatency) {
           try {
             await speakWithCloud(cleaned);
           } catch (cloudError) {
@@ -282,10 +310,24 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
   }, [checkBudget, speakWithCloud, speakWithDevice]);
 
   const speak = useCallback(async (text: string) => {
-    // Keep budget stats updated, but never block child playback in Playground.
-    try { await checkBudget(); } catch { /* proceed anyway — never block */ }
+    // Refresh budget async without blocking playback startup.
+    void checkBudget();
+
+    const prioritizeNow = isLatencyCriticalUtterance(text);
+    if (prioritizeNow && (isProcessing.current || speechQueue.current.length > 0)) {
+      speechQueue.current = [text];
+      try { Speech.stop(); } catch { /* safe */ }
+      if (voiceControllerRef.current) {
+        void voiceControllerRef.current.stopSpeaking().catch(() => {});
+      }
+      if (!isProcessing.current) {
+        void processQueue();
+      }
+      return;
+    }
+
     speechQueue.current.push(text);
-    processQueue();
+    void processQueue();
   }, [checkBudget, processQueue]);
 
   const stop = useCallback(() => {

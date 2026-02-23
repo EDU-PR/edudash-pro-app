@@ -39,8 +39,8 @@ export const TIER_HIERARCHY: Record<SubscriptionTier, number> = {
 // Monthly quota limits by tier (number of AI requests)
 export const TIER_QUOTAS: Record<SubscriptionTier, { ai_requests: number; priority_support: boolean; rpm_limit: number }> = {
   'free': { ai_requests: 300, priority_support: false, rpm_limit: 5 },
-  'starter': { ai_requests: 500, priority_support: false, rpm_limit: 15 },
-  'premium': { ai_requests: 2500, priority_support: true, rpm_limit: 30 },
+  'starter': { ai_requests: 1500, priority_support: false, rpm_limit: 15 },
+  'premium': { ai_requests: 6000, priority_support: true, rpm_limit: 30 },
   'enterprise': { ai_requests: -1, priority_support: true, rpm_limit: 60 }, // -1 = unlimited
 }
 
@@ -130,11 +130,16 @@ export function getModelsForTier(tier: SubscriptionTier): AIModelInfo[] {
  * Get the default/recommended model for a tier
  */
 export function getDefaultModelForTier(tier: SubscriptionTier): AIModelId {
+  const costSafeDefaults: Record<SubscriptionTier, AIModelId> = {
+    free: 'claude-3-haiku-20240307',
+    starter: 'claude-3-5-haiku-20241022',
+    premium: 'claude-3-5-haiku-20241022',
+    enterprise: 'claude-3-7-sonnet-20250219',
+  }
+  const preferred = costSafeDefaults[tier] || 'claude-3-haiku-20240307'
+  if (canAccessModel(tier, preferred)) return preferred
   const availableModels = getModelsForTier(tier)
-  if (availableModels.length === 0) return 'claude-3-haiku-20240307' // fallback
-  
-  // Return the highest tier model available (last in filtered array)
-  return availableModels[availableModels.length - 1].id
+  return availableModels[0]?.id || 'claude-3-haiku-20240307'
 }
 
 /**

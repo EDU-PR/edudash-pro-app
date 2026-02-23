@@ -254,7 +254,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
         duration: normalizedDuration,
         objectives: objectiveList,
         language: language || 'en',
-        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022',
         context: planningContext || undefined,
       };
       setLastPayload(payload);

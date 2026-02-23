@@ -20,6 +20,7 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 type StationeryList = {
   id: string;
+  school_id: string;
   age_group_label: string;
   age_min: number | null;
   age_max: number | null;
@@ -43,6 +44,8 @@ type StudentRow = {
   first_name: string | null;
   last_name: string | null;
   date_of_birth: string | null;
+  preschool_id?: string | null;
+  organization_id?: string | null;
   classes?: { name?: string | null } | null;
 };
 
@@ -72,13 +75,27 @@ function getAgeFromDob(dateOfBirth: string | null): number | null {
   return age >= 0 ? age : null;
 }
 
+function getProfileSchoolIds(profile: any): string[] {
+  const ids = [profile?.organization_id, profile?.preschool_id]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
+function getStudentSchoolIds(student: StudentRow): string[] {
+  const ids = [student.organization_id, student.preschool_id]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
 export default function PrincipalStationeryScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const { showError, showWarning, showSuccess, AlertComponent } = useEduDashAlert();
   const supabase = useMemo(() => assertSupabase(), []);
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const schoolId = profile?.organization_id || (profile as any)?.preschool_id || null;
+  const schoolIds = useMemo(() => getProfileSchoolIds(profile), [profile]);
   const academicYear = useMemo(() => getAcademicYear(), []);
 
   const [loading, setLoading] = useState(true);
@@ -91,45 +108,92 @@ export default function PrincipalStationeryScreen() {
   const [notes, setNotes] = useState<any[]>([]);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [selectedListId, setSelectedListId] = useState<string>('');
+  const [activeSchoolId, setActiveSchoolId] = useState<string>('');
   const [newItemName, setNewItemName] = useState('');
   const [newItemQty, setNewItemQty] = useState('1');
   const [newItemUnit, setNewItemUnit] = useState('pc');
 
   const load = useCallback(async () => {
-    if (!schoolId) {
+    if (!schoolIds.length) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      await supabase.rpc('ensure_stationery_year_templates', {
-        p_school_id: schoolId,
-        p_academic_year: academicYear,
-      });
+      await Promise.all(
+        schoolIds.map((schoolId) =>
+          supabase.rpc('ensure_stationery_year_templates', {
+            p_school_id: schoolId,
+            p_academic_year: academicYear,
+          })
+        )
+      );
 
-      const [{ data: listRows, error: listError }, { data: studentRows, error: studentError }] = await Promise.all([
+      const [
+        { data: listRows, error: listError },
+        { data: studentsByPreschool, error: studentsByPreschoolError },
+        { data: studentsByOrg, error: studentsByOrgError },
+      ] = await Promise.all([
         supabase
           .from('stationery_lists')
-          .select('id, age_group_label, age_min, age_max, is_visible, is_published, sort_order')
-          .eq('school_id', schoolId)
+          .select('id, school_id, age_group_label, age_min, age_max, is_visible, is_published, sort_order')
+          .in('school_id', schoolIds)
           .eq('academic_year', academicYear)
           .order('sort_order', { ascending: true }),
         supabase
           .from('students')
-          .select('id, first_name, last_name, date_of_birth, classes(name)')
-          .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
+          .select('id, first_name, last_name, date_of_birth, preschool_id, organization_id, classes(name)')
+          .in('preschool_id', schoolIds)
+          .eq('is_active', true)
+          .order('first_name', { ascending: true }),
+        supabase
+          .from('students')
+          .select('id, first_name, last_name, date_of_birth, preschool_id, organization_id, classes(name)')
+          .in('organization_id', schoolIds)
           .eq('is_active', true)
           .order('first_name', { ascending: true }),
       ]);
 
       if (listError) throw listError;
-      if (studentError) throw studentError;
+      if (studentsByPreschoolError) throw studentsByPreschoolError;
+      if (studentsByOrgError) throw studentsByOrgError;
 
       const loadedLists = (listRows || []) as StationeryList[];
-      const listIds = loadedLists.map((row) => row.id);
-      const loadedStudents = (studentRows || []) as StudentRow[];
-      const studentIds = loadedStudents.map((row) => row.id);
+      const studentById = new Map<string, StudentRow>();
+      [...(studentsByPreschool || []), ...(studentsByOrg || [])].forEach((row: any) => {
+        if (row?.id) studentById.set(String(row.id), row as StudentRow);
+      });
+      const mergedStudents = Array.from(studentById.values());
+
+      const studentCountBySchoolId = new Map<string, number>();
+      mergedStudents.forEach((student) => {
+        getStudentSchoolIds(student).forEach((studentSchoolId) => {
+          studentCountBySchoolId.set(
+            studentSchoolId,
+            Number(studentCountBySchoolId.get(studentSchoolId) || 0) + 1
+          );
+        });
+      });
+
+      const listSchoolIds = Array.from(new Set(loadedLists.map((list) => String(list.school_id)).filter(Boolean)));
+      const nextSchoolId = [activeSchoolId, ...listSchoolIds, ...schoolIds]
+        .filter(Boolean)
+        .sort((a, b) => {
+          const bCount = Number(studentCountBySchoolId.get(b) || 0);
+          const aCount = Number(studentCountBySchoolId.get(a) || 0);
+          return bCount - aCount;
+        })[0] || '';
+
+      const scopedLists = nextSchoolId
+        ? loadedLists.filter((list) => String(list.school_id) === nextSchoolId)
+        : loadedLists;
+      const listIds = scopedLists.map((row) => row.id);
+      const scopedStudents = mergedStudents.filter((student) => {
+        if (!nextSchoolId) return true;
+        return getStudentSchoolIds(student).includes(nextSchoolId);
+      });
+      const studentIds = scopedStudents.map((row) => row.id);
 
       const [{ data: itemRows }, { data: checkRows }, { data: noteRows }, { data: overrideRows }] = await Promise.all([
         listIds.length
@@ -162,9 +226,10 @@ export default function PrincipalStationeryScreen() {
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
-      setLists(loadedLists);
+      setActiveSchoolId(nextSchoolId);
+      setLists(scopedLists);
       setItems((itemRows || []) as StationeryItem[]);
-      setStudents(loadedStudents);
+      setStudents(scopedStudents);
       setChecks(checkRows || []);
       setNotes(noteRows || []);
       setOverrides(
@@ -175,16 +240,17 @@ export default function PrincipalStationeryScreen() {
         )
       );
 
-      if (!selectedListId && loadedLists[0]?.id) {
-        setSelectedListId(loadedLists[0].id);
-      }
+      setSelectedListId((prev) => {
+        if (prev && scopedLists.some((list) => list.id === prev)) return prev;
+        return scopedLists[0]?.id || '';
+      });
     } catch (e: any) {
       showError('Error', e?.message || 'Failed to load stationery data');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [academicYear, schoolId, selectedListId, showError, supabase]);
+  }, [academicYear, activeSchoolId, schoolIds, showError, supabase]);
 
   useEffect(() => {
     void load();
@@ -347,16 +413,25 @@ export default function PrincipalStationeryScreen() {
     }
   };
 
-  const saveOverride = async (studentId: string, listId: string) => {
+  const saveOverride = async (studentId: string, listId: string, currentListId: string) => {
+    if (!listId || listId === currentListId) return;
+    const targetList = lists.find((list) => list.id === listId);
+    if (!targetList) {
+      showWarning('List unavailable', 'The selected list is no longer available. Refresh and try again.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase
         .from('stationery_student_overrides')
         .upsert(
           {
+            school_id: targetList.school_id,
             student_id: studentId,
             list_id: listId,
             academic_year: academicYear,
+            set_by: (profile as any)?.id || null,
           },
           { onConflict: 'student_id,academic_year' }
         );
@@ -494,20 +569,25 @@ export default function PrincipalStationeryScreen() {
                   <View style={styles.overrideRow}>
                     <Text style={styles.overrideLabel}>Override age-group list</Text>
                     <View style={styles.pickerWrap}>
-                      <Picker
-                        selectedValue={overrides[row.studentId] || row.listId}
-                        onValueChange={(value) => {
-                          if (typeof value === 'string' && value) {
-                            void saveOverride(row.studentId, value);
-                          }
-                        }}
-                        style={styles.picker}
-                        dropdownIconColor={theme.text}
-                      >
-                        {lists.map((list) => (
-                          <Picker.Item key={list.id} label={list.age_group_label} value={list.id} color={theme.text} />
-                        ))}
-                      </Picker>
+                      {lists.length > 0 ? (
+                        <Picker
+                          selectedValue={overrides[row.studentId] || row.listId || lists[0]?.id || ''}
+                          onValueChange={(value) => {
+                            if (typeof value === 'string' && value) {
+                              void saveOverride(row.studentId, value, overrides[row.studentId] || row.listId || '');
+                            }
+                          }}
+                          enabled={!saving}
+                          style={styles.picker}
+                          dropdownIconColor={theme.text}
+                        >
+                          {lists.map((list) => (
+                            <Picker.Item key={list.id} label={list.age_group_label} value={list.id} color={theme.text} />
+                          ))}
+                        </Picker>
+                      ) : (
+                        <Text style={styles.muted}>No age-group lists available.</Text>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -645,4 +725,3 @@ const createStyles = (theme: any) =>
     },
     picker: { color: theme.text, height: 44, marginHorizontal: -8 },
   });
-

@@ -94,14 +94,37 @@ export default function ParentStationeryPage() {
             .eq('is_published', true),
         ]);
 
+        const preschoolsById = new Map<string, any>(
+          (preschools || []).map((row: any) => [String(row.id), row])
+        );
+        const organizationsById = new Map<string, any>(
+          (orgs || []).map((row: any) => [String(row.id), row])
+        );
+        const publishedBySchoolId = new Set<string>(
+          (publishedLists || [])
+            .map((row: any) => String(row?.school_id || '').trim())
+            .filter(Boolean)
+        );
+
         const ids = new Set<string>();
-        [...(preschools || []), ...(orgs || [])].forEach((row: any) => {
-          if (row?.settings?.features?.stationery?.enabled) {
-            ids.add(String(row.id));
+        schoolIds.forEach((schoolId) => {
+          const preschoolValue = preschoolsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const organizationValue = organizationsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const resolvedValue =
+            typeof preschoolValue === 'boolean'
+              ? preschoolValue
+              : (typeof organizationValue === 'boolean' ? organizationValue : undefined);
+
+          if (resolvedValue === true) {
+            ids.add(schoolId);
+            return;
           }
-        });
-        (publishedLists || []).forEach((row: any) => {
-          if (row?.school_id) ids.add(String(row.school_id));
+          if (resolvedValue === false) {
+            return;
+          }
+          if (publishedBySchoolId.has(schoolId)) {
+            ids.add(schoolId);
+          }
         });
 
         if (!cancelled) {
