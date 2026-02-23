@@ -63,10 +63,10 @@ export async function checkAIQuota(
       quotaInfo,
     };
   } catch {
-    // Fail-open: server-side ai-proxy enforces the real limit.
-    // Blocking here on network/service errors locks ALL users out.
+    // Fail-closed: on quota check error, block to prevent bypass.
+    // User sees "Unable to verify quota" and can retry when service recovers.
     return {
-      allowed: true,
+      allowed: false,
       reason: 'error',
       quotaInfo: undefined,
     };
@@ -130,7 +130,6 @@ export function withAIQuotaGuard<T extends (...args: any[]) => any>(
         return; // Don't execute the original function
       }
     } catch (error) {
-      // Error checking quota - log and allow function to proceed
       const errorInfo = extractAPIError(error);
       
       track('edudash.ai.quota.check_error', {
@@ -138,10 +137,15 @@ export function withAIQuotaGuard<T extends (...args: any[]) => any>(
         error: errorInfo.message,
       });
       
-      // In case of quota check error, allow function to proceed
-      // The actual AI service will handle quota enforcement server-side
-      console.warn('Quota check failed, proceeding with function execution:', errorInfo.message);
-      return await fn(...args);
+      // Fail-closed: on quota check error, do not execute. Show user-friendly message.
+      if (!skipAlert) {
+        Alert.alert(
+          'Unable to Verify Quota',
+          'We couldn\'t verify your AI usage limit. Please check your connection and try again.',
+          [{ text: 'OK', style: 'cancel' }],
+        );
+      }
+      return;
     }
   };
 }
@@ -315,10 +319,9 @@ export async function canUseAI(
   try {
     const result = await checkAIQuota(serviceType, userId, requestedUnits);
     return result.allowed;
-  } catch (error) {
-    // On error, assume allowed (server-side will handle final enforcement)
-    console.warn('Error checking AI quota, assuming allowed:', error);
-    return true;
+  } catch {
+    // Fail-closed: on error, block to prevent bypass
+    return false;
   }
 }
 

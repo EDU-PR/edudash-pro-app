@@ -85,18 +85,24 @@ serve(async (req: Request) => {
         p_request_type: 'stt',
       });
 
-      if (!quota.error) {
-        const quotaData = quota.data as Record<string, unknown> | null;
-        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
-          return new Response(JSON.stringify({
-            error: 'quota_exceeded',
-            message: 'Speech-to-text usage quota exceeded for this billing period',
-            details: quotaData,
-          }), {
-            status: 429,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+      if (quota.error) {
+        console.error('[transcribe-audio] check_ai_usage_limit failed:', quota.error);
+        return new Response(JSON.stringify({
+          error: 'quota_check_failed',
+          message: 'AI service is temporarily unavailable. Please try again in a few minutes.',
+        }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return new Response(JSON.stringify({
+          error: 'quota_exceeded',
+          message: "You've reached your AI usage limit for this period. Upgrade for more.",
+          details: quotaData,
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -163,7 +169,7 @@ serve(async (req: Request) => {
 
     const result = await whisperResp.json();
 
-    // Record usage (non-fatal)
+    // Record usage (non-fatal) — audit log + quota counter
     try {
       await supabase.rpc('record_ai_usage', {
         p_user_id: user.id,
@@ -179,8 +185,14 @@ serve(async (req: Request) => {
           text_length: (result.text || '').length,
         },
       });
+      await supabase.rpc('increment_ai_usage', {
+        p_user_id: user.id,
+        p_request_type: 'stt',
+        p_status: 'success',
+        p_metadata: { scope: 'transcribe_audio' },
+      });
     } catch (usageErr) {
-      console.warn('[transcribe-audio] record_ai_usage failed (non-fatal):', usageErr);
+      console.warn('[transcribe-audio] usage recording failed (non-fatal):', usageErr);
     }
 
     return new Response(

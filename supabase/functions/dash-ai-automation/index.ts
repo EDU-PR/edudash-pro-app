@@ -103,6 +103,41 @@ serve(async (req: Request) => {
     const systemPrompt = TOOL_PROMPTS[tool_id] ||
       'You are a helpful AI assistant for school administration. Generate professional content based on the user\'s request.';
 
+    // Quota check — prevent unbounded automation requests
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (!devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: user.id,
+        p_request_type: 'chat_message',
+      });
+
+      if (quota.error) {
+        console.error('[dash-ai-automation] check_ai_usage_limit failed:', quota.error);
+        return new Response(
+          JSON.stringify({
+            error: 'quota_check_failed',
+            message: 'Unable to verify AI usage quota. Please try again in a few minutes.',
+          }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'quota_exceeded',
+            message: "You've reached your AI usage limit for this period. Upgrade for more.",
+            details: quotaData,
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     console.log('[dash-ai-automation] Generating content:', { tool_id, userId: user.id });
 
     if (!ANTHROPIC_API_KEY) {
@@ -135,6 +170,20 @@ serve(async (req: Request) => {
 
     const aiData = await aiResponse.json();
     const content = aiData.content?.[0]?.text || '';
+
+    // Record usage after successful generation
+    if (!devBypass) {
+      try {
+        await supabase.rpc('increment_ai_usage', {
+          p_user_id: user.id,
+          p_request_type: 'chat_message',
+          p_status: 'success',
+          p_metadata: { scope: 'dash_ai_automation', tool_id },
+        });
+      } catch (usageErr) {
+        console.warn('[dash-ai-automation] increment_ai_usage failed (non-fatal):', usageErr);
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, content, result: content, tool_id }),

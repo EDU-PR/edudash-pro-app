@@ -97,13 +97,42 @@ serve(async (req: Request) => {
       });
     }
 
+    // Quota check — only for non-service calls
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
+                      (environment === 'development' || environment === 'local');
+
+    if (actingUserId && !isServiceRoleToken && !devBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: actingUserId,
+        p_request_type: 'chat_message',
+      });
+
+      if (quota.error) {
+        console.error('[ai-insights] check_ai_usage_limit failed:', quota.error);
+        return new Response(JSON.stringify({
+          error: 'quota_check_failed',
+          message: 'Unable to verify AI usage quota. Please try again in a few minutes.',
+        }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const quotaData = quota.data as Record<string, unknown> | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return new Response(JSON.stringify({
+          error: 'quota_exceeded',
+          message: "You've reached your AI usage limit for this period. Upgrade for more.",
+          details: quotaData,
+        }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // Get user profile for context
     let profile: { role?: string | null; preschool_id?: string | null; organization_id?: string | null; first_name?: string | null } | null = null;
     if (actingUserId) {
       const { data } = await supabase
         .from('profiles')
         .select('role, preschool_id, organization_id, first_name')
-        .eq('id', actingUserId)
+        .eq('auth_user_id', actingUserId)
         .maybeSingle();
       profile = data as typeof profile;
     }
@@ -187,6 +216,20 @@ Return ONLY a JSON array of strings, e.g.: ["Insight 1", "Insight 2", "Insight 3
 
     if (bullets.length === 0) {
       bullets = [`You've been active with ${aiRequestCount || 0} AI interactions recently. Keep it up!`];
+    }
+
+    // Record usage after successful AI generation (skip for static fallback and service role)
+    if (actingUserId && !isServiceRoleToken && !devBypass && ANTHROPIC_API_KEY && aiResponse.ok) {
+      try {
+        await supabase.rpc('increment_ai_usage', {
+          p_user_id: actingUserId,
+          p_request_type: 'chat_message',
+          p_status: 'success',
+          p_metadata: { scope: 'ai_insights', scope_type: scope },
+        });
+      } catch (usageErr) {
+        console.warn('[ai-insights] increment_ai_usage failed (non-fatal):', usageErr);
+      }
     }
 
     return new Response(JSON.stringify({
