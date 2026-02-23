@@ -140,6 +140,116 @@ function getQuotasForTier(tier: string): Record<string, number> {
   return TIER_QUOTAS[normalizeTier(tier)] || TIER_QUOTAS.free;
 }
 
+const STAFF_ROLES = new Set([
+  'teacher',
+  'assistant_teacher',
+  'principal',
+  'principal_admin',
+  'admin',
+  'staff',
+]);
+
+const TIER_RANK: Record<string, number> = {
+  free: 0,
+  trial: 1,
+  starter: 2,
+  basic: 2,
+  premium: 3,
+  pro: 3,
+  enterprise: 4,
+};
+
+function rankTier(rawTier: string | null | undefined): number {
+  const normalized = normalizeTier(String(rawTier || 'free'));
+  return TIER_RANK[normalized] ?? 0;
+}
+
+function selectHighestTier(candidates: Array<string | null | undefined>): string {
+  let bestTier = 'free';
+  let bestRank = -1;
+  for (const candidate of candidates) {
+    const normalized = normalizeTier(String(candidate || 'free'));
+    const rank = rankTier(normalized);
+    if (rank > bestRank) {
+      bestRank = rank;
+      bestTier = normalized;
+    }
+  }
+  return bestTier;
+}
+
+async function resolveEffectiveUserTier(supabase: any, userId: string): Promise<string> {
+  const candidates: Array<string | null | undefined> = [];
+
+  const { data: tierRow } = await supabase
+    .from('user_ai_tiers')
+    .select('tier')
+    .eq('user_id', userId)
+    .maybeSingle();
+  candidates.push(tierRow?.tier || null);
+
+  const profileSelect = 'id, auth_user_id, subscription_tier, role, preschool_id, organization_id';
+  let profile: any = null;
+
+  const { data: profileByAuth } = await supabase
+    .from('profiles')
+    .select(profileSelect)
+    .eq('auth_user_id', userId)
+    .maybeSingle();
+  profile = profileByAuth || null;
+
+  if (!profile) {
+    const { data: profileById } = await supabase
+      .from('profiles')
+      .select(profileSelect)
+      .eq('id', userId)
+      .maybeSingle();
+    profile = profileById || null;
+  }
+
+  candidates.push(profile?.subscription_tier || null);
+
+  const role = String(profile?.role || '').toLowerCase();
+  const schoolId = profile?.preschool_id || profile?.organization_id;
+
+  if (schoolId && STAFF_ROLES.has(role)) {
+    const { data: school } = await supabase
+      .from('preschools')
+      .select('subscription_tier')
+      .eq('id', schoolId)
+      .maybeSingle();
+    candidates.push(school?.subscription_tier || null);
+
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('subscription_tier, plan_tier')
+      .eq('id', schoolId)
+      .maybeSingle();
+    candidates.push(org?.subscription_tier || null);
+    candidates.push(org?.plan_tier || null);
+
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('plan_id, status, created_at')
+      .eq('school_id', schoolId)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscription?.plan_id) {
+      const { data: plan } = await supabase
+        .from('subscription_plans')
+        .select('tier')
+        .eq('id', subscription.plan_id)
+        .maybeSingle();
+      candidates.push(plan?.tier || null);
+    }
+  }
+
+  return selectHighestTier(candidates);
+}
+
 // Platform schools get unlimited usage
 const PLATFORM_SCHOOL_IDS = [
   '00000000-0000-0000-0000-000000000001', // Community School
@@ -287,14 +397,7 @@ serve(async (req: Request) => {
 
       // Get server-defined limits for the user
       case 'limits': {
-        // Get user tier
-        const { data: tierRow } = await supabase
-          .from('user_ai_tiers')
-          .select('tier')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        const tier = normalizeTier(tierRow?.tier || 'free');
+        const tier = await resolveEffectiveUserTier(supabase, user.id);
         const quotas = getQuotasForTier(tier);
 
         return respond({
@@ -365,14 +468,7 @@ serve(async (req: Request) => {
       // User limits: tier + quotas + current usage
       case 'user_limits': {
         const targetUserId = body.user_id || user.id;
-
-        const { data: tierRow } = await supabase
-          .from('user_ai_tiers')
-          .select('tier')
-          .eq('user_id', targetUserId)
-          .maybeSingle();
-
-        const tier = normalizeTier(tierRow?.tier || 'free');
+        const tier = await resolveEffectiveUserTier(supabase, targetUserId);
         const quotas = getQuotasForTier(tier);
 
         const now = new Date();
@@ -517,14 +613,7 @@ serve(async (req: Request) => {
         if (!serviceType) return respond({ error: 'Missing service_type' }, 400);
         const normalizedServiceType = normalizeServiceType(serviceType);
         const requestTypes = getRequestTypesForService(normalizedServiceType);
-
-        const { data: tierRow } = await supabase
-          .from('user_ai_tiers')
-          .select('tier')
-          .eq('user_id', targetUserId)
-          .maybeSingle();
-
-        const tier = normalizeTier(tierRow?.tier || 'free');
+        const tier = await resolveEffectiveUserTier(supabase, targetUserId);
         const quotas = getQuotasForTier(tier);
         const limit = quotas[normalizedServiceType] ?? quotas[serviceType] ?? 0;
 
