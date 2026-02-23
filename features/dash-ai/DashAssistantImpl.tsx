@@ -96,6 +96,7 @@ interface DashAssistantProps {
     grade?: string;
     topic?: string;
     difficulty?: 1 | 2 | 3 | 4 | 5;
+    slowLearner?: boolean;
   };
 }
 

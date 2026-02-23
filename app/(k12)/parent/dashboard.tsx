@@ -8,10 +8,11 @@
  * - k12, k12_school, combined, primary, secondary, community_school
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform, Image } from 'react-native';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform, Image, Animated } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
@@ -49,11 +50,15 @@ import {
   buildK12ParentActionTarget,
   type K12ParentActionId,
 } from '@/lib/navigation/k12ParentActionMap';
+import { usePublishedRoutineStatus } from '@/hooks/usePublishedRoutineStatus';
+import * as Device from 'expo-device';
+import { useParentProgress } from '@/hooks/useLessonProgress';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
+const SLOW_LEARNER_MODE_KEY = '@k12_parent_slow_learner_mode';
 
 type StarfieldPoint = {
   top: `${number}%`;
@@ -97,7 +102,12 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeSubTab] = useState('dashboard');
+  const [slowLearnerMode, setSlowLearnerMode] = useState(false);
   const dashboardBottomPadding = quickWinsEnabled ? 100 : 80;
+  const isHuaweiNoGmsRiskDevice = Platform.OS === 'android'
+    && (String(Device.brand || '').toLowerCase().includes('huawei')
+      || String(Device.manufacturer || '').toLowerCase().includes('huawei'));
+
 
   const SUB_NAV_TABS = useMemo(() => [
     { id: 'dashboard', label: t('navigation.dashboard', { defaultValue: 'Dashboard' }) },
@@ -117,6 +127,24 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     (profile as any)?.organization_membership?.organization_id ||
     (profile as any)?.organization_id ||
     (profile as any)?.preschool_id;
+  const routineStatus = usePublishedRoutineStatus(organizationId);
+  const { childrenProgress } = useParentProgress(user?.id);
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!routineStatus.hasPublished) return;
+    const delay = setTimeout(() => {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
+        ])
+      );
+      pulse.start();
+    }, 250);
+    return () => clearTimeout(delay);
+  }, [routineStatus.hasPublished, glowAnim]);
+
   const tierBadgeLabel = useMemo(() => {
     const normalizedTier = normalizeTierName(
       String(tier || (profile as any)?.subscription_tier || 'free')
@@ -177,7 +205,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     const attendanceRate = totalChildren > 0
       ? Math.round(children.reduce((sum, child) => sum + Number(child.attendance || 0), 0) / totalChildren)
       : 0;
-    const leadChild = children[0];
+    const leadChild = children.length > 0 ? children[0] : null;
 
     return {
       totalChildren,
@@ -191,6 +219,35 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
       leadChildAvgGrade: leadChild?.avgGrade || null,
     };
   }, [children]);
+
+  const recentLearningCompletions = useMemo(() => {
+    return childrenProgress
+      .filter((item) => item.completedAssignments > 0)
+      .slice(0, 3)
+      .map((item) => ({
+        id: item.studentId,
+        child: item.studentName,
+        completionRate: item.completionRate,
+        averageScore: item.averageScore,
+        averageStars: item.averageStars,
+      }));
+  }, [childrenProgress]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(SLOW_LEARNER_MODE_KEY);
+        if (!mounted) return;
+        setSlowLearnerMode(String(raw || '').toLowerCase() === 'true');
+      } catch {
+        if (mounted) setSlowLearnerMode(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Track dashboard view
   useEffect(() => {
@@ -268,6 +325,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     { id: 'messages', actionId: 'messages' as const, icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), color: '#3B82F6' },
     { id: 'payments', actionId: 'payments' as const, icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), color: '#8B5CF6' },
     { id: 'announcements', actionId: 'announcements' as const, icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), color: '#EF4444' },
+    { id: 'daily_program', actionId: 'daily_program' as const, icon: 'time', label: t('dashboard.parent.nav.daily_routine', { defaultValue: 'Daily Routine' }), color: '#0891B2' },
     { id: 'menu', actionId: 'weekly_menu' as const, icon: 'restaurant-outline', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), color: '#F97316' },
     { id: 'documents', actionId: 'documents' as const, icon: 'document-attach', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), color: '#14B8A6' },
   ]), [t]);
@@ -278,9 +336,26 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   ]), [t]);
 
   const openTutorSession = useCallback(() => {
-    track('k12.parent.tutor_session_open', { user_id: user?.id });
-    pushAction('tutor_session');
-  }, [pushAction, user?.id]);
+    track('k12.parent.tutor_session_open', {
+      user_id: user?.id,
+      slow_learner_mode: slowLearnerMode,
+    });
+    pushAction('tutor_session', {
+      slowLearner: slowLearnerMode ? 'true' : 'false',
+    });
+  }, [pushAction, slowLearnerMode, user?.id]);
+
+  const toggleSlowLearnerMode = useCallback(async () => {
+    const next = !slowLearnerMode;
+    setSlowLearnerMode(next);
+    track('k12.parent.slow_learner_mode_toggle', {
+      user_id: user?.id,
+      enabled: next,
+    });
+    try {
+      await AsyncStorage.setItem(SLOW_LEARNER_MODE_KEY, String(next));
+    } catch {}
+  }, [slowLearnerMode, user?.id]);
 
   const handleExamBuilderPress = useCallback(() => {
     if (!canShowExamPrep) {
@@ -318,7 +393,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
 
     track('k12.parent.exam_builder_open', { user_id: user?.id });
     // Pass child's grade so exam-prep can skip the grade-selection step
-    const leadChild = children[0];
+    const leadChild = children.length > 0 ? children[0] : null;
     const gradeNum = leadChild ? getGradeNumber(leadChild.grade) : 0;
     const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
     const safeStudentId = toUuidOrUndefined(leadChild?.id || null);
@@ -347,6 +422,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     { id: 'payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: 'card', route: K12_PARENT_ACTIONS.payments.route },
     { id: 'announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: 'megaphone', route: K12_PARENT_ACTIONS.announcements.route },
     { id: 'menu', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', route: K12_PARENT_ACTIONS.weekly_menu.route },
+    { id: 'daily_program', label: t('dashboard.parent.nav.daily_routine', { defaultValue: 'Daily Routine' }), icon: 'time', route: K12_PARENT_ACTIONS.daily_program.route },
     { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: K12_PARENT_ACTIONS.weekly_report.route },
     { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: K12_PARENT_ACTIONS.documents.route },
     { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: K12_PARENT_ACTIONS.account.route },
@@ -538,10 +614,11 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                     {dashboardSummary.leadChildGrade || 'Grade'}
                   </Text>
                 </LinearGradient>
-                {children[0]?.avatarUrl ? (
+                {children.length > 0 && children[0]?.avatarUrl ? (
                   <Image
                     source={{ uri: children[0].avatarUrl }}
                     style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' }}
+                    onError={() => undefined}
                   />
                 ) : null}
               </View>
@@ -681,10 +758,33 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             </View>
 
             <View style={styles.inlineTutorCta}>
-              <Text style={styles.inlineTutorCtaText}>
-                {t('dashboard.parent.k12.tutor_cta', { defaultValue: 'Start Tutor Session' })}
-              </Text>
-              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.inlineTutorCtaText}>
+                  {t('dashboard.parent.k12.tutor_cta', { defaultValue: 'Start Tutor Session' })}
+                </Text>
+                <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+              </View>
+              <TouchableOpacity
+                onPress={toggleSlowLearnerMode}
+                activeOpacity={0.86}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: slowLearnerMode ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)',
+                  backgroundColor: slowLearnerMode ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.12)',
+                }}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: slowLearnerMode }}
+                accessibilityLabel={t('dashboard.parent.k12.slow_learner_mode', { defaultValue: 'Slow learner mode' })}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                  {slowLearnerMode
+                    ? t('dashboard.parent.k12.slow_learner_mode_on', { defaultValue: 'Slow Mode On' })
+                    : t('dashboard.parent.k12.slow_learner_mode_off', { defaultValue: 'Slow Mode Off' })}
+                </Text>
+              </TouchableOpacity>
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -707,7 +807,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         />
 
         {/* Ad Banner + Upgrade CTA (free tier only) */}
-        <AdBannerWithUpgrade screen="k12_parent_dashboard" showUpgradeCTA margin={10} />
+        {!isHuaweiNoGmsRiskDevice && (
+          <AdBannerWithUpgrade screen="k12_parent_dashboard" showUpgradeCTA margin={10} />
+        )}
 
         {/* Children Cards */}
         <View style={styles.section}>
@@ -733,6 +835,63 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           )}
         </View>
 
+        {/* Daily Routine Banner — only shown when principal has published this week's routine */}
+        <Animated.View
+          style={{
+            opacity: routineStatus.hasPublished
+              ? glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] })
+              : 0,
+            transform: [{ scale: routineStatus.hasPublished
+              ? glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.012] })
+              : 1,
+            }],
+            marginHorizontal: 0,
+            display: routineStatus.hasPublished ? 'flex' : 'none',
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              track('k12.parent.daily_routine_tap', { user_id: user?.id });
+              handleQuickAction('daily_program');
+            }}
+          >
+            <LinearGradient
+              colors={['#0E4429', '#1A6B42', '#0891B2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={dailyRoutineStyles.banner}
+            >
+              {/* Glow ring */}
+              <Animated.View
+                style={[
+                  dailyRoutineStyles.glowRing,
+                  {
+                    opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.75] }),
+                  },
+                ]}
+              />
+              <View style={dailyRoutineStyles.bannerLeft}>
+                <View style={dailyRoutineStyles.iconWrap}>
+                  <Ionicons name="time" size={26} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={dailyRoutineStyles.bannerTitle}>Daily Routine Published</Text>
+                  <Text style={dailyRoutineStyles.bannerSub} numberOfLines={1}>
+                    {routineStatus.weekLabel || "This week's program is ready"}
+                  </Text>
+                </View>
+              </View>
+              <View style={dailyRoutineStyles.bannerRight}>
+                <View style={dailyRoutineStyles.badge}>
+                  <Text style={dailyRoutineStyles.badgeText}>NEW</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+
         {/* Quick Actions */}
         <View style={styles.section}>
           <SectionHeaderCard
@@ -745,6 +904,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                 : action.id === 'documents' ? docsTourRef
                 : action.id === 'announcements' ? announcementsTourRef
                 : undefined;
+              const showBadge = action.id === 'daily_program' && routineStatus.hasPublished;
               return (
                 <TouchableOpacity
                   key={action.id}
@@ -753,8 +913,8 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                     styles.quickActionCard,
                     {
                       backgroundColor: quickWinsEnabled ? 'rgba(255,255,255,0.06)' : theme.surfaceVariant,
-                      borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border,
-                      borderWidth: 1,
+                      borderColor: showBadge ? action.color : (quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border),
+                      borderWidth: showBadge ? 1.5 : 1,
                     },
                   ]}
                   onPress={() => handleQuickAction(action.actionId)}
@@ -762,6 +922,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                 >
                   <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
                     <Ionicons name={action.icon as any} size={24} color={action.color} />
+                    {showBadge && (
+                      <View style={dailyRoutineStyles.dotBadge} />
+                    )}
                   </View>
                   <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
                 </TouchableOpacity>
@@ -854,6 +1017,51 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                   <Text style={[styles.updateMessage, { color: theme.text }]}>{update.message}</Text>
                 </View>
                 <Text style={[styles.updateTime, { color: theme.textSecondary }]}>{update.time}</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Learning Activity Snapshot */}
+        <View style={styles.section}>
+          <SectionHeaderCard
+            title={t('dashboard.parent.k12.learning_snapshot.title', { defaultValue: 'Recent Learning Activity' })}
+            hint={t('dashboard.parent.k12.learning_snapshot.hint', { defaultValue: 'Latest completion health from assigned work.' })}
+          />
+          {recentLearningCompletions.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+              <Ionicons name="school-outline" size={32} color={theme.textSecondary} />
+              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                {t('dashboard.parent.k12.learning_snapshot.empty', { defaultValue: 'No completed learning activities yet' })}
+              </Text>
+            </View>
+          ) : (
+            recentLearningCompletions.map((entry) => (
+              <View
+                key={entry.id}
+                style={[
+                  styles.updateCard,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.1)' : theme.border,
+                    borderWidth: quickWinsEnabled ? 1 : 0,
+                  },
+                ]}
+              >
+                <View style={[styles.updateIcon, { backgroundColor: '#10B98120' }]}>
+                  <Ionicons name="checkmark-done" size={18} color="#10B981" />
+                </View>
+                <View style={styles.updateInfo}>
+                  <Text style={[styles.updateChild, { color: theme.textSecondary }]}>{entry.child}</Text>
+                  <Text style={[styles.updateMessage, { color: theme.text }]}>
+                    {entry.averageScore !== null
+                      ? `Avg score ${entry.averageScore}% • completion ${entry.completionRate}%`
+                      : `Completion ${entry.completionRate}%`}
+                  </Text>
+                </View>
+                <Text style={[styles.updateTime, { color: theme.textSecondary }]}>
+                  {entry.averageStars !== null ? `${entry.averageStars}/3★` : '--'}
+                </Text>
               </View>
             ))
           )}
@@ -957,6 +1165,84 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     </SafeAreaView>
   );
 }
+
+const dailyRoutineStyles = {
+  banner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
+  },
+  glowRing: {
+    position: 'absolute' as const,
+    top: -10,
+    left: -10,
+    right: -10,
+    bottom: -10,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#0891B2',
+  },
+  bannerLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    flex: 1,
+  },
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  bannerTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+  bannerSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 2,
+  },
+  bannerRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
+  badge: {
+    backgroundColor: '#FF6B6B',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800' as const,
+    color: '#fff',
+    letterSpacing: 0.6,
+  },
+  dotBadge: {
+    position: 'absolute' as const,
+    top: -3,
+    right: -3,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF6B6B',
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+};
 
 export default function K12ParentDashboardScreen() {
   const flags = getFeatureFlagsSync();

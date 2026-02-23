@@ -15,6 +15,8 @@ export type PreschoolPlayType =
 export type TutorSession = {
   id: string;
   mode: TutorMode;
+  /** Parent-enforced supportive pacing profile */
+  slowLearner?: boolean;
   subject?: string | null;
   grade?: string | null;
   topic?: string | null;

@@ -49,7 +49,12 @@ export default function DashTutorScreen() {
     initialMessage?: string;
     conversationId?: string;
     ageBand?: string;
+    slowLearner?: string;
   }>();
+  const slowLearnerMode = useMemo(
+    () => String(params?.slowLearner || '').toLowerCase() === 'true',
+    [params?.slowLearner]
+  );
 
   // Resolve age band from params, profile, or default
   const ageBand = useMemo(() => {
@@ -247,6 +252,7 @@ export default function DashTutorScreen() {
           tutorConfig={{
             subject: params?.subject,
             grade: params?.grade,
+            slowLearner: slowLearnerMode,
           }}
         />
       </View>

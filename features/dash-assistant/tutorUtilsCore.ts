@@ -227,6 +227,17 @@ export const buildTutorSystemContext = (
         '- Keep examples playful and concrete with 3-5 year old vocabulary.',
       ].join('\n')
     : null;
+  const slowLearnerGuidance = session.slowLearner
+    ? [
+        'SLOW LEARNER SUPPORT MODE (PARENT-ENFORCED):',
+        '- Keep pacing deliberately slower and confidence-building.',
+        '- Teach one concept at a time and ask one question at a time.',
+        '- Use simple wording and short instructions (2-4 lines each).',
+        '- If incorrect: give one hint, then a worked example, then retry.',
+        '- Confirm understanding with a short confidence check before moving on.',
+        '- Use supportive language; frame mistakes as retries, never penalties.',
+      ].join('\n')
+    : null;
 
   const mascotPersonality = getMascotPersonality(ageBand);
 
@@ -243,6 +254,7 @@ export const buildTutorSystemContext = (
     learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
     levelGuidance,
     phonicsGuidance,
+    slowLearnerGuidance,
     '',
     'CAPS CURRICULUM TOOLS (for K-12 learners):',
     '- You can search the CAPS curriculum database using the search_caps_curriculum tool.',
