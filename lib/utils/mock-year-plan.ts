@@ -2,6 +2,7 @@
 // Provides fallback plan when AI service is unavailable
 
 import type { YearPlanConfig, GeneratedYearPlan, GeneratedTerm } from '@/components/principal/ai-planner/types';
+import { getSACalendarForYear } from '@/lib/data/saSchoolCalendar';
 
 const THEMES = [
   { theme: 'All About Me', description: 'Self-discovery and identity', activities: ['Self-portraits', 'Family trees', 'Feelings chart'] },
@@ -16,14 +17,16 @@ const THEMES = [
   { theme: 'Stories & Books', description: 'Literacy and imagination', activities: ['Story time', 'Book making', 'Character dress-up'] },
 ];
 
-const TERM_START_DATES = ['01-15', '04-15', '07-15', '10-01'];
-const TERM_END_DATES = ['03-28', '06-28', '09-20', '12-06'];
+// Fallback if saSchoolCalendar doesn't have the year
+const FALLBACK_TERM_STARTS = ['01-15', '04-08', '07-21', '10-06'];
+const FALLBACK_TERM_ENDS = ['03-27', '06-26', '09-23', '12-09'];
 const EXCURSION_TITLES = ['Fire Station Visit', 'Farm Visit', 'Library Visit', 'Nature Reserve'];
 const EXCURSION_DESTINATIONS = ['Local Fire Station', 'Community Farm', 'Public Library', 'Nature Reserve'];
 
 export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan {
   const terms: GeneratedTerm[] = [];
   const monthlyEntries: GeneratedYearPlan['monthlyEntries'] = [];
+  const { termDates, holidays } = getSACalendarForYear(config.academicYear);
 
   for (let i = 0; i < config.numberOfTerms; i++) {
     const weeklyThemes = THEMES.slice(0, 10).map((t, idx) => ({
@@ -31,23 +34,28 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       ...t,
     }));
 
-    const budgetCost = config.budgetLevel === 'low' 
-      ? 'R50 per child' 
-      : config.budgetLevel === 'medium' 
-        ? 'R100 per child' 
+    const budgetCost = config.budgetLevel === 'low'
+      ? 'R50 per child'
+      : config.budgetLevel === 'medium'
+        ? 'R100 per child'
         : 'R150 per child';
+
+    const termRange = termDates[i] ?? {
+      start: `${config.academicYear}-${FALLBACK_TERM_STARTS[i]}`,
+      end: `${config.academicYear}-${FALLBACK_TERM_ENDS[i]}`,
+    };
 
     terms.push({
       termNumber: i + 1,
       name: `Term ${i + 1}`,
-      startDate: `${config.academicYear}-${TERM_START_DATES[i]}`,
-      endDate: `${config.academicYear}-${TERM_END_DATES[i]}`,
+      startDate: termRange.start,
+      endDate: termRange.end,
       weeklyThemes,
       excursions: config.includeExcursions ? [
         {
           title: EXCURSION_TITLES[i],
           destination: EXCURSION_DESTINATIONS[i],
-          suggestedDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-20`,
+          suggestedDate: `${termRange.start.slice(0, 7)}-20`,
           learningObjectives: ['Community awareness', 'Safety rules', 'Asking questions'],
           estimatedCost: budgetCost,
         },
@@ -56,28 +64,28 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
         {
           title: 'Staff Planning Meeting',
           type: 'staff',
-          suggestedDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-10`,
+          suggestedDate: `${termRange.start.slice(0, 7)}-10`,
           agenda: ['Term overview', 'Resource needs', 'Special events'],
         },
         {
           title: 'Parent Information Evening',
           type: 'parent',
-          suggestedDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-25`,
+          suggestedDate: `${termRange.start.slice(0, 7)}-25`,
           agenda: ['Term themes', 'Assessment schedule', 'Q&A'],
         },
       ] : [],
       specialEvents: [`Term ${i + 1} Concert`, i === 3 ? 'Graduation Ceremony' : 'Sports Day'],
     });
 
-    const startMonth = Number(TERM_START_DATES[i].split('-')[0]);
+    const startMonth = Number(termRange.start.slice(5, 7));
     monthlyEntries.push({
       monthIndex: startMonth,
       bucket: 'holidays_closures',
       subtype: 'closure',
       title: `Term ${i + 1} starts`,
       details: `Welcome and orientation for Term ${i + 1}`,
-      startDate: `${config.academicYear}-${TERM_START_DATES[i]}`,
-      endDate: `${config.academicYear}-${TERM_START_DATES[i]}`,
+      startDate: termRange.start,
+      endDate: termRange.start,
       source: 'ai',
       isPublished: false,
       publishedToCalendar: false,
@@ -89,8 +97,8 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       subtype: 'staff_meeting',
       title: 'Staff Planning Meeting',
       details: 'Term readiness and resource alignment',
-      startDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-10`,
-      endDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-10`,
+      startDate: `${termRange.start.slice(0, 7)}-10`,
+      endDate: `${termRange.start.slice(0, 7)}-10`,
       source: 'ai',
       isPublished: false,
       publishedToCalendar: false,
@@ -102,8 +110,8 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       subtype: 'excursion',
       title: EXCURSION_TITLES[i],
       details: EXCURSION_DESTINATIONS[i],
-      startDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-20`,
-      endDate: `${config.academicYear}-${TERM_START_DATES[i].split('-')[0]}-20`,
+      startDate: `${termRange.start.slice(0, 7)}-20`,
+      endDate: `${termRange.start.slice(0, 7)}-20`,
       source: 'ai',
       isPublished: false,
       publishedToCalendar: false,
@@ -122,6 +130,23 @@ export function generateMockYearPlan(config: YearPlanConfig): GeneratedYearPlan 
       publishedToCalendar: false,
     });
   }
+
+  // Add SA public holidays to monthly entries
+  holidays.forEach((h) => {
+    const monthIndex = Number(h.date.slice(5, 7));
+    monthlyEntries.push({
+      monthIndex,
+      bucket: 'holidays_closures',
+      subtype: 'holiday',
+      title: h.name,
+      details: `South African public holiday`,
+      startDate: h.date,
+      endDate: h.date,
+      source: 'ai',
+      isPublished: false,
+      publishedToCalendar: false,
+    });
+  });
 
   const budgetEstimate = config.budgetLevel === 'low'
     ? 'R15,000 - R25,000'

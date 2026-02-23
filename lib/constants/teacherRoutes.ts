@@ -88,6 +88,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'success',
     category: 'lessons',
   },
+  assign_playground_activity: {
+    path: '/screens/assign-lesson?mode=activity-only' as Href,
+    title: 'Assign Playground Activity',
+    titleKey: 'teacher.assign_playground_activity',
+    icon: 'game-controller',
+    color: '#EC4899',
+    category: 'lessons',
+  },
   assign_homework: {
     path: '/screens/assign-homework' as Href,
     title: 'Assign Homework',
@@ -312,6 +320,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'take_attendance',
   'start_live_lesson',
   'assign_lesson',
+  'assign_playground_activity',
   'assign_homework',
   'my_class',
   'daily_program',

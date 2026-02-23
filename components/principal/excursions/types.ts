@@ -1,5 +1,41 @@
 // Types for Principal Excursions
 
+export type ExcursionPreflightCheckId =
+  | 'transport_verified'
+  | 'first_aid_kit'
+  | 'consent_forms'
+  | 'emergency_contacts'
+  | 'staff_ratio'
+  | 'weather_venue'
+  | 'allergy_medical';
+
+export interface ExcursionPreflightChecks extends Record<ExcursionPreflightCheckId, boolean> {}
+
+export const PREFLIGHT_CHECK_ITEMS: Array<{ id: ExcursionPreflightCheckId; label: string }> = [
+  { id: 'transport_verified', label: 'Transport verified (vehicle/operator confirmed)' },
+  { id: 'first_aid_kit', label: 'First aid kit packed and accessible' },
+  { id: 'consent_forms', label: 'All consent forms signed' },
+  { id: 'emergency_contacts', label: 'Emergency contacts up to date' },
+  { id: 'staff_ratio', label: 'Staff ratio meets minimum (e.g. 1:8)' },
+  { id: 'weather_venue', label: 'Weather/venue confirmed suitable' },
+  { id: 'allergy_medical', label: 'Allergy/medical notes reviewed' },
+];
+
+export const DEFAULT_PREFLIGHT_CHECKS: ExcursionPreflightChecks = {
+  transport_verified: false,
+  first_aid_kit: false,
+  consent_forms: false,
+  emergency_contacts: false,
+  staff_ratio: false,
+  weather_venue: false,
+  allergy_medical: false,
+};
+
+export function isPreflightComplete(checks: ExcursionPreflightChecks | null | undefined): boolean {
+  if (!checks || typeof checks !== 'object') return false;
+  return PREFLIGHT_CHECK_ITEMS.every((item) => Boolean(checks[item.id]));
+}
+
 export interface Excursion {
   id: string;
   title: string;
@@ -15,6 +51,7 @@ export interface Excursion {
   consent_deadline?: string;
   status: ExcursionStatus;
   created_at: string;
+  preflight_checks?: ExcursionPreflightChecks | null;
 }
 
 export type ExcursionStatus = 'draft' | 'pending_approval' | 'approved' | 'cancelled' | 'completed';
@@ -28,6 +65,7 @@ export interface ExcursionFormData {
   learning_objectives: string;
   items_to_bring: string;
   consent_required: boolean;
+  preflight_checks?: ExcursionPreflightChecks;
 }
 
 export const STATUS_COLORS: Record<ExcursionStatus, string> = {
@@ -55,15 +93,26 @@ export const getInitialExcursionFormData = (): ExcursionFormData => ({
   learning_objectives: '',
   items_to_bring: '',
   consent_required: true,
+  preflight_checks: { ...DEFAULT_PREFLIGHT_CHECKS },
 });
 
-export const excursionToFormData = (excursion: Excursion): ExcursionFormData => ({
-  title: excursion.title,
-  description: excursion.description || '',
-  destination: excursion.destination,
-  excursion_date: new Date(excursion.excursion_date),
-  estimated_cost_per_child: String(excursion.estimated_cost_per_child || 0),
-  learning_objectives: excursion.learning_objectives?.join(', ') || '',
-  items_to_bring: excursion.items_to_bring?.join(', ') || '',
-  consent_required: excursion.consent_required,
-});
+export const excursionToFormData = (excursion: Excursion): ExcursionFormData => {
+  const checks = excursion.preflight_checks as ExcursionPreflightChecks | undefined;
+  const preflight: ExcursionPreflightChecks = { ...DEFAULT_PREFLIGHT_CHECKS };
+  if (checks && typeof checks === 'object') {
+    PREFLIGHT_CHECK_ITEMS.forEach((item) => {
+      preflight[item.id] = Boolean(checks[item.id]);
+    });
+  }
+  return {
+    title: excursion.title,
+    description: excursion.description || '',
+    destination: excursion.destination,
+    excursion_date: new Date(excursion.excursion_date),
+    estimated_cost_per_child: String(excursion.estimated_cost_per_child || 0),
+    learning_objectives: excursion.learning_objectives?.join(', ') || '',
+    items_to_bring: excursion.items_to_bring?.join(', ') || '',
+    consent_required: excursion.consent_required,
+    preflight_checks: preflight,
+  };
+};

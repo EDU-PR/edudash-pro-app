@@ -250,14 +250,15 @@ export function useLessonAssignment(options?: {
     }
   }, [organizationId, profile?.id, queryClient]);
   
-  // Assign lesson to entire class
+  // Assign lesson to entire class (lessonId can be null when assigning activity-only)
   const assignLessonToClass = useCallback(async (
-    lessonId: string,
+    lessonId: string | null,
     classId: string,
     options?: Partial<AssignLessonParams>
   ): Promise<boolean> => {
     if (!organizationId || !profile?.id) return false;
-    
+    if (!lessonId && !options?.interactive_activity_id) return false;
+
     setIsAssigning(true);
     try {
       const supabase = assertSupabase();
@@ -278,7 +279,7 @@ export function useLessonAssignment(options?: {
         const { error } = await supabase
           .from('lesson_assignments')
           .insert({
-            lesson_id: lessonId,
+            lesson_id: lessonId ?? null,
             interactive_activity_id: options?.interactive_activity_id || null,
             class_id: classId,
             preschool_id: organizationId,
@@ -297,7 +298,7 @@ export function useLessonAssignment(options?: {
         const lessonType = options?.lesson_type || (options?.interactive_activity_id ? 'interactive' : 'standard');
         const stemCategory = options?.stem_category || 'none';
         const assignments = students.map(student => ({
-          lesson_id: lessonId,
+          lesson_id: lessonId ?? null,
           interactive_activity_id: options?.interactive_activity_id || null,
           student_id: student.id,
           class_id: classId,

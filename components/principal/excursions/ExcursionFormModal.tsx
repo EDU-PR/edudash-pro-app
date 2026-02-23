@@ -14,8 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/contexts/ThemeContext';
-import type { Excursion, ExcursionFormData } from './types';
-import { getInitialExcursionFormData, excursionToFormData } from './types';
+import type { Excursion, ExcursionFormData, ExcursionPreflightChecks } from './types';
+import { getInitialExcursionFormData, excursionToFormData, PREFLIGHT_CHECK_ITEMS, isPreflightComplete } from './types';
 
 interface ExcursionFormModalProps {
   visible: boolean;
@@ -163,6 +163,42 @@ export function ExcursionFormModal({
               />
               <Text style={styles.checkboxLabel}>Parent consent required</Text>
             </TouchableOpacity>
+
+            {excursion && (
+              <View style={styles.preflightSection}>
+                <Text style={styles.preflightTitle}>Preflight Checklist (required before approval)</Text>
+                {PREFLIGHT_CHECK_ITEMS.map((item) => {
+                  const checked = formData.preflight_checks?.[item.id] ?? false;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.checkboxRow}
+                      onPress={() =>
+                        setFormData((prev) => {
+                          const next: ExcursionPreflightChecks = {
+                            ...(prev.preflight_checks ?? {}),
+                            [item.id]: !checked,
+                          } as ExcursionPreflightChecks;
+                          return { ...prev, preflight_checks: next };
+                        })
+                      }
+                    >
+                      <Ionicons
+                        name={checked ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={24}
+                        color={checked ? '#10b981' : theme.textSecondary}
+                      />
+                      <Text style={[styles.checkboxLabel, !checked && styles.checkboxLabelIncomplete]}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {formData.preflight_checks && isPreflightComplete(formData.preflight_checks) && (
+                  <Text style={styles.preflightComplete}>All checks complete. Ready to approve.</Text>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.modalFooter}>
@@ -254,6 +290,27 @@ const createStyles = (theme: any) =>
     checkboxLabel: {
       fontSize: 16,
       color: theme.text,
+    },
+    checkboxLabelIncomplete: {
+      color: theme.textSecondary,
+    },
+    preflightSection: {
+      marginTop: 24,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    preflightTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 12,
+    },
+    preflightComplete: {
+      fontSize: 13,
+      color: '#10b981',
+      marginTop: 12,
+      fontWeight: '500',
     },
     modalButton: {
       paddingHorizontal: 24,

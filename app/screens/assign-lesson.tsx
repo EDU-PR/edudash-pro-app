@@ -62,7 +62,8 @@ export default function AssignLessonScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ lessonId?: string; studentId?: string; classId?: string }>();
+  const params = useLocalSearchParams<{ lessonId?: string; studentId?: string; classId?: string; mode?: string }>();
+  const isActivityOnlyMode = params.mode === 'activity-only';
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   
   const [step, setStep] = useState(1);
@@ -97,13 +98,14 @@ export default function AssignLessonScreen() {
   const teacherId = profile?.id;
 
   const orderedPlaygroundActivities = useMemo<PreschoolActivity[]>(() => {
+    if (!selectedLesson && !isActivityOnlyMode) return [...PRESCHOOL_ACTIVITIES];
     if (!selectedLesson) return [...PRESCHOOL_ACTIVITIES];
     return sortPlaygroundActivitiesForLesson({
       title: selectedLesson.title,
       subject: selectedLesson.subject,
       description: selectedLesson.description,
     });
-  }, [selectedLesson]);
+  }, [selectedLesson, isActivityOnlyMode]);
 
   const recommendedActivityIds = useMemo(() => {
     if (!selectedLesson) return new Set<string>();
@@ -121,6 +123,12 @@ export default function AssignLessonScreen() {
       setPlaygroundActivityId(orderedPlaygroundActivities[0].id);
     }
   }, [playgroundActivityId, orderedPlaygroundActivities]);
+
+  useEffect(() => {
+    if (isActivityOnlyMode) {
+      setAttachPlaygroundActivity(true);
+    }
+  }, [isActivityOnlyMode]);
   
   // Fetch initial data
   useEffect(() => {
@@ -187,7 +195,7 @@ export default function AssignLessonScreen() {
   }, [organizationId, params.lessonId, params.studentId, params.classId]);
   
   const handleAssign = async () => {
-    if (!selectedLesson) {
+    if (!isActivityOnlyMode && !selectedLesson) {
       Alert.alert('Error', 'Please select a lesson');
       return;
     }
@@ -202,7 +210,7 @@ export default function AssignLessonScreen() {
       return;
     }
 
-    if (attachPlaygroundActivity && !playgroundActivityId) {
+    if ((attachPlaygroundActivity || isActivityOnlyMode) && !playgroundActivityId) {
       Alert.alert('Error', 'Please select a Dash Playground activity');
       return;
     }
@@ -211,20 +219,22 @@ export default function AssignLessonScreen() {
       let success = false;
       let interactiveActivityId: string | undefined;
 
-      if (attachPlaygroundActivity) {
+      if (attachPlaygroundActivity || isActivityOnlyMode) {
         if (!organizationId || !teacherId) {
-          Alert.alert('Error', 'Teacher profile is required to attach Dash Playground activities.');
+          Alert.alert('Error', 'Teacher profile is required for Dash Playground activities.');
           return;
         }
         const interactiveActivity = await ensurePlaygroundInteractiveActivity({
           preschoolId: organizationId,
           teacherId,
-          lesson: {
-            id: selectedLesson.id,
-            title: selectedLesson.title,
-            subject: selectedLesson.subject,
-            description: selectedLesson.description,
-          },
+          lesson: isActivityOnlyMode || !selectedLesson
+            ? null
+            : {
+                id: selectedLesson.id,
+                title: selectedLesson.title,
+                subject: selectedLesson.subject,
+                description: selectedLesson.description,
+              },
           presetActivityId: playgroundActivityId!,
           difficulty: playgroundDifficulty,
         });
@@ -242,15 +252,15 @@ export default function AssignLessonScreen() {
       
       if (assignToClass && selectedClass) {
         success = await assignLessonToClass(
-          selectedLesson.id,
+          isActivityOnlyMode ? null : selectedLesson!.id,
           selectedClass.id,
           assignmentOptions,
         );
       } else {
-        // Assign to each selected student
         for (const studentId of selectedStudents) {
           const result = await assignLesson({
-            lesson_id: selectedLesson.id,
+            lesson_id: isActivityOnlyMode ? undefined : selectedLesson!.id,
+            interactive_activity_id: interactiveActivityId,
             student_id: studentId,
             ...assignmentOptions,
           });
@@ -338,7 +348,9 @@ export default function AssignLessonScreen() {
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Assign Lesson</Text>
+            <Text style={styles.headerTitle}>
+              {isActivityOnlyMode ? 'Assign Playground Activity' : 'Assign Lesson'}
+            </Text>
             <Text style={styles.headerSubtitle}>Step {step} of 3</Text>
           </View>
         </View>
@@ -359,24 +371,27 @@ export default function AssignLessonScreen() {
             </View>
           </View>
           <View style={styles.progressLabels}>
-            <Text style={styles.progressLabel}>Lesson</Text>
+            <Text style={styles.progressLabel}>{isActivityOnlyMode ? 'Activity' : 'Lesson'}</Text>
             <Text style={styles.progressLabel}>Recipients</Text>
             <Text style={styles.progressLabel}>Confirm</Text>
           </View>
         </View>
       </LinearGradient>
       
-      {/* Step 1: Select Lesson */}
+      {/* Step 1: Select Lesson or Activity */}
       {step === 1 && (
         <View style={styles.stepContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search lessons..."
-            placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+          {!isActivityOnlyMode && (
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search lessons..."
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          )}
           
+          {!isActivityOnlyMode && (
           <FlatList
             data={filteredLessons}
             keyExtractor={item => item.id}
@@ -461,7 +476,7 @@ export default function AssignLessonScreen() {
                     </View>
 
                     <Text style={styles.playgroundLabel}>Select Activity</Text>
-                    {selectedLesson ? (
+                    {(selectedLesson || isActivityOnlyMode) ? (
                       orderedPlaygroundActivities.map((activity) => {
                         const isSelected = playgroundActivityId === activity.id;
                         const isRecommended = recommendedActivityIds.has(activity.id);
@@ -499,7 +514,7 @@ export default function AssignLessonScreen() {
                       })
                     ) : (
                       <Text style={styles.playgroundEmptyHint}>
-                        Pick a lesson first to see aligned Dash Playground recommendations.
+                        {isActivityOnlyMode ? 'Select a Dash Playground activity to assign.' : 'Pick a lesson first to see aligned Dash Playground recommendations.'}
                       </Text>
                     )}
                   </>
@@ -519,12 +534,75 @@ export default function AssignLessonScreen() {
               </View>
             }
           />
+          )}
+          {isActivityOnlyMode && (
+            <View style={styles.playgroundSection}>
+              <Text style={styles.playgroundLabel}>Difficulty</Text>
+              <View style={styles.playgroundDifficultyRow}>
+                {PLAYGROUND_DIFFICULTY_OPTIONS.map((difficulty) => {
+                  const isActive = playgroundDifficulty === difficulty;
+                  return (
+                    <TouchableOpacity
+                      key={difficulty}
+                      style={[
+                        styles.playgroundDifficultyChip,
+                        isActive && styles.playgroundDifficultyChipActive,
+                      ]}
+                      onPress={() => setPlaygroundDifficulty(difficulty)}
+                    >
+                      <Text
+                        style={[
+                          styles.playgroundDifficultyText,
+                          isActive && styles.playgroundDifficultyTextActive,
+                        ]}
+                      >
+                        {difficulty === 'easy' ? 'Easy' : difficulty === 'medium' ? 'Medium' : 'Tricky'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.playgroundLabel}>Select Activity</Text>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {orderedPlaygroundActivities.map((activity) => {
+                  const isSelected = playgroundActivityId === activity.id;
+                  const domain = DOMAIN_LABELS[activity.domain];
+                  return (
+                    <TouchableOpacity
+                      key={activity.id}
+                      style={[
+                        styles.playgroundActivityItem,
+                        isSelected && styles.playgroundActivityItemSelected,
+                      ]}
+                      onPress={() => setPlaygroundActivityId(activity.id)}
+                    >
+                      <View style={styles.playgroundActivityLeft}>
+                        <Text style={styles.playgroundActivityEmoji}>{activity.emoji}</Text>
+                        <View style={styles.playgroundActivityText}>
+                          <Text style={styles.playgroundActivityTitle}>{activity.title}</Text>
+                          <Text style={styles.playgroundActivityMeta}>
+                            {(domain?.emoji || '🎯')} {(domain?.label || activity.domain)} • {activity.durationMinutes} min
+                          </Text>
+                        </View>
+                      </View>
+                      {isSelected && (
+                        <Ionicons name="checkmark-circle" size={22} color="#8B5CF6" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
           
           <View style={styles.stepFooter}>
             <TouchableOpacity
-              style={[styles.nextButton, !selectedLesson && styles.nextButtonDisabled]}
-              onPress={() => selectedLesson && setStep(2)}
-              disabled={!selectedLesson}
+              style={[
+                styles.nextButton,
+                !(isActivityOnlyMode ? playgroundActivityId : selectedLesson) && styles.nextButtonDisabled,
+              ]}
+              onPress={() => (isActivityOnlyMode ? playgroundActivityId : selectedLesson) && setStep(2)}
+              disabled={!(isActivityOnlyMode ? playgroundActivityId : selectedLesson)}
             >
               <Text style={styles.nextButtonText}>Continue</Text>
               <Ionicons name="arrow-forward" size={20} color="#fff" />

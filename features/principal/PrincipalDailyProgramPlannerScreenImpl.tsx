@@ -1295,6 +1295,15 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
   const canGenerate = setupReady && preflightComplete;
 
+  const showPreflightIncompleteBanner = useMemo(() => {
+    if (!draft) return false;
+    const maybePreflight = (draft as any)?.generation_context?.preflight;
+    if (!maybePreflight || typeof maybePreflight !== 'object') return true;
+    return PREFLIGHT_QUESTIONS.some(
+      (q) => String((maybePreflight as any)[q.key] || '').trim().length < 6
+    );
+  }, [draft]);
+
   return (
     <DesktopLayout role="principal" title="AI Daily Routine Planner" showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1361,6 +1370,18 @@ export default function PrincipalDailyProgramPlannerScreen() {
             )}
           </View>
         </LinearGradient>
+
+        {showPreflightIncompleteBanner && (
+          <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: '#f59e0b' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="warning" size={20} color="#f59e0b" />
+              <Text style={[styles.sectionTitle, { color: '#b45309' }]}>Preflight data missing</Text>
+            </View>
+            <Text style={styles.sectionHint}>
+              This program was loaded without preflight assumptions. Re-enter your answers in the Mandatory Preflight section below before regenerating.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Smart Quick Start</Text>
