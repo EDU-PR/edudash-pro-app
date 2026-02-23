@@ -1,6 +1,7 @@
 // AI Year Plan Prompt Builder - Extracted for WARP.md compliance
 
 import type { YearPlanConfig } from '@/components/principal/ai-planner/types';
+import { formatSACalendarForPrompt } from '@/lib/data/saSchoolCalendar';
 
 export const YEAR_PLAN_SYSTEM_PROMPT = `You are an expert Early Childhood Development (ECD) curriculum planner in South Africa. 
 Generate a comprehensive academic year plan that is:
@@ -9,6 +10,7 @@ Generate a comprehensive academic year plan that is:
 - Practical and achievable for a typical preschool
 - Budget-conscious based on the specified budget level
 - Deterministic for month-by-month operations (holidays, meetings, excursions, donations/fundraisers)
+- Using the EXACT South African term dates and public holidays provided
 
 Respond with valid JSON matching this structure:
 {
@@ -54,11 +56,19 @@ Respond with valid JSON matching this structure:
 }`;
 
 export function buildYearPlanUserPrompt(config: YearPlanConfig): string {
-  const considerations = config.specialConsiderations 
-    ? `- Special considerations: ${config.specialConsiderations}` 
+  const considerations = config.specialConsiderations
+    ? `- Special considerations: ${config.specialConsiderations}`
     : '';
-    
-  return `Generate a year plan for ${config.academicYear} with the following requirements:
+  const calendarBlock = formatSACalendarForPrompt(config.academicYear);
+  const excursionNote = config.includeExcursions
+    ? 'Excursions are MANDATORY for preschool. Include at least 2 excursions per term.'
+    : 'Include excursions if requested.';
+
+  return `${calendarBlock}
+
+---
+
+Generate a year plan for ${config.academicYear} with the following requirements:
 - Number of terms: ${config.numberOfTerms}
 - Age groups: ${config.ageGroups.join(', ')} years
 - Focus areas: ${config.focusAreas.join(', ')}
@@ -68,6 +78,7 @@ export function buildYearPlanUserPrompt(config: YearPlanConfig): string {
 ${considerations}
 
 Generate approximately 10 weekly themes per term with relevant activities.
-For excursions, suggest 2-3 per term that are educational and age-appropriate.
-For meetings, include staff meetings, parent meetings, and curriculum planning sessions.`;
+${excursionNote}
+For meetings, include staff meetings, parent meetings, and curriculum planning sessions.
+Ensure monthlyEntries includes ALL public holidays from the calendar above.`;
 }

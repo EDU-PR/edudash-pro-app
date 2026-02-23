@@ -21,7 +21,8 @@ export interface PlaygroundLessonReference {
 export interface EnsurePlaygroundInteractiveActivityParams {
   preschoolId: string;
   teacherId: string;
-  lesson: PlaygroundLessonReference;
+  /** When null, creates standalone playground assignment (no lesson). */
+  lesson: PlaygroundLessonReference | null;
   presetActivityId: string;
   difficulty: PlaygroundDifficultyLevel;
 }
@@ -145,27 +146,34 @@ export async function ensurePlaygroundInteractiveActivity(
   }
 
   const snapshot = buildPlaygroundVariant(baseActivity, difficulty);
-  const content: PlaygroundSnapshotContent = {
+  const linkedLessonId = lesson?.id ?? null;
+  const linkedLessonTitle = lesson?.title ?? 'Playground practice';
+  const content: PlaygroundSnapshotContent & { linked_lesson_id?: string | null } = {
     source: 'dash_playground',
     preset_activity_id: presetActivityId,
     difficulty,
     domain: snapshot.domain,
     snapshot,
-    linked_lesson_id: lesson.id,
-    linked_lesson_title: lesson.title,
+    linked_lesson_title: linkedLessonTitle,
   };
+  if (linkedLessonId) {
+    content.linked_lesson_id = linkedLessonId;
+  } else {
+    content.linked_lesson_id = null;
+  }
 
   const supabase = assertSupabase();
+  const dedupFilter: Record<string, unknown> = {
+    source: 'dash_playground',
+    preset_activity_id: presetActivityId,
+    difficulty,
+    linked_lesson_id: linkedLessonId ?? null,
+  };
   const { data: existing, error: existingError } = await supabase
     .from('interactive_activities')
     .select('id, title, activity_type, description, content')
     .eq('preschool_id', preschoolId)
-    .contains('content', {
-      source: 'dash_playground',
-      preset_activity_id: presetActivityId,
-      difficulty,
-      linked_lesson_id: lesson.id,
-    })
+    .contains('content', dedupFilter)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -186,7 +194,7 @@ export async function ensurePlaygroundInteractiveActivity(
       teacher_id: teacherId,
       created_by: teacherId,
       activity_type: toInteractiveActivityType(snapshot.gameType),
-      title: `${lesson.title} • ${snapshot.title} (${difficulty})`,
+      title: lesson ? `${lesson.title} • ${snapshot.title} (${difficulty})` : `${snapshot.title} (${difficulty})`,
       description: snapshot.subtitle || snapshot.learningObjective || null,
       instructions: snapshot.learningObjective || snapshot.subtitle || null,
       content,

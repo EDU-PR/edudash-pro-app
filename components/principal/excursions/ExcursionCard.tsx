@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { Excursion } from './types';
-import { STATUS_COLORS, STATUS_LABELS } from './types';
+import { STATUS_COLORS, STATUS_LABELS, isPreflightComplete } from './types';
 
 interface ExcursionCardProps {
   excursion: Excursion;
@@ -74,13 +74,35 @@ export function ExcursionCard({ excursion, onPress, onApprove, onDelete }: Excur
 
       <View style={styles.cardActions}>
         {excursion.status === 'draft' && onApprove && (
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#10b98120' }]}
-            onPress={() => onApprove(excursion)}
-          >
-            <Ionicons name="checkmark-circle" size={18} color="#10b981" />
-            <Text style={[styles.actionButtonText, { color: '#10b981' }]}>Approve</Text>
-          </TouchableOpacity>
+          <>
+            {!isPreflightComplete(excursion.preflight_checks) && (
+              <Text style={styles.preflightHint}>Complete preflight checklist to approve</Text>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: isPreflightComplete(excursion.preflight_checks) ? '#10b98120' : '#6b728020',
+                },
+              ]}
+              onPress={() => onApprove(excursion)}
+              disabled={!isPreflightComplete(excursion.preflight_checks)}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color={isPreflightComplete(excursion.preflight_checks) ? '#10b981' : '#6b7280'}
+              />
+              <Text
+                style={[
+                  styles.actionButtonText,
+                  { color: isPreflightComplete(excursion.preflight_checks) ? '#10b981' : '#6b7280' },
+                ]}
+              >
+                Approve
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: '#ef444420' }]}
@@ -155,8 +177,15 @@ const createStyles = (theme: any) =>
     cardActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
+      alignItems: 'center',
+      flexWrap: 'wrap',
       marginTop: 16,
       gap: 8,
+    },
+    preflightHint: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      flex: 1,
     },
     actionButton: {
       flexDirection: 'row',

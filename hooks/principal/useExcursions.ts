@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import type { Excursion, ExcursionFormData } from '@/components/principal/excursions/types';
+import { isPreflightComplete } from '@/components/principal/excursions/types';
 
 interface UseExcursionsOptions {
   organizationId?: string;
@@ -70,7 +71,7 @@ export function useExcursions({ organizationId, userId }: UseExcursionsOptions):
 
     try {
       const supabase = assertSupabase();
-      const excursionData = {
+      const excursionData: Record<string, unknown> = {
         preschool_id: organizationId,
         created_by: userId,
         title: formData.title.trim(),
@@ -83,6 +84,9 @@ export function useExcursions({ organizationId, userId }: UseExcursionsOptions):
         consent_required: formData.consent_required,
         status: 'draft' as const,
       };
+      if (formData.preflight_checks) {
+        excursionData.preflight_checks = formData.preflight_checks;
+      }
 
       if (editingId) {
         const { error } = await supabase
@@ -140,16 +144,23 @@ export function useExcursions({ organizationId, userId }: UseExcursionsOptions):
   }, [fetchExcursions]);
 
   const updateStatus = useCallback(async (excursion: Excursion, newStatus: string) => {
+    if (newStatus === 'approved' && !isPreflightComplete(excursion.preflight_checks)) {
+      Alert.alert(
+        'Preflight Required',
+        'Complete all preflight checklist items before approving. Open the excursion and check each item.',
+      );
+      return;
+    }
     try {
       const supabase = assertSupabase();
       const { error } = await supabase
         .from('school_excursions')
-        .update({ 
+        .update({
           status: newStatus,
-          ...(newStatus === 'approved' ? { approved_by: userId, approved_at: new Date().toISOString() } : {})
+          ...(newStatus === 'approved' ? { approved_by: userId, approved_at: new Date().toISOString() } : {}),
         })
         .eq('id', excursion.id);
-      
+
       if (error) throw error;
       fetchExcursions();
     } catch (error: any) {
