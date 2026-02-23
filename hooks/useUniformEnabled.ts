@@ -16,6 +16,18 @@ interface UniformResult {
   uniformSchoolIds: string[];
 }
 
+function getChildSchoolIds(child: any): string[] {
+  const ids = [
+    child?.organizationId,
+    child?.preschoolId,
+    child?.organization_id,
+    child?.preschool_id,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(ids));
+}
+
 export function useUniformEnabled(children: any[]): UniformResult {
   const [uniformEnabled, setUniformEnabled] = useState(false);
   const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
@@ -31,11 +43,11 @@ export function useUniformEnabled(children: any[]): UniformResult {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const preschoolIds = Array.from(new Set(
-        children.map((c) => c.preschoolId || c.preschool_id).filter(Boolean)
-      )) as string[];
+      const schoolIds = Array.from(
+        new Set(children.flatMap((child) => getChildSchoolIds(child)))
+      ) as string[];
 
-      if (!preschoolIds.length) {
+      if (!schoolIds.length) {
         if (!cancelled) { setUniformEnabled(false); setUniformSchoolIds([]); }
         return;
       }
@@ -43,13 +55,27 @@ export function useUniformEnabled(children: any[]): UniformResult {
       try {
         const supabase = assertSupabase();
         const [{ data: p }, { data: o }] = await Promise.all([
-          supabase.from('preschools').select('id, settings').in('id', preschoolIds),
-          supabase.from('organizations').select('id, settings').in('id', preschoolIds),
+          supabase.from('preschools').select('id, settings').in('id', schoolIds),
+          supabase.from('organizations').select('id, settings').in('id', schoolIds),
         ]);
 
+        const preschoolsById = new Map<string, any>(
+          (p || []).map((row: any) => [String(row.id), row])
+        );
+        const orgsById = new Map<string, any>(
+          (o || []).map((row: any) => [String(row.id), row])
+        );
         const enabledIds = new Set<string>();
-        [...(p || []), ...(o || [])].forEach((row: any) => {
-          if (row?.settings?.features?.uniforms?.enabled) enabledIds.add(row.id);
+        schoolIds.forEach((schoolId) => {
+          const preschoolValue = preschoolsById.get(schoolId)?.settings?.features?.uniforms?.enabled;
+          const organizationValue = orgsById.get(schoolId)?.settings?.features?.uniforms?.enabled;
+          const resolvedValue =
+            typeof preschoolValue === 'boolean'
+              ? preschoolValue
+              : (typeof organizationValue === 'boolean' ? organizationValue : undefined);
+          if (resolvedValue === true) {
+            enabledIds.add(schoolId);
+          }
         });
 
         if (!cancelled) {

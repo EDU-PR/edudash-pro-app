@@ -168,22 +168,48 @@ export default function ParentDashboard() {
           .eq('is_visible', true)
           .eq('is_published', true);
 
+        const preschoolsById = new Map<string, any>(
+          (preschoolSettings || []).map((row: any) => [String(row.id), row])
+        );
+        const organizationsById = new Map<string, any>(
+          (organizationSettings || []).map((row: any) => [String(row.id), row])
+        );
+        const publishedBySchoolId = new Set<string>(
+          (publishedStationeryLists || [])
+            .map((row: any) => String(row?.school_id || '').trim())
+            .filter(Boolean)
+        );
+
         const enabledIds = new Set<string>();
         const stationeryIds = new Set<string>();
-        (preschoolSettings || []).forEach((row: any) => {
-          const enabled = row?.settings?.features?.uniforms?.enabled;
-          const stationery = row?.settings?.features?.stationery?.enabled;
-          if (enabled) enabledIds.add(row.id);
-          if (stationery) stationeryIds.add(row.id);
-        });
-        (organizationSettings || []).forEach((row: any) => {
-          const enabled = row?.settings?.features?.uniforms?.enabled;
-          const stationery = row?.settings?.features?.stationery?.enabled;
-          if (enabled) enabledIds.add(row.id);
-          if (stationery) stationeryIds.add(row.id);
-        });
-        (publishedStationeryLists || []).forEach((row: any) => {
-          if (row?.school_id) stationeryIds.add(String(row.school_id));
+
+        schoolIds.forEach((schoolId) => {
+          const preschoolUniform = preschoolsById.get(schoolId)?.settings?.features?.uniforms?.enabled;
+          const orgUniform = organizationsById.get(schoolId)?.settings?.features?.uniforms?.enabled;
+          const resolvedUniform =
+            typeof preschoolUniform === 'boolean'
+              ? preschoolUniform
+              : (typeof orgUniform === 'boolean' ? orgUniform : undefined);
+          if (resolvedUniform === true) {
+            enabledIds.add(schoolId);
+          }
+
+          const preschoolStationery = preschoolsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const orgStationery = organizationsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const resolvedStationery =
+            typeof preschoolStationery === 'boolean'
+              ? preschoolStationery
+              : (typeof orgStationery === 'boolean' ? orgStationery : undefined);
+          if (resolvedStationery === true) {
+            stationeryIds.add(schoolId);
+            return;
+          }
+          if (resolvedStationery === false) {
+            return;
+          }
+          if (publishedBySchoolId.has(schoolId)) {
+            stationeryIds.add(schoolId);
+          }
         });
 
         if (!cancelled) {

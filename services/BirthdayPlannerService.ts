@@ -102,6 +102,53 @@ const getDaysUntil = (date: Date): number => {
  */
 export class BirthdayPlannerService {
   private static prefsTableState: 'unknown' | 'available' | 'missing' = 'unknown';
+  private static prefsTableStateHydration: Promise<void> | null = null;
+  private static readonly PREFS_TABLE_STATE_CACHE_KEY = '@birthday_prefs_table_state_v1';
+  private static readonly PREFS_TABLE_STATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+  private static async ensurePrefsTableStateLoaded(): Promise<void> {
+    if (this.prefsTableStateHydration) {
+      await this.prefsTableStateHydration;
+      return;
+    }
+
+    this.prefsTableStateHydration = (async () => {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        if (!AsyncStorage?.getItem) return;
+        const raw = await AsyncStorage.getItem(this.PREFS_TABLE_STATE_CACHE_KEY);
+        if (!raw) return;
+
+        const parsed = JSON.parse(raw) as { state?: 'available' | 'missing'; checkedAt?: number };
+        const checkedAt = Number(parsed?.checkedAt || 0);
+        const ageMs = Date.now() - checkedAt;
+        if (!parsed?.state || !Number.isFinite(ageMs) || ageMs > this.PREFS_TABLE_STATE_CACHE_TTL_MS) {
+          return;
+        }
+
+        this.prefsTableState = parsed.state;
+      } catch {
+        // Ignore cache errors and continue probing in runtime.
+      }
+    })();
+
+    await this.prefsTableStateHydration;
+  }
+
+  private static persistPrefsTableState(state: 'available' | 'missing'): void {
+    void (async () => {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        if (!AsyncStorage?.setItem) return;
+        await AsyncStorage.setItem(
+          this.PREFS_TABLE_STATE_CACHE_KEY,
+          JSON.stringify({ state, checkedAt: Date.now() })
+        );
+      } catch {
+        // Ignore persistence errors.
+      }
+    })();
+  }
 
   private static isPrefsTableMissing(error: any): boolean {
     const status = error?.status ?? error?.statusCode;
@@ -120,7 +167,13 @@ export class BirthdayPlannerService {
       console.warn('[BirthdayPlannerService] birthday_celebration_preferences table missing - preferences disabled.');
     }
     this.prefsTableState = 'missing';
+    this.persistPrefsTableState('missing');
     return true;
+  }
+
+  private static markPrefsTableAvailable(): void {
+    this.prefsTableState = 'available';
+    this.persistPrefsTableState('available');
   }
 
   /**
@@ -131,6 +184,7 @@ export class BirthdayPlannerService {
     daysAhead: number = 90
   ): Promise<UpcomingBirthdaysResponse> {
     try {
+      await this.ensurePrefsTableStateLoaded();
       const supabase = assertSupabase();
       
       // Fetch all active students with their class info
@@ -171,7 +225,7 @@ export class BirthdayPlannerService {
             console.error('[BirthdayPlannerService] Error fetching preferences:', prefError);
           }
         } else {
-          this.prefsTableState = 'available';
+          this.markPrefsTableAvailable();
           (preferences || []).forEach((pref: any) => {
             preferencesMap.set(pref.student_id, {
               id: pref.id,
@@ -428,6 +482,7 @@ export class BirthdayPlannerService {
    */
   static async getStudentBirthday(studentId: string): Promise<StudentBirthday | null> {
     try {
+      await this.ensurePrefsTableStateLoaded();
       const supabase = assertSupabase();
       
       const { data: student, error } = await supabase
@@ -462,7 +517,7 @@ export class BirthdayPlannerService {
             console.error('[BirthdayPlannerService] Error fetching preferences:', prefError);
           }
         } else {
-          this.prefsTableState = 'available';
+          this.markPrefsTableAvailable();
           prefData = data;
         }
       }
@@ -515,6 +570,7 @@ export class BirthdayPlannerService {
     preferences: Partial<BirthdayCelebrationPreferences>
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      await this.ensurePrefsTableStateLoaded();
       if (this.prefsTableState === 'missing') {
         return { success: false, error: 'Birthday preferences are not available yet.' };
       }

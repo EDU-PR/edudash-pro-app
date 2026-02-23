@@ -226,9 +226,9 @@ function getDefaultModelForTier(tier: string | null | undefined): string {
   const t = String(tier ?? 'free').toLowerCase();
   if (t.includes('enterprise') || t === 'superadmin' || t === 'super_admin') return 'claude-sonnet-4-20250514';
   if (t.includes('premium') || t.includes('pro') || t.includes('plus') || t.includes('basic')) {
-    return 'claude-3-7-sonnet-20250219';
+    return 'claude-3-5-sonnet-20241022';
   }
-  if (t.includes('starter') || t === 'trial') return 'claude-3-5-sonnet-20241022';
+  if (t.includes('starter') || t === 'trial') return 'claude-3-5-haiku-20241022';
   return 'claude-3-haiku-20240307';
 }
 
@@ -250,8 +250,8 @@ function normalizeTierForExamRole(role: string, profileTier: string | null, reso
 function buildModelFallbackChain(preferredModel: string): string[] {
   const ordered = [
     preferredModel,
-    'claude-3-7-sonnet-20250219',
     'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
     'claude-3-haiku-20240307',
   ];
   return [...new Set(ordered.filter(Boolean))];

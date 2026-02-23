@@ -5,9 +5,11 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useStationeryChecklist } from '@/hooks/useStationeryChecklist';
 
@@ -29,6 +31,32 @@ interface Props {
   children: ChildRow[];
 }
 
+function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseInputDate(value: string): Date | null {
+  const trimmed = String(value || '').trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const parsed = new Date(year, month, day);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
 export const StationeryChecklistSection: React.FC<Props> = ({ children }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -47,6 +75,8 @@ export const StationeryChecklistSection: React.FC<Props> = ({ children }) => {
 
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
   const [expectedByDraft, setExpectedByDraft] = useState<Record<string, string>>({});
+  const [datePickerChildId, setDatePickerChildId] = useState<string | null>(null);
+  const [datePickerValue, setDatePickerValue] = useState<Date>(new Date());
 
   const handlePickEvidence = async (childId: string, itemId: string) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -199,19 +229,87 @@ export const StationeryChecklistSection: React.FC<Props> = ({ children }) => {
                   }))
                 }
               />
-              <TextInput
-                style={styles.dateInput}
-                placeholder="Expected by (YYYY-MM-DD)"
-                placeholderTextColor={theme.textSecondary}
-                value={childExpectedBy}
-                onChangeText={(value) =>
-                  setExpectedByDraft((prev) => ({
-                    ...prev,
-                    [childChecklist.childId]: value,
-                  }))
-                }
-                autoCapitalize="none"
-              />
+              <View style={styles.dateRow}>
+                <TouchableOpacity
+                  style={styles.dateInput}
+                  onPress={() => {
+                    const seed = parseInputDate(childExpectedBy) || new Date();
+                    setDatePickerValue(seed);
+                    setDatePickerChildId(childChecklist.childId);
+                  }}
+                >
+                  <Ionicons name="calendar-outline" size={15} color={theme.textSecondary} />
+                  <Text
+                    style={[
+                      styles.dateValueText,
+                      !childExpectedBy && styles.dateValuePlaceholder,
+                    ]}
+                  >
+                    {childExpectedBy || 'Expected by'}
+                  </Text>
+                </TouchableOpacity>
+                {!!childExpectedBy && (
+                  <TouchableOpacity
+                    style={styles.clearDateBtn}
+                    onPress={() =>
+                      setExpectedByDraft((prev) => ({
+                        ...prev,
+                        [childChecklist.childId]: '',
+                      }))
+                    }
+                  >
+                    <Ionicons name="close-circle-outline" size={16} color={theme.textSecondary} />
+                    <Text style={styles.clearDateText}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {datePickerChildId === childChecklist.childId ? (
+                <View style={styles.datePickerWrap}>
+                  <DateTimePicker
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    value={datePickerValue}
+                    onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+                      if (Platform.OS === 'android') {
+                        if (event.type === 'dismissed') {
+                          setDatePickerChildId(null);
+                          return;
+                        }
+                        if (selectedDate) {
+                          const formatted = formatDateForInput(selectedDate);
+                          setExpectedByDraft((prev) => ({
+                            ...prev,
+                            [childChecklist.childId]: formatted,
+                          }));
+                          setDatePickerValue(selectedDate);
+                        }
+                        setDatePickerChildId(null);
+                        return;
+                      }
+
+                      if (selectedDate) {
+                        const formatted = formatDateForInput(selectedDate);
+                        setExpectedByDraft((prev) => ({
+                          ...prev,
+                          [childChecklist.childId]: formatted,
+                        }));
+                        setDatePickerValue(selectedDate);
+                      }
+                    }}
+                  />
+                  {Platform.OS === 'ios' ? (
+                    <View style={styles.iosPickerActions}>
+                      <TouchableOpacity
+                        style={styles.iosPickerBtn}
+                        onPress={() => setDatePickerChildId(null)}
+                      >
+                        <Text style={styles.iosPickerBtnText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
               <TouchableOpacity
                 style={styles.saveNoteBtn}
                 onPress={() => {
@@ -392,12 +490,71 @@ const createStyles = (theme: any) =>
       textAlignVertical: 'top',
     },
     dateInput: {
+      flex: 1,
       borderWidth: 1,
       borderColor: theme.border,
       borderRadius: 10,
       paddingHorizontal: 10,
       paddingVertical: 9,
       color: theme.text,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    dateValueText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    dateValuePlaceholder: {
+      color: theme.textSecondary,
+      fontWeight: '400',
+    },
+    clearDateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      backgroundColor: theme.surface,
+    },
+    clearDateText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    datePickerWrap: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      overflow: 'hidden',
+      backgroundColor: theme.surface,
+    },
+    iosPickerActions: {
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      padding: 8,
+      alignItems: 'flex-end',
+    },
+    iosPickerBtn: {
+      borderWidth: 1,
+      borderColor: theme.primary,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    iosPickerBtnText: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
     },
     saveNoteBtn: {
       flexDirection: 'row',

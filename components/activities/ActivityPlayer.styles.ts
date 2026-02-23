@@ -137,7 +137,17 @@ export const createActivityPlayerStyles = (theme: any) =>
       fontWeight: '600',
       lineHeight: 22,
     },
+    celebrationOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 30,
+      backgroundColor: 'rgba(15,23,42,0.5)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+    },
     celebrationCard: {
+      width: '100%',
+      maxWidth: 420,
       alignItems: 'center',
       backgroundColor: theme.surface,
       borderRadius: 20,
@@ -167,6 +177,8 @@ export const createActivityPlayerStyles = (theme: any) =>
       paddingVertical: 14,
       paddingHorizontal: 32,
       marginTop: 4,
+      minWidth: 190,
+      alignItems: 'center',
     },
     nextBtnText: {
       color: '#fff',

@@ -77,14 +77,37 @@ export function useStationeryEnabled(children: any[]): StationeryEnabledResult {
             .eq('is_published', true),
         ]);
 
+        const preschoolsById = new Map<string, any>(
+          (preschoolRows || []).map((row: any) => [String(row.id), row])
+        );
+        const organizationsById = new Map<string, any>(
+          (orgRows || []).map((row: any) => [String(row.id), row])
+        );
+        const publishedBySchoolId = new Set<string>(
+          (publishedLists || [])
+            .map((row: any) => String(row?.school_id || '').trim())
+            .filter(Boolean)
+        );
+
         const enabledIds = new Set<string>();
-        [...(preschoolRows || []), ...(orgRows || [])].forEach((row: any) => {
-          if (row?.settings?.features?.stationery?.enabled) {
-            enabledIds.add(String(row.id));
+        schoolIds.forEach((schoolId) => {
+          const preschoolValue = preschoolsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const organizationValue = organizationsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+          const resolvedValue =
+            typeof preschoolValue === 'boolean'
+              ? preschoolValue
+              : (typeof organizationValue === 'boolean' ? organizationValue : undefined);
+
+          if (resolvedValue === true) {
+            enabledIds.add(schoolId);
+            return;
           }
-        });
-        (publishedLists || []).forEach((row: any) => {
-          if (row?.school_id) enabledIds.add(String(row.school_id));
+          if (resolvedValue === false) {
+            return;
+          }
+          if (publishedBySchoolId.has(schoolId)) {
+            enabledIds.add(schoolId);
+          }
         });
 
         if (!cancelled) {

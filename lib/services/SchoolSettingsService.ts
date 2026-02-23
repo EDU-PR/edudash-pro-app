@@ -280,15 +280,47 @@ export class SchoolSettingsService {
     schoolId: string,
     updates: Partial<SchoolSettings>
   ): Promise<SchoolSettings> {
-    // Use RBAC-safe RPC to update allowed keys server-side
-    const { data, error } = await assertSupabase().rpc('update_school_settings', {
+    const supabase = assertSupabase();
+
+    // Build a fully merged payload first, because update_school_settings does top-level JSON merge.
+    const [{ data: preschoolRow }, { data: organizationRow }] = await Promise.all([
+      supabase.from('preschools').select('settings').eq('id', schoolId).maybeSingle(),
+      supabase.from('organizations').select('settings').eq('id', schoolId).maybeSingle(),
+    ]);
+    const currentSettings = (preschoolRow?.settings || organizationRow?.settings || {}) as Partial<SchoolSettings>;
+    const nextSettings = deepMerge(currentSettings as SchoolSettings, updates as Partial<SchoolSettings>);
+
+    const { data, error } = await supabase.rpc('update_school_settings', {
       p_preschool_id: schoolId,
-      p_patch: updates as any,
+      p_patch: nextSettings as any,
     });
-    if (error) throw error;
-    // Deep merge defaults client-side for completeness
-    const merged = deepMerge(DEFAULT_SCHOOL_SETTINGS, (data || {}) as Partial<SchoolSettings>);
-    return merged;
+
+    if (error) {
+      // Fallback for org-only deployments where the RPC cannot find a preschool row.
+      if (!preschoolRow && organizationRow) {
+        const { error: orgUpdateError } = await supabase
+          .from('organizations')
+          .update({ settings: nextSettings as any })
+          .eq('id', schoolId);
+        if (orgUpdateError) throw orgUpdateError;
+        return deepMerge(DEFAULT_SCHOOL_SETTINGS, nextSettings as Partial<SchoolSettings>);
+      }
+      throw error;
+    }
+
+    // Keep organizations.settings aligned when both entities share the same id.
+    if (organizationRow) {
+      try {
+        await supabase
+          .from('organizations')
+          .update({ settings: (data || nextSettings) as any })
+          .eq('id', schoolId);
+      } catch {
+        // Best-effort sync only; preschools.settings remains source of truth.
+      }
+    }
+
+    return deepMerge(DEFAULT_SCHOOL_SETTINGS, ((data || nextSettings) || {}) as Partial<SchoolSettings>);
   }
 
   static async updateWhatsAppNumber(schoolId: string, whatsappE164: string): Promise<void> {

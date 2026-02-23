@@ -336,23 +336,25 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
               <Text style={styles.hintText}>{currentRound.hint}</Text>
             </View>
           )}
-
-          {/* Celebration */}
-          {showCelebration && (
-            <Animated.View style={[styles.celebrationCard, { transform: [{ scale: bounceAnim }] }]}>
-              <Text style={styles.celebrationEmoji}>{autoRevealed ? '💪' : '🌟'}</Text>
-              <Text style={styles.celebrationText}>
-                {autoRevealed ? "That's a tricky one! Now you know!" : (currentRound.celebration || 'Great job!')}
-              </Text>
-              <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
-                <Text style={styles.nextBtnText}>
-                  {isLastRound ? 'Finish! 🎉' : 'Next Round →'}
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
         </ScrollView>
       </Animated.View>
+
+      {/* Celebration overlay */}
+      {showCelebration && (
+        <View style={styles.celebrationOverlay}>
+          <Animated.View style={[styles.celebrationCard, { transform: [{ scale: bounceAnim }] }]}>
+            <Text style={styles.celebrationEmoji}>{autoRevealed ? '💪' : '🌟'}</Text>
+            <Text style={styles.celebrationText}>
+              {autoRevealed ? "That's a tricky one! Now you know!" : (currentRound.celebration || 'Great job!')}
+            </Text>
+            <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+              <Text style={styles.nextBtnText}>
+                {isLastRound ? 'Finish! 🎉' : 'Next Round →'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }

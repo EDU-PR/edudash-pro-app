@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { useState, useEffect, useMemo } from 'react'
 import { useSubscription } from '@/contexts/SubscriptionContext'
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers'
 import { 
   AIModelId, 
   AIModelInfo, 
@@ -43,21 +44,9 @@ export function useAIModelSelection(
   // Normalize tier for consistency
   const tier = useMemo((): SubscriptionTier => {
     if (!subscriptionTier) return 'free'
-    
-    // Handle legacy tier names
-    switch (subscriptionTier.toLowerCase()) {
-      case 'parent_starter':
-      case 'starter':
-        return 'starter'
-      case 'parent_plus':
-      case 'premium':
-      case 'pro':
-        return 'premium'
-      case 'enterprise':
-        return 'enterprise'
-      default:
-        return 'free'
-    }
+
+    const capabilityTier = getCapabilityTier(normalizeTierName(String(subscriptionTier)))
+    return capabilityTier as SubscriptionTier
   }, [subscriptionTier])
 
   // Get available models based on tier
@@ -154,6 +143,9 @@ export function useTierInfo() {
         }
       case 'starter':
       case 'parent_starter':
+      case 'teacher_starter':
+      case 'school_starter':
+      case 'trial':
         return {
           name: 'Starter Plan', 
           color: '#059669',
@@ -162,6 +154,9 @@ export function useTierInfo() {
         }
       case 'premium':
       case 'parent_plus':
+      case 'teacher_pro':
+      case 'school_premium':
+      case 'school_pro':
       case 'pro':
         return {
           name: 'Premium Plan',
@@ -170,6 +165,9 @@ export function useTierInfo() {
           description: 'Advanced AI with all models'
         }
       case 'enterprise':
+      case 'school_enterprise':
+      case 'super_admin':
+      case 'superadmin':
         return {
           name: 'Enterprise Plan',
           color: '#DC2626',

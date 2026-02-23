@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -110,14 +112,35 @@ export default function ParentStationeryScreen() {
           .eq('is_published', true),
       ]);
 
+      const preschoolsById = new Map<string, any>(
+        (preschools || []).map((row: any) => [String(row.id), row])
+      );
+      const organizationsById = new Map<string, any>(
+        (orgs || []).map((row: any) => [String(row.id), row])
+      );
+      const publishedBySchoolId = new Set<string>(
+        (publishedLists || [])
+          .map((row: any) => String(row?.school_id || '').trim())
+          .filter(Boolean)
+      );
+
       const enabled = new Set<string>();
-      [...(preschools || []), ...(orgs || [])].forEach((row: any) => {
-        if (row?.settings?.features?.stationery?.enabled) {
-          enabled.add(String(row.id));
+      schoolIds.forEach((schoolId) => {
+        const preschoolValue = preschoolsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+        const organizationValue = organizationsById.get(schoolId)?.settings?.features?.stationery?.enabled;
+        const resolvedValue =
+          typeof preschoolValue === 'boolean'
+            ? preschoolValue
+            : (typeof organizationValue === 'boolean' ? organizationValue : undefined);
+
+        if (resolvedValue === true) {
+          enabled.add(schoolId);
+          return;
         }
-      });
-      (publishedLists || []).forEach((row: any) => {
-        if (row?.school_id) enabled.add(String(row.school_id));
+        if (resolvedValue === false) return;
+        if (publishedBySchoolId.has(schoolId)) {
+          enabled.add(schoolId);
+        }
       });
       setFeatureEnabledSchoolIds(Array.from(enabled));
     } catch (loadError: any) {
@@ -150,56 +173,64 @@ export default function ParentStationeryScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SubPageHeader title="Stationery Checklist" />
 
-      {loading ? (
-        <View style={styles.centerBox}>
-          <EduDashSpinner size="large" color={theme.primary} />
-          <Text style={styles.muted}>Loading checklist...</Text>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} />}
-        >
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <Ionicons name="checkbox-outline" size={22} color={theme.primary} />
-              <Text style={styles.heroTitle}>Track Stationery Per Child</Text>
-            </View>
-            <Text style={styles.heroSubtitle}>
-              Mark bought items, upload optional proof photos, and add notes about what is still needed.
-            </Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+      >
+        {loading ? (
+          <View style={styles.centerBox}>
+            <EduDashSpinner size="large" color={theme.primary} />
+            <Text style={styles.muted}>Loading checklist...</Text>
           </View>
-
-          {error ? (
-            <View style={styles.errorCard}>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={() => { setRefreshing(true); void load(); }}>
-                <Text style={styles.retryText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {!error && children.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Ionicons name="people-outline" size={24} color={theme.textSecondary} />
-              <Text style={styles.muted}>No linked children found yet.</Text>
-            </View>
-          ) : null}
-
-          {!error && children.length > 0 && eligibleChildren.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Ionicons name="settings-outline" size={24} color={theme.textSecondary} />
-              <Text style={styles.muted}>
-                Stationery tracking is currently disabled by your school. Ask the principal/admin to enable it in school settings.
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} />}
+          >
+            <View style={styles.heroCard}>
+              <View style={styles.heroHeader}>
+                <Ionicons name="checkbox-outline" size={22} color={theme.primary} />
+                <Text style={styles.heroTitle}>Track Stationery Per Child</Text>
+              </View>
+              <Text style={styles.heroSubtitle}>
+                Mark bought items, upload optional proof photos, and add notes about what is still needed.
               </Text>
             </View>
-          ) : null}
 
-          {!error && eligibleChildren.length > 0 ? (
-            <StationeryChecklistSection children={eligibleChildren as any} />
-          ) : null}
-        </ScrollView>
-      )}
+            {error ? (
+              <View style={styles.errorCard}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => { setRefreshing(true); void load(); }}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {!error && children.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Ionicons name="people-outline" size={24} color={theme.textSecondary} />
+                <Text style={styles.muted}>No linked children found yet.</Text>
+              </View>
+            ) : null}
+
+            {!error && children.length > 0 && eligibleChildren.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Ionicons name="settings-outline" size={24} color={theme.textSecondary} />
+                <Text style={styles.muted}>
+                  Stationery tracking is currently disabled by your school. Ask the principal/admin to enable it in school settings.
+                </Text>
+              </View>
+            ) : null}
+
+            {!error && eligibleChildren.length > 0 ? (
+              <StationeryChecklistSection children={eligibleChildren as any} />
+            ) : null}
+          </ScrollView>
+        )}
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -209,6 +240,9 @@ const createStyles = (theme: any) =>
     container: {
       flex: 1,
       backgroundColor: theme.background,
+    },
+    keyboardContainer: {
+      flex: 1,
     },
     content: {
       padding: 16,

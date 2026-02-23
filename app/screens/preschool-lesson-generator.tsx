@@ -503,7 +503,7 @@ Schema:
         duration: Number(duration) || 30,
         objectives: [],
         language: language || 'en',
-        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022',
         isPreschool: true,
         ageGroup: selectedAgeGroup,
         includeHomework,
