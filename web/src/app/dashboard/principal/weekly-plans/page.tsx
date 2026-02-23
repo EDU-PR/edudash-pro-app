@@ -20,7 +20,7 @@ export default function WeeklyPlansPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'published'>('all');
 
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const { plans, loading: plansLoading, approvePlan, rejectPlan } = useWeeklyPlans(preschoolId);
 
   useEffect(() => {

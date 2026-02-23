@@ -62,7 +62,7 @@ export default function MeetingsPage() {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
 
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const preschoolName = profile?.preschoolName;
 
   const [formData, setFormData] = useState<{

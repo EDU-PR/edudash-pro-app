@@ -23,7 +23,7 @@ export type QuotaMap = Record<AIQuotaFeature, number>
  * Aligned with TIER_QUOTAS in `@/lib/tiers` for the shared fields.
  */
 const DEFAULT_MONTHLY_QUOTAS: Record<CapabilityTier, QuotaMap> = {
-  free: { lesson_generation: 5, grading_assistance: 10, homework_help: 20, transcription: 5 },
+  free: { lesson_generation: 10, grading_assistance: 10, homework_help: 20, transcription: 5 },
   starter: { lesson_generation: 30, grading_assistance: 60, homework_help: 120, transcription: 30 },
   premium: { lesson_generation: 120, grading_assistance: 240, homework_help: 480, transcription: 120 },
   enterprise: { lesson_generation: 5000, grading_assistance: 10000, homework_help: 30000, transcription: 36000 }, // ~300 hours
@@ -102,30 +102,82 @@ async function getUserTier(): Promise<CapabilityTier> {
         }
       }
       
-      // For staff with 'free' tier, inherit from school
-      const role = String(profile?.role || '').toLowerCase()
-      const isStaff = ['teacher', 'principal', 'admin', 'principal_admin'].includes(role)
-      const schoolId = profile?.preschool_id || profile?.organization_id
+      // For staff with 'free' tier, inherit from school/org
+      let role = String(profile?.role || '').toLowerCase()
+      let schoolId = profile?.preschool_id || profile?.organization_id || null
+
+      if (!schoolId && user?.id) {
+        const { data: membershipRows } = await client
+          .from('organization_members')
+          .select('organization_id, role, member_type, membership_status, updated_at')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(5)
+
+        const membership = (membershipRows || []).find((row: any) =>
+          String(row?.membership_status || '').toLowerCase() === 'active',
+        ) || membershipRows?.[0]
+
+        if (membership?.organization_id) {
+          schoolId = String(membership.organization_id)
+        }
+
+        if (!role) {
+          role = String(membership?.role || membership?.member_type || '').toLowerCase()
+        }
+      }
+
+      const isStaff = ['teacher', 'principal', 'admin', 'principal_admin', 'staff'].includes(role)
       if (isStaff && schoolId) {
+        let resolvedTier: CapabilityTier | null = null
         const { data: school } = await client
           .from('preschools')
           .select('subscription_tier')
           .eq('id', schoolId)
           .maybeSingle()
-        
+
         if (school?.subscription_tier) {
-          return getCapabilityTier(normalizeTierName(String(school.subscription_tier).toLowerCase()))
+          resolvedTier = getCapabilityTier(normalizeTierName(String(school.subscription_tier).toLowerCase()))
         }
 
-        const { data: org } = await client
-          .from('organizations')
-          .select('subscription_tier, plan_tier')
-          .eq('id', schoolId)
-          .maybeSingle()
+        if (!resolvedTier || resolvedTier === 'free') {
+          const { data: org } = await client
+            .from('organizations')
+            .select('subscription_tier, plan_tier')
+            .eq('id', schoolId)
+            .maybeSingle()
 
-        const inheritedTier = String(org?.subscription_tier || org?.plan_tier || '').toLowerCase()
-        if (inheritedTier) {
-          return getCapabilityTier(normalizeTierName(inheritedTier))
+          const inheritedTier = String(org?.subscription_tier || org?.plan_tier || '').toLowerCase()
+          if (inheritedTier) {
+            resolvedTier = getCapabilityTier(normalizeTierName(inheritedTier))
+          }
+        }
+
+        if ((!resolvedTier || resolvedTier === 'free') && profile?.organization_id && !profile?.preschool_id) {
+          // Some schools store subscription on preschools while profiles carry organization_id.
+          const { data: linkedSchool } = await client
+            .from('profiles')
+            .select('preschool_id')
+            .eq('organization_id', profile.organization_id)
+            .not('preschool_id', 'is', null)
+            .limit(1)
+            .maybeSingle()
+
+          if (linkedSchool?.preschool_id) {
+            const { data: linkedPreschool } = await client
+              .from('preschools')
+              .select('subscription_tier')
+              .eq('id', linkedSchool.preschool_id)
+              .maybeSingle()
+
+            if (linkedPreschool?.subscription_tier) {
+              resolvedTier = getCapabilityTier(normalizeTierName(String(linkedPreschool.subscription_tier).toLowerCase()))
+            }
+          }
+        }
+
+        if (resolvedTier && resolvedTier !== 'free') {
+          return resolvedTier
         }
       }
     }

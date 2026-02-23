@@ -785,6 +785,22 @@ export default function FinanceControlCenterScreen() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Receivables</Text>
       {renderSectionError(pickSectionError(bundle?.errors, 'receivables'))}
+      {!!receivables && (
+        (() => {
+          const excludedInactive = Number(receivables.summary?.excluded_inactive_students || 0);
+          const excludedFuture = Number(receivables.summary?.excluded_future_enrollment_students || 0);
+          const excludedUnverified = Number(receivables.summary?.excluded_unverified_students || 0);
+          const totalExcluded = excludedInactive + excludedFuture + excludedUnverified;
+          if (totalExcluded <= 0) return null;
+          return (
+            <View style={styles.infoBanner}>
+              <Text style={styles.infoBannerText}>
+                Excluded from receivables: {excludedFuture} not started yet, {excludedUnverified} unverified new registrations, {excludedInactive} inactive.
+              </Text>
+            </View>
+          );
+        })()
+      )}
       {!receivables || receivables.students.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No pending or overdue receivables for this month.</Text>

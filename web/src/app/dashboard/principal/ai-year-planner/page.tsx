@@ -274,7 +274,7 @@ export default function AIYearPlannerPage() {
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName || 'Your School';
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const monthlyByMonth = useMemo(() => {
     const bucketSeed = () => ({
       holidays_closures: [] as string[],

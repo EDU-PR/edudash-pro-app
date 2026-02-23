@@ -28,6 +28,7 @@ export interface StudentFee {
   id: string;
   student_id: string;
   fee_structure_id?: string | null;
+  billing_month?: string | null;
   amount: number;
   final_amount: number;
   discount_amount?: number;

@@ -21,7 +21,7 @@ export default function CurriculumThemesPage() {
   const [terms, setTerms] = useState<AcademicTerm[]>([]);
 
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const { themes, loading: themesLoading, createTheme, updateTheme, deleteTheme } = useCurriculumThemes(preschoolId);
 
   useEffect(() => {

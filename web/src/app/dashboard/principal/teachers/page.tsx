@@ -43,7 +43,7 @@ export default function TeachersPage() {
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const preschoolName = profile?.preschoolName;
 
   useEffect(() => {

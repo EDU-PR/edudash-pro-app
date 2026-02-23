@@ -22,6 +22,11 @@ export interface SaveWeeklyProgramInput {
   weeklyProgram: WeeklyProgramDraft;
 }
 
+export interface DeleteWeeklyProgramInput {
+  weeklyProgramId: string;
+  preschoolId: string;
+}
+
 const DAY_LABELS: Record<number, string> = {
   1: 'Monday',
   2: 'Tuesday',
@@ -691,6 +696,38 @@ export class WeeklyProgramService {
       save_warnings: saveWarnings.length > 0 ? saveWarnings : undefined,
       blocks,
     };
+  }
+
+  static async deleteWeeklyProgram(input: DeleteWeeklyProgramInput): Promise<void> {
+    const supabase = assertSupabase();
+
+    const weeklyProgramId = String(input.weeklyProgramId || '').trim();
+    const preschoolId = String(input.preschoolId || '').trim();
+
+    if (!weeklyProgramId || !preschoolId) {
+      throw new Error('Missing weekly program context for delete');
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('weekly_programs')
+      .select('id')
+      .eq('id', weeklyProgramId)
+      .eq('preschool_id', preschoolId)
+      .single();
+
+    if (existingError || !existing?.id) {
+      throw new Error(existingError?.message || 'Saved routine not found');
+    }
+
+    const { error: deleteError } = await supabase
+      .from('weekly_programs')
+      .delete()
+      .eq('id', weeklyProgramId)
+      .eq('preschool_id', preschoolId);
+
+    if (deleteError) {
+      throw new Error(deleteError.message || 'Failed to delete saved routine');
+    }
   }
 
   private static async shareWeeklyProgramByAudience(

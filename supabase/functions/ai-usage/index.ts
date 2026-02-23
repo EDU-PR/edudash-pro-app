@@ -38,7 +38,7 @@ if (!SUPABASE_SERVICE_ROLE_KEY) {
 const TIER_QUOTAS: Record<string, Record<string, number>> = {
   free: {
     chat_messages: 300,
-    lesson_generation: 5,
+    lesson_generation: 10,
     grading_assistance: 10,
     homework_help: 20,
     homework_help_agentic: 5,
@@ -209,8 +209,28 @@ async function resolveEffectiveUserTier(supabase: any, userId: string): Promise<
 
   candidates.push(profile?.subscription_tier || null);
 
-  const role = String(profile?.role || '').toLowerCase();
-  const schoolId = profile?.preschool_id || profile?.organization_id;
+  let role = String(profile?.role || '').toLowerCase();
+  let schoolId = profile?.preschool_id || profile?.organization_id || null;
+
+  if (!schoolId) {
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id, role, member_type, membership_status, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(5);
+
+    const preferredMembership = (memberships || []).find((row: any) =>
+      String(row?.membership_status || '').toLowerCase() === 'active',
+    ) || memberships?.[0];
+
+    if (preferredMembership?.organization_id) {
+      schoolId = String(preferredMembership.organization_id);
+    }
+    if (!role) {
+      role = String(preferredMembership?.role || preferredMembership?.member_type || '').toLowerCase();
+    }
+  }
 
   if (schoolId && STAFF_ROLES.has(role)) {
     const { data: school } = await supabase
@@ -227,6 +247,26 @@ async function resolveEffectiveUserTier(supabase: any, userId: string): Promise<
       .maybeSingle();
     candidates.push(org?.subscription_tier || null);
     candidates.push(org?.plan_tier || null);
+
+    if ((!school?.subscription_tier || normalizeTier(school.subscription_tier) === 'free') && profile?.organization_id && !profile?.preschool_id) {
+      // Some deployments keep profile.organization_id but store school tier in preschools rows.
+      const { data: linkedSchool } = await supabase
+        .from('profiles')
+        .select('preschool_id')
+        .eq('organization_id', profile.organization_id)
+        .not('preschool_id', 'is', null)
+        .limit(1)
+        .maybeSingle();
+
+      if (linkedSchool?.preschool_id) {
+        const { data: linkedPreschool } = await supabase
+          .from('preschools')
+          .select('subscription_tier')
+          .eq('id', linkedSchool.preschool_id)
+          .maybeSingle();
+        candidates.push(linkedPreschool?.subscription_tier || null);
+      }
+    }
 
     const { data: subscription } = await supabase
       .from('subscriptions')

@@ -36,7 +36,7 @@ export function useLessonGenerator() {
         duration: opts.duration ?? 45,
         objectives: opts.learningObjectives,
         language: opts.language || 'en',
-        model: opts.model || 'claude-3-5-sonnet-20241022',
+        model: opts.model || 'claude-3-5-haiku-20241022',
       } as any;
 
       const { data, error } = await invokeAIGatewayWithRetry(payload, {

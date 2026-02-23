@@ -3,6 +3,7 @@ import { assertSupabase } from '@/lib/supabase';
 export type FeeCorrectionAuditAction =
   | 'waive'
   | 'adjust'
+  | 'delete'
   | 'mark_paid'
   | 'mark_unpaid'
   | 'change_class'

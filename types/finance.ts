@@ -173,6 +173,9 @@ export interface FinanceReceivablesSummary {
   overdue_students: number;
   outstanding_students: number;
   outstanding_amount: number;
+  excluded_inactive_students?: number;
+  excluded_future_enrollment_students?: number;
+  excluded_unverified_students?: number;
 }
 
 export interface FinanceReceivableStudentRow {

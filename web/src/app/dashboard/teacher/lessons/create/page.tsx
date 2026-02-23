@@ -162,7 +162,7 @@ Provide clear sections: Lesson Title; Learning Objectives (3-5); Materials Neede
           service_type: 'chat_message',
           payload: {
             prompt,
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-3-5-haiku-20241022',
           },
           stream: false,
           enable_tools: false,

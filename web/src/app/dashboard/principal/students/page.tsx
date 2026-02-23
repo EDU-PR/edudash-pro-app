@@ -34,7 +34,7 @@ export default function StudentsPage() {
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
 
   // Auth check
   useEffect(() => {

@@ -96,6 +96,11 @@ export interface SchoolSettings {
     allowParentMessaging: boolean;
     requireTwoFactorAuth: boolean;
     sessionTimeout: number;
+    financeAdminControls: {
+      canManageFees: boolean;
+      canManageStudentProfile: boolean;
+      canDeleteFees: boolean;
+    };
   };
 
   // Notifications
@@ -200,6 +205,11 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
     allowParentMessaging: true,
     requireTwoFactorAuth: false,
     sessionTimeout: 30,
+    financeAdminControls: {
+      canManageFees: true,
+      canManageStudentProfile: true,
+      canDeleteFees: true,
+    },
   },
   notifications: {
     emailEnabled: true,

@@ -39,6 +39,141 @@ interface UniformPricingState {
   };
 }
 
+interface FinanceAdminControlsState {
+  canManageFees: boolean;
+  canManageStudentProfile: boolean;
+  canDeleteFees: boolean;
+}
+
+interface FinancePrivacySettingsState {
+  feesPrivateModeEnabled: boolean;
+  financeAdminControls: FinanceAdminControlsState;
+}
+
+const DEFAULT_FINANCE_ADMIN_CONTROLS: FinanceAdminControlsState = {
+  canManageFees: true,
+  canManageStudentProfile: true,
+  canDeleteFees: true,
+};
+
+const DEFAULT_FINANCE_PRIVACY_SETTINGS: FinancePrivacySettingsState = {
+  feesPrivateModeEnabled: false,
+  financeAdminControls: DEFAULT_FINANCE_ADMIN_CONTROLS,
+};
+
+function deepMerge<T>(base: T, overrides: Partial<T>): T {
+  const result: any = Array.isArray(base) ? [...(base as any)] : { ...(base as any) };
+  for (const key of Object.keys(overrides || {})) {
+    const value: any = (overrides as any)[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      (result as any)[key] = deepMerge((result as any)[key] ?? {}, value);
+    } else {
+      (result as any)[key] = value;
+    }
+  }
+  return result as T;
+}
+
+function resolveFinancePrivacyFromSettings(settings: Record<string, any> | null | undefined): FinancePrivacySettingsState {
+  const root = settings || {};
+  const financialReports = (root.features?.financialReports || {}) as Record<string, any>;
+  const permissions = (root.permissions || {}) as Record<string, any>;
+  const financeAdminControls = (permissions.financeAdminControls || {}) as Record<string, any>;
+  const financePermissions = (root.finance_permissions || {}) as Record<string, any>;
+
+  const feesPrivateModeEnabled =
+    financialReports.privateModeEnabled === true ||
+    financialReports.hideOnDashboards === true ||
+    financialReports.requirePasswordForAccess === true;
+
+  return {
+    feesPrivateModeEnabled,
+    financeAdminControls: {
+      canManageFees:
+        financeAdminControls.canManageFees !== undefined
+          ? financeAdminControls.canManageFees === true
+          : financePermissions.admin_can_manage_fees !== undefined
+            ? financePermissions.admin_can_manage_fees === true
+            : true,
+      canManageStudentProfile:
+        financeAdminControls.canManageStudentProfile !== undefined
+          ? financeAdminControls.canManageStudentProfile === true
+          : financePermissions.admin_can_manage_student_profile !== undefined
+            ? financePermissions.admin_can_manage_student_profile === true
+            : true,
+      canDeleteFees:
+        financeAdminControls.canDeleteFees !== undefined
+          ? financeAdminControls.canDeleteFees === true
+          : financePermissions.admin_can_delete_fees !== undefined
+            ? financePermissions.admin_can_delete_fees === true
+            : true,
+    },
+  };
+}
+
+async function fetchSchoolSettings(
+  supabase: ReturnType<typeof createClient>,
+  schoolId: string
+): Promise<Record<string, any>> {
+  const { data: preschoolRow } = await supabase
+    .from('preschools')
+    .select('settings')
+    .eq('id', schoolId)
+    .maybeSingle();
+  if (preschoolRow?.settings) {
+    return preschoolRow.settings as Record<string, any>;
+  }
+
+  const { data: organizationRow } = await supabase
+    .from('organizations')
+    .select('settings')
+    .eq('id', schoolId)
+    .maybeSingle();
+
+  return (organizationRow?.settings || {}) as Record<string, any>;
+}
+
+async function updateSchoolSettings(
+  supabase: ReturnType<typeof createClient>,
+  schoolId: string,
+  patch: Record<string, any>
+): Promise<void> {
+  const [{ data: preschoolRow }, { data: organizationRow }] = await Promise.all([
+    supabase.from('preschools').select('settings').eq('id', schoolId).maybeSingle(),
+    supabase.from('organizations').select('settings').eq('id', schoolId).maybeSingle(),
+  ]);
+
+  const currentSettings =
+    (preschoolRow?.settings || organizationRow?.settings || {}) as Record<string, any>;
+  const mergedSettings = deepMerge(currentSettings, patch);
+
+  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('update_school_settings', {
+    p_preschool_id: schoolId,
+    p_patch: mergedSettings,
+  });
+
+  if (rpcError) {
+    if (!preschoolRow && organizationRow) {
+      const { error: orgUpdateError } = await supabase
+        .from('organizations')
+        .update({ settings: mergedSettings })
+        .eq('id', schoolId);
+      if (orgUpdateError) throw orgUpdateError;
+      return;
+    }
+    throw rpcError;
+  }
+
+  if (organizationRow) {
+    const syncedSettings = (rpcData || mergedSettings) as Record<string, any>;
+    try {
+      await supabase.from('organizations').update({ settings: syncedSettings }).eq('id', schoolId);
+    } catch {
+      // Best-effort sync only; preschools/settings RPC remains source of truth.
+    }
+  }
+}
+
 export default function FeesPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -49,6 +184,12 @@ export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeItem | null>(null);
+  const [feesPrivateModeEnabled, setFeesPrivateModeEnabled] = useState(
+    DEFAULT_FINANCE_PRIVACY_SETTINGS.feesPrivateModeEnabled
+  );
+  const [financeAdminControls, setFinanceAdminControls] = useState<FinanceAdminControlsState>(
+    DEFAULT_FINANCE_ADMIN_CONTROLS
+  );
   const [uniformPricing, setUniformPricing] = useState<UniformPricingState>({
     enabled: false,
     setPrice: '',
@@ -60,7 +201,8 @@ export default function FeesPage() {
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const schoolId = profile?.preschoolId || profile?.organizationId;
+  const preschoolId = schoolId;
 
   useEffect(() => {
     const initAuth = async () => {
@@ -76,17 +218,18 @@ export default function FeesPage() {
   }, [router, supabase]);
 
   useEffect(() => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
     fetchFees();
     fetchUniformPricing();
-  }, [preschoolId]);
+    fetchFinancePrivacySettings();
+  }, [schoolId]);
 
   const fetchFees = async () => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
     const { data } = await supabase
       .from('school_settings')
       .select('setting_value')
-      .eq('preschool_id', preschoolId)
+      .eq('preschool_id', schoolId)
       .eq('setting_key', 'fees')
       .single();
 
@@ -102,12 +245,12 @@ export default function FeesPage() {
   };
 
   const fetchUniformPricing = async () => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
 
     const { data, error } = await supabase
       .from('school_fee_structures')
       .select('id, name, description, fee_category, amount_cents, is_active')
-      .eq('preschool_id', preschoolId)
+      .eq('preschool_id', schoolId)
       .eq('fee_category', 'uniform');
 
     if (error) {
@@ -149,15 +292,28 @@ export default function FeesPage() {
     });
   };
 
+  const fetchFinancePrivacySettings = async () => {
+    if (!schoolId) return;
+    try {
+      const settings = await fetchSchoolSettings(supabase, schoolId);
+      const resolved = resolveFinancePrivacyFromSettings(settings);
+      setFeesPrivateModeEnabled(resolved.feesPrivateModeEnabled);
+      setFinanceAdminControls(resolved.financeAdminControls);
+    } catch {
+      setFeesPrivateModeEnabled(DEFAULT_FINANCE_PRIVACY_SETTINGS.feesPrivateModeEnabled);
+      setFinanceAdminControls(DEFAULT_FINANCE_PRIVACY_SETTINGS.financeAdminControls);
+    }
+  };
+
   const handleSaveFees = async () => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
     setSaving(true);
     setMessage(null);
 
     const { error } = await supabase
       .from('school_settings')
       .upsert({
-        preschool_id: preschoolId,
+        preschool_id: schoolId,
         setting_key: 'fees',
         setting_value: JSON.stringify(fees),
         updated_at: new Date().toISOString(),
@@ -173,6 +329,7 @@ export default function FeesPage() {
 
     const uniformSaveResult = await saveUniformPricing();
     const uniformFlagResult = await updateUniformFeatureFlag(uniformPricing.enabled);
+    const financeSettingsResult = await saveFinancePrivacySettings();
     setSaving(false);
 
     if (!uniformSaveResult) {
@@ -185,12 +342,17 @@ export default function FeesPage() {
       return;
     }
 
-    setMessage({ type: 'success', text: 'Fees updated successfully!' });
+    if (!financeSettingsResult) {
+      setMessage({ type: 'error', text: 'Fees saved, but fee privacy/admin controls could not be updated.' });
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Fees, privacy mode, and admin controls updated successfully!' });
     setTimeout(() => setMessage(null), 3000);
   };
 
   const updateUniformFeatureFlag = async (enabled: boolean): Promise<boolean> => {
-    if (!preschoolId) return false;
+    if (!schoolId) return false;
 
     const tables: Array<'preschools' | 'organizations'> = ['preschools', 'organizations'];
     try {
@@ -198,7 +360,7 @@ export default function FeesPage() {
         const { data: row, error } = await supabase
           .from(table)
           .select('id, settings')
-          .eq('id', preschoolId)
+          .eq('id', schoolId)
           .maybeSingle();
 
         if (error || !row) continue;
@@ -223,7 +385,7 @@ export default function FeesPage() {
         const { error: updateError } = await supabase
           .from(table)
           .update({ settings: nextSettings })
-          .eq('id', preschoolId);
+          .eq('id', schoolId);
 
         if (updateError) {
           return false;
@@ -237,13 +399,13 @@ export default function FeesPage() {
   };
 
   const saveUniformPricing = async (): Promise<boolean> => {
-    if (!preschoolId) return false;
+    if (!schoolId) return false;
 
     if (!uniformPricing.enabled) {
       const { error } = await supabase
         .from('school_fee_structures')
         .update({ is_active: false })
-        .eq('preschool_id', preschoolId)
+        .eq('preschool_id', schoolId)
         .eq('fee_category', 'uniform');
 
       return !error;
@@ -261,7 +423,7 @@ export default function FeesPage() {
     const payloads = [
       {
         id: uniformPricing.ids.set,
-        preschool_id: preschoolId,
+        preschool_id: schoolId,
         name: 'Uniform Set',
         description: 'Uniform Set',
         amount_cents: Math.round(setPrice * 100),
@@ -271,7 +433,7 @@ export default function FeesPage() {
       },
       {
         id: uniformPricing.ids.tshirt,
-        preschool_id: preschoolId,
+        preschool_id: schoolId,
         name: 'Uniform T-shirt',
         description: 'Uniform T-shirt',
         amount_cents: Math.round(tshirtPrice * 100),
@@ -281,7 +443,7 @@ export default function FeesPage() {
       },
       {
         id: uniformPricing.ids.shorts,
-        preschool_id: preschoolId,
+        preschool_id: schoolId,
         name: 'Uniform Shorts',
         description: 'Uniform Shorts',
         amount_cents: Math.round(shortsPrice * 100),
@@ -315,6 +477,37 @@ export default function FeesPage() {
     }
 
     return true;
+  };
+
+  const saveFinancePrivacySettings = async (): Promise<boolean> => {
+    if (!schoolId) return false;
+    try {
+      const patch = {
+        features: {
+          financialReports: {
+            hideOnDashboards: feesPrivateModeEnabled,
+            requirePasswordForAccess: feesPrivateModeEnabled,
+            privateModeEnabled: feesPrivateModeEnabled,
+          },
+        },
+        permissions: {
+          financeAdminControls: {
+            canManageFees: financeAdminControls.canManageFees,
+            canManageStudentProfile: financeAdminControls.canManageStudentProfile,
+            canDeleteFees: financeAdminControls.canDeleteFees,
+          },
+        },
+        finance_permissions: {
+          admin_can_manage_fees: financeAdminControls.canManageFees,
+          admin_can_manage_student_profile: financeAdminControls.canManageStudentProfile,
+          admin_can_delete_fees: financeAdminControls.canDeleteFees,
+        },
+      };
+      await updateSchoolSettings(supabase, schoolId, patch);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const handleAddFee = (fee: FeeItem) => {
@@ -509,6 +702,70 @@ export default function FeesPage() {
                 step="0.01"
                 disabled={!uniformPricing.enabled}
               />
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 16 }}>
+            <h3 style={{ margin: 0 }}>Fee Privacy & Admin Controls</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
+              Match mobile policy controls: private fee mode and principal-scoped admin finance rights.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gap: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={feesPrivateModeEnabled}
+                onChange={(e) => setFeesPrivateModeEnabled(e.target.checked)}
+              />
+              Enable private fees mode (hide fee widgets on dashboards)
+            </label>
+
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', marginBottom: 10 }}>
+                Admin finance controls
+              </div>
+
+              <div style={{ display: 'grid', gap: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={financeAdminControls.canManageFees}
+                    onChange={(e) =>
+                      setFinanceAdminControls((prev) => ({ ...prev, canManageFees: e.target.checked }))
+                    }
+                  />
+                  Admins can mark/waive/adjust fees
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={financeAdminControls.canManageStudentProfile}
+                    onChange={(e) =>
+                      setFinanceAdminControls((prev) => ({
+                        ...prev,
+                        canManageStudentProfile: e.target.checked,
+                      }))
+                    }
+                  />
+                  Admins can change class/start date/lifecycle
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={financeAdminControls.canDeleteFees}
+                    onChange={(e) =>
+                      setFinanceAdminControls((prev) => ({ ...prev, canDeleteFees: e.target.checked }))
+                    }
+                  />
+                  Admins can delete fee rows
+                </label>
+              </div>
             </div>
           </div>
         </div>

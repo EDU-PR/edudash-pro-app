@@ -103,8 +103,8 @@ const getDaysUntil = (date: Date): number => {
 export class BirthdayPlannerService {
   private static prefsTableState: 'unknown' | 'available' | 'missing' = 'unknown';
   private static prefsTableStateHydration: Promise<void> | null = null;
-  private static readonly PREFS_TABLE_STATE_CACHE_KEY = '@birthday_prefs_table_state_v1';
-  private static readonly PREFS_TABLE_STATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  private static readonly PREFS_TABLE_STATE_CACHE_KEY = '@birthday_prefs_table_state_v2';
+  private static readonly PREFS_TABLE_STATE_CACHE_TTL_MS = 60 * 60 * 1000;
 
   private static async ensurePrefsTableStateLoaded(): Promise<void> {
     if (this.prefsTableStateHydration) {

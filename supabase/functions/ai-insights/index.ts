@@ -16,6 +16,23 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 const ANTHROPIC_API_KEY=REDACTED
 
+function extractBearerToken(authHeader: string | null): string {
+  const raw = String(authHeader || '').trim();
+  if (!raw) return '';
+  return raw.startsWith('Bearer ') ? raw.slice(7).trim() : raw;
+}
+
+function getJwtRole(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return typeof payload?.role === 'string' ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
 function getDefaultModelForTier(tier: string | null | undefined): string {
   const t = String(tier ?? 'free').toLowerCase();
   if (t.includes('enterprise') || t === 'superadmin' || t === 'super_admin') return 'claude-sonnet-4-20250514';
@@ -34,25 +51,44 @@ serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    const token = extractBearerToken(authHeader);
+    if (!token) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY!);
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
+    const tokenRole = getJwtRole(token);
+    const isServiceRoleToken =
+      token === SUPABASE_SERVICE_ROLE_KEY || tokenRole === 'service_role';
+
+    let user: { id: string } | null = null;
+    if (!isServiceRoleToken) {
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authData?.user) {
+        return new Response(JSON.stringify({ error: 'Invalid session' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      user = { id: authData.user.id };
+    }
+
+    if (!isServiceRoleToken && !user?.id) {
       return new Response(JSON.stringify({ error: 'Invalid session' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const body = await req.json();
-    const { scope, period_days = 14, context, model: bodyModel } = body;
+    const { scope, period_days = 14, context, model: bodyModel, user_id: bodyUserId } = body;
+    const actingUserId = user?.id || (typeof bodyUserId === 'string' && bodyUserId.trim().length > 0 ? bodyUserId.trim() : null);
 
-    const { data: tier } = await supabase.rpc('get_user_subscription_tier', { user_id: user.id });
+    let tier: string | null = null;
+    if (actingUserId) {
+      const { data } = await supabase.rpc('get_user_subscription_tier', { user_id: actingUserId });
+      tier = data || null;
+    }
     const model = bodyModel || getDefaultModelForTier(tier);
 
     if (!scope || !['teacher', 'principal', 'parent'].includes(scope)) {
@@ -62,27 +98,37 @@ serve(async (req: Request) => {
     }
 
     // Get user profile for context
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, preschool_id, organization_id, first_name')
-      .eq('id', user.id)
-      .maybeSingle();
+    let profile: { role?: string | null; preschool_id?: string | null; organization_id?: string | null; first_name?: string | null } | null = null;
+    if (actingUserId) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role, preschool_id, organization_id, first_name')
+        .eq('id', actingUserId)
+        .maybeSingle();
+      profile = data as typeof profile;
+    }
 
-    const orgId = profile?.preschool_id || profile?.organization_id;
+    const orgId = profile?.preschool_id || profile?.organization_id || context?.organization_id || context?.preschool_id || null;
 
     // Gather data for insights
     const now = new Date();
     const periodStart = new Date(now.getTime() - period_days * 24 * 60 * 60 * 1000).toISOString();
 
     // Get usage stats
-    const { count: aiRequestCount } = await supabase
-      .from('ai_request_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', periodStart);
+    let aiRequestCount = 0;
+    if (actingUserId) {
+      const { count } = await supabase
+        .from('ai_request_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', actingUserId)
+        .gte('created_at', periodStart);
+      aiRequestCount = Number(count || 0);
+    }
 
     const contextStr = context ? JSON.stringify(context) : '';
-    const dataContext = `User role: ${scope}, AI requests in last ${period_days} days: ${aiRequestCount || 0}. ${contextStr}`;
+    const identityContext = actingUserId ? `user_id: ${actingUserId}` : 'service_role_call: true';
+    const tenantContext = orgId ? `organization_id: ${orgId}` : '';
+    const dataContext = `User role: ${scope}, AI requests in last ${period_days} days: ${aiRequestCount || 0}. ${identityContext}. ${tenantContext}. ${contextStr}`;
 
     if (!ANTHROPIC_API_KEY) {
       // Return static insights when AI not configured

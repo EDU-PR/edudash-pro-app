@@ -119,7 +119,7 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
       const supabase = assertSupabase();
       const { data, error } = await supabase
         .from('student_fees')
-        .select('*, fee_structures(name, fee_type, description)')
+        .select('*, billing_month, fee_structures(name, fee_type, description)')
         .eq('student_id', studentId)
         .order('due_date', { ascending: false });
 
@@ -136,7 +136,7 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
 
         const { data: refreshed } = await supabase
           .from('student_fees')
-          .select('*, fee_structures(name, fee_type, description)')
+          .select('*, billing_month, fee_structures(name, fee_type, description)')
           .eq('student_id', studentId)
           .order('due_date', { ascending: false });
 
@@ -251,8 +251,11 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
     if (!activeMonthIso || source !== 'receivables') return displayFees;
     const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
     return displayFees.filter((fee) => {
-      if (!fee.due_date) return false;
-      const month = getMonthStartISO(fee.due_date, { recoverUtcMonthBoundary: true });
+      const month = fee.billing_month
+        ? getMonthStartISO(fee.billing_month, { recoverUtcMonthBoundary: true })
+        : fee.due_date
+          ? getMonthStartISO(fee.due_date, { recoverUtcMonthBoundary: true })
+          : null;
       if (month !== activeMonthIso) return false;
       return unpaidStatuses.has(String(fee.status || '').toLowerCase());
     });

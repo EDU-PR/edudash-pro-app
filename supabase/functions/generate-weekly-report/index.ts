@@ -125,7 +125,7 @@ Generate warm, encouraging, and specific reports. Return ONLY a JSON object (no 
 
 Generate the report JSON now:`
 
-    const modelName = Deno.env.get('ANTHROPIC_MODEL') || 'claude-sonnet-4-20250514';
+    const modelName = Deno.env.get('ANTHROPIC_MODEL') || 'claude-3-5-haiku-20241022';
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

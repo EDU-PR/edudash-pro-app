@@ -19,7 +19,7 @@ export default function STEMProgramsPage() {
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
 
   useEffect(() => {
     const initAuth = async () => {

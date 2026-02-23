@@ -32,7 +32,7 @@ export default function InviteTeacherPage() {
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const inviterDisplayName = profile
     ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'A principal'
     : 'A principal';

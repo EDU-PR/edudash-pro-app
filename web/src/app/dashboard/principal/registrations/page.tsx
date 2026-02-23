@@ -74,7 +74,7 @@ export default function PrincipalRegistrationsPage() {
   
   const [userId, setUserId] = useState<string>();
   const { profile } = useUserProfile(userId);
-  const preschoolId = profile?.preschoolId;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const organizationId = profile?.organizationId;
   
   // Check if this school uses EduSite sync (exclude EduDash Pro schools)
