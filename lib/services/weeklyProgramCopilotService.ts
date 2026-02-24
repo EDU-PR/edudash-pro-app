@@ -1554,7 +1554,18 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     routineRequirements.push('Include a toilet or bathroom routine support moment each day.');
   }
   if (constraints.includeNapTime) {
-    routineRequirements.push('Include a nap or quiet-rest block suitable for the age group.');
+    const ageGroup = String(input.ageGroup || '').trim();
+    const maxAgeMatch = ageGroup.match(/(\d+)[-–](\d+)/);
+    const maxAge = maxAgeMatch ? Math.max(Number(maxAgeMatch[1]), Number(maxAgeMatch[2])) : 4;
+    if (maxAge <= 3) {
+      routineRequirements.push(
+        'Include a dedicated nap block (45–90 min) after lunch; 1–3 year olds need regular sleep.',
+      );
+    } else {
+      routineRequirements.push(
+        'Include a rest or quiet-time block after lunch; 4–6 year olds may nap or do quiet activities (20–45 min).',
+      );
+    }
   }
   if (constraints.includeMealBlocks) {
     routineRequirements.push('Include practical meal/snack windows every day.');
@@ -1620,6 +1631,8 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     '- Midday: Lunch break',
     '- After lunch: Story time / creative arts / quiet activity (this section is MANDATORY and must not be omitted)',
     '- Afternoon close (≥13:30): Reflection, pack-up, and dismissal preparation',
+    'CRITICAL - CONSISTENCY: Use the SAME time slots and block sequence for Monday through Friday. The ONLY variation across days should be learning block titles and activity focus (e.g., Literacy Monday, Mathematics Tuesday). Do NOT change block types, start/end times, or block order between days. Thursday and Friday must mirror Monday–Wednesday structure.',
+    'LESSON ALIGNMENT: Learning blocks must use consistent time windows (e.g., 08:30–09:30, 11:00–12:00) across all weekdays so teachers can schedule lessons into them. Keep learning blocks 30–60 minutes. Use block_type "learning" for lesson-schedulable blocks.',
     'MANDATORY: Include ALL five weekdays (Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5). No exceptions. Every day must have 6-10 blocks. Never omit a weekday.',
     'Keep output token-safe:',
     '- Monday-Friday only (day_of_week 1..5).',

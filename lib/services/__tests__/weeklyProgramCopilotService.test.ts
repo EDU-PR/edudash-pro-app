@@ -1,7 +1,19 @@
 const mockInvoke = jest.fn();
 
+const createMockQueryChain = () => {
+  const chain = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    gte: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+  };
+  return chain;
+};
+
 jest.mock('@/lib/supabase', () => ({
   assertSupabase: () => ({
+    from: jest.fn(() => createMockQueryChain()),
     functions: {
       invoke: mockInvoke,
     },
