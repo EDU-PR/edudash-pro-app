@@ -187,8 +187,8 @@ async function sendFCMDataMessage(
     tokenPrefix: fcmToken.substring(0, 20) + '...',
   });
 
-  try {
-    const response = await fetch(url, {
+  const attemptSend = async (): Promise<Response> =>
+    await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -196,6 +196,17 @@ async function sendFCMDataMessage(
       },
       body: JSON.stringify(message),
     });
+
+  try {
+    let response = await attemptSend();
+    if (!response.ok && response.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      response = await attemptSend();
+    }
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      response = await attemptSend();
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -314,7 +325,10 @@ Deno.serve(async (req: Request) => {
     );
 
     if (deviceError || allTokens.length === 0) {
-      console.warn('[SendFCMCall] No active Android FCM tokens for user:', body.callee_user_id);
+      console.warn('[SendFCMCall] No active Android FCM tokens for user:', {
+        callee_user_id: body.callee_user_id,
+        device_error: deviceError ? String(deviceError.message || deviceError) : null,
+      });
       return new Response(
         JSON.stringify(
           structuredFailure(

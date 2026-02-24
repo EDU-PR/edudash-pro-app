@@ -804,8 +804,29 @@ export function InviteContactModal({
             padding: '16px 24px',
             borderTop: '1px solid rgba(255, 255, 255, 0.08)',
             background: 'rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            alignItems: 'stretch',
           }}
         >
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              padding: '12px 20px',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              border: 'none',
+              borderRadius: 12,
+              fontSize: 15,
+              fontWeight: 600,
+              color: 'white',
+              cursor: 'pointer',
+            }}
+          >
+            Done
+          </button>
           <p
             style={{
               margin: 0,

@@ -450,11 +450,14 @@ function deduplicateNotifications(notifications: Notification[]): Notification[]
   const seen = new Map<string, Notification>();
   
   for (const notif of notifications) {
-    // Create a key based on type and title/body within a 5-minute window
-    const timeWindow = Math.floor(new Date(notif.created_at).getTime() / (5 * 60 * 1000));
-    const key = `${notif.type}-${notif.title.substring(0, 30)}-${timeWindow}`;
-    
-    // Keep the one with more data or the first one seen
+    // Dedup by title+body content within a 10-minute window, ignoring type so that
+    // the same notification arriving from multiple source tables (in_app_notifications,
+    // push_notifications, notifications) is collapsed into one entry.
+    const timeWindow = Math.floor(new Date(notif.created_at).getTime() / (10 * 60 * 1000));
+    const titleKey = notif.title.trim().substring(0, 40).toLowerCase();
+    const bodyKey = notif.body.trim().substring(0, 40).toLowerCase();
+    const key = `${titleKey}|${bodyKey}|${timeWindow}`;
+
     if (!seen.has(key)) {
       seen.set(key, notif);
     }

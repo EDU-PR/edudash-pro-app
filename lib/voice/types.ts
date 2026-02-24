@@ -29,6 +29,7 @@ export interface TTSRequest {
 
 export interface TTSResponse {
   audio_url: string;
+  audio_blob_url?: string;
   cache_hit: boolean;
   provider: 'azure' | 'google' | 'openai';
   content_hash: string;

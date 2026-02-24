@@ -13,12 +13,14 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
-  FlatList,
   Text,
+  TouchableOpacity,
   StyleSheet,
   RefreshControl,
   Linking,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -55,6 +57,7 @@ export default function NotificationsScreen() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const role = profile?.role;
   const isParent = role === 'parent';
   const isTeacher = role === 'teacher';
@@ -82,7 +85,45 @@ export default function NotificationsScreen() {
     await refetch();
     setRefreshing(false);
   };
-  
+
+  // ── Multi-select ──────────────────────────────────────────────────────────
+  const handleLongPressSelect = useCallback((notification: Notification) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(notification.id)) {
+        next.delete(notification.id);
+      } else {
+        next.add(notification.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCancelSelect = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(notifications.map((n) => n.id)));
+  }, [notifications]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (!user?.id || selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    for (const id of ids) {
+      await markNotificationRead(user.id, id);
+    }
+    await addToClearedNotifications(user.id, ids);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+  }, [user?.id, selectedIds, queryClient]);
+
+  // ── Swipe-to-dismiss ──────────────────────────────────────────────────────
+  const handleDismiss = useCallback(async (notification: Notification) => {
+    if (!user?.id) return;
+    await markNotificationRead(user.id, notification.id);
+    await addToClearedNotifications(user.id, [notification.id]);
+    queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+  }, [user?.id, queryClient]);
+
   // Mark a single notification as read
   const handleMarkRead = useCallback(async (notificationId: string) => {
     if (!user?.id) return;
@@ -498,16 +539,38 @@ export default function NotificationsScreen() {
     );
   }
   
+  const isSelectMode = selectedIds.size > 0;
+
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
-      <NotificationHeader 
-        title={t('notifications.title', { defaultValue: 'Notifications' })}
-        subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
-        rightAction={{
-          icon: 'ellipsis-vertical',
-          onPress: () => setMenuVisible(true),
-        }}
-      />
+      {isSelectMode ? (
+        <View style={[styles.selectHeader, { backgroundColor: theme.primary, paddingTop: insets.top + 4 }]}>
+          <TouchableOpacity onPress={handleCancelSelect} style={styles.selectHeaderBtn}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.selectHeaderTitle}>
+            {selectedIds.size} selected
+          </Text>
+          <View style={styles.selectHeaderActions}>
+            <TouchableOpacity onPress={handleSelectAll} style={styles.selectHeaderBtn}>
+              <Text style={styles.selectHeaderAction}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDeleteSelected} style={styles.selectHeaderBtn}>
+              <Ionicons name="trash-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <NotificationHeader 
+          title={t('notifications.title', { defaultValue: 'Notifications' })}
+          subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
+          rightAction={{
+            icon: 'ellipsis-vertical',
+            onPress: () => setMenuVisible(true),
+          }}
+        />
+      )}
       
       <NotificationMenu
         visible={menuVisible}
@@ -518,16 +581,20 @@ export default function NotificationsScreen() {
         onClearAll={handleClearAll}
       />
       
-      <FlatList
+      <FlashList
         data={notifications}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={90}
         renderItem={({ item }) => (
           <NotificationItem
             notification={item}
-            onPress={() => handleNotificationPress(item)}
+            onPress={isSelectMode ? () => handleLongPressSelect(item) : () => handleNotificationPress(item)}
             onMarkRead={() => handleMarkRead(item.id)}
-            onReply={item.type === 'message' || item.type === 'call' ? handleReply : undefined}
-            onMute={item.type === 'message' || item.type === 'announcement' ? handleMute : undefined}
+            onReply={!isSelectMode && (item.type === 'message' || item.type === 'call') ? handleReply : undefined}
+            onMute={!isSelectMode && (item.type === 'message' || item.type === 'announcement') ? handleMute : undefined}
+            selected={isSelectMode ? selectedIds.has(item.id) : undefined}
+            onLongPressSelect={handleLongPressSelect}
+            onDismiss={!isSelectMode ? handleDismiss : undefined}
           />
         )}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
@@ -542,12 +609,40 @@ export default function NotificationsScreen() {
         }
       />
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  selectHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  selectHeaderTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  selectHeaderBtn: {
+    padding: 6,
+  },
+  selectHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  selectHeaderAction: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loadingContainer: {
     padding: 16,

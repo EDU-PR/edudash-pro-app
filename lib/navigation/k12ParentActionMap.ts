@@ -26,6 +26,7 @@ export type K12ParentActionId =
   | 'documents'
   | 'homework'
   | 'weekly_report'
+  | 'daily_program'
   | 'settings'
   | 'see_all_activity'
   | 'see_all_events'
@@ -120,6 +121,10 @@ export const K12_PARENT_ACTIONS: Record<K12ParentActionId, K12ParentActionConfig
   weekly_report: {
     route: '/screens/parent-weekly-report',
     label: 'Weekly Report',
+  },
+  daily_program: {
+    route: '/screens/parent-daily-program',
+    label: 'Daily Routine',
   },
   settings: {
     route: '/screens/settings',

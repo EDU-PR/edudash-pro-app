@@ -20,7 +20,7 @@ import { createStyles } from '@/features/teacher-post-activity/teacher-post-acti
 
 export default function TeacherPostActivityScreen() {
   const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(), []);
   const { showAlert, AlertModalComponent } = useAlertModal();
 
   const {

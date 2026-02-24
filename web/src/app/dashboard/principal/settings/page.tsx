@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { Settings, User, Lock, Bell, Globe, CreditCard, FileText, Activity } from 'lucide-react';
+import { Settings, User, Lock, Bell, Globe, CreditCard, FileText, Activity, MessageCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -69,6 +69,13 @@ export default function SettingsPage() {
       icon: Activity,
       onClick: () => router.push('/dashboard/principal/settings/learner-lifecycle'),
       color: '#ef4444',
+    },
+    {
+      label: 'Messaging & Groups',
+      description: 'Auto-add teachers as admins when they create class groups',
+      icon: MessageCircle,
+      onClick: () => router.push('/dashboard/principal/settings/messaging-groups'),
+      color: '#06b6d4',
     },
   ];
 

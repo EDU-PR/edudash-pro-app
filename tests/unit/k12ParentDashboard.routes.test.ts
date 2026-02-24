@@ -38,6 +38,7 @@ const KNOWN_VALID_ROUTES = new Set([
   '/screens/settings',
   '/screens/parent-activity-feed',
   '/screens/calendar',
+  '/screens/parent-daily-program',
 ]);
 
 /** Routes that must NOT appear in the action map (they don't exist). */
@@ -74,6 +75,7 @@ describe('K12 Parent Action Map', () => {
       'event_detail',
       'school_communication',
       'child_detail',
+      'daily_program',
     ];
     expectedIds.forEach((id) => {
       expect(K12_PARENT_ACTIONS).toHaveProperty(id);

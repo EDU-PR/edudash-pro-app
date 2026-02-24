@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, RefreshControl, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, RefreshControl, Modal, Platform } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useTeacherLessons, TeacherLesson } from '@/hooks/useTeacherLessons';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterStatus = 'all' | 'active' | 'draft' | 'mine';
@@ -29,6 +30,8 @@ export default function TeacherLessonsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState<TeacherLesson | null>(null);
+  const { showAlert, AlertModalComponent } = useAlertModal();
 
   const {
     lessons,
@@ -90,99 +93,48 @@ export default function TeacherLessonsScreen() {
     const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
     
     if (!isOwner && !isPrincipal) {
-      Alert.alert('Permission Denied', 'You can only delete lessons you created.');
+      showAlert({ title: 'Permission Denied', message: 'You can only delete lessons you created.', type: 'error' });
       return;
     }
 
-    Alert.alert(
-      'Delete Lesson',
-      `Are you sure you want to delete "${lesson.title}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showAlert({
+      title: 'Delete Lesson',
+      message: `Are you sure you want to delete "${lesson.title}"? This action cannot be undone.`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel' },
         {
           text: 'Delete',
-          style: 'destructive',
           onPress: async () => {
             try {
               const supabase = (await import('@/lib/supabase')).assertSupabase();
-              
-              // Delete any related activities first
               await supabase.from('lesson_activities').delete().eq('lesson_id', lesson.id);
-              
-              // Delete the lesson
               const { error } = await supabase.from('lessons').delete().eq('id', lesson.id);
-              
               if (error) throw error;
-              
-              Alert.alert('Success', 'Lesson deleted successfully');
+              showAlert({ title: 'Deleted', message: 'Lesson deleted successfully.', type: 'success' });
               refetch();
-            } catch (error) {
-              console.error('[TeacherLessons] Delete error:', error);
-              Alert.alert('Error', 'Failed to delete lesson');
+            } catch (err) {
+              console.error('[TeacherLessons] Delete error:', err);
+              showAlert({ title: 'Error', message: 'Failed to delete lesson.', type: 'error' });
             }
           },
         },
-      ]
-    );
-  }, [teacherId, profile, refetch]);
+      ],
+    });
+  }, [teacherId, profile, refetch, showAlert]);
 
+  // Opens the branded lesson action sheet for a given lesson
   const handleLessonPress = useCallback((lesson: TeacherLesson) => {
-    const isOwner = lesson.teacher_id === teacherId;
-    const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
-    const canEditDelete = isOwner || isPrincipal;
+    setSelectedLesson(lesson);
+  }, []);
 
-    // Build action options
-    const actions: any[] = [
-      {
-        text: 'View Lesson',
-        onPress: () => router.push({
-          pathname: '/screens/lesson-viewer',
-          params: { lessonId: lesson.id },
-        }),
-      },
-      {
-        text: 'Assign to Students',
-        onPress: () => router.push({
-          pathname: '/screens/assign-lesson',
-          params: { lessonId: lesson.id },
-        }),
-      },
-    ];
-
-    // Add edit option if user can edit
-    if (canEditDelete) {
-      actions.push({
-        text: '✏️ Edit Lesson',
-        onPress: () => router.push({
-          pathname: '/screens/lesson-edit',
-          params: { lessonId: lesson.id },
-        }),
-      });
-    }
-
-    // Add delete option if user can delete
-    if (canEditDelete) {
-      actions.push({
-        text: '🗑️ Delete Lesson',
-        style: 'destructive',
-        onPress: () => handleDeleteLesson(lesson),
-      });
-    }
-
-    actions.push({ text: 'Cancel', style: 'cancel' });
-
-    // Show action sheet
-    Alert.alert(
-      lesson.title,
-      `${lesson.subject} • ${lesson.duration_minutes || 30} min`,
-      actions
-    );
-  }, [teacherId, profile, handleDeleteLesson]);
+  const handleCloseLessonModal = useCallback(() => setSelectedLesson(null), []);
 
   const handleAssignLesson = useCallback((lesson: TeacherLesson) => {
+    setSelectedLesson(null);
     router.push({
       pathname: '/screens/assign-lesson',
-      params: { lessonId: lesson.id },
+      params: { lessonId: lesson.id, deliveryMode: 'class_activity' },
     });
   }, []);
 
@@ -299,10 +251,10 @@ export default function TeacherLessonsScreen() {
 
         <TouchableOpacity
           style={styles.assignButton}
-          onPress={() => handleAssignLesson(item)}
+          onPress={() => handleLessonPress(item)}
         >
-          <Ionicons name="send" size={16} color="#fff" />
-          <Text style={styles.assignButtonText}>Assign</Text>
+          <Ionicons name="ellipsis-horizontal" size={16} color="#fff" />
+          <Text style={styles.assignButtonText}>Deliver</Text>
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -400,7 +352,265 @@ export default function TeacherLessonsScreen() {
           estimatedItemSize={80}
         />
       )}
+
+      {/* Lesson delivery action sheet */}
+      <LessonActionModal
+        lesson={selectedLesson}
+        theme={theme}
+        teacherId={teacherId}
+        profile={profile}
+        onClose={handleCloseLessonModal}
+        onDelete={handleDeleteLesson}
+        showAlert={showAlert}
+      />
+      <AlertModalComponent />
     </SafeAreaView>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lesson delivery action modal — replaces native Alert.alert action sheet
+// ─────────────────────────────────────────────────────────────────────────────
+interface LessonActionModalProps {
+  lesson: TeacherLesson | null;
+  theme: any;
+  teacherId: string | undefined;
+  profile: any;
+  onClose: () => void;
+  onDelete: (lesson: TeacherLesson) => void;
+  showAlert: (config: any) => void;
+}
+
+function LessonActionModal({
+  lesson,
+  theme,
+  teacherId,
+  profile,
+  onClose,
+  onDelete,
+  showAlert: _showAlert,
+}: LessonActionModalProps) {
+  if (!lesson) return null;
+
+  const isOwner = lesson.teacher_id === teacherId;
+  const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
+  const canEditDelete = isOwner || isPrincipal;
+
+  const ACTION_ROWS: Array<{
+    icon: string;
+    color: string;
+    label: string;
+    sublabel: string;
+    onPress: () => void;
+    destructive?: boolean;
+  }> = [
+    {
+      icon: 'calendar',
+      color: '#5A409D',
+      label: 'Add to Today\'s Class',
+      sublabel: 'Schedule for your class — parents are notified',
+      onPress: () => {
+        onClose();
+        router.push({
+          pathname: '/screens/assign-lesson',
+          params: { lessonId: lesson.id, deliveryMode: 'class_activity' },
+        });
+      },
+    },
+    {
+      icon: 'game-controller',
+      color: '#10B981',
+      label: 'Assign Playground Activity',
+      sublabel: 'Assign a digital activity students do on Dash',
+      onPress: () => {
+        onClose();
+        router.push({
+          pathname: '/screens/assign-lesson',
+          params: { lessonId: lesson.id, deliveryMode: 'playground', mode: 'activity-only' },
+        });
+      },
+    },
+    {
+      icon: 'home',
+      color: '#F59E0B',
+      label: 'Send Take-Home Activity',
+      sublabel: 'Parent-guided reinforcement at home',
+      onPress: () => {
+        onClose();
+        router.push({
+          pathname: '/screens/assign-lesson',
+          params: { lessonId: lesson.id, deliveryMode: 'take_home' },
+        });
+      },
+    },
+    {
+      icon: 'analytics',
+      color: '#3B82F6',
+      label: 'View Class Insights',
+      sublabel: 'Track scores, stars, and completion time',
+      onPress: () => {
+        onClose();
+        router.push('/screens/teacher-class-insights');
+      },
+    },
+    {
+      icon: 'eye',
+      color: theme.primary,
+      label: 'View Lesson Plan',
+      sublabel: 'Open the full lesson plan',
+      onPress: () => {
+        onClose();
+        router.push({
+          pathname: '/screens/lesson-viewer',
+          params: { lessonId: lesson.id },
+        });
+      },
+    },
+  ];
+
+  if (canEditDelete) {
+    ACTION_ROWS.push({
+      icon: 'pencil',
+      color: theme.textSecondary,
+      label: 'Edit Lesson',
+      sublabel: 'Update lesson content',
+      onPress: () => {
+        onClose();
+        router.push({
+          pathname: '/screens/lesson-edit',
+          params: { lessonId: lesson.id },
+        });
+      },
+    });
+    ACTION_ROWS.push({
+      icon: 'trash',
+      color: '#EF4444',
+      label: 'Delete Lesson',
+      sublabel: 'Permanently remove this lesson',
+      destructive: true,
+      onPress: () => {
+        onClose();
+        onDelete(lesson);
+      },
+    });
+  }
+
+  const s = StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingBottom: 32,
+      overflow: 'hidden',
+    },
+    handle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.border,
+      alignSelf: 'center',
+      marginTop: 12,
+      marginBottom: 8,
+    },
+    titleBlock: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+      marginBottom: 8,
+    },
+    sheetTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    sheetSubtitle: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      gap: 14,
+    },
+    iconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowLabel: {
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    rowSublabel: {
+      fontSize: 12,
+      marginTop: 1,
+    },
+    cancelRow: {
+      marginTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      paddingTop: 8,
+    },
+  });
+
+  return (
+    <Modal
+      visible={!!lesson}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <View style={s.sheet}>
+            <View style={s.handle} />
+            <View style={s.titleBlock}>
+              <Text style={s.sheetTitle} numberOfLines={1}>{lesson.title}</Text>
+              <Text style={s.sheetSubtitle}>
+                {lesson.subject} · {lesson.duration_minutes || 30} min · {lesson.age_group || '3-6 yrs'}
+              </Text>
+            </View>
+
+            {ACTION_ROWS.map((row) => (
+              <TouchableOpacity
+                key={row.label}
+                style={s.row}
+                onPress={row.onPress}
+                activeOpacity={0.7}
+              >
+                <View style={[s.iconCircle, { backgroundColor: row.color + '20' }]}>
+                  <Ionicons name={row.icon as any} size={20} color={row.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.rowLabel, { color: row.destructive ? '#EF4444' : theme.text }]}>
+                    {row.label}
+                  </Text>
+                  <Text style={[s.rowSublabel, { color: theme.textSecondary }]}>
+                    {row.sublabel}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity style={[s.row, s.cancelRow]} onPress={onClose} activeOpacity={0.7}>
+              <Text style={[s.rowLabel, { color: theme.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 

@@ -372,8 +372,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 4,
-    paddingHorizontal: 4,
+    marginVertical: 2,
+    paddingHorizontal: 2,
     width: '100%',
     maxWidth: '100%',
   },
@@ -396,20 +396,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   pressableBubble: {
-    maxWidth: '84%',
+    maxWidth: '88%',
     flexShrink: 1,
   },
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 6,
+    gap: 3,
     width: '100%',
   },
   bubbleRowOwn: {
     justifyContent: 'flex-end',
+    paddingRight: 2,
   },
   bubbleRowOther: {
     justifyContent: 'flex-start',
+    paddingLeft: 2,
   },
   senderAvatar: {
     width: 28,
@@ -420,8 +422,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148, 163, 184, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    marginRight: 3,
     marginBottom: 2,
+    flexShrink: 0,
   },
   senderAvatarText: {
     fontSize: 11,
@@ -434,7 +437,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   senderAvatarSpacer: {
-    width: 34,
+    width: 31,
   },
   voiceBubbleWrapper: {
     maxWidth: '84%',
@@ -443,8 +446,8 @@ const styles = StyleSheet.create({
   name: { 
     fontSize: 12, 
     fontWeight: '600', 
-    marginBottom: 6, 
-    marginLeft: 16,
+    marginBottom: 4, 
+    marginLeft: 8,
     color: '#a78bfa',
   },
   bubble: { 

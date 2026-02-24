@@ -18,6 +18,18 @@ export const wantsLessonGenerator = (text: string, assistantText?: string): bool
   return false;
 };
 
+/** Filters out JSON-like or internal strings that should not be shown as follow-up chips. */
+export const isValidFollowUp = (s: string): boolean => {
+  if (!s || s.length < 6) return false;
+  const lower = s.toLowerCase().trim();
+  // Exclude JSON keys, object fragments, or internal structure
+  if (/^["']?\s*(type|prompt|word|hint|language|hide_word_reveal)\s*["']?\s*:/.test(lower)) return false;
+  if (/^["']?\s*[\{\[]\s*["']?/.test(lower) || /["']?\s*[\}\]]\s*["']?$/.test(lower)) return false;
+  if (/\{\s*"type"\s*:\s*"(spelling_practice|column_addition|quiz_question)"/.test(lower)) return false;
+  if (/^"?prompt"?$/i.test(lower) || /^"?prompt"\s*:\s*"?/i.test(lower)) return false;
+  return true;
+};
+
 export const extractFollowUps = (text: string): string[] => {
   try {
     const raw = String(text || '').trim();
@@ -29,14 +41,14 @@ export const extractFollowUps = (text: string): string[] => {
         .replace(/\s+/g, ' ')
         .trim();
     const dedupe = (items: string[]) =>
-      Array.from(new Set(items.map(cleaned).filter((item) => item.length >= 6))).slice(0, 6);
+      Array.from(new Set(items.map(cleaned).filter(isValidFollowUp))).slice(0, 6);
 
     const jsonArrayMatch = raw.match(/\[[\s\S]*\]/);
     if (jsonArrayMatch?.[0]) {
       try {
         const parsed = JSON.parse(jsonArrayMatch[0]);
         if (Array.isArray(parsed)) {
-          const mapped = parsed.map((entry) => String(entry || ''));
+          const mapped = parsed.map((entry) => String(entry || '')).filter(isValidFollowUp);
           const normalized = dedupe(mapped);
           if (normalized.length > 0) return normalized;
         }
@@ -53,23 +65,26 @@ export const extractFollowUps = (text: string): string[] => {
 
       const userMatch = line.match(/^\s*User:\s*(.+)$/i);
       if (userMatch?.[1]) {
-        results.push(userMatch[1]);
+        const v = cleaned(userMatch[1]);
+        if (isValidFollowUp(v)) results.push(v);
         continue;
       }
 
       const numberedMatch = line.match(/^\s*\d{1,2}[\)\.\-:]\s+(.+)$/);
       if (numberedMatch?.[1]) {
-        results.push(numberedMatch[1]);
+        const v = cleaned(numberedMatch[1]);
+        if (isValidFollowUp(v)) results.push(v);
         continue;
       }
 
       const bulletMatch = line.match(/^\s*[-*•]\s+(.+)$/);
       if (bulletMatch?.[1]) {
-        results.push(bulletMatch[1]);
+        const v = cleaned(bulletMatch[1]);
+        if (isValidFollowUp(v)) results.push(v);
         continue;
       }
 
-      if (line.includes('?')) {
+      if (line.includes('?') && isValidFollowUp(cleaned(line))) {
         results.push(line);
       }
     }
@@ -118,6 +133,10 @@ export const buildDashContextOverride = (params: {
         '- Include repetition across activities to reinforce mastery, especially for foundational skills.',
         '- Prefer practical at-home tasks with everyday materials before digital-only suggestions.',
         '- For each activity include: Objective, Duration, Materials, Steps, and a quick Success Check.',
+        '- For slower learners, keep each task to one concept at a time and avoid multi-step overload.',
+        '- Use a confidence ladder: easy warm-up -> guided practice -> independent try.',
+        '- Provide remediation loops: if incorrect, retry with simpler hint, then worked example, then retry.',
+        '- Keep response chunks short and clear (2-4 lines per step) with supportive language.',
         '- Include 1 remediation option and 1 stretch/challenge option for differentiation.',
         '- Keep parent instructions actionable so they can run the activity without teacher support.',
       ].join('\n')
@@ -158,10 +177,15 @@ export const buildDashContextOverride = (params: {
     '  • Prefer Mermaid blocks: ```mermaid ... ```',
     '  • For numeric comparisons, provide a markdown table or chart-friendly list',
     '  • NEVER output placeholders like [DIAGRAM], [CHART], or [GRAPH]',
-    '- For step-by-step column addition/subtraction visuals, output:',
+    '- For step-by-step column ADDITION visuals only, output:',
     '  • ```column {"type":"column_addition","question":"...","addends":[975,155]} ```',
+    '- NEVER use column blocks for division problems. If the question asks to divide, share equally, or find "how many in each group", use a quiz block or written explanation instead — addends are for addition only.',
     '- For interactive spelling practice, output:',
-    '  • ```spelling {"type":"spelling_practice","word":"because","prompt":"Spell the word because","hint":"Use it in a sentence"} ```',
+    '  • ```spelling {"type":"spelling_practice","word":"because","prompt":"Spell the hidden word","hint":"Use it in a sentence","language":"en","hide_word_reveal":true} ```',
+    '- In spelling tasks NEVER reveal the answer word in normal text, prompt text, or hint text before the learner solves it.',
+    '- For Afrikaans tasks, use `language:"af"` in spelling JSON and keep examples/instructions in Afrikaans.',
+    '- For K-12 maths learners who struggle: use one problem at a time, simple language, worked examples, and progressive hints.',
+    '- Prefer `column` interactive blocks for arithmetic over Mermaid diagrams unless user explicitly asks for a diagram.',
     '',
     '4. Uncertainty handling:',
     '   - If visibility is poor, say exactly which words/lines are unclear',

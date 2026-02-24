@@ -43,6 +43,24 @@ function buildMermaidHtml(definition: string): string {
 export const MermaidRenderer: React.FC<MermaidRendererProps> = ({ definition, height = 190 }) => {
   const cleaned = String(definition || '').trim();
   if (!cleaned) return null;
+  const looksLikeMermaidSyntax = /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/m.test(cleaned);
+  if (!looksLikeMermaidSyntax) {
+    return (
+      <View
+        style={{
+          marginVertical: 8,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: 'rgba(148,163,184,0.28)',
+          padding: 10,
+        }}
+      >
+        <Text style={{ color: '#cbd5e1', fontSize: 12 }}>
+          Diagram syntax was invalid. Dash will provide a simplified explanation instead.
+        </Text>
+      </View>
+    );
+  }
 
   if (Platform.OS === 'web') {
     return (

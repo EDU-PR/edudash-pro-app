@@ -226,6 +226,57 @@ export default function TeacherDashboard() {
 
       <h1 className="h1">{greeting}, {userName}</h1>
 
+      {/* Daily Room – routine & TV display */}
+      <div className="section" style={{ marginBottom: 16 }}>
+        <div
+          className="card"
+          style={{
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+          onClick={() => router.push('/display')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && router.push('/display')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MonitorPlay size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Daily Room</div>
+              <div style={{ fontSize: 13, opacity: 0.9 }}>View today&apos;s routine, lessons &amp; menu on the TV display</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn"
+              style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: 'white', fontWeight: 600 }}
+              onClick={(e) => { e.stopPropagation(); router.push('/display'); }}
+            >
+              Open Display
+            </button>
+            <button
+              type="button"
+              className="btn"
+              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.6)', color: 'white', fontWeight: 600 }}
+              onClick={(e) => { e.stopPropagation(); router.push('/dashboard/teacher/timetable'); }}
+            >
+              My Timetable
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Dashboard sections: two distinct grids (Overview + Quick actions) */}
       <div className="dashboardSections">
         {/* Overview Metrics */}
@@ -291,7 +342,7 @@ export default function TeacherDashboard() {
             }}
           >
             <MonitorPlay className="icon20" />
-            <span>Get TV link</span>
+            <span>Daily Room (TV)</span>
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/teacher/groups')}>
             <Calendar className="icon20" />

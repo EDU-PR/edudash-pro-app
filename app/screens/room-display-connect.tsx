@@ -8,6 +8,7 @@ import {
   Share,
   Linking,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -42,9 +43,13 @@ function trimClassId(value: string): string {
 export default function RoomDisplayConnectScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(theme, insets), [theme, insets]);
 
   const orgId = profile?.organization_id || (profile as any)?.preschool_id || null;
+  const userId = user?.id || null;
+  const profileId = (profile as any)?.id || null;
+  const isPrincipal = /principal|admin|owner|superadmin/i.test(String((profile as any)?.role || ''));
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
@@ -67,19 +72,26 @@ export default function RoomDisplayConnectScreen() {
 
       try {
         setClassesLoading(true);
-        const { data, error: queryError } = await assertSupabase()
+        let query = assertSupabase()
           .from('classes')
-          .select('id, name')
+          .select('id, name, teacher_id')
           .eq('preschool_id', orgId)
           .order('name', { ascending: true });
+        if (!isPrincipal && (profileId || userId)) {
+          const tid = profileId || userId;
+          query = query.eq('teacher_id', tid);
+        }
+        const { data, error: queryError } = await query;
 
         if (queryError) throw queryError;
-        const rows = ((data || []) as Array<{ id?: string; name?: string }>).map((row) => ({
-          id: String(row.id || ''),
-          name: String(row.name || 'Class'),
-        }));
+        const rows = ((data || []) as Array<{ id?: string; name?: string }>)
+          .filter((row) => row.id)
+          .map((row) => ({
+            id: String(row.id || ''),
+            name: String(row.name || 'Class'),
+          }));
         if (!cancelled) {
-          setClasses(rows.filter((row) => row.id));
+          setClasses(rows);
         }
       } catch {
         if (!cancelled) {
@@ -96,7 +108,7 @@ export default function RoomDisplayConnectScreen() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [orgId, isPrincipal, profileId, userId]);
 
   const copyText = useCallback(async (text: string, success: string) => {
     try {
@@ -288,7 +300,7 @@ export default function RoomDisplayConnectScreen() {
   );
 }
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -296,7 +308,8 @@ const createStyles = (theme: any) =>
     },
     content: {
       padding: 16,
-      paddingBottom: 40,
+      paddingTop: 16 + insets.top,
+      paddingBottom: 40 + insets.bottom,
       gap: 12,
     },
     heroCard: {

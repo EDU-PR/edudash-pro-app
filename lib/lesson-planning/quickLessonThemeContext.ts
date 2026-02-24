@@ -3,6 +3,14 @@ export type QuickLessonContextSource =
   | 'weekly_plan_only'
   | 'theme_only';
 
+export interface RoutineBlockForContext {
+  day_of_week: number;
+  block_type: string;
+  title: string;
+  objectives: string[];
+  start_time?: string | null;
+}
+
 export interface QuickLessonThemeContext {
   source: QuickLessonContextSource;
   weekNumber?: number | null;
@@ -14,13 +22,49 @@ export interface QuickLessonThemeContext {
   themeTitle?: string | null;
   themeDescription?: string | null;
   themeObjectives: string[];
+  routineBlocks?: RoutineBlockForContext[];
 }
 
 type SupabaseLike = {
   from: (table: string) => {
     select: (columns: string) => any;
+    eq?: (column: string, value: unknown) => any;
+    in?: (column: string, values: unknown[]) => any;
   };
 };
+
+const DAY_LABELS: Record<number, string> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+};
+
+function formatRoutineBlocksForPrompt(blocks: RoutineBlockForContext[]): string {
+  const byDay = new Map<number, RoutineBlockForContext[]>();
+  for (const b of blocks) {
+    const d = Math.min(5, Math.max(1, b.day_of_week));
+    const list = byDay.get(d) || [];
+    list.push(b);
+    byDay.set(d, list);
+  }
+  const lines: string[] = [];
+  for (let day = 1; day <= 5; day++) {
+    const dayBlocks = (byDay.get(day) || []).sort((a, b) => (a.day_of_week === b.day_of_week ? 0 : a.day_of_week - b.day_of_week));
+    const label = DAY_LABELS[day] || `Day ${day}`;
+    const parts = dayBlocks.map((b) => {
+      const time = b.start_time ? `${b.start_time} ` : '';
+      const type = b.block_type || 'block';
+      const obj = Array.isArray(b.objectives) && b.objectives.length > 0 ? ` (${b.objectives.slice(0, 2).join('; ')})` : '';
+      return `${time}${type} - ${b.title}${obj}`;
+    });
+    if (parts.length > 0) {
+      lines.push(`${label}: ${parts.join('; ')}`);
+    }
+  }
+  return lines.join('\n');
+}
 
 const STATUS_RANK: Record<string, number> = {
   published: 4,
@@ -132,7 +176,10 @@ export async function loadQuickLessonThemeContext(input: {
       return normalizeThemeRow(themeQuery.data);
     };
 
-    const fetchWeeklyProgramFallback = async () => {
+    const fetchWeeklyProgramFallback = async (): Promise<{
+      program: any;
+      routineBlocks: RoutineBlockForContext[];
+    } | null> => {
       const programQuery = await supabase
         .from('weekly_programs')
         .select('id, title, summary, week_start_date, week_end_date, status, updated_at, created_at')
@@ -157,7 +204,28 @@ export async function loadQuickLessonThemeContext(input: {
         return bTime - aTime;
       });
 
-      return sortedPrograms[0] || null;
+      const program = sortedPrograms[0] || null;
+      if (!program?.id) return null;
+
+      const blocksQuery = await supabase
+        .from('daily_program_blocks')
+        .select('day_of_week, block_type, title, objectives, start_time')
+        .eq('weekly_program_id', program.id)
+        .order('day_of_week', { ascending: true })
+        .order('block_order', { ascending: true });
+
+      let routineBlocks: RoutineBlockForContext[] = [];
+      if (!blocksQuery.error && Array.isArray(blocksQuery.data)) {
+        routineBlocks = (blocksQuery.data as any[]).map((row) => ({
+          day_of_week: Math.min(5, Math.max(1, Number(row.day_of_week) || 1)),
+          block_type: String(row.block_type || 'learning'),
+          title: String(row.title || '').trim() || 'Block',
+          objectives: toObjectiveList(row.objectives),
+          start_time: row.start_time || null,
+        }));
+      }
+
+      return { program, routineBlocks };
     };
 
     if (!selectedPlan) {
@@ -165,16 +233,18 @@ export async function loadQuickLessonThemeContext(input: {
       const themeOnly = await fetchLatestPublishedTheme();
 
       if (programFallback) {
+        const { program, routineBlocks } = programFallback;
         return {
           source: themeOnly ? 'weekly_plan_with_theme' : 'weekly_plan_only',
-          weekStartDate: programFallback.week_start_date,
-          weekEndDate: programFallback.week_end_date,
-          weeklyFocus: programFallback.title || null,
-          weeklyObjectives: toObjectiveList(programFallback.summary),
-          weeklyPlanStatus: programFallback.status || null,
+          weekStartDate: program.week_start_date,
+          weekEndDate: program.week_end_date,
+          weeklyFocus: program.title || null,
+          weeklyObjectives: toObjectiveList(program.summary),
+          weeklyPlanStatus: program.status || null,
           themeTitle: themeOnly?.title,
           themeDescription: themeOnly?.description,
           themeObjectives: themeOnly?.objectives || [],
+          routineBlocks: routineBlocks.length > 0 ? routineBlocks : undefined,
         };
       }
 
@@ -251,6 +321,14 @@ export function buildQuickLessonThemeHint(context: QuickLessonThemeContext | nul
 
   if (context.themeObjectives.length > 0) {
     lines.push(`- Theme objectives: ${limitList(context.themeObjectives).join('; ')}.`);
+  }
+
+  if (context.routineBlocks && context.routineBlocks.length > 0) {
+    const formatted = formatRoutineBlocksForPrompt(context.routineBlocks);
+    if (formatted) {
+      lines.push('- Daily routine (align strictly):');
+      lines.push(formatted.split('\n').map((l) => `  ${l}`).join('\n'));
+    }
   }
 
   lines.push('- Keep instructions practical for a real classroom with minimal setup time.');

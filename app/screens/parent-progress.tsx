@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { createProgressStyles, getProgressColor, getStatusColor } from '@/lib/screen-styles/parent-progress.styles';
+import { clampPercent } from '@/lib/progress/clampPercent';
 
 export default function ParentProgressScreen() {
   const { theme } = useTheme();
@@ -155,11 +156,19 @@ export default function ParentProgressScreen() {
             <View style={styles.overviewCard}>
               <View style={styles.overviewHeader}>
                 <Text style={styles.overviewTitle}>{selectedChild.studentName}</Text>
-                {selectedChild.grade && (
-                  <View style={styles.gradeBadge}>
-                    <Text style={styles.gradeBadgeText}>Grade {selectedChild.grade}</Text>
-                  </View>
-                )}
+                <View style={styles.headerBadgeRow}>
+                  {selectedChild.grade && (
+                    <View style={styles.gradeBadge}>
+                      <Text style={styles.gradeBadgeText}>Grade {selectedChild.grade}</Text>
+                    </View>
+                  )}
+                  {!!selectedProgress?.streak && selectedProgress.streak > 0 && (
+                    <View style={styles.streakBadge}>
+                      <Ionicons name="flame" size={12} color="#F97316" />
+                      <Text style={styles.streakBadgeText}>{selectedProgress.streak} day streak</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               
               {/* Completion Ring */}
@@ -217,6 +226,15 @@ export default function ParentProgressScreen() {
                   <Text style={styles.statLabel}>Overdue</Text>
                 </View>
               </View>
+
+              {selectedProgress?.averageStars !== null && (
+                <View style={styles.starsSummaryRow}>
+                  <Ionicons name="star" size={16} color="#F59E0B" />
+                  <Text style={styles.starsSummaryText}>
+                    Average activity stars: {selectedProgress.averageStars}/3
+                  </Text>
+                </View>
+              )}
             </View>
             
             {/* Recent Lessons */}
@@ -299,6 +317,35 @@ export default function ParentProgressScreen() {
                           <Text style={styles.subjectBadgeText}>
                             {subject.subject.charAt(0).toUpperCase() + subject.subject.slice(1)}
                           </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {selectedProgress?.domainBreakdown?.length > 0 && (
+                  <View style={styles.topSubjectsContainer}>
+                    <Text style={styles.topSubjectsTitle}>Domain Progress</Text>
+                    <View style={styles.domainBreakdownContainer}>
+                      {selectedProgress.domainBreakdown.slice(0, 4).map((domain) => (
+                        <View key={domain.domain} style={styles.domainItem}>
+                          <View style={styles.domainLabelRow}>
+                            <Text style={styles.domainLabel}>
+                              {domain.domain.replace(/_/g, ' ')}
+                            </Text>
+                            <Text style={styles.domainMeta}>
+                              {domain.count} done
+                              {domain.averageStars !== null ? ` • ${domain.averageStars}/3★` : ''}
+                            </Text>
+                          </View>
+                          <View style={styles.domainBarTrack}>
+                            <View
+                              style={[
+                                styles.domainBarFill,
+                                { width: `${clampPercent(domain.count * 20)}%` },
+                              ]}
+                            />
+                          </View>
                         </View>
                       ))}
                     </View>

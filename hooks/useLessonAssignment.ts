@@ -42,6 +42,8 @@ export interface LessonAssignment {
   };
 }
 
+export type DeliveryMode = 'class_activity' | 'playground' | 'take_home';
+
 export interface AssignLessonParams {
   lesson_id?: string;
   interactive_activity_id?: string;
@@ -52,6 +54,8 @@ export interface AssignLessonParams {
   notes?: string;
   lesson_type?: 'standard' | 'interactive' | 'ai_enhanced' | 'robotics' | 'computer_literacy';
   stem_category?: 'ai' | 'robotics' | 'computer_literacy' | 'none';
+  /** Distinguishes how the lesson is delivered to avoid sending class group activities as homework */
+  delivery_mode?: DeliveryMode;
 }
 
 export interface LessonCompletion {
@@ -193,6 +197,11 @@ export function useLessonAssignment(options?: {
     try {
       const supabase = assertSupabase();
       
+      // Derive delivery_mode: playground when an interactive activity is present,
+      // otherwise fall back to what the caller specified (default: class_activity).
+      const derivedDeliveryMode: string = params.delivery_mode
+        ?? (params.interactive_activity_id ? 'playground' : 'class_activity');
+
       const assignmentData: any = {
         lesson_id: params.lesson_id || null,
         interactive_activity_id: params.interactive_activity_id || null,
@@ -206,6 +215,7 @@ export function useLessonAssignment(options?: {
         status: 'assigned',
         lesson_type: params.lesson_type || (params.interactive_activity_id ? 'interactive' : 'standard'),
         stem_category: params.stem_category || 'none',
+        delivery_mode: derivedDeliveryMode,
       };
       
       const { data: insertedAssignment, error } = await supabase
@@ -272,10 +282,13 @@ export function useLessonAssignment(options?: {
       
       if (studentsError) throw studentsError;
       
+      const classLessonType = options?.lesson_type || (options?.interactive_activity_id ? 'interactive' : 'standard');
+      const classStemCategory = options?.stem_category || 'none';
+      const classDeliveryMode: string = options?.delivery_mode
+        ?? (options?.interactive_activity_id ? 'playground' : 'class_activity');
+
       if (!students || students.length === 0) {
-        // Assign to class directly
-        const lessonType = options?.lesson_type || (options?.interactive_activity_id ? 'interactive' : 'standard');
-        const stemCategory = options?.stem_category || 'none';
+        // Assign to class directly (no individual student records)
         const { error } = await supabase
           .from('lesson_assignments')
           .insert({
@@ -288,15 +301,14 @@ export function useLessonAssignment(options?: {
             priority: options?.priority || 'normal',
             notes: options?.notes || null,
             status: 'assigned',
-            lesson_type: lessonType,
-            stem_category: stemCategory,
+            lesson_type: classLessonType,
+            stem_category: classStemCategory,
+            delivery_mode: classDeliveryMode,
           });
         
         if (error) throw error;
       } else {
         // Assign to each student in the class
-        const lessonType = options?.lesson_type || (options?.interactive_activity_id ? 'interactive' : 'standard');
-        const stemCategory = options?.stem_category || 'none';
         const assignments = students.map(student => ({
           lesson_id: lessonId ?? null,
           interactive_activity_id: options?.interactive_activity_id || null,
@@ -308,8 +320,9 @@ export function useLessonAssignment(options?: {
           priority: options?.priority || 'normal',
           notes: options?.notes || null,
           status: 'assigned' as const,
-          lesson_type: lessonType,
-          stem_category: stemCategory,
+          lesson_type: classLessonType,
+          stem_category: classStemCategory,
+          delivery_mode: classDeliveryMode,
         }));
         
         const { data: insertedAssignments, error } = await supabase

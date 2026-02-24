@@ -1,0 +1,4404 @@
+{
+  "generatedAt": "2026-02-23T14:03:08.827Z",
+  "baseLocale": "en",
+  "namespaces": [
+    "common.json",
+    "whatsapp.json"
+  ],
+  "baseTotalKeys": 3690,
+  "locales": {
+    "af": {
+      "missingCount": 184,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9501355013550136,
+      "missingByNs": {
+        "common.json": [
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "de": {
+      "missingCount": 189,
+      "baseTotalKeys": 3690,
+      "coverage": 0.948780487804878,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "es": {
+      "missingCount": 191,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9482384823848239,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "fr": {
+      "missingCount": 191,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9482384823848239,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "nso": {
+      "missingCount": 205,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9444444444444444,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.language.current",
+          "settings.language.title",
+          "settings.language.available",
+          "settings.language.comingSoon",
+          "settings.language.soon",
+          "settings.language.sa_blurb",
+          "settings.theme.title",
+          "settings.theme.preview",
+          "settings.theme.primary",
+          "settings.theme.secondary",
+          "settings.theme.accent",
+          "settings.theme.light",
+          "settings.theme.dark",
+          "settings.theme.system",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "pt": {
+      "missingCount": 189,
+      "baseTotalKeys": 3690,
+      "coverage": 0.948780487804878,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "st": {
+      "missingCount": 191,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9482384823848239,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    },
+    "zu": {
+      "missingCount": 191,
+      "baseTotalKeys": 3690,
+      "coverage": 0.9482384823848239,
+      "missingByNs": {
+        "common.json": [
+          "common.ai_model_in_use",
+          "common.ai_model_label",
+          "common.ai_drop_files_or_tap",
+          "common.ai_drop_files_subtext",
+          "roles.student",
+          "dashboard.hints.insights",
+          "dashboard.checking_access",
+          "dashboard.parent.generate_image",
+          "dashboard.parent.generate_image_subtitle",
+          "dashboard.parent.section.insights",
+          "dashboard.parent.uniform.labels.past_number_choice",
+          "dashboard.parent.uniform.labels.past_number_yes",
+          "dashboard.parent.uniform.labels.past_number_no",
+          "dashboard.parent.uniform.helper.past_number_choice",
+          "dashboard.parent.nav.weekly_menu",
+          "dashboard.parent.nav.documents",
+          "dashboard.parent.k12.grades",
+          "dashboard.parent.k12.tutor_badge",
+          "dashboard.parent.k12.current_class",
+          "dashboard.parent.k12.class_overview",
+          "dashboard.parent.k12.avg_grade",
+          "dashboard.parent.k12.current_tutor_session",
+          "dashboard.parent.k12.current_tutor_hint",
+          "dashboard.parent.k12.tutor_cta",
+          "dashboard.parent.k12.exam_badge",
+          "dashboard.parent.k12.exam_title",
+          "dashboard.parent.k12.exam_description",
+          "dashboard.parent.k12.exam_cta",
+          "dashboard.assign_playground_activity",
+          "dashboard.section.start_here.title",
+          "dashboard.section.start_here.hint",
+          "dashboard.section.urgent_queue.title",
+          "dashboard.section.urgent_queue.hint",
+          "dashboard.section.daily_ops.title",
+          "dashboard.section.daily_ops.hint",
+          "dashboard.section.daily_ops.copy",
+          "dashboard.section.admissions_cashflow.title",
+          "dashboard.section.admissions_cashflow.hint",
+          "dashboard.section.admissions_cashflow.copy",
+          "dashboard.section.learners_families.title",
+          "dashboard.section.learners_families.hint",
+          "dashboard.section.learners_families.copy",
+          "dashboard.section.learners_families.lifecycle_hint",
+          "dashboard.layout_controls",
+          "dashboard.expand_all",
+          "dashboard.collapse_all_except_urgent",
+          "dashboard.learner_activity_control",
+          "dashboard.uniform_orders",
+          "dashboard.dash_ai_advisor",
+          "dashboard.waitlist",
+          "dashboard.staff_leave",
+          "dashboard.petty_cash_request",
+          "dashboard.weekly_menu",
+          "dashboard.daily_program_ai",
+          "dashboard.room_display_connect",
+          "dashboard.timetable",
+          "dashboard.compliance",
+          "dashboard.uniform_collections_note_ye",
+          "dashboard.uniform_no_order",
+          "dashboard.uniform_status_paid",
+          "dashboard.uniform_status_pending",
+          "dashboard.uniform_status_unpaid",
+          "dashboard.uniform_open_hub",
+          "dashboard.uniform_message_unpaid",
+          "dashboard.uniform_message_no_order",
+          "settings.app_preferences.power_user_title",
+          "settings.app_preferences.power_user_subtitle",
+          "settings.app_preferences.dash_fab_locked",
+          "settings.open_full_settings",
+          "settings.open_full_settings_desc",
+          "teacher.assign_playground_activity",
+          "teacher.browse_lessons",
+          "teacher.quick_lesson",
+          "teacher.create_activity",
+          "teacher.assign_homework",
+          "teacher.birthday_chart",
+          "teacher.manage_groups",
+          "teacher.request_petty_cash",
+          "teacher.family_activity_review",
+          "teacher.reputation",
+          "teacher.generate_image",
+          "teacher.call_parent",
+          "teacher.subtitle_upcoming_one",
+          "teacher.room_display_connect",
+          "teacher.student_insights",
+          "teacher.advanced_tools",
+          "teacher.assignment_overdue",
+          "teacher.total_students",
+          "teacher.growth",
+          "teacher.interactive_tutor_mode",
+          "teacher.tutor_mode_title",
+          "teacher.tutor_mode_description",
+          "teacher.start_tutor_session",
+          "teacher.daily_program",
+          "teacher.routine_blocks_count",
+          "teacher.open_planner",
+          "teacher.set_reminders",
+          "teacher.current_class_overview",
+          "teacher.current_class_overview_hint",
+          "teacher.upcoming_assignments",
+          "teacher.upcoming_assignments_hint",
+          "teacher.due",
+          "teacher.submitted",
+          "teacher.overdue",
+          "teacher.recent_activity_hint",
+          "teacher.pending",
+          "notifications.actions.reply",
+          "notifications.actions.mark_read",
+          "notifications.actions.mute",
+          "notifications.actions.muted_title",
+          "notifications.actions.muted_desc",
+          "account.session_expired_switch_message",
+          "account.switch_account_desc_no_biometric",
+          "account.use_password_to_switch",
+          "grades.no_grades_yet",
+          "grades.no_grades_desc",
+          "grades.graded_count",
+          "grades.auto_graded",
+          "grades.teacher_graded",
+          "grades.needs_review",
+          "grades.grade_posted",
+          "grades.confidence"
+        ],
+        "whatsapp.json": [
+          "title",
+          "connected",
+          "notConnected",
+          "checking",
+          "pleaseWait",
+          "connectWhatsApp",
+          "openWhatsApp",
+          "chatWithSchool",
+          "getInstantUpdates",
+          "upgradeRequired",
+          "enterPhoneTitle",
+          "enterPhoneDescription",
+          "phoneNumberLabel",
+          "phoneHint",
+          "consentTitle",
+          "consentDescription",
+          "consentText",
+          "privacyPolicy",
+          "consentRequired",
+          "consentRequiredMessage",
+          "connecting",
+          "connect",
+          "disconnect",
+          "connectionSuccessTitle",
+          "connectionSuccessDescription",
+          "alreadyConnected",
+          "connectedPhone",
+          "sendTestMessage",
+          "sendingTest",
+          "testMessageSent",
+          "testMessageSentMessage",
+          "testMessageFailed",
+          "testMessageFailedMessage",
+          "confirmOptOut",
+          "confirmOptOutMessage",
+          "optOut",
+          "invalidPhone",
+          "invalidPhoneMessage",
+          "optInFailed",
+          "optInFailedMessage",
+          "openFailed",
+          "openFailedMessage",
+          "noSchoolNumber",
+          "noSchoolNumberMessage",
+          "messageReceived",
+          "messageSent",
+          "features.instantMessages",
+          "features.instantMessagesDesc",
+          "features.directChat",
+          "features.directChatDesc",
+          "features.homeworkReminders",
+          "features.homeworkRemindersDesc",
+          "features.voiceMessages",
+          "features.voiceMessagesDesc",
+          "features.mediaSharing",
+          "features.mediaSharingDesc",
+          "features.workOffline",
+          "features.workOfflineDesc",
+          "benefits.title",
+          "benefits.familyFriendly",
+          "benefits.instantDelivery",
+          "benefits.worksOffline",
+          "benefits.noAppSwitching",
+          "benefits.voiceSupport",
+          "benefits.mediaFriendly",
+          "troubleshooting.notReceiving",
+          "troubleshooting.checkConnection",
+          "troubleshooting.updatePhone",
+          "troubleshooting.contactSupport"
+        ]
+      }
+    }
+  },
+  "missingFrequency": [
+    {
+      "key": "common:roles.student",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.hints.insights",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.checking_access",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.section.insights",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.uniform.labels.past_number_choice",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.uniform.labels.past_number_yes",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.uniform.labels.past_number_no",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.uniform.helper.past_number_choice",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.nav.weekly_menu",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.nav.documents",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.grades",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.tutor_badge",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.current_class",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.class_overview",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.avg_grade",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.current_tutor_session",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.current_tutor_hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.tutor_cta",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.exam_badge",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.exam_title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.exam_description",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.k12.exam_cta",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.assign_playground_activity",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.start_here.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.start_here.hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.urgent_queue.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.urgent_queue.hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.daily_ops.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.daily_ops.hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.daily_ops.copy",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.admissions_cashflow.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.admissions_cashflow.hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.admissions_cashflow.copy",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.learners_families.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.learners_families.hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.learners_families.copy",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.section.learners_families.lifecycle_hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.layout_controls",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.expand_all",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.collapse_all_except_urgent",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.learner_activity_control",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_orders",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.dash_ai_advisor",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.waitlist",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.staff_leave",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.petty_cash_request",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.weekly_menu",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.daily_program_ai",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.room_display_connect",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.timetable",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.compliance",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_collections_note_ye",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_no_order",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_status_paid",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_status_pending",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_status_unpaid",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_open_hub",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_message_unpaid",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.uniform_message_no_order",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.app_preferences.power_user_title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.app_preferences.power_user_subtitle",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.app_preferences.dash_fab_locked",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.open_full_settings",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.open_full_settings_desc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.assign_playground_activity",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.browse_lessons",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.quick_lesson",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.create_activity",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.assign_homework",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.birthday_chart",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.manage_groups",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.request_petty_cash",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.family_activity_review",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.reputation",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.generate_image",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.call_parent",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.subtitle_upcoming_one",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.room_display_connect",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.student_insights",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.advanced_tools",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.assignment_overdue",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.total_students",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.growth",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.interactive_tutor_mode",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.tutor_mode_title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.tutor_mode_description",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.start_tutor_session",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.daily_program",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.routine_blocks_count",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.open_planner",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.set_reminders",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.current_class_overview",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.current_class_overview_hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.upcoming_assignments",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.upcoming_assignments_hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.due",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.submitted",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.overdue",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.recent_activity_hint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:teacher.pending",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:notifications.actions.reply",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:notifications.actions.mark_read",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:notifications.actions.mute",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:notifications.actions.muted_title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:notifications.actions.muted_desc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.no_grades_yet",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.no_grades_desc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.graded_count",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.auto_graded",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.teacher_graded",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.needs_review",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.grade_posted",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:grades.confidence",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connected",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:notConnected",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:checking",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:pleaseWait",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connectWhatsApp",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:openWhatsApp",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:chatWithSchool",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:getInstantUpdates",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:upgradeRequired",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:enterPhoneTitle",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:enterPhoneDescription",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:phoneNumberLabel",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:phoneHint",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:consentTitle",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:consentDescription",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:consentText",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:privacyPolicy",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:consentRequired",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:consentRequiredMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connecting",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connect",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:disconnect",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connectionSuccessTitle",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connectionSuccessDescription",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:alreadyConnected",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:connectedPhone",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:sendTestMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:sendingTest",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:testMessageSent",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:testMessageSentMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:testMessageFailed",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:testMessageFailedMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:confirmOptOut",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:confirmOptOutMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:optOut",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:invalidPhone",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:invalidPhoneMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:optInFailed",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:optInFailedMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:openFailed",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:openFailedMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:noSchoolNumber",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:noSchoolNumberMessage",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:messageReceived",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:messageSent",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.instantMessages",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.instantMessagesDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.directChat",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.directChatDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.homeworkReminders",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.homeworkRemindersDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.voiceMessages",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.voiceMessagesDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.mediaSharing",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.mediaSharingDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.workOffline",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:features.workOfflineDesc",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.title",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.familyFriendly",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.instantDelivery",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.worksOffline",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.noAppSwitching",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.voiceSupport",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:benefits.mediaFriendly",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:troubleshooting.notReceiving",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:troubleshooting.checkConnection",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:troubleshooting.updatePhone",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "whatsapp:troubleshooting.contactSupport",
+      "count": 8,
+      "locales": [
+        "af",
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:common.ai_model_in_use",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:common.ai_model_label",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:common.ai_drop_files_or_tap",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:common.ai_drop_files_subtext",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:account.session_expired_switch_message",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:account.switch_account_desc_no_biometric",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:account.use_password_to_switch",
+      "count": 7,
+      "locales": [
+        "de",
+        "es",
+        "fr",
+        "nso",
+        "pt",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.generate_image",
+      "count": 6,
+      "locales": [
+        "af",
+        "es",
+        "fr",
+        "nso",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:dashboard.parent.generate_image_subtitle",
+      "count": 6,
+      "locales": [
+        "af",
+        "es",
+        "fr",
+        "nso",
+        "st",
+        "zu"
+      ]
+    },
+    {
+      "key": "common:settings.language.current",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.language.title",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.language.available",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.language.comingSoon",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.language.soon",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.language.sa_blurb",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.title",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.preview",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.primary",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.secondary",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.accent",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.light",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.dark",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    },
+    {
+      "key": "common:settings.theme.system",
+      "count": 1,
+      "locales": [
+        "nso"
+      ]
+    }
+  ],
+  "critical": {
+    "prefixes": [
+      "navigation.",
+      "common.actions.",
+      "errors.",
+      "auth.",
+      "languageSelector."
+    ],
+    "threshold": 3,
+    "items": []
+  }
+}

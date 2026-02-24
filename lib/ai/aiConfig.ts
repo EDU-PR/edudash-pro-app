@@ -37,8 +37,14 @@ export const AI_MODELS = {
 
 export type AIModelTier = keyof typeof AI_MODELS;
 
-/** Get the model ID for a given tier */
+/** Get the model ID for a given tier.
+ * Respects EXPO_PUBLIC_AI_MODEL env override so operators can pin a model
+ * for a specific deployment without a code change. */
 export function getAIModel(tier: AIModelTier = 'balanced'): string {
+  const envOverride = typeof process !== 'undefined'
+    ? (process.env.EXPO_PUBLIC_AI_MODEL || '').trim()
+    : '';
+  if (envOverride) return envOverride;
   return AI_MODELS[tier];
 }
 

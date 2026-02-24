@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,6 +6,22 @@ import { assertSupabase } from '@/lib/supabase';
 import { setActiveOrganization } from '@/components/account/OrganizationSwitcher';
 import { setPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+
+/** Parse token and email from a pasted invite URL like /invite/teacher?token=X&email=Y */
+function parseInviteUrl(pasted: string): { token: string; email: string } | null {
+  const s = String(pasted || '').trim();
+  if (!s) return null;
+  try {
+    const url = s.startsWith('http') ? s : `https://dummy.com${s.startsWith('/') ? s : `/${s}`}`;
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get('token') || '';
+    const email = parsed.searchParams.get('email') || '';
+    if (token && email) return { token, email };
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function TeacherInviteAcceptScreen() {
   const { user } = useAuth();
@@ -20,6 +36,14 @@ export default function TeacherInviteAcceptScreen() {
     if (typeof params?.token === 'string' && params.token) setToken(String(params.token));
     if (typeof params?.email === 'string' && params.email) setEmail(String(params.email));
   }, [params?.token, params?.email]);
+
+  const handleLinkInputChange = useCallback((text: string) => {
+    const parsed = parseInviteUrl(text);
+    if (parsed) {
+      setToken(parsed.token);
+      setEmail(parsed.email);
+    }
+  }, []);
 
   const handleSignIn = async () => {
     if (token.trim() && email.trim()) {
@@ -129,10 +153,12 @@ export default function TeacherInviteAcceptScreen() {
         <Text style={styles.helper}>
           Sign in or create an account to continue. We’ll keep your invite token ready.
         </Text>
-        <Text style={styles.label}>Invite token</Text>
-        <TextInput style={styles.input} value={token} onChangeText={setToken} autoCapitalize="none" placeholder="Paste the invite token" />
+        <Text style={styles.label}>Paste invite link (from email)</Text>
+        <TextInput style={styles.input} onChangeText={handleLinkInputChange} autoCapitalize="none" placeholder="Paste full link" placeholderTextColor="#64748b" />
+        <Text style={styles.label}>Or enter manually: Token</Text>
+        <TextInput style={styles.input} value={token} onChangeText={setToken} autoCapitalize="none" placeholder="Invite token" placeholderTextColor="#64748b" />
         <Text style={styles.label}>Your email</Text>
-        <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="you@example.com" />
+        <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="you@example.com" placeholderTextColor="#64748b" />
         <TouchableOpacity style={styles.button} onPress={handleSignIn}>
           <Text style={styles.buttonText}>Sign In</Text>
         </TouchableOpacity>
@@ -147,11 +173,16 @@ export default function TeacherInviteAcceptScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Accept Teacher Invite' }} />
-      <Text style={styles.title}>Enter your invite token</Text>
-      <Text style={styles.label}>Invite token</Text>
-      <TextInput style={styles.input} value={token} onChangeText={setToken} autoCapitalize="none" placeholder="Paste the invite token" />
+      <Text style={styles.title}>Accept your invite</Text>
+      <Text style={styles.helper}>
+        Paste the link from your invitation email, or enter token and email below.
+      </Text>
+      <Text style={styles.label}>Paste invite link (from email)</Text>
+      <TextInput style={styles.input} onChangeText={handleLinkInputChange} autoCapitalize="none" placeholder="Paste full link – we'll extract your invite details" placeholderTextColor="#64748b" />
+      <Text style={styles.label}>Or enter manually: Token</Text>
+      <TextInput style={styles.input} value={token} onChangeText={setToken} autoCapitalize="none" placeholder="Invite token" placeholderTextColor="#64748b" />
       <Text style={styles.label}>Your email</Text>
-      <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="you@example.com" />
+      <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="you@example.com" placeholderTextColor="#64748b" />
       <TouchableOpacity disabled={submitting} style={styles.button} onPress={onAccept}>
         <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Accept Invite'}</Text>
       </TouchableOpacity>

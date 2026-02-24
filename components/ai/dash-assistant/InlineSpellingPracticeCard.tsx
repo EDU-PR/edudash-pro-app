@@ -12,6 +12,8 @@ export interface SpellingPracticePayload {
   syllables?: string[];
   sentence?: string;
   letter_bank?: string[];
+  language?: string;
+  hide_word_reveal?: boolean;
 }
 
 interface InlineSpellingPracticeCardProps {
@@ -24,8 +26,41 @@ const SPELLING_FENCE_REGEX = /```spelling\s*\n?([\s\S]*?)```/i;
 const normalizeWord = (value: string) =>
   String(value || '')
     .trim()
-    .toLowerCase()
-    .replace(/[^a-z]/g, '');
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}]/gu, '');
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const redactWordInText = (text: string | undefined, word: string): string => {
+  const source = String(text || '').trim();
+  const target = String(word || '').trim();
+  if (!source || !target) return source;
+  const targetRegex = new RegExp(`\\b${escapeRegex(target)}\\b`, 'gi');
+  return source.replace(targetRegex, '____');
+};
+
+const detectSpellingLanguage = (payload: SpellingPracticePayload): 'af' | 'zu' | 'en' => {
+  const explicit = String(payload.language || '').trim().toLowerCase();
+  if (explicit.startsWith('af')) return 'af';
+  if (explicit.startsWith('zu')) return 'zu';
+
+  const combined = [
+    payload.prompt,
+    payload.hint,
+    payload.sentence,
+    payload.word,
+  ]
+    .map((entry) => String(entry || '').toLowerCase())
+    .join(' ');
+
+  if (/\b(spel|woord|kleur|die|dit|een|n|is|soort)\b/.test(combined) || /[êëïôûáéíóú]/i.test(combined)) {
+    return 'af';
+  }
+  if (/\b(igama|isipelingi|funda|lalela|umbuzo)\b/.test(combined)) {
+    return 'zu';
+  }
+  return 'en';
+};
 
 const coerceSpellingPayload = (value: unknown): SpellingPracticePayload | null => {
   if (!value || typeof value !== 'object') return null;
@@ -44,6 +79,8 @@ const coerceSpellingPayload = (value: unknown): SpellingPracticePayload | null =
     letter_bank: Array.isArray(raw.letter_bank)
       ? raw.letter_bank.map((entry) => String(entry).trim()).filter(Boolean).slice(0, 20)
       : undefined,
+    language: typeof raw.language === 'string' ? raw.language : undefined,
+    hide_word_reveal: raw.hide_word_reveal === false ? false : true,
   };
 };
 
@@ -82,12 +119,19 @@ export const InlineSpellingPracticeCard: React.FC<InlineSpellingPracticeCardProp
   const [solved, setSolved] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [hintLevel, setHintLevel] = useState(0);
-  const [showWordFlash, setShowWordFlash] = useState(true);
+  const [showWordFlash, setShowWordFlash] = useState(false);
   const [isSpeakingWord, setIsSpeakingWord] = useState(false);
   const hideWordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const targetWord = useMemo(() => String(payload.word || '').trim(), [payload.word]);
   const targetNorm = useMemo(() => normalizeWord(targetWord), [targetWord]);
+  const detectedLanguage = useMemo(() => detectSpellingLanguage(payload), [payload]);
+  const displayPrompt = useMemo(() => {
+    const safePrompt = payload.prompt || 'Spell the hidden word.';
+    return redactWordInText(safePrompt, targetWord);
+  }, [payload.prompt, targetWord]);
+  const displayHint = useMemo(() => redactWordInText(payload.hint, targetWord), [payload.hint, targetWord]);
+  const shouldRevealWordOnStart = payload.hide_word_reveal === false;
 
   const clearWordTimer = useCallback(() => {
     if (hideWordTimerRef.current) {
@@ -98,11 +142,15 @@ export const InlineSpellingPracticeCard: React.FC<InlineSpellingPracticeCardProp
 
   const scheduleWordHide = useCallback(() => {
     clearWordTimer();
+    if (!shouldRevealWordOnStart) {
+      setShowWordFlash(false);
+      return;
+    }
     setShowWordFlash(true);
     hideWordTimerRef.current = setTimeout(() => {
       setShowWordFlash(false);
     }, 2000);
-  }, [clearWordTimer]);
+  }, [clearWordTimer, shouldRevealWordOnStart]);
 
   useEffect(() => {
     scheduleWordHide();
@@ -175,24 +223,51 @@ export const InlineSpellingPracticeCard: React.FC<InlineSpellingPracticeCardProp
     scheduleWordHide();
   }, [scheduleWordHide]);
 
-  const playWordAudio = useCallback(() => {
+  const playWordAudio = useCallback(async () => {
     if (!targetWord) return;
     if (isSpeakingWord) {
-      Speech.stop();
+      await Promise.allSettled([
+        Speech.stop(),
+        (async () => {
+          const { audioManager } = await import('@/lib/voice/audio');
+          await audioManager.stop();
+        })(),
+      ]);
       setIsSpeakingWord(false);
       return;
     }
 
     setIsSpeakingWord(true);
-    Speech.stop();
-    Speech.speak(targetWord, {
-      rate: 0.88,
-      pitch: 1.04,
-      onDone: () => setIsSpeakingWord(false),
-      onStopped: () => setIsSpeakingWord(false),
-      onError: () => setIsSpeakingWord(false),
-    });
-  }, [isSpeakingWord, targetWord]);
+    await Speech.stop();
+    const shortLang: 'af' | 'zu' | 'en' = detectedLanguage;
+    const locale = shortLang === 'af' ? 'af-ZA' : shortLang === 'zu' ? 'zu-ZA' : 'en-ZA';
+
+    try {
+      const { voiceService } = await import('@/lib/voice/client');
+      const { audioManager } = await import('@/lib/voice/audio');
+      // Use non-stream synthesize so we get an https:// URL (Supabase Storage).
+      // Blob URLs from streamMode fail on React Native; playback would fall back
+      // to device TTS, which has poor Afrikaans/native-language pronunciation.
+      const ttsResponse = await voiceService.synthesize({
+        text: targetWord,
+        language: shortLang,
+      } as any);
+      if (ttsResponse?.audio_url) {
+        await audioManager.play(ttsResponse.audio_url);
+      }
+      setIsSpeakingWord(false);
+      return;
+    } catch {
+      Speech.speak(targetWord, {
+        language: locale,
+        rate: 0.88,
+        pitch: 1.04,
+        onDone: () => setIsSpeakingWord(false),
+        onStopped: () => setIsSpeakingWord(false),
+        onError: () => setIsSpeakingWord(false),
+      });
+    }
+  }, [detectedLanguage, isSpeakingWord, targetWord]);
 
   const borderColor = isDark ? '#334155' : '#dbe2ea';
   const cardBg = isDark ? '#1e293b' : '#f8fafc';
@@ -210,7 +285,7 @@ export const InlineSpellingPracticeCard: React.FC<InlineSpellingPracticeCardProp
       </View>
 
       <Text style={[styles.prompt, { color: textColor }]}>
-        {payload.prompt || `Spell this word correctly: "${targetWord}"`}
+        {displayPrompt}
       </Text>
 
       <View style={[styles.flashWordBox, { borderColor, backgroundColor: panelBg }]}>
@@ -236,8 +311,8 @@ export const InlineSpellingPracticeCard: React.FC<InlineSpellingPracticeCardProp
         )}
       </View>
 
-      {payload.hint ? (
-        <Text style={[styles.subtleHint, { color: mutedColor }]}>{payload.hint}</Text>
+      {displayHint ? (
+        <Text style={[styles.subtleHint, { color: mutedColor }]}>{displayHint}</Text>
       ) : null}
 
       <View style={[styles.inputWrap, { borderColor, backgroundColor: panelBg }]}>

@@ -44,6 +44,8 @@ const NAV_ACTION_MAP: Record<string, string> = {
   '/dashboard/teacher/live-lesson': 'start_live_lesson',
   '/dashboard/teacher/birthdays': 'birthday_chart',
   '/dashboard/teacher/menu': 'weekly_menu',
+  '/dashboard/teacher/timetable': 'view_timetable',
+  '/dashboard/teacher/activity-samples': 'activity_samples',
   '/dashboard/teacher/messages': 'messages',
   '/dashboard/teacher/groups': 'manage_groups',
   '/dashboard/teacher/calls': 'call_parent',
@@ -94,6 +96,7 @@ export function getTeacherNavSections(
         { href: '/dashboard/teacher/activities', label: 'Activities', icon: Sparkles },
         { href: '/dashboard/teacher/interactive-activities', label: 'Interactive Activities', icon: Sparkles },
         { href: '/dashboard/teacher/weekly-plans', label: 'Weekly Plans', icon: Calendar },
+        { href: '/dashboard/teacher/activity-samples', label: 'Activity Samples', icon: BookOpen },
         { href: '/dashboard/teacher/assignments', label: 'Assignments', icon: ClipboardCheck },
         { href: '/dashboard/teacher/homework', label: 'Homework', icon: FileText },
       ],
@@ -103,6 +106,7 @@ export function getTeacherNavSections(
       items: [
         { href: '/dashboard/teacher/classes', label: 'My Classes', icon: Users },
         { href: '/dashboard/teacher/attendance', label: 'Attendance', icon: CheckSquare },
+        { href: '/dashboard/teacher/timetable', label: 'My Timetable', icon: Calendar },
         { href: '/dashboard/teacher/live-lesson', label: 'Live Lesson', icon: Video },
         { href: '/dashboard/teacher/birthdays', label: 'Birthday Chart', icon: Gift },
         { href: '/dashboard/teacher/menu', label: 'Weekly Menu', icon: Calendar },
@@ -135,7 +139,7 @@ export function getTeacherNavSections(
     {
       label: 'Display',
       items: [
-        { href: '/display', label: 'Room Display (TV link)', icon: MonitorPlay },
+        { href: '/display', label: 'Daily Room (TV)', icon: MonitorPlay },
       ],
     },
     {

@@ -7,6 +7,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -18,6 +19,12 @@ interface NotificationItemProps {
   onMarkRead: () => void;
   onReply?: (notification: Notification) => void;
   onMute?: (notification: Notification) => void;
+  /** When true the item renders in multi-select mode */
+  selected?: boolean;
+  /** Called when the user long-presses to enter selection mode */
+  onLongPressSelect?: (notification: Notification) => void;
+  /** Called when the item is swiped away */
+  onDismiss?: (notification: Notification) => void;
 }
 
 /**
@@ -94,6 +101,9 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
   onMarkRead,
   onReply,
   onMute,
+  selected = false,
+  onLongPressSelect,
+  onDismiss,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -101,14 +111,18 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
   const iconConfig = getIconConfig(notification.type, theme);
   
   const isUnread = !notification.read;
-  const containerBg = isUnread ? theme.primary + '12' : theme.surface;
+  const containerBg = selected
+    ? theme.primary + '25'
+    : isUnread ? theme.primary + '12' : theme.surface;
   const quickActions = getQuickActions(notification.type);
 
   const handleLongPress = useCallback(() => {
-    if (isUnread) {
+    if (onLongPressSelect) {
+      onLongPressSelect(notification);
+    } else if (isUnread) {
       setExpanded(prev => !prev);
     }
-  }, [isUnread]);
+  }, [isUnread, onLongPressSelect, notification]);
 
   const handleReply = useCallback(() => {
     setExpanded(false);
@@ -125,14 +139,35 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
     onMute?.(notification);
   }, [onMute, notification]);
   
+  const renderRightActions = useCallback(() => (
+    <TouchableOpacity
+      style={[styles.swipeDeleteAction, { backgroundColor: theme.error || '#EF4444' }]}
+      onPress={() => onDismiss?.(notification)}
+      activeOpacity={0.8}
+    >
+      <Ionicons name="trash-outline" size={22} color="#fff" />
+      <Text style={styles.swipeDeleteText}>
+        {t('common.delete', { defaultValue: 'Delete' })}
+      </Text>
+    </TouchableOpacity>
+  ), [onDismiss, notification, theme.error, t]);
+
   return (
+    <Swipeable
+      renderRightActions={onDismiss ? renderRightActions : undefined}
+      rightThreshold={60}
+      overshootRight={false}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') onDismiss?.(notification);
+      }}
+    >
     <TouchableOpacity 
       style={[
         styles.container, 
         { 
           backgroundColor: containerBg,
-          borderLeftWidth: isUnread ? 3 : 0,
-          borderLeftColor: isUnread ? theme.primary : 'transparent',
+          borderLeftWidth: selected ? 3 : isUnread ? 3 : 0,
+          borderLeftColor: selected ? theme.primary : isUnread ? theme.primary : 'transparent',
           opacity: isUnread ? 1 : 0.75,
         }
       ]}
@@ -140,6 +175,12 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
       onLongPress={handleLongPress}
       activeOpacity={0.7}
     >
+      {/* Multi-select checkbox */}
+      {selected !== undefined && onLongPressSelect && (
+        <View style={[styles.checkbox, { borderColor: selected ? theme.primary : theme.border }]}>
+          {selected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
+        </View>
+      )}
       {/* Unread indicator */}
       {isUnread && (
         <View style={[styles.unreadIndicator, { backgroundColor: theme.primary }]} />
@@ -242,11 +283,12 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         )}
       </View>
       
-      {/* Unread dot */}
-      {isUnread && (
+      {/* Unread dot (hidden when in select mode to not clash with checkbox) */}
+      {isUnread && !onLongPressSelect && (
         <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />
       )}
     </TouchableOpacity>
+    </Swipeable>
   );
 };
 
@@ -327,6 +369,29 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  swipeDeleteAction: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    borderRadius: 12,
+    marginBottom: 10,
+    gap: 4,
+  },
+  swipeDeleteText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    flexShrink: 0,
   },
 });
 

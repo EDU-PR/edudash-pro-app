@@ -13,6 +13,7 @@ import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { log, warn, debug, error as logError } from '@/lib/debug';
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { getAdUnitId as getPlacementAdUnitId } from '@/lib/ads/config';
 import { getPlacement } from '@/lib/ads/placements';
 
@@ -57,6 +58,13 @@ const getProductionIds = () => {
 };
 
 let isInitialized = false;
+
+function isHuaweiNoGmsRiskDevice(): boolean {
+  if (Platform.OS !== 'android') return false;
+  const brand = String(Device.brand || '').toLowerCase();
+  const manufacturer = String(Device.manufacturer || '').toLowerCase();
+  return brand.includes('huawei') || manufacturer.includes('huawei');
+}
 
 /**
  * Check if we should use production ad IDs
@@ -134,6 +142,10 @@ export async function initializeAdMob(): Promise<boolean> {
       log('AdMob initialization skipped: web platform');
       return false;
     }
+    if (isHuaweiNoGmsRiskDevice()) {
+      warn('AdMob initialization skipped: Huawei/no-GMS risk device');
+      return false;
+    }
     
     const useProductionAds = shouldUseProductionIds();
     
@@ -176,6 +188,7 @@ let rewardedAd: any = null;
 async function loadInterstitialAd(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
   if (Platform.OS !== 'android') return false;
+  if (isHuaweiNoGmsRiskDevice()) return false;
   
   try {
     const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
@@ -220,6 +233,7 @@ export async function showInterstitialAd(placementKey?: string): Promise<boolean
   // Skip on non-Android platforms
   if (Platform.OS === 'web') return false;
   if (Platform.OS !== 'android') return false;
+  if (isHuaweiNoGmsRiskDevice()) return false;
   
   try {
     const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
@@ -298,6 +312,7 @@ export async function showAppOpenAd(placementKey?: string): Promise<boolean> {
 
   if (Platform.OS === 'web') return false;
   if (Platform.OS !== 'android') return false;
+  if (isHuaweiNoGmsRiskDevice()) return false;
 
   try {
     const { AppOpenAd, AppOpenAdOrientation, AdEventType, TestIds } = require('react-native-google-mobile-ads');
@@ -392,6 +407,7 @@ export async function showRewardedAd(placementKey?: string): Promise<{
   // Skip on non-Android platforms
   if (Platform.OS === 'web') return { shown: false, rewarded: false };
   if (Platform.OS !== 'android') return { shown: false, rewarded: false };
+  if (isHuaweiNoGmsRiskDevice()) return { shown: false, rewarded: false };
   
   try {
     const { RewardedAd, RewardedAdEventType, TestIds } = require('react-native-google-mobile-ads');

@@ -46,6 +46,12 @@ type SupabaseFunctionsClient = {
   };
 };
 
+type CompletionInsightSummary = {
+  totalCompletions: number;
+  avgScore: number | null;
+  topDomains: Array<{ domain: string; count: number; avgScore: number | null }>;
+};
+
 const VALID_BLOCK_TYPES: DailyProgramBlockType[] = [
   'circle_time',
   'learning',
@@ -285,6 +291,7 @@ const sanitizeJsonCandidate = (value: string): string =>
     .replace(/^\uFEFF/, '')
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\/\/[^\n]*/g, '') // strip single-line comments
     .trim();
 
 const tryParseJsonCandidate = (value: string): unknown | null => {
@@ -295,6 +302,8 @@ const tryParseJsonCandidate = (value: string): unknown | null => {
     normalized,
     // Common AI formatting mistake: trailing commas in objects/arrays.
     normalized.replace(/,\s*([}\]])/g, '$1'),
+    // Strip markdown-style bold/italic that might wrap keys
+    normalized.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1'),
   ];
 
   for (const candidate of attempts) {
@@ -397,15 +406,88 @@ const parseWeeklyProgramFromUnknown = (
   return null;
 };
 
+/** Extract substring from first `{` to last `}` to handle leading/trailing prose */
+const extractJsonBraceSpan = (value: string): string | null => {
+  const first = value.indexOf('{');
+  const last = value.lastIndexOf('}');
+  if (first < 0 || last < 0 || first >= last) return null;
+  return value.slice(first, last + 1);
+};
+
+/**
+ * Try to repair truncated JSON by appending closing brackets/strings.
+ * Used when AI hits max_tokens and returns incomplete JSON (e.g. ends with "objectives": ["Hom).
+ */
+const tryRepairTruncatedJson = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.indexOf('{') < 0) return null;
+
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{') {
+      stack.push('}');
+      continue;
+    }
+
+    if (ch === '[') {
+      stack.push(']');
+      continue;
+    }
+
+    if (ch === '}' && stack.length > 0 && stack[stack.length - 1] === '}') {
+      stack.pop();
+      continue;
+    }
+
+    if (ch === ']' && stack.length > 0 && stack[stack.length - 1] === ']') {
+      stack.pop();
+      continue;
+    }
+  }
+
+  if (stack.length === 0 && !inString) return null;
+
+  const suffix: string[] = [];
+  if (inString) suffix.push('"');
+  for (let i = stack.length - 1; i >= 0; i -= 1) {
+    suffix.push(stack[i]);
+  }
+  return trimmed + suffix.join('');
+};
+
 const parseWeeklyProgramFromText = (value: string, depth = 0): WeeklyProgramAIResponse | null => {
   if (depth > 4) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  const candidates = [fenced?.[1], trimmed].filter(
-    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0,
-  );
+  const braceSpan = extractJsonBraceSpan(trimmed);
+  const candidates = [fenced?.[1], braceSpan, trimmed]
+    .filter(
+      (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0,
+    )
+    .filter((c, i, arr) => arr.indexOf(c) === i); // dedupe
 
   for (const candidate of candidates) {
     const direct = tryParseJsonCandidate(candidate);
@@ -420,6 +502,15 @@ const parseWeeklyProgramFromText = (value: string, depth = 0): WeeklyProgramAIRe
       if (parsedObject == null) continue;
       const parsed = parseWeeklyProgramFromUnknown(parsedObject, depth + 1);
       if (parsed) return parsed;
+    }
+
+    const repaired = tryRepairTruncatedJson(candidate);
+    if (repaired) {
+      const repairedParsed = tryParseJsonCandidate(repaired);
+      if (repairedParsed != null) {
+        const parsed = parseWeeklyProgramFromUnknown(repairedParsed, depth + 1);
+        if (parsed) return parsed;
+      }
     }
   }
 
@@ -504,21 +595,6 @@ const normalizeWeeklyProgramErrorMessage = (message: string | null | undefined):
   }
 
   return raw;
-};
-
-const isProviderCapacityError = (message: string | null | undefined): boolean => {
-  const normalized = String(message || '').toLowerCase();
-  if (!normalized) return false;
-  return (
-    normalized.includes('workspace api usage limits') ||
-    normalized.includes('api provider usage limit reached') ||
-    normalized.includes('provider usage limit reached') ||
-    normalized.includes('insufficient_quota') ||
-    normalized.includes('rate limit') ||
-    normalized.includes('http 429') ||
-    normalized.includes(' status: 429') ||
-    normalized.includes('will regain access on')
-  );
 };
 
 const extractAIContent = (data: unknown): string => {
@@ -740,6 +816,8 @@ const WEEKDAY_LABELS: Record<number, string> = {
   4: 'Thursday',
   5: 'Friday',
 };
+const MIN_BLOCKS_PER_WEEKDAY = 6;
+const MAX_BLOCKS_PER_WEEKDAY = 10;
 
 const CAPS_HOME_LANGUAGE_KEYWORDS = [
   'home language',
@@ -788,48 +866,267 @@ const hasWeatherSignal = (block: DailyProgramBlock): boolean => {
   return WEATHER_KEYWORDS.some((keyword) => haystack.includes(keyword));
 };
 
-const createFallbackWeekdayBlock = (day: number): DailyProgramBlock => ({
+const appendNote = (existing: string | null | undefined, suffix: string): string => {
+  const base = String(existing || '').trim();
+  return base ? `${base} ${suffix}` : suffix;
+};
+
+const normalizeDayBlock = (
+  block: DailyProgramBlock,
+  day: number,
+  order: number,
+  noteSuffix?: string,
+): DailyProgramBlock => ({
+  ...block,
   day_of_week: clampDayOfWeek(day),
-  block_order: 1,
-  block_type: 'transition',
-  title: `${WEEKDAY_LABELS[day] || 'Weekday'} Routine Starter`,
-  start_time: null,
-  end_time: null,
-  objectives: ['Predictable classroom routine', 'Calm transition into learning'],
-  materials: ['Routine chart'],
-  transition_cue: 'Welcome learners, review the routine, and begin the first guided activity.',
-  notes: 'Auto-filled when AI omits a weekday so the weekly plan remains complete.',
-  parent_tip: null,
+  block_order: Math.max(1, order),
+  block_type: toBlockType(block.block_type),
+  title: String(block.title || '').trim() || `Learning Block ${Math.max(1, order)}`,
+  start_time: typeof block.start_time === 'string' ? block.start_time : null,
+  end_time: typeof block.end_time === 'string' ? block.end_time : null,
+  objectives: toStringArray(block.objectives).slice(0, 3),
+  materials: toStringArray(block.materials).slice(0, 3),
+  transition_cue: String(block.transition_cue || '').trim() || null,
+  notes: noteSuffix ? appendNote(block.notes, noteSuffix) : String(block.notes || '').trim() || null,
+  parent_tip: String(block.parent_tip || '').trim() || null,
 });
 
+const createFallbackWeekdayBlocks = (day: number): DailyProgramBlock[] => {
+  const safeDay = clampDayOfWeek(day);
+  return [
+    {
+      day_of_week: safeDay,
+      block_order: 1,
+      block_type: 'circle_time',
+      title: 'Morning Circle: Weather & Greetings',
+      start_time: '06:00',
+      end_time: '08:00',
+      objectives: ['Daily weather observation', 'Calm start to the day'],
+      materials: ['Weather chart', 'Greeting song cards'],
+      transition_cue: 'Welcome learners and transition to guided learning.',
+      notes: 'Auto-filled to preserve a complete daily structure.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 2,
+      block_type: 'learning',
+      title: 'Focused Learning Stations',
+      start_time: '08:00',
+      end_time: '09:30',
+      objectives: ['Home Language and Mathematics integration', 'Guided small-group practice'],
+      materials: ['Manipulatives', 'Picture cards'],
+      transition_cue: 'Rotate groups smoothly with clear instructions.',
+      notes: 'Auto-filled learning anchor block.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 3,
+      block_type: 'meal',
+      title: 'Morning Snack, Hygiene & Reset',
+      start_time: '09:30',
+      end_time: '10:00',
+      objectives: ['Healthy routine habits', 'Self-help and hygiene reinforcement'],
+      materials: ['Snack station', 'Handwashing supplies'],
+      transition_cue: 'Handwashing first, then settle for the next activity.',
+      notes: 'Auto-filled meal/hygiene block.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 4,
+      block_type: 'outdoor',
+      title: 'Outdoor Play & Gross Motor',
+      start_time: '10:00',
+      end_time: '11:00',
+      objectives: ['Gross motor development', 'Social-emotional confidence'],
+      materials: ['Outdoor play equipment'],
+      transition_cue: 'Cool down and reflect before transitioning indoors.',
+      notes: 'Auto-filled movement/outdoor anchor block.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 5,
+      block_type: 'meal',
+      title: 'Lunch Break',
+      start_time: '11:30',
+      end_time: '12:00',
+      objectives: ['Nutritional routine', 'Self-help skills during mealtimes'],
+      materials: ['Lunch boxes', 'Handwashing supplies'],
+      transition_cue: 'Pack away and wash hands before transitioning to afternoon activities.',
+      notes: 'Auto-filled lunch block. Adjust times to match school schedule.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 6,
+      block_type: 'circle_time',
+      title: 'Afternoon Story & Creative Time',
+      start_time: '12:00',
+      end_time: '13:00',
+      objectives: ['Literacy development through storytelling', 'Creative expression and fine motor skills'],
+      materials: ['Story books', 'Art supplies'],
+      transition_cue: 'Settle down for story time, then move into creative activity.',
+      notes: 'Auto-filled post-lunch afternoon block.',
+      parent_tip: null,
+    },
+    {
+      day_of_week: safeDay,
+      block_order: 7,
+      block_type: 'transition',
+      title: 'Afternoon Reflection & Dismissal Prep',
+      start_time: '13:00',
+      end_time: '14:00',
+      objectives: ['Reflective closure of the school day', 'Pack-up and dismissal readiness'],
+      materials: ['School bags', 'Daily reflection chart'],
+      transition_cue: 'Pack bags, share one thing learned today, line up calmly for pickup.',
+      notes: 'Auto-filled dismissal block. Day must not end before 13:30.',
+      parent_tip: null,
+    },
+  ];
+};
+
+const findNearestSourceDay = (
+  grouped: Map<number, DailyProgramBlock[]>,
+  targetDay: number,
+  minimumBlocks = 1,
+  excludeDay?: number,
+): number | null => {
+  for (let distance = 1; distance <= 4; distance += 1) {
+    const previous = targetDay - distance;
+    if (
+      previous >= 1
+      && previous <= 5
+      && previous !== excludeDay
+      && (grouped.get(previous) || []).length >= minimumBlocks
+    ) {
+      return previous;
+    }
+
+    const next = targetDay + distance;
+    if (
+      next >= 1
+      && next <= 5
+      && next !== excludeDay
+      && (grouped.get(next) || []).length >= minimumBlocks
+    ) {
+      return next;
+    }
+  }
+  return null;
+};
+
+const appendUniqueBlocks = (params: {
+  base: DailyProgramBlock[];
+  additions: DailyProgramBlock[];
+  day: number;
+  note: string;
+  maxBlocks: number;
+}): DailyProgramBlock[] => {
+  const { base, additions, day, note, maxBlocks } = params;
+  const next = [...base];
+  const seenTitles = new Set(
+    next
+      .map((block) => String(block.title || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  for (const candidate of additions) {
+    if (next.length >= maxBlocks) break;
+
+    const titleKey = String(candidate.title || '').trim().toLowerCase();
+    if (titleKey && seenTitles.has(titleKey)) continue;
+
+    next.push(normalizeDayBlock(candidate, day, next.length + 1, note));
+    if (titleKey) seenTitles.add(titleKey);
+  }
+
+  return next;
+};
+
 const ensureWeekdayCoverage = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
-  const grouped = new Map<number, DailyProgramBlock[]>();
-  for (const day of WEEKDAY_SEQUENCE) grouped.set(day, []);
+  const sourceByDay = new Map<number, DailyProgramBlock[]>();
+  for (const day of WEEKDAY_SEQUENCE) sourceByDay.set(day, []);
 
   blocks.forEach((block) => {
     const day = clampDayOfWeek(block.day_of_week);
     if (day < 1 || day > 5) return;
-    grouped.get(day)?.push({ ...block, day_of_week: day });
+    sourceByDay.get(day)?.push(normalizeDayBlock(block, day, Number(block.block_order) || 1));
   });
 
   for (const day of WEEKDAY_SEQUENCE) {
-    const dayBlocks = (grouped.get(day) || [])
+    const dayBlocks = (sourceByDay.get(day) || [])
       .slice()
-      .sort((a, b) => a.block_order - b.block_order);
-    if (dayBlocks.length > 0) {
-      grouped.set(day, dayBlocks);
-      continue;
-    }
-    grouped.set(day, [createFallbackWeekdayBlock(day)]);
+      .sort((a, b) => a.block_order - b.block_order)
+      .slice(0, MAX_BLOCKS_PER_WEEKDAY)
+      .map((block, index) => normalizeDayBlock(block, day, index + 1));
+    sourceByDay.set(day, dayBlocks);
   }
 
   const normalized: DailyProgramBlock[] = [];
   for (const day of WEEKDAY_SEQUENCE) {
-    const dayBlocks = (grouped.get(day) || []).map((block, index) => ({
-      ...block,
-      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
-      block_order: index + 1,
-    }));
+    let dayBlocks = (sourceByDay.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order)
+      .map((block, index) => normalizeDayBlock(block, day, index + 1))
+      .slice(0, MAX_BLOCKS_PER_WEEKDAY);
+
+    if (dayBlocks.length === 0) {
+      const sourceDay =
+        findNearestSourceDay(sourceByDay, day, MIN_BLOCKS_PER_WEEKDAY, day) ||
+        findNearestSourceDay(sourceByDay, day, 1, day);
+
+      if (sourceDay) {
+        const sourceLabel = WEEKDAY_LABELS[sourceDay] || `Day ${sourceDay}`;
+        const targetLabel = WEEKDAY_LABELS[day] || `Day ${day}`;
+        dayBlocks = (sourceByDay.get(sourceDay) || [])
+          .slice(0, MAX_BLOCKS_PER_WEEKDAY)
+          .map((block, index) =>
+            normalizeDayBlock(
+              block,
+              day,
+              index + 1,
+              `Auto-filled from ${sourceLabel} because ${targetLabel} was incomplete.`,
+            ),
+          );
+      } else {
+        dayBlocks = createFallbackWeekdayBlocks(day);
+      }
+    }
+
+    if (dayBlocks.length < MIN_BLOCKS_PER_WEEKDAY) {
+      dayBlocks = appendUniqueBlocks({
+        base: dayBlocks,
+        additions: createFallbackWeekdayBlocks(day),
+        day,
+        note: 'Auto-added to preserve a full daily routine.',
+        maxBlocks: MIN_BLOCKS_PER_WEEKDAY,
+      });
+
+      while (dayBlocks.length < MIN_BLOCKS_PER_WEEKDAY) {
+        const order = dayBlocks.length + 1;
+        dayBlocks.push({
+          day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+          block_order: order,
+          block_type: 'learning',
+          title: `Learning Support Block ${order}`,
+          start_time: null,
+          end_time: null,
+          objectives: ['Maintain consistent classroom flow'],
+          materials: ['Classroom routine resources'],
+          transition_cue: 'Transition calmly into the next block.',
+          notes: 'Auto-added to preserve the minimum daily block count.',
+          parent_tip: null,
+        });
+      }
+    }
+
+    dayBlocks = dayBlocks
+      .slice(0, MAX_BLOCKS_PER_WEEKDAY)
+      .map((block, index) => normalizeDayBlock(block, day, index + 1));
+
     normalized.push(...dayBlocks);
   }
 
@@ -1051,6 +1348,115 @@ const applyCapsCoverageMetadata = (
   );
 };
 
+/** Parse "HH:MM" to minutes since midnight, or null if invalid */
+const parseTimeToMinutes = (time: string | null | undefined): number | null => {
+  if (!time) return null;
+  const m = String(time).match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+};
+
+/** 13:30 = 810 minutes — the minimum end-time for any day */
+const MIN_DAY_END_MINUTES = 810; // 13:30
+
+/**
+ * Ensure every weekday's last block ends at or after 13:30.
+ * When a day ends early, append an afternoon block so the full day is covered.
+ */
+const ensureFullDayCoverage = (blocks: DailyProgramBlock[]): DailyProgramBlock[] => {
+  const grouped = new Map<number, DailyProgramBlock[]>();
+  for (const d of WEEKDAY_SEQUENCE) grouped.set(d, []);
+  for (const b of blocks) {
+    const d = clampDayOfWeek(b.day_of_week);
+    if (d >= 1 && d <= 5) grouped.get(d)?.push(b);
+  }
+
+  const result: DailyProgramBlock[] = [];
+  for (const day of WEEKDAY_SEQUENCE) {
+    const dayBlocks = (grouped.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order);
+
+    if (dayBlocks.length === 0) {
+      result.push(...createFallbackWeekdayBlocks(day));
+      continue;
+    }
+
+    // Find the latest end_time across all blocks for this day
+    let latestEndMinutes: number | null = null;
+    for (const b of dayBlocks) {
+      const t = parseTimeToMinutes(b.end_time);
+      if (t !== null && (latestEndMinutes === null || t > latestEndMinutes)) {
+        latestEndMinutes = t;
+      }
+    }
+
+    const nextOrder = Math.max(...dayBlocks.map((b) => b.block_order)) + 1;
+
+    if (latestEndMinutes !== null && latestEndMinutes < MIN_DAY_END_MINUTES) {
+      // Day ends before 13:30 — determine what's missing
+      const startMinutes = latestEndMinutes;
+      const startH = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+      const startM = String(startMinutes % 60).padStart(2, '0');
+
+      // Add afternoon session starting from where the day ended
+      dayBlocks.push({
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: nextOrder,
+        block_type: 'circle_time',
+        title: 'Afternoon Story & Creative Activity',
+        start_time: `${startH}:${startM}`,
+        end_time: '13:30',
+        objectives: [
+          'Literacy through storytelling',
+          'Creative expression and fine motor development',
+          'Calm afternoon routine before dismissal',
+        ],
+        materials: ['Story books', 'Art/craft supplies', 'Colouring sheets'],
+        transition_cue: 'Pack away and prepare for dismissal.',
+        notes: 'Auto-added: day must not end before 13:30.',
+        parent_tip: null,
+      });
+
+      // Add dismissal block if latest end is still before 13:30
+      dayBlocks.push({
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: nextOrder + 1,
+        block_type: 'transition',
+        title: 'Dismissal Preparation & Pack-Up',
+        start_time: '13:30',
+        end_time: '14:00',
+        objectives: ['Organised end-of-day routine', 'Reflection and pack-up'],
+        materials: ['School bags', 'Daily chart'],
+        transition_cue: 'Line up calmly and wait for parents or transport.',
+        notes: 'Auto-added dismissal block. Adjust if school closes later.',
+        parent_tip: null,
+      });
+    } else if (latestEndMinutes === null) {
+      // No times on any block — append an untimed afternoon close block
+      dayBlocks.push({
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: nextOrder,
+        block_type: 'transition',
+        title: 'Afternoon Close & Dismissal',
+        start_time: '13:30',
+        end_time: '14:00',
+        objectives: ['End-of-day pack-up and reflection'],
+        materials: ['School bags'],
+        transition_cue: 'Pack bags and prepare for pickup.',
+        notes: 'Auto-added to ensure full-day coverage through 13:30.',
+        parent_tip: null,
+      });
+    }
+
+    result.push(...dayBlocks.map((b, i) => ({ ...b, day_of_week: day as 1|2|3|4|5|6|7, block_order: i + 1 })));
+  }
+
+  return result.sort((a, b) =>
+    a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week,
+  );
+};
+
 const normalizeAIResponse = (
   response: WeeklyProgramAIResponse,
   input: GenerateWeeklyProgramFromTermInput,
@@ -1059,14 +1465,21 @@ const normalizeAIResponse = (
   const weekEnd = addDays(weekStart, 4);
   const flatBlocks = Array.isArray(response.blocks) ? toBlocksFromFlat(response.blocks) : [];
   const dayBlocks = toBlocksFromDays(response.days);
-  const blocks = flatBlocks.length > 0 ? flatBlocks : dayBlocks;
+  const rawBlocks = flatBlocks.length > 0 ? flatBlocks : dayBlocks;
+
+  // Enforce full 5-day cycle: only keep Monday–Friday (1–5), no exceptions
+  const blocks = rawBlocks.filter((b) => {
+    const d = clampDayOfWeek(b.day_of_week);
+    return d >= 1 && d <= 5;
+  });
 
   if (blocks.length === 0) {
     throw new Error('AI response did not include any daily program blocks');
   }
 
   const weekdayCoveredBlocks = ensureWeekdayCoverage(blocks);
-  const normalizedBlocks = ensureDailyWeatherRepetition(weekdayCoveredBlocks);
+  const fullDayBlocks = ensureFullDayCoverage(weekdayCoveredBlocks);
+  const normalizedBlocks = ensureDailyWeatherRepetition(fullDayBlocks);
   const initialCoverage = computeCapsCoverage(normalizedBlocks);
   const correctedBlocks = applyCapsCoverageMetadata(normalizedBlocks, initialCoverage);
   const finalCoverage = computeCapsCoverage(correctedBlocks);
@@ -1108,144 +1521,6 @@ const normalizeAIResponse = (
       capsCoverage: finalCoverage,
     },
     blocks: correctedBlocks,
-  };
-};
-
-const DEFAULT_DAY_FOCUS: Record<number, { language: string; math: string; lifeSkill: string }> = {
-  1: {
-    language: 'Home Language: Story sequencing and key vocabulary',
-    math: 'Mathematics: Counting objects to 20 and number matching',
-    lifeSkill: 'Life Skills: Classroom rules, sharing, and turn-taking',
-  },
-  2: {
-    language: 'Home Language: Listening comprehension and retelling',
-    math: 'Mathematics: Shape recognition and sorting',
-    lifeSkill: 'Life Skills: Fine-motor art and self-help routines',
-  },
-  3: {
-    language: 'Home Language: Phonics sounds and oral language games',
-    math: 'Mathematics: Pattern extension and comparison',
-    lifeSkill: 'Life Skills: Movement coordination and hygiene habits',
-  },
-  4: {
-    language: 'Home Language: Vocabulary revision and shared reading',
-    math: 'Mathematics: Measurement words (long/short, heavy/light)',
-    lifeSkill: 'Life Skills: Outdoor cooperation and safety awareness',
-  },
-  5: {
-    language: 'Home Language: Guided speaking and weekly reflection',
-    math: 'Mathematics: Number revision and practical problem-solving',
-    lifeSkill: 'Life Skills: Creative expression and calm transitions',
-  },
-};
-
-const buildDeterministicFallbackResponse = (
-  input: GenerateWeeklyProgramFromTermInput,
-): WeeklyProgramAIResponse => {
-  const constraints = input.constraints || {};
-  const preflight = input.preflightAnswers;
-  const includeMeal = constraints.includeMealBlocks !== false;
-  const includeOutdoor = constraints.includeOutdoorPlay !== false;
-  const includeStory = constraints.includeStoryCircle !== false;
-  const includeNap = constraints.includeNapTime === true;
-  const includeToilet = constraints.includeToiletRoutine !== false;
-  const includeHygiene = constraints.includeHygieneChecks !== false;
-
-  const days = WEEKDAY_SEQUENCE.map((day) => {
-    const focus = DEFAULT_DAY_FOCUS[day];
-    const dayBlocks: WeeklyProgramAIResponse['days'][number]['blocks'] = [
-      {
-        block_order: 1,
-        block_type: 'circle_time',
-        title: 'Community Circle & Weather Report',
-        start_time: '08:00',
-        end_time: '08:30',
-        objectives: ['Daily weather observation', 'Calendar talk', 'Oral language confidence'],
-        materials: ['Weather chart', 'Calendar cards'],
-        transition_cue: 'Sing the welcome routine and prepare for focused learning.',
-        notes: `${preflight?.nonNegotiableAnchors ? `Anchors: ${preflight.nonNegotiableAnchors}. ` : ''}CAPS focus: ${focus.language}`,
-      },
-      {
-        block_order: 2,
-        block_type: 'learning',
-        title: 'Language Learning Block',
-        start_time: '08:30',
-        end_time: '09:05',
-        objectives: ['Home Language development', 'Listening and speaking', 'Vocabulary reinforcement'],
-        materials: ['Story cards', 'Picture prompts'],
-        transition_cue: 'Review key words and transition to mathematics with a counting song.',
-        notes: `${preflight?.fixedWeeklyEvents ? `Fixed events: ${preflight.fixedWeeklyEvents}. ` : ''}CAPS focus: ${focus.language}`,
-      },
-      {
-        block_order: 3,
-        block_type: 'learning',
-        title: 'Mathematics Confidence Block',
-        start_time: '09:05',
-        end_time: '09:40',
-        objectives: ['Number sense', 'Pattern and shape exposure', 'Practical problem solving'],
-        materials: ['Counters', 'Shape cards'],
-        transition_cue: 'Pack away resources and prepare for snack/transition.',
-        notes: `${preflight?.resourceConstraints ? `Resource constraints: ${preflight.resourceConstraints}. ` : ''}CAPS focus: ${focus.math}`,
-      },
-    ];
-
-    if (includeMeal || includeToilet) {
-      dayBlocks.push({
-        block_order: dayBlocks.length + 1,
-        block_type: 'meal',
-        title: includeToilet ? 'Snack & Toilet Routine' : 'Snack Routine',
-        start_time: '09:40',
-        end_time: '10:10',
-        objectives: ['Healthy routine consistency', includeToilet ? 'Toilet independence support' : 'Nutrition break'],
-        materials: ['Snack station', includeToilet ? 'Toilet routine chart' : 'Water bottles'],
-        transition_cue: 'Guide handwashing and line-up for movement/outdoor learning.',
-        notes: `${preflight?.safetyCompliance ? `Safety: ${preflight.safetyCompliance}. ` : ''}${includeHygiene ? 'Include handwashing and hygiene checks before and after snack.' : 'Routine snack break.'}`,
-      });
-    }
-
-    dayBlocks.push({
-      block_order: dayBlocks.length + 1,
-      block_type: includeOutdoor ? 'outdoor' : 'movement',
-      title: includeOutdoor ? 'Outdoor Play & Gross Motor' : 'Indoor Movement Circuit',
-      start_time: '10:10',
-      end_time: '10:50',
-      objectives: ['Life Skills movement', 'Social cooperation', 'Self-regulation'],
-      materials: includeOutdoor ? ['Outdoor cones', 'Balls'] : ['Movement cards', 'Music'],
-      transition_cue: preflight?.afterLunchPattern
-        ? `After-lunch pattern: ${preflight.afterLunchPattern}. Cool down, hydrate, and transition to final reflective learning block.`
-        : 'Cool down, hydrate, and transition to final reflective learning block.',
-      notes: `CAPS focus: ${focus.lifeSkill}`,
-    });
-
-    dayBlocks.push({
-      block_order: dayBlocks.length + 1,
-      block_type: includeNap ? 'nap' : includeStory ? 'assessment' : 'transition',
-      title: includeNap
-        ? 'Rest Time & Story Reflection'
-        : includeStory
-          ? 'Story Reflection & Learning Documentation'
-          : 'Reflection & Calm Transition',
-      start_time: '10:50',
-      end_time: '11:30',
-      objectives: includeNap
-        ? ['Calm regulation', 'Listening to story recap']
-        : ['Reflection on the day', 'Language recap'],
-      materials: includeNap ? ['Rest mats', 'Story book'] : ['Reflection cards', 'Class discussion board'],
-      transition_cue: 'Close with gratitude, recap key learning, and prepare for departure routines.',
-      notes: `CAPS consolidation: ${focus.language}; ${focus.math}; ${focus.lifeSkill}`,
-    });
-
-    return {
-      day_of_week: day,
-      blocks: dayBlocks,
-    };
-  });
-
-  return {
-    title: `${input.schoolName ? `${input.schoolName} ` : ''}${input.theme} Weekly Program`.trim(),
-    summary:
-      'Generated from fallback planner due temporary provider limits. CAPS/ECD coverage, weather repetition, healthy school routines, and preflight constraints are preserved.',
-    days,
   };
 };
 
@@ -1297,6 +1572,9 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     routineRequirements.push('Include hygiene routines (e.g., handwashing or cleanup) as part of the daily flow.');
   }
 
+  const arrivalStart = constraints.arrivalStartTime || '06:00';
+  const pickupCutoff = constraints.pickupCutoffTime || '14:00';
+
   return [
     'Generate a CAPS-aligned preschool weekly school routine from term context.',
     ...(input.schoolName ? [`School name: ${input.schoolName}`] : []),
@@ -1334,9 +1612,18 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
       ? ['If naming the school anywhere, use the exact provided school name only and do not invent alternatives.']
       : []),
     'Include a daily weather check-in or weather-circle block for every weekday (Monday-Friday) to reinforce repetition routines.',
-    'Keep output compact and token-safe:',
+    `MANDATORY FULL-DAY COVERAGE: The program MUST span from approximately ${arrivalStart} all the way to at least 13:30 (with ${pickupCutoff} as the latest pickup window). The LAST block of every day MUST end at or after 13:30. NEVER truncate or end the day before 13:30.`,
+    'Required daily structure (approximate — use actual school times):',
+    `- Morning: Arrival/greeting block (${arrivalStart}) → Morning circle/weather → Focused learning`,
+    '- Mid-morning: Snack + hygiene break → Outdoor/gross-motor play',
+    '- Late morning: Second learning block (mathematics or home language focus)',
+    '- Midday: Lunch break',
+    '- After lunch: Story time / creative arts / quiet activity (this section is MANDATORY and must not be omitted)',
+    '- Afternoon close (≥13:30): Reflection, pack-up, and dismissal preparation',
+    'MANDATORY: Include ALL five weekdays (Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5). No exceptions. Every day must have 6-10 blocks. Never omit a weekday.',
+    'Keep output token-safe:',
     '- Monday-Friday only (day_of_week 1..5).',
-    '- 4-6 blocks per day.',
+    '- 6-10 blocks per day.',
     '- Keep objectives/materials concise (max 3 short items each).',
     '- Keep notes brief and classroom-focused.',
     'Return ONLY valid JSON. No markdown fences, no comments, no text before/after. No trailing commas in arrays or objects.',
@@ -1363,8 +1650,55 @@ const buildPrompt = (input: GenerateWeeklyProgramFromTermInput): string => {
     '    }',
     '  ]',
     '}',
-    'Cover Monday-Friday with practical preschool activities, smooth transitions, and a healthy school-day rhythm.',
+    `Cover Monday-Friday with practical preschool activities, smooth transitions, and a healthy full school-day rhythm from ${arrivalStart} to ${pickupCutoff}. The days array MUST contain exactly 5 entries (one per weekday). The last block of every day MUST end at or after 13:30.`,
   ].join('\n');
+};
+
+const getCompletionInsightSummary = async (preschoolId: string): Promise<CompletionInsightSummary> => {
+  const supabase = assertSupabase();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('lesson_completions')
+    .select('score, feedback')
+    .eq('preschool_id', preschoolId)
+    .gte('completed_at', thirtyDaysAgo)
+    .order('completed_at', { ascending: false })
+    .limit(300);
+
+  if (error) {
+    return { totalCompletions: 0, avgScore: null, topDomains: [] };
+  }
+
+  const rows = data || [];
+  const scores = rows
+    .map((row: any) => row.score)
+    .filter((value: unknown): value is number => Number.isFinite(value as number));
+  const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+  const domainMap = new Map<string, { count: number; scores: number[] }>();
+
+  rows.forEach((row: any) => {
+    const feedback = row.feedback && typeof row.feedback === 'object' ? row.feedback : {};
+    const activityMeta = (feedback as Record<string, unknown>).activity_meta;
+    const domain = activityMeta && typeof activityMeta === 'object'
+      ? String((activityMeta as Record<string, unknown>).domain || '').trim().toLowerCase()
+      : '';
+    if (!domain) return;
+    const current = domainMap.get(domain) || { count: 0, scores: [] };
+    current.count += 1;
+    if (Number.isFinite(row.score)) current.scores.push(Number(row.score));
+    domainMap.set(domain, current);
+  });
+
+  const topDomains = Array.from(domainMap.entries())
+    .map(([domain, value]) => ({
+      domain,
+      count: value.count,
+      avgScore: value.scores.length ? Math.round(value.scores.reduce((a, b) => a + b, 0) / value.scores.length) : null,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  return { totalCompletions: rows.length, avgScore, topDomains };
 };
 
 export class WeeklyProgramCopilotService {
@@ -1372,7 +1706,14 @@ export class WeeklyProgramCopilotService {
     input: GenerateWeeklyProgramFromTermInput,
   ): Promise<WeeklyProgramDraft> {
     const supabase = assertSupabase();
-    const prompt = buildPrompt(input);
+    const completionInsights = await getCompletionInsightSummary(input.preschoolId);
+    const completionInsightText =
+      completionInsights.topDomains.length > 0
+        ? `Recent completion insights (last 30 days): total=${completionInsights.totalCompletions}, avgScore=${completionInsights.avgScore ?? 'n/a'}, topDomains=${completionInsights.topDomains
+            .map((domain) => `${domain.domain}:${domain.count} (${domain.avgScore ?? 'n/a'}%)`)
+            .join('; ')}. Use this to reinforce weaker domains while maintaining balanced coverage.`
+        : 'Recent completion insights unavailable; maintain balanced reinforcement across Home Language, Mathematics, and Life Skills.';
+    const prompt = `${buildPrompt(input)}\n${completionInsightText}`;
 
     const { data, error } = await supabase.functions.invoke('ai-proxy', {
       body: {
@@ -1398,9 +1739,8 @@ export class WeeklyProgramCopilotService {
         error instanceof Error ? error.message : null,
       );
       const combinedMessage = friendlyDetailed || friendlyFallback || 'Failed to generate weekly program';
-      if (isProviderCapacityError(combinedMessage)) {
-        console.warn('[WeeklyProgramCopilot] Provider capacity reached, using deterministic fallback generator.');
-        return normalizeAIResponse(buildDeterministicFallbackResponse(input), input);
+      if (__DEV__) {
+        console.warn('[WeeklyProgramCopilot] AI generation failed:', { raw: detailedMessage || error });
       }
       throw new Error(combinedMessage);
     }
@@ -1430,7 +1770,9 @@ export class WeeklyProgramCopilotService {
       });
     }
 
-    throw new Error('Failed to parse weekly program response (AI returned non-JSON output).');
+    throw new Error(
+      'Unable to generate program. The AI returned an unexpected format. Please try again.',
+    );
   }
 
   // Compatibility alias for previous snake_case naming used in docs/plans.

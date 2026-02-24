@@ -973,8 +973,12 @@ export class DashVoiceService {
    */
   public normalizeTextForSpeech(text: string): string {
     let normalized = text;
+
+    // Strip [WHITEBOARD]...[/WHITEBOARD] blocks FIRST — they are visual-only UI elements
+    normalized = normalized.replace(/\[WHITEBOARD\][\s\S]*?\[\/WHITEBOARD\]/gi, ' ');
+    normalized = normalized.replace(/\[\/?\s*WHITEBOARD\s*\]/gi, ' ');
     
-    // Remove markdown formatting FIRST (before other transformations)
+    // Remove markdown formatting (before other transformations)
     normalized = this.removeMarkdownFormatting(normalized);
     
     // Handle bullet points and list formatting

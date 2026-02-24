@@ -1152,7 +1152,7 @@ function DisplayPageClient() {
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: 'var(--primary)', color: 'white' }}>2</span>
-                Open <strong style={{ color: 'var(--text-primary)' }}>Dashboard</strong> and tap or click <strong style={{ color: 'var(--primary)' }}>&quot;Get TV link&quot;</strong>.
+                Open <strong style={{ color: 'var(--text-primary)' }}>Dashboard</strong> and tap or click <strong style={{ color: 'var(--primary)' }}>&quot;Daily Room (TV)&quot;</strong>.
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: 'var(--primary)', color: 'white' }}>3</span>

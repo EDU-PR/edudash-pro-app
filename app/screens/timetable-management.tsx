@@ -13,9 +13,12 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -52,6 +55,7 @@ export default function TimetableManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState(new Date().getDay() || 1);
+  const [exporting, setExporting] = useState(false);
 
   const fetchSlots = useCallback(async () => {
     if (!organizationId) return;
@@ -82,6 +86,55 @@ export default function TimetableManagementScreen() {
 
   const daySlots = slots.filter((s) => s.day_of_week === selectedDay);
 
+  const buildTimetableHTML = useCallback(() => {
+    const rows = daySlots
+      .map(
+        (s) =>
+          `<tr><td>${s.start_time?.slice(0, 5) || ''} – ${s.end_time?.slice(0, 5) || ''}</td><td>${s.subject || s.activity_type || ''}</td><td>${s.room || '-'}</td></tr>`
+      )
+      .join('');
+    const dayName = DAYS[selectedDay] ?? `Day ${selectedDay}`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Timetable</title>
+<style>body{font-family:system-ui,sans-serif;padding:24px;color:#333}h1{font-size:20px;margin-bottom:4px}
+.sub{font-size:12px;color:#666;margin-bottom:16px}table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#f5f5f5;font-weight:600}
+.footer{font-size:11px;color:#999;margin-top:24px}</style></head><body>
+<h1>Weekly Timetable</h1><p class="sub">${dayName} • Generated ${new Date().toLocaleDateString()}</p>
+<table><thead><tr><th>Time</th><th>Subject / Activity</th><th>Room</th></tr></thead>
+<tbody>${rows || '<tr><td colspan="3">No classes scheduled</td></tr>'}</tbody></table>
+<p class="footer">EduDash Pro</p></body></html>`;
+  }, [daySlots, selectedDay]);
+
+  const handlePrint = useCallback(async () => {
+    setExporting(true);
+    try {
+      await Print.printAsync({ html: buildTimetableHTML() });
+    } catch (err) {
+      logger.error('[Timetable]', 'Print failed', err);
+      Alert.alert('Print failed', 'Could not open print dialog. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [buildTimetableHTML]);
+
+  const handleSavePDF = useCallback(async () => {
+    setExporting(true);
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildTimetableHTML(), base64: false });
+      const filename = `timetable-${new Date().toISOString().slice(0, 10)}.pdf`;
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `Save ${filename}` });
+      } else {
+        Alert.alert('Saved', `PDF saved as ${filename}`);
+      }
+    } catch (err) {
+      logger.error('[Timetable]', 'PDF export failed', err);
+      Alert.alert('Export failed', 'Could not save PDF. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [buildTimetableHTML]);
+
   if (loading) {
     return (
       <DesktopLayout role="principal" title="Timetable">
@@ -98,8 +151,30 @@ export default function TimetableManagementScreen() {
         style={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.heading}>Weekly Timetable</Text>
-        <Text style={styles.subtitle}>Manage class schedules and teacher assignments</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.heading}>Weekly Timetable</Text>
+            <Text style={styles.subtitle}>Manage class schedules and teacher assignments</Text>
+          </View>
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionBtn, exporting && styles.actionBtnDisabled]}
+              onPress={handlePrint}
+              disabled={exporting}
+            >
+              <Ionicons name="print-outline" size={20} color={theme.primary} />
+              <Text style={styles.actionBtnText}>Print</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, exporting && styles.actionBtnDisabled]}
+              onPress={handleSavePDF}
+              disabled={exporting}
+            >
+              <Ionicons name="document-outline" size={20} color={theme.primary} />
+              <Text style={styles.actionBtnText}>Save PDF</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Day Tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayTabs}>
@@ -155,7 +230,26 @@ const createStyles = (theme: any) =>
   StyleSheet.create({
     container: { flex: 1, padding: 16 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 16,
+    },
     heading: { fontSize: 22, fontWeight: '700', color: theme.text, marginBottom: 4 },
+    actions: { flexDirection: 'row', gap: 12 },
+    actionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.primary,
+    },
+    actionBtnDisabled: { opacity: 0.5 },
+    actionBtnText: { fontSize: 14, fontWeight: '600', color: theme.primary },
     subtitle: { fontSize: 14, color: theme.textSecondary, marginBottom: 16 },
     dayTabs: { flexDirection: 'row', marginBottom: 16 },
     dayTab: {

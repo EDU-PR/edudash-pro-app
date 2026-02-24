@@ -70,6 +70,7 @@ export interface DashPromptBuilderConfig {
 export class DashPromptBuilder {
   private personality: DashPersonality;
   private getUserProfile: () => UserProfile | undefined;
+  private static systemPromptCache = new Map<string, string>();
   
   constructor(config: DashPromptBuilderConfig) {
     this.personality = config.personality;
@@ -218,8 +219,10 @@ ${orgType === 'skills_development' ? `
 - Prioritize letter recognition, phonics sounds, number recognition, counting, shapes, colors, and fine-motor skills
 - Keep steps short and hands-on (3-6 steps max)
 - Include a quick interactive check (e.g., "Can you point to the letter B?")
-${SHARED_PHONICS_PROMPT_BLOCK}
 `;
+      if (role === 'teacher' || role === 'parent' || role === 'student' || role === 'learner') {
+        context += `\n${SHARED_PHONICS_PROMPT_BLOCK}\n`;
+      }
     }
     
     // Add K-12 specific features
@@ -260,6 +263,16 @@ ${SHARED_PHONICS_PROMPT_BLOCK}
   public buildSystemPrompt(): string {
     const profile = this.getUserProfile();
     const userRole = profile?.role || 'educator';
+    const cacheKey = [
+      userRole,
+      String(profile?.organization_type || ''),
+      String(profile?.age_group || ''),
+      String(profile?.grade_level || ''),
+      String(profile?.subscription_tier || ''),
+      String(profile?.full_name || profile?.display_name || ''),
+    ].join('|');
+    const cached = DashPromptBuilder.systemPromptCache.get(cacheKey);
+    if (cached) return cached;
     const roleSpec = this.personality.role_specializations[userRole];
     const capabilities = roleSpec?.capabilities || [];
     
@@ -330,7 +343,7 @@ TUTORING FLOW (PARENT/STUDENT MODE):
 `
       : '';
     
-    return `You are Dash, an AI Teaching Assistant and Educational Professor.${userGreeting}
+    const built = `You are Dash, an AI Teaching Assistant and Educational Professor.${userGreeting}
 ${organizationContext}
 ${ageGroupPersona}
 CORE PERSONALITY: ${this.personality.personality_traits.join(', ')}
@@ -394,6 +407,7 @@ TOOL SELECTION GUIDE:
 - "What subjects are available?" → Use get_caps_subjects with {grade: "X"}
 - "What should my child learn in Grade X?" → Use caps_curriculum_query with {grade: "X"}
 - "Find textbooks for Grade X Mathematics" → Use textbook_content with {grade: "X", subject: "Mathematics"}
+- "Generate lesson plan" / "Create teaching strategy" → FIRST call get_weekly_routine_for_lesson(organization_id), THEN call generate_teaching_strategy with routine_context from the result
 
 EXAMPLES:
   User: "Show me grade 10 mathematics CAPS documents"
@@ -435,7 +449,18 @@ TOOL USAGE BEST PRACTICES:
    - Use proactively when users want insights or summaries
    - Combine with other tools for comprehensive answers
 
+5. **Lesson Generation** (generate_teaching_strategy):
+   - When a teacher or principal asks for a lesson plan or teaching strategy, FIRST call get_weekly_routine_for_lesson with the user's organization_id
+   - Pass routine_context from the result into generate_teaching_strategy so the lesson aligns with the school's daily routine
+   - Do not deviate from the routine structure when it is provided
+
 IMPORTANT: Always use tools to access real data. Never make up information. Never claim to perform actions you cannot do.`;
+    DashPromptBuilder.systemPromptCache.set(cacheKey, built);
+    if (DashPromptBuilder.systemPromptCache.size > 40) {
+      const oldestKey = DashPromptBuilder.systemPromptCache.keys().next().value;
+      if (oldestKey) DashPromptBuilder.systemPromptCache.delete(oldestKey);
+    }
+    return built;
   }
   
   /**

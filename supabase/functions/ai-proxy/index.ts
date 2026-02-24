@@ -163,9 +163,18 @@ const MAX_TOKENS_BY_SERVICE: Record<string, number> = {
   image_generation: 512,
 };
 const DEFAULT_MAX_TOKENS = 2048;
+const DEFAULT_TEMPERATURE = 0.4;
+const VOICE_CHAT_TEMPERATURE = 0.15;
 
 function getMaxTokensForService(serviceType: string): number {
   return MAX_TOKENS_BY_SERVICE[serviceType] || DEFAULT_MAX_TOKENS;
+}
+
+function resolveTemperature(requestMetadata?: Record<string, unknown>): number {
+  const context = String(requestMetadata?.context || requestMetadata?.source || '').toLowerCase();
+  return context.includes('voice_chat') || context.includes('dash_voice_orb')
+    ? VOICE_CHAT_TEMPERATURE
+    : DEFAULT_TEMPERATURE;
 }
 
 const WebSearchArgsSchema = z.object({
@@ -2006,132 +2015,6 @@ function mapProviderErrorStatus(message: string): number {
   return 502;
 }
 
-function getStringMetaValue(metadata: Record<string, unknown>, key: string): string {
-  const value = metadata[key];
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function shouldServeWeeklyProgramFallback(
-  serviceType: string,
-  metadata: Record<string, unknown>,
-  primaryError: string,
-  fallbackError?: string,
-): boolean {
-  if (serviceType !== 'lesson_generation') return false;
-  const source = getStringMetaValue(metadata, 'source').toLowerCase();
-  if (!source.includes('weekly_program_copilot')) return false;
-  const combined = `${primaryError || ''} ${fallbackError || ''}`.trim();
-  return hasQuotaOrRateLimitSignal(combined);
-}
-
-function extractPromptLine(prompt: string, label: string): string {
-  if (!prompt) return '';
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = prompt.match(new RegExp(`^${escaped}:\\s*(.+)$`, 'im'));
-  return match?.[1]?.trim() || '';
-}
-
-function buildWeeklyProgramFallbackPayload(prompt: string): Record<string, unknown> {
-  const schoolName = extractPromptLine(prompt, 'School name');
-  const theme = extractPromptLine(prompt, 'Theme') || 'Healthy Habits';
-  const ageGroup = extractPromptLine(prompt, 'Age group') || 'Preschool';
-  const preflightAnchors = extractPromptLine(prompt, '- Non-negotiable anchors');
-  const preflightFixedEvents = extractPromptLine(prompt, '- Fixed weekly events/constraints');
-  const preflightAfterLunch = extractPromptLine(prompt, '- After-lunch pattern + transitions');
-  const preflightResources = extractPromptLine(prompt, '- Resource/staff constraints');
-  const preflightSafety = extractPromptLine(prompt, '- Safety/compliance + fallback rules');
-  const title = `${schoolName ? `${schoolName} ` : ''}${theme} Weekly Program`.trim();
-
-  const dayFocus: Record<number, { language: string; math: string; life: string }> = {
-    1: { language: 'Story retell and speaking', math: 'Count and match to 20', life: 'Routine expectations and sharing' },
-    2: { language: 'Listening comprehension', math: 'Shapes and sorting', life: 'Fine-motor and self-help skills' },
-    3: { language: 'Phonics and vocabulary', math: 'Patterns and comparison', life: 'Movement and hygiene routines' },
-    4: { language: 'Shared reading and recap', math: 'Measurement words', life: 'Outdoor cooperation and safety' },
-    5: { language: 'Weekly oral reflection', math: 'Number revision', life: 'Creative expression and transitions' },
-  };
-
-  const days = [1, 2, 3, 4, 5].map((day) => ({
-    day_of_week: day,
-    blocks: [
-      {
-        block_order: 1,
-        block_type: 'circle_time',
-        title: 'Community Circle & Weather Report',
-        start_time: '08:00',
-        end_time: '08:30',
-        objectives: ['Daily weather check-in', 'Calendar routine', 'Oral language confidence'],
-        materials: ['Weather chart', 'Calendar cards'],
-        transition_cue: 'Welcome learners and move into focused language learning.',
-        notes: `${preflightAnchors ? `Anchors: ${preflightAnchors}. ` : ''}CAPS Home Language: ${dayFocus[day].language}`,
-      },
-      {
-        block_order: 2,
-        block_type: 'learning',
-        title: 'Home Language Learning',
-        start_time: '08:30',
-        end_time: '09:05',
-        objectives: ['Listening and speaking', 'Vocabulary growth', 'Comprehension'],
-        materials: ['Story cards', 'Picture prompts'],
-        transition_cue: 'Use a counting rhyme to transition into mathematics.',
-        notes: `${preflightFixedEvents ? `Fixed events: ${preflightFixedEvents}. ` : ''}CAPS Home Language: ${dayFocus[day].language}`,
-      },
-      {
-        block_order: 3,
-        block_type: 'learning',
-        title: 'Mathematics Confidence Block',
-        start_time: '09:05',
-        end_time: '09:40',
-        objectives: ['Number sense', 'Patterns and relationships', 'Practical reasoning'],
-        materials: ['Counters', 'Shape cards'],
-        transition_cue: 'Pack away and prepare for snack routine.',
-        notes: `${preflightResources ? `Resource constraints: ${preflightResources}. ` : ''}CAPS Mathematics: ${dayFocus[day].math}`,
-      },
-      {
-        block_order: 4,
-        block_type: 'meal',
-        title: 'Snack & Toilet Routine',
-        start_time: '09:40',
-        end_time: '10:10',
-        objectives: ['Healthy habits', 'Toilet routine consistency', 'Hygiene checks'],
-        materials: ['Snack station', 'Handwashing setup'],
-        transition_cue: 'Guide learners to movement/outdoor area.',
-        notes: `${preflightSafety ? `Safety: ${preflightSafety}. ` : ''}Life Skills: hygiene and self-help independence.`,
-      },
-      {
-        block_order: 5,
-        block_type: 'outdoor',
-        title: 'Outdoor Play & Gross Motor',
-        start_time: '10:10',
-        end_time: '10:50',
-        objectives: ['Gross-motor development', 'Social cooperation', 'Self-regulation'],
-        materials: ['Balls', 'Cones'],
-        transition_cue: preflightAfterLunch
-          ? `After-lunch pattern: ${preflightAfterLunch}. Cool down and regroup for story reflection.`
-          : 'Cool down and regroup for story reflection.',
-        notes: `CAPS Life Skills: ${dayFocus[day].life}`,
-      },
-      {
-        block_order: 6,
-        block_type: 'assessment',
-        title: 'Story Reflection & Learning Documentation',
-        start_time: '10:50',
-        end_time: '11:30',
-        objectives: ['Consolidate language and numeracy learning', 'Reflect on the day'],
-        materials: ['Reflection cards', 'Class board'],
-        transition_cue: 'Close the session and prepare for departure routines.',
-        notes: `CAPS consolidation for ${ageGroup}.`,
-      },
-    ],
-  }));
-
-  return {
-    title,
-    summary:
-      `Fallback weekly program for ${ageGroup}. Generated during temporary AI provider capacity limits with CAPS/ECD strand coverage, weather repetition, and preflight constraints preserved.`,
-    days,
-  };
-}
-
 function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], systemPrompt: string) {
   const baseMessages = payload.conversationHistory || payload.messages;
   const messages: Array<JsonRecord> = [];
@@ -2340,6 +2223,7 @@ function callAnthropicStreaming(
   requestedModel: string | null | undefined,
   allowedOverride: string[] | undefined,
   isSuperAdmin: boolean,
+  requestMetadata: Record<string, unknown>,
   maxTokens: number = DEFAULT_MAX_TOKENS,
   enableTools: boolean = false,
   clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
@@ -2399,7 +2283,7 @@ function callAnthropicStreaming(
             body: JSON.stringify({
               model: modelName,
               max_tokens: maxTokens,
-              temperature: 0.4,
+              temperature: resolveTemperature(requestMetadata),
               stream: true,
               messages: providerMessages,
               system: systemPrompt,
@@ -2687,6 +2571,7 @@ function callAnthropicStreaming(
 function callOpenAIStreaming(
   messages: Array<JsonRecord>,
   requestedModel: string | null | undefined,
+  requestMetadata: Record<string, unknown>,
   maxTokens: number = DEFAULT_MAX_TOKENS,
 ): { stream: ReadableStream<Uint8Array>; meta: Promise<ProviderResponse> } {
   const apiKey = getOpenAIApiKey();
@@ -2716,7 +2601,7 @@ function callOpenAIStreaming(
         const requestBody: JsonRecord = {
           model,
           messages: normalizeOpenAIMessages(messages),
-          temperature: 0.4,
+          temperature: resolveTemperature(requestMetadata),
           max_tokens: maxTokens,
           stream: true,
           stream_options: { include_usage: true },
@@ -2862,6 +2747,7 @@ async function callOpenAI(
   messages: Array<JsonRecord>,
   enableTools: boolean,
   requestedModel?: string | null,
+  requestMetadata: Record<string, unknown> = {},
   maxTokens: number = DEFAULT_MAX_TOKENS,
   clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
 ): Promise<ProviderResponse> {
@@ -2881,7 +2767,7 @@ async function callOpenAI(
   const body: JsonRecord = {
     model,
     messages: normalizeOpenAIMessages(messages),
-    temperature: 0.4,
+    temperature: resolveTemperature(requestMetadata),
     max_tokens: maxTokens,
   };
 
@@ -3008,7 +2894,7 @@ async function callOpenAI(
       const followUpBody: JsonRecord = {
         model,
         messages: normalizeOpenAIMessages(messages),
-        temperature: 0.4,
+        temperature: resolveTemperature(requestMetadata),
         max_tokens: maxTokens,
       };
 
@@ -3086,6 +2972,7 @@ async function callAnthropic(
   enableTools: boolean,
   requestedModel?: string | null,
   allowedOverride?: string[],
+  requestMetadata: Record<string, unknown> = {},
   maxTokens: number = DEFAULT_MAX_TOKENS,
   clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
 ): Promise<ProviderResponse> {
@@ -3114,7 +3001,7 @@ async function callAnthropic(
     const body: JsonRecord = {
       model,
       max_tokens: maxTokens,
-      temperature: 0.4,
+      temperature: resolveTemperature(requestMetadata),
       messages: providerMessages,
       system: systemPrompt,
     };
@@ -3806,6 +3693,7 @@ serve(async (req) => {
           requestedModel,
           allowedOverride,
           isSuperAdmin,
+          requestMetadata,
           maxTokens,
           enableTools,
           clientToolDefs,
@@ -3864,6 +3752,7 @@ serve(async (req) => {
         const { stream, meta } = callOpenAIStreaming(
           messages,
           requestedModel,
+          requestMetadata,
           maxTokens,
         );
 
@@ -3942,10 +3831,27 @@ serve(async (req) => {
           ? pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model
           : requestedModel;
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
-        return await callAnthropic(supabase, messages, enableTools, model, allowedOverride, maxTokens, clientTools);
+        return await callAnthropic(
+          supabase,
+          messages,
+          enableTools,
+          model,
+          allowedOverride,
+          requestMetadata,
+          maxTokens,
+          clientTools,
+        );
       }
       if (!hasOpenAI) throw new Error('OPENAI_API_KEY missing and OpenAI not configured.');
-      return await callOpenAI(supabase, messages, enableTools, requestedModel, maxTokens, clientTools);
+      return await callOpenAI(
+        supabase,
+        messages,
+        enableTools,
+        requestedModel,
+        requestMetadata,
+        maxTokens,
+        clientTools,
+      );
     };
 
     try {
@@ -3967,41 +3873,6 @@ serve(async (req) => {
         } catch (fallbackError) {
           const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
           const fallbackStatus = mapProviderErrorStatus(fallbackMessage);
-          if (shouldServeWeeklyProgramFallback(serviceType, requestMetadata, providerMessage, fallbackMessage)) {
-            const fallbackProgram = buildWeeklyProgramFallbackPayload(String(payload.payload.prompt || ''));
-            try {
-              await supabase.rpc('record_ai_usage', {
-                p_user_id: userData.user.id,
-                p_feature_used: normalizeServiceType(payload.service_type),
-                p_model_used: 'weekly-program-fallback-v1',
-                p_tokens_used: 0,
-                p_request_tokens: 0,
-                p_response_tokens: 0,
-                p_success: true,
-                p_metadata: {
-                  scope: payload.scope,
-                  organization_id: profile.organization_id || profile.preschool_id || null,
-                  request_metadata: payload.metadata || {},
-                  fallback_mode: 'weekly_program_provider_capacity',
-                  provider_error: providerMessage,
-                  fallback_provider_error: fallbackMessage,
-                },
-              });
-            } catch (usageErr) {
-              console.warn('[ai-proxy] record_ai_usage failed for weekly program fallback (non-fatal):', usageErr);
-            }
-            console.warn('[ai-proxy] Returning deterministic weekly program fallback due provider capacity.');
-            return new Response(JSON.stringify({
-              content: JSON.stringify(fallbackProgram),
-              usage: { tokens_in: 0, tokens_out: 0, cost: 0 },
-              model: 'weekly-program-fallback-v1',
-              fallback_used: true,
-              fallback_reason: 'provider_capacity',
-            }), {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
           console.error('[ai-proxy] Provider error:', providerMessage, 'Fallback error:', fallbackMessage);
           return new Response(JSON.stringify({
             error: 'provider_error',
@@ -4013,40 +3884,6 @@ serve(async (req) => {
           });
         }
       } else {
-        if (shouldServeWeeklyProgramFallback(serviceType, requestMetadata, providerMessage)) {
-          const fallbackProgram = buildWeeklyProgramFallbackPayload(String(payload.payload.prompt || ''));
-          try {
-            await supabase.rpc('record_ai_usage', {
-              p_user_id: userData.user.id,
-              p_feature_used: normalizeServiceType(payload.service_type),
-              p_model_used: 'weekly-program-fallback-v1',
-              p_tokens_used: 0,
-              p_request_tokens: 0,
-              p_response_tokens: 0,
-              p_success: true,
-              p_metadata: {
-                scope: payload.scope,
-                organization_id: profile.organization_id || profile.preschool_id || null,
-                request_metadata: payload.metadata || {},
-                fallback_mode: 'weekly_program_provider_capacity_single_provider',
-                provider_error: providerMessage,
-              },
-            });
-          } catch (usageErr) {
-            console.warn('[ai-proxy] record_ai_usage failed for weekly program fallback (non-fatal):', usageErr);
-          }
-          console.warn('[ai-proxy] Returning deterministic weekly program fallback due provider capacity.');
-          return new Response(JSON.stringify({
-            content: JSON.stringify(fallbackProgram),
-            usage: { tokens_in: 0, tokens_out: 0, cost: 0 },
-            model: 'weekly-program-fallback-v1',
-            fallback_used: true,
-            fallback_reason: 'provider_capacity',
-          }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
         console.error('[ai-proxy] Provider error:', providerMessage);
         return new Response(JSON.stringify({
           error: 'provider_error',

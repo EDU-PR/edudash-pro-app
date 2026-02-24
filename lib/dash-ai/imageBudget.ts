@@ -138,11 +138,24 @@ function buildBudgetFromServerRow(row: ServerBudgetRow, tier?: string | null): I
 }
 
 async function getServerAutoScanBudget(tier?: string | null): Promise<ImageBudget | null> {
+  const feature = String(AUTO_SCAN_FEATURE || '').trim().toLowerCase();
+  if (!feature) {
+    throw new Error('AUTO_SCAN_FEATURE is not configured');
+  }
   const { data, error } = await assertSupabase().rpc('get_daily_media_budget', {
-    p_feature: AUTO_SCAN_FEATURE,
-    p_tier: normalizeTier(tier),
+    p_feature: feature,
+    p_tier: normalizeTier(tier) || 'free',
   });
-  if (error) throw error;
+  if (error) {
+    console.error('[AutoScanBudget] get_daily_media_budget failed', {
+      code: (error as any)?.code,
+      message: (error as any)?.message,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      tier: normalizeTier(tier),
+    });
+    throw error;
+  }
   const row = parseServerBudgetRow(data);
   if (!row) return null;
   return buildBudgetFromServerRow(row, tier);
@@ -207,17 +220,14 @@ async function consumeLocalAutoScanBudget(
     const raw = await AsyncStorage.getItem(key);
     const current = raw ? (JSON.parse(raw) as { usedCount?: number }) : { usedCount: 0 };
     const currentBudget = buildAutoScanBudgetFromUsage(current.usedCount, dailyLimit);
-    if (currentBudget.remainingCount < count) {
-      return {
-        allowed: false,
-        budget: currentBudget,
-      };
-    }
+    const allowed = currentBudget.remainingCount >= count;
 
+    // Always clamp and persist — even on denial — so repeated over-requests
+    // cannot dodge the limit by requesting more than what remains each time.
     const nextUsed = Math.min(dailyLimit, currentBudget.usedCount + count);
     await AsyncStorage.setItem(key, JSON.stringify({ usedCount: nextUsed }));
     return {
-      allowed: true,
+      allowed,
       budget: buildAutoScanBudgetFromUsage(nextUsed, dailyLimit),
     };
   });

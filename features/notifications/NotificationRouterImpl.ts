@@ -52,6 +52,24 @@ async function getCurrentUserId(): Promise<string | null> {
 }
 
 /**
+ * Get currently logged-in user's role (e.g. 'parent', 'teacher', 'principal')
+ */
+async function getCurrentUserRole(): Promise<string | null> {
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) return null;
+    const { data } = await assertSupabase()
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+    return (data?.role as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get user's name/email for display
  */
 async function getUserDisplayName(userId: string): Promise<string> {
@@ -308,7 +326,7 @@ export function setupNotificationRouter(): () => void {
         );
       } else {
         // Notification is for current user - handle normally
-        handleNotificationInteraction(data);
+        await handleNotificationInteraction(data);
       }
     }
   );
@@ -437,7 +455,7 @@ const openBuildUpdateStore = async (data: NotificationPayload): Promise<void> =>
 /**
  * Handle notification interaction (user tapped notification)
  */
-function handleNotificationInteraction(data: NotificationPayload): void {
+async function handleNotificationInteraction(data: NotificationPayload): Promise<void> {
   const receiptUrl = extractReceiptUrl(data);
   if (receiptUrl) {
     void openReceipt(receiptUrl);
@@ -505,9 +523,18 @@ function handleNotificationInteraction(data: NotificationPayload): void {
       } as any);
       break;
       
-    case 'announcement':
-      router.push('/screens/parent-announcements' as any);
+    case 'announcement': {
+      const role = await getCurrentUserRole();
+      if (role === 'principal' || role === 'principal_admin') {
+        router.push('/screens/principal-announcement' as any);
+      } else if (role === 'teacher') {
+        // Teachers see announcements in their messages/communications list
+        router.push('/screens/teacher-message-list' as any);
+      } else {
+        router.push('/screens/parent-announcements' as any);
+      }
       break;
+    }
       
     case 'homework':
     case 'assignment':

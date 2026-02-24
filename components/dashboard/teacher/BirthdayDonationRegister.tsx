@@ -73,44 +73,45 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
             <Text style={styles.muted}>{t('dashboard.birthday_donations.no_class', { defaultValue: 'No class assigned yet.' })}</Text>
           )}
 
-          {upcomingBirthdays.length === 0 && (
-            <Text style={styles.muted}>
-              {emptyMessage}
-            </Text>
-          )}
-
-          {upcomingBirthdays.length > 0 && (
-            <View style={styles.birthdayPicker}>
-              <Text style={styles.label}>{t('dashboard.birthday_donations.select_birthday', { defaultValue: 'Select birthday' })}</Text>
-              <View style={styles.windowRow}>
-                {(['upcoming', 'recent', 'all'] as const).map((mode) => {
-                  const selected = mode === birthdayWindowMode;
-                  const label = mode === 'upcoming'
-                    ? t('dashboard.birthday_donations.window_upcoming', { defaultValue: 'Upcoming' })
-                    : mode === 'recent'
-                      ? t('dashboard.birthday_donations.window_recent', { defaultValue: 'Recent' })
-                      : t('dashboard.birthday_donations.window_all', { defaultValue: 'All' });
-                  return (
-                    <TouchableOpacity
-                      key={mode}
-                      style={[styles.windowChip, selected && { backgroundColor: theme.primary }]}
-                      onPress={() => setBirthdayWindowMode(mode)}
-                    >
-                      <Text style={[styles.windowChipText, selected && { color: '#fff' }]}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {isPreschool && (
+          {/* Window mode selector — always visible so teachers can switch to
+              Recent/All even when there are no upcoming birthdays */}
+          <View style={styles.birthdayPicker}>
+            <Text style={styles.label}>{t('dashboard.birthday_donations.select_birthday', { defaultValue: 'Select birthday' })}</Text>
+            <View style={styles.windowRow}>
+              {(['upcoming', 'recent', 'all'] as const).map((mode) => {
+                const selected = mode === birthdayWindowMode;
+                const label = mode === 'upcoming'
+                  ? t('dashboard.birthday_donations.window_upcoming', { defaultValue: 'Upcoming' })
+                  : mode === 'recent'
+                    ? t('dashboard.birthday_donations.window_recent', { defaultValue: 'Recent' })
+                    : t('dashboard.birthday_donations.window_all', { defaultValue: 'All' });
+                return (
                   <TouchableOpacity
-                    style={[styles.windowChip, useFridayCelebration && { backgroundColor: theme.primary }]}
-                    onPress={() => setUseFridayCelebration((prev) => !prev)}
+                    key={mode}
+                    style={[styles.windowChip, selected && { backgroundColor: theme.primary }]}
+                    onPress={() => setBirthdayWindowMode(mode)}
                   >
-                    <Text style={[styles.windowChipText, useFridayCelebration && { color: '#fff' }]}>
-                      {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration' })}
-                    </Text>
+                    <Text style={[styles.windowChipText, selected && { color: '#fff' }]}>{label}</Text>
                   </TouchableOpacity>
-                )}
-              </View>
+                );
+              })}
+              {isPreschool && (
+                <TouchableOpacity
+                  style={[styles.windowChip, useFridayCelebration && { backgroundColor: theme.primary }]}
+                  onPress={() => setUseFridayCelebration((prev) => !prev)}
+                >
+                  <Text style={[styles.windowChipText, useFridayCelebration && { color: '#fff' }]}>
+                    {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration' })}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {upcomingBirthdays.length === 0 ? (
+              <Text style={[styles.muted, { marginTop: 8 }]}>
+                {emptyMessage}
+              </Text>
+            ) : (
               <View style={styles.birthdayPickerList}>
                 {upcomingBirthdays.map((entry) => {
                   const selected = entry.key === selectedBirthday?.key;
@@ -136,13 +137,15 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                   );
                 })}
               </View>
+            )}
+            {upcomingBirthdays.length > 0 && birthdayWindowMode === 'upcoming' && (
               <Text style={styles.helperText}>
                 {t('dashboard.birthday_donations.late_hint', {
                   defaultValue: 'Late payment? Switch to Recent or All to record past birthdays.',
                 })}
               </Text>
-            </View>
-          )}
+            )}
+          </View>
 
           {selectedBirthday && (
             <View style={styles.birthdayCard}>

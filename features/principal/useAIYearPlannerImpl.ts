@@ -42,6 +42,7 @@ interface UseAIYearPlannerReturn {
   setExpandedTerm: (termNumber: number | null) => void;
   generateYearPlan: (config: YearPlanConfig) => Promise<void>;
   savePlanToDatabase: () => Promise<void>;
+  updatePlan: (updater: (plan: GeneratedYearPlan) => GeneratedYearPlan) => void;
 }
 
 type MeetingType =
@@ -526,6 +527,62 @@ function findMatchingBrace(str: string, start: number): number {
   return -1;
 }
 
+/**
+ * Attempt to repair a truncated JSON string by:
+ * 1. Tracking the bracket/brace/string stack
+ * 2. Closing any in-progress string
+ * 3. Closing all unclosed brackets in reverse order
+ */
+function tryRepairTruncatedYearPlanJson(text: string): Record<string, unknown> | null {
+  const stack: Array<'{' | '['> = [];
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\' && inString) { escape = true; continue; }
+    if (inString) {
+      if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{') stack.push('{');
+    else if (c === '[') stack.push('[');
+    else if (c === '}') stack.pop();
+    else if (c === ']') stack.pop();
+  }
+
+  if (stack.length === 0 && !inString) return null; // not actually truncated
+
+  let repaired = text;
+  if (inString) repaired += '"'; // close open string
+  repaired = repaired.replace(/,\s*$/, ''); // strip trailing comma before close
+  repaired += stack
+    .slice()
+    .reverse()
+    .map((c) => (c === '{' ? '}' : ']'))
+    .join('');
+
+  const attempts = [
+    repaired,
+    repaired.replace(/,\s*([}\]])/g, '$1'), // strip trailing commas inside
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const result = JSON.parse(attempt);
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        return result as Record<string, unknown>;
+      }
+    } catch {
+      // try next attempt
+    }
+  }
+
+  return null;
+}
+
 function extractJsonObject(content: string): Record<string, unknown> | null {
   const text = String(content || '').trim();
   if (!text) return null;
@@ -548,6 +605,14 @@ function extractJsonObject(content: string): Record<string, unknown> | null {
     if (__DEV__) {
       console.warn('[AI Year Planner] Failed to parse AI response as JSON:', e);
       console.warn('[AI Year Planner] Response sample (first 800 chars):', text.slice(0, 800));
+    }
+    // Attempt repair for truncated responses
+    const repaired = tryRepairTruncatedYearPlanJson(slice);
+    if (repaired) {
+      if (__DEV__) {
+        console.log('[AI Year Planner] Repaired truncated JSON successfully');
+      }
+      return repaired;
     }
     return null;
   }
@@ -898,6 +963,8 @@ export function useAIYearPlanner({
         `- Return exactly ${config.numberOfTerms} terms in the \"terms\" array.`,
         `- Term numbers must be 1..${config.numberOfTerms} with no gaps.`,
         `- Use only valid YYYY-MM-DD dates.`,
+        `- Keep responses COMPACT to avoid truncation: max 3 activities per weekly theme (single short phrases only), max 2 excursions per term, max 2 meetings per term. Prefer brevity over detail in every string value.`,
+        `- Do NOT include markdown, prose, or any text outside the JSON object.`,
       ].join('\n');
 
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
@@ -1135,6 +1202,10 @@ export function useAIYearPlanner({
     }
   }, [generatedPlan, generationConfig, organizationId, userId, showPlannerAlert]);
 
+  const updatePlan = useCallback((updater: (plan: GeneratedYearPlan) => GeneratedYearPlan) => {
+    setGeneratedPlan((prev) => (prev ? updater(prev) : prev));
+  }, []);
+
   return {
     generatedPlan,
     isGenerating,
@@ -1143,5 +1214,6 @@ export function useAIYearPlanner({
     setExpandedTerm,
     generateYearPlan,
     savePlanToDatabase,
+    updatePlan,
   };
 }

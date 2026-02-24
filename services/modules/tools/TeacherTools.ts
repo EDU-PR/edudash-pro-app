@@ -54,6 +54,20 @@ function buildStrategyTool(): AgentTool {
           type: 'number',
           description: 'Optional: Lesson duration in minutes (default 30)',
         },
+        routine_context: {
+          type: 'string',
+          description:
+            'Optional: Weekly/daily routine context from get_weekly_routine_for_lesson. When provided, the lesson MUST align with this routine and must not deviate.',
+        },
+        routine_block_title: {
+          type: 'string',
+          description:
+            'Optional: Specific block title from the routine. When provided with routine_block_objectives, align strictly with this block.',
+        },
+        routine_block_objectives: {
+          type: 'string',
+          description: 'Optional: Block objectives (comma-separated). Use with routine_block_title for strict alignment.',
+        },
       },
       required: ['subject', 'topic', 'grade'],
     },
@@ -64,8 +78,25 @@ function buildStrategyTool(): AgentTool {
         const model = getDefaultModelIdForTier(tier);
         const duration = args.duration_minutes || 30;
 
+        const routineBlockParts: string[] = [];
+        if (args.routine_block_title || args.routine_block_objectives) {
+          routineBlockParts.push(
+            'STRICT ALIGNMENT: This lesson MUST align with the following routine block. Do not deviate.',
+            args.routine_block_title ? `- Block: ${args.routine_block_title}` : '',
+            args.routine_block_objectives ? `- Objectives: ${args.routine_block_objectives}` : '',
+          );
+        }
+        if (args.routine_context) {
+          routineBlockParts.push(
+            'MANDATORY ROUTINE ALIGNMENT: Use this weekly/daily routine as context. Your lesson must fit within and align with this structure. Do not deviate.',
+            '',
+            args.routine_context,
+          );
+        }
+
         const prompt = [
           `You are a master South African ECD/K-12 pedagogy advisor.`,
+          ...(routineBlockParts.length > 0 ? [routineBlockParts.join('\n'), ''] : []),
           `Generate a structured teaching strategy for:`,
           `- Subject: ${args.subject}`,
           `- Topic: ${args.topic}`,
@@ -143,6 +174,68 @@ function buildStrategyTool(): AgentTool {
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Strategy generation failed',
+        };
+      }
+    },
+  };
+}
+
+// ─── Weekly Routine for Lesson Alignment ────────────────────────────────────
+
+function buildWeeklyRoutineTool(): AgentTool {
+  return {
+    name: 'get_weekly_routine_for_lesson',
+    description:
+      "Fetch the organization's active weekly/daily routine for lesson alignment. " +
+      "Use BEFORE generate_teaching_strategy so lessons align with the principal's routine and do not deviate.",
+    parameters: {
+      type: 'object',
+      properties: {
+        organization_id: {
+          type: 'string',
+          description: 'Organization/preschool ID to fetch the routine for',
+        },
+      },
+      required: ['organization_id'],
+    },
+    risk: 'low',
+    execute: async (args, context?) => {
+      try {
+        const orgId = args.organization_id || (context as any)?.organizationId;
+        if (!orgId) {
+          return {
+            success: false,
+            error: 'organization_id is required to fetch the weekly routine',
+          };
+        }
+        const { WeeklyProgramService } = await import('@/features/principal/weeklyProgramServiceCore');
+        const program = await WeeklyProgramService.getActiveWeeklyProgramForOrganization(orgId);
+        if (!program) {
+          return {
+            success: true,
+            result: {
+              routine_context: null,
+              message: 'No active weekly routine found for this organization. Generate lessons as usual.',
+            },
+          };
+        }
+        const routineContext = WeeklyProgramService.formatRoutineForLessonContext(program);
+        return {
+          success: true,
+          result: {
+            routine_context: routineContext,
+            program_title: program.title,
+            week_start: program.week_start_date,
+            week_end: program.week_end_date,
+            message:
+              'Pass routine_context to generate_teaching_strategy so the lesson aligns with this routine.',
+          },
+        };
+      } catch (error) {
+        logger.error('[TeacherTools] get_weekly_routine_for_lesson failed', { error });
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch weekly routine',
         };
       }
     },
@@ -358,7 +451,8 @@ export function registerTeacherTools(
   register: (tool: AgentTool) => void,
 ): void {
   register(buildStrategyTool());
+  register(buildWeeklyRoutineTool());
   register(buildHomeworkTool());
   register(buildBatchGradeTool());
-  logger.info('[TeacherTools] 3 teacher tools registered');
+  logger.info('[TeacherTools] 4 teacher tools registered');
 }
