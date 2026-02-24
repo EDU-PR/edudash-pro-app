@@ -31,15 +31,20 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Class Information</Text>
         {canAssignClass && classes.length > 0 && (
-          <TouchableOpacity onPress={onAssignClass}>
-            <Text style={styles.editText}>Assign Class</Text>
+          <TouchableOpacity
+            style={styles.assignClassButton}
+            onPress={onAssignClass}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="school-outline" size={18} color="#fff" style={styles.assignClassButtonIcon} />
+            <Text style={styles.assignClassButtonText}>Assign Class</Text>
           </TouchableOpacity>
         )}
       </View>
       
       {student.class_name ? (
         <View style={styles.classInfo}>
-          <Ionicons name="school" size={20} color="#007AFF" />
+          <Ionicons name="school" size={20} color={theme.primary} />
           <View style={styles.classDetails}>
             <Text style={styles.className}>{student.class_name}</Text>
             {student.teacher_name && (
@@ -52,7 +57,7 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
           <Ionicons name="alert-circle" size={20} color="#F59E0B" />
           <Text style={styles.unassignedText}>Not assigned to any class</Text>
           {canAssignClass && classes.length > 0 && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.assignButton}
               onPress={onAssignClass}
             >
@@ -88,10 +93,21 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     color: theme.text,
   },
-  editText: {
-    color: '#007AFF',
+  assignClassButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  assignClassButtonIcon: {
+    marginRight: 6,
+  },
+  assignClassButtonText: {
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   classInfo: {
     flexDirection: 'row',

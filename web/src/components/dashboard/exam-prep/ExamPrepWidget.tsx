@@ -348,6 +348,7 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
 
   const [customPrompt, setCustomPrompt] = useState('');
+  const [promptSystemPrefix, setPromptSystemPrefix] = useState('');
 
   // Fetch user info for UpgradeModal
   useEffect(() => {
@@ -377,6 +378,7 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
       <ConversationalExamBuilder
         grade={selectedGrade}
         subject={selectedSubject}
+        language={LANGUAGE_OPTIONS[selectedLanguage]}
         onClose={() => setShowConversationalBuilder(false)}
         onSave={(exam) => {
           console.log('Exam saved:', exam);
@@ -939,18 +941,18 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
     
     // Store prompt and display for preview
     setCustomPrompt(prompt);
+    setPromptSystemPrefix(extractPromptParts(prompt).systemPrefix);
     setShowPromptPreview(true);
+  };
 
-    // ✅ INCREMENT USAGE COUNTER WHEN EXAM GENERATION STARTS
+  const handleConfirmGenerate = () => {
+    if (!customPrompt) return;
+
     if (userId && !guestMode) {
       incrementUsage('exam_generation', 'success').catch(err => {
         console.error('[ExamPrep] Failed to increment usage:', err);
       });
     }
-  };
-
-  const handleConfirmGenerate = () => {
-    if (!customPrompt) return;
     
     // For practice tests, navigate to dedicated exam generation page
     const isInteractive = selectedExamType === 'practice_test';
@@ -981,54 +983,65 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
   const handleCancelPreview = () => {
     setShowPromptPreview(false);
     setCustomPrompt('');
+    setPromptSystemPrefix('');
   };
 
   /**
-   * Extract user-editable portion of the prompt by removing internal system instructions.
-   * Filters out "You are Dash", "**IMPORTANT:", and other AI directives.
+   * Split prompt into immutable system prefix + user-editable body.
+   * This keeps hidden guardrails intact when parents edit visible instructions.
    */
-  const getUserEditablePrompt = (fullPrompt: string): string => {
-    if (!fullPrompt) return '';
-    
-    // Split into lines and filter out system instructions
-    const lines = fullPrompt.split('\n');
-    const filteredLines = lines.filter(line => {
-      const trimmed = line.trim();
-      // Remove system instructions
-      if (trimmed.startsWith('You are Dash,')) return false;
-      if (trimmed.includes('**IMPORTANT:')) return false;
-      if (trimmed.includes('Generate ALL content')) return false;
-      if (trimmed.startsWith('**Your Task:**')) return false;
-      if (trimmed.startsWith('**Conversation Flow:**')) return false;
-      if (trimmed.startsWith('**Important Guidelines:**')) return false;
-      if (trimmed.startsWith('**CAPS Curriculum Focus:**')) return false;
-      if (trimmed.startsWith('**AGE-APPROPRIATE INSTRUCTION VERBS')) return false;
-      if (trimmed.startsWith('**WRONG - Too vague')) return false;
-      if (trimmed.startsWith('**CORRECT - Clear teacher')) return false;
-      if (trimmed.startsWith('**PEDAGOGICAL FRAMEWORK')) return false;
-      return true;
-    });
-    
-    // Rejoin and extract main content section
-    let result = filteredLines.join('\n').trim();
-    
-    // Remove leading system context up to the actual content instructions
+  const extractPromptParts = (fullPrompt: string): { systemPrefix: string; userContent: string } => {
+    if (!fullPrompt) {
+      return { systemPrefix: '', userContent: '' };
+    }
+
     const contentMarkers = [
-      'Generate an interactive',
+      'Have a brief conversation to understand what the student needs',
+      'Generate an interactive, age-appropriate practice examination paper',
       'Generate comprehensive revision notes',
       'Generate a 7-day intensive study',
-      'Generate 30 flashcards'
+      'Generate 30 flashcards',
     ];
-    
+
+    let markerIndex = -1;
     for (const marker of contentMarkers) {
-      const markerIndex = result.indexOf(marker);
-      if (markerIndex !== -1) {
-        result = result.substring(markerIndex);
-        break;
+      const index = fullPrompt.indexOf(marker);
+      if (index !== -1 && (markerIndex === -1 || index < markerIndex)) {
+        markerIndex = index;
       }
     }
-    
-    return result;
+
+    if (markerIndex === -1) {
+      return {
+        systemPrefix: promptSystemPrefix || '',
+        userContent: fullPrompt.trim(),
+      };
+    }
+
+    const rawPrefix = fullPrompt.slice(0, markerIndex);
+    const normalizedPrefix = rawPrefix.endsWith('\n\n')
+      ? rawPrefix
+      : `${rawPrefix.replace(/\s+$/, '')}\n\n`;
+
+    return {
+      systemPrefix: normalizedPrefix,
+      userContent: fullPrompt.slice(markerIndex).trim(),
+    };
+  };
+
+  const getDefaultPromptSystemHeader = (): string => {
+    const languageName = LANGUAGE_OPTIONS[selectedLanguage];
+    return `You are Dash, a South African education assistant specializing in CAPS curriculum.\n\n**IMPORTANT: Generate ALL content in ${languageName} (${selectedLanguage}). Use ONLY this language throughout the entire document. Do NOT switch languages.**\n\n`;
+  };
+
+  const getUserEditablePrompt = (fullPrompt: string): string => {
+    if (!fullPrompt) return '';
+
+    if (promptSystemPrefix && fullPrompt.startsWith(promptSystemPrefix)) {
+      return fullPrompt.slice(promptSystemPrefix.length).trim();
+    }
+
+    return extractPromptParts(fullPrompt).userContent;
   };
 
   /**
@@ -1036,14 +1049,9 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
    */
   const reconstructFullPrompt = (userContent: string): string => {
     if (!userContent) return '';
-    
-    const languageName = LANGUAGE_OPTIONS[selectedLanguage];
-    const complexity = GRADE_COMPLEXITY[selectedGrade as keyof typeof GRADE_COMPLEXITY];
-    
-    // Extract system instructions from original prompt
-    const systemHeader = `You are Dash, a South African education assistant specializing in CAPS curriculum.\n\n**IMPORTANT: Generate ALL content in ${languageName} (${selectedLanguage}). Use ONLY this language throughout the entire document. Do NOT switch languages.**\n\n`;
-    
-    return systemHeader + userContent;
+
+    const systemHeader = promptSystemPrefix || getDefaultPromptSystemHeader();
+    return `${systemHeader}${userContent.trim()}`;
   };
 
   return (

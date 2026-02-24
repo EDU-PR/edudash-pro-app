@@ -249,6 +249,71 @@ describe('WeeklyProgramCopilotService', () => {
     }
   });
 
+  it('guarantees every weekday runs until at least 13:30', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      error: null,
+      data: {
+        content: JSON.stringify({
+          title: 'Short Day Response',
+          summary: 'Model ended too early',
+          days: [
+            {
+              day_of_week: 1,
+              blocks: [
+                { block_order: 1, title: 'Arrival', block_type: 'transition', start_time: '06:30', end_time: '07:00' },
+                { block_order: 2, title: 'Math Game', block_type: 'learning', start_time: '07:00', end_time: '08:00' },
+              ],
+            },
+          ],
+        }),
+      },
+    });
+
+    const draft = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm(baseInput);
+
+    for (const day of [1, 2, 3, 4, 5]) {
+      const dayBlocks = draft.blocks.filter((block) => block.day_of_week === day);
+      expect(dayBlocks.length).toBeGreaterThan(0);
+
+      const latestEnd = dayBlocks.reduce((max, block) => {
+        const end = String(block.end_time || '');
+        if (!/^\d{2}:\d{2}$/.test(end)) return max;
+        const [h, m] = end.split(':').map(Number);
+        const mins = (h * 60) + m;
+        return Math.max(max, mins);
+      }, -1);
+
+      expect(latestEnd).toBeGreaterThanOrEqual((13 * 60) + 30);
+    }
+  });
+
+  it('returns a full fallback week when AI returns no blocks', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      error: null,
+      data: {
+        content: JSON.stringify({
+          title: 'Empty Payload',
+          summary: 'No usable blocks',
+          days: [],
+        }),
+      },
+    });
+
+    const draft = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm(baseInput);
+
+    for (const day of [1, 2, 3, 4, 5]) {
+      const dayBlocks = draft.blocks.filter((block) => block.day_of_week === day);
+      expect(dayBlocks.length).toBeGreaterThanOrEqual(6);
+      const latestEnd = dayBlocks.reduce((max, block) => {
+        const end = String(block.end_time || '');
+        if (!/^\d{2}:\d{2}$/.test(end)) return max;
+        const [h, m] = end.split(':').map(Number);
+        return Math.max(max, (h * 60) + m);
+      }, -1);
+      expect(latestEnd).toBeGreaterThanOrEqual((13 * 60) + 30);
+    }
+  });
+
   it('enforces weather repetition across Monday-Friday blocks', async () => {
     mockInvoke.mockResolvedValueOnce({
       error: null,

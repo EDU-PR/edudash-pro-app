@@ -38,6 +38,7 @@ const DAY_LABELS: Record<number, string> = {
   7: 'Sunday',
 };
 const WEEKDAY_SEQUENCE = [1, 2, 3, 4, 5] as const;
+const MIN_WEEKDAY_END_MINUTES = 13 * 60 + 30; // 13:30 hard floor
 
 function toDateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -81,6 +82,13 @@ function toMinutes(value: string): number | null {
   if (!normalized) return null;
   const [hours, minutes] = normalized.split(':').map((part) => Number(part));
   return hours * 60 + minutes;
+}
+
+function toHHMM(totalMinutes: number): string {
+  const safe = Math.max(0, Math.min((23 * 60) + 59, Math.round(totalMinutes)));
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function formatDateRange(weekStartDate: string): string {
@@ -201,7 +209,90 @@ function ensureWeekdayCoverage(blocks: DailyProgramBlock[]): { blocks: DailyProg
   };
 }
 
-function normalizeBlocksWithCoverage(blocks: DailyProgramBlock[]): { blocks: DailyProgramBlock[]; filledDays: number[] } {
+function ensureMinimumWeekdayEndCoverage(blocks: DailyProgramBlock[]): {
+  blocks: DailyProgramBlock[];
+  extendedDays: number[];
+} {
+  const groupedByDay = new Map<number, DailyProgramBlock[]>();
+  for (let day = 1; day <= 7; day += 1) groupedByDay.set(day, []);
+
+  for (const block of blocks) {
+    const day = Math.min(7, Math.max(1, Number(block.day_of_week) || 1));
+    groupedByDay.get(day)?.push({
+      ...block,
+      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+    });
+  }
+
+  const extendedDays: number[] = [];
+  for (const day of WEEKDAY_SEQUENCE) {
+    const dayBlocks = (groupedByDay.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order);
+
+    let latestEnd: number | null = null;
+    for (const block of dayBlocks) {
+      const end = block.end_time ? toMinutes(String(block.end_time)) : null;
+      if (end !== null && (latestEnd === null || end > latestEnd)) {
+        latestEnd = end;
+      }
+    }
+
+    if (latestEnd !== null && latestEnd >= MIN_WEEKDAY_END_MINUTES) {
+      groupedByDay.set(day, dayBlocks);
+      continue;
+    }
+
+    const startMinutes = latestEnd ?? Math.max(0, MIN_WEEKDAY_END_MINUTES - 45);
+    const endMinutes = MIN_WEEKDAY_END_MINUTES;
+    const nextOrder = dayBlocks.length > 0
+      ? Math.max(...dayBlocks.map((block) => Number(block.block_order) || 0)) + 1
+      : 1;
+
+    dayBlocks.push({
+      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      block_order: nextOrder,
+      block_type: 'transition',
+      title: 'Afternoon Close & Dismissal Preparation',
+      start_time: toHHMM(startMinutes),
+      end_time: toHHMM(endMinutes),
+      objectives: ['End-of-day reflection', 'Orderly dismissal preparation'],
+      materials: ['Bags and attendance register'],
+      transition_cue: 'Pack away, review the day briefly, and prepare for pickup.',
+      notes: 'Auto-added to enforce full-day coverage through at least 13:30.',
+      parent_tip: null,
+    });
+
+    groupedByDay.set(day, dayBlocks);
+    extendedDays.push(day);
+  }
+
+  const normalized: DailyProgramBlock[] = [];
+  for (let day = 1; day <= 7; day += 1) {
+    const dayBlocks = (groupedByDay.get(day) || [])
+      .slice()
+      .sort((a, b) => a.block_order - b.block_order)
+      .map((block, index) => ({
+        ...block,
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: index + 1,
+      }));
+    normalized.push(...dayBlocks);
+  }
+
+  return {
+    blocks: normalized.sort((a, b) =>
+      a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week,
+    ),
+    extendedDays,
+  };
+}
+
+function normalizeBlocksWithCoverage(blocks: DailyProgramBlock[]): {
+  blocks: DailyProgramBlock[];
+  filledDays: number[];
+  extendedDays: number[];
+} {
   const normalized = (blocks || [])
     .map((block, index) => {
       const day = Math.min(7, Math.max(1, Number(block.day_of_week) || 1)) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -223,7 +314,13 @@ function normalizeBlocksWithCoverage(blocks: DailyProgramBlock[]): { blocks: Dai
     })
     .sort((a, b) => (a.day_of_week === b.day_of_week ? a.block_order - b.block_order : a.day_of_week - b.day_of_week));
 
-  return ensureWeekdayCoverage(normalized);
+  const withWeekdayCoverage = ensureWeekdayCoverage(normalized);
+  const withMinimumEndCoverage = ensureMinimumWeekdayEndCoverage(withWeekdayCoverage.blocks);
+  return {
+    blocks: withMinimumEndCoverage.blocks,
+    filledDays: withWeekdayCoverage.filledDays,
+    extendedDays: withMinimumEndCoverage.extendedDays,
+  };
 }
 
 function validateRules(rules: ProgramTimeRules): { normalized: ProgramTimeRules; issues: string[] } {
@@ -258,6 +355,10 @@ function validateRules(rules: ProgramTimeRules): { normalized: ProgramTimeRules;
     issues.push('Pickup window must begin after arrival cutoff.');
   }
 
+  if (pickupCutoff !== null && pickupCutoff < MIN_WEEKDAY_END_MINUTES) {
+    issues.push('Pickup cutoff must be 13:30 or later so the full-day program is not truncated.');
+  }
+
   return { normalized, issues };
 }
 
@@ -274,6 +375,10 @@ function validateBlocksAgainstRules(blocks: DailyProgramBlock[], rules: ProgramT
 
   const starts: number[] = [];
   const ends: number[] = [];
+  const latestEndByDay = new Map<number, number | null>();
+  for (const day of WEEKDAY_SEQUENCE) {
+    latestEndByDay.set(day, null);
+  }
 
   for (const block of blocks) {
     const start = block.start_time ? toMinutes(String(block.start_time)) : null;
@@ -281,6 +386,13 @@ function validateBlocksAgainstRules(blocks: DailyProgramBlock[], rules: ProgramT
 
     if (start !== null) starts.push(start);
     if (end !== null) ends.push(end);
+    const day = Number(block.day_of_week);
+    if (end !== null && day >= 1 && day <= 5) {
+      const current = latestEndByDay.get(day) ?? null;
+      if (current === null || end > current) {
+        latestEndByDay.set(day, end);
+      }
+    }
 
     if (start !== null && end !== null && start >= end) {
       issues.push(`${DAY_LABELS[block.day_of_week]} block \"${block.title}\" has an invalid time range.`);
@@ -306,6 +418,17 @@ function validateBlocksAgainstRules(blocks: DailyProgramBlock[], rules: ProgramT
     const latest = Math.max(...ends);
     if (latest > pickupCutoff) {
       issues.push('Latest program activity ends after the pickup cutoff.');
+    }
+  }
+
+  for (const day of WEEKDAY_SEQUENCE) {
+    const latestEnd = latestEndByDay.get(day) ?? null;
+    if (latestEnd === null) {
+      issues.push(`${DAY_LABELS[day]} has no valid end time. Every day must run until at least 13:30.`);
+      continue;
+    }
+    if (latestEnd < MIN_WEEKDAY_END_MINUTES) {
+      issues.push(`${DAY_LABELS[day]} ends at ${toHHMM(latestEnd)}. Every day must run until at least 13:30.`);
     }
   }
 
@@ -533,6 +656,7 @@ export class WeeklyProgramService {
     const normalizedCoverage = normalizeBlocksWithCoverage(Array.isArray(weeklyProgram.blocks) ? weeklyProgram.blocks : []);
     const blocks = normalizedCoverage.blocks;
     const autoFilledDays = normalizedCoverage.filledDays;
+    const extendedDays = normalizedCoverage.extendedDays;
 
     let themeId = weeklyProgram.theme_id || null;
     if (!themeId && weeklyProgram.preschool_id) {
@@ -655,6 +779,7 @@ export class WeeklyProgramService {
     let savedProgram: any = null;
     let saveWarning: string | null = null;
     let autoFillWarning: string | null = null;
+    let shortDayCoverageWarning: string | null = null;
     let usedFallbackWithoutGenerationContext = false;
 
     try {
@@ -695,6 +820,9 @@ export class WeeklyProgramService {
     if (autoFilledDays.length > 0) {
       autoFillWarning = `Auto-filled missing weekdays: ${formatFilledDays(autoFilledDays)}.`;
     }
+    if (extendedDays.length > 0) {
+      shortDayCoverageWarning = `Extended short weekdays to reach at least 13:30: ${formatFilledDays(extendedDays)}.`;
+    }
 
     await supabase.from('daily_program_blocks').delete().eq('weekly_program_id', savedProgram.id);
 
@@ -723,7 +851,7 @@ export class WeeklyProgramService {
       }
     }
 
-    const saveWarnings = [saveWarning, autoFillWarning].filter(Boolean) as string[];
+    const saveWarnings = [saveWarning, autoFillWarning, shortDayCoverageWarning].filter(Boolean) as string[];
 
     return {
       id: savedProgram.id,
@@ -816,46 +944,64 @@ export class WeeklyProgramService {
     const normalizedCoverage = normalizeBlocksWithCoverage((blockRows || []) as DailyProgramBlock[]);
     const blocks = normalizedCoverage.blocks;
     const autoFilledDays = normalizedCoverage.filledDays;
+    const extendedDays = normalizedCoverage.extendedDays;
     if (blocks.length === 0) {
       throw new Error('No daily program blocks found. Please generate or add routine blocks first.');
     }
 
-    if (autoFilledDays.length > 0) {
-      const missingDaySet = new Set(autoFilledDays);
-      const missingDayRows = blocks
-        .filter((block) => missingDaySet.has(Number(block.day_of_week)))
-        .map((block) => ({
-          weekly_program_id: input.weeklyProgramId,
-          preschool_id: input.preschoolId,
-          class_id: programRow.class_id || null,
-          created_by: programRow.created_by || input.sharedBy || null,
-          day_of_week: block.day_of_week,
-          block_order: block.block_order,
-          block_type: block.block_type,
-          title: block.title,
-          start_time: block.start_time || null,
-          end_time: block.end_time || null,
-          objectives: block.objectives || [],
-          materials: block.materials || [],
-          transition_cue: block.transition_cue || null,
-          notes: block.notes || null,
-          parent_tip: block.parent_tip || null,
-        }));
+    if (autoFilledDays.length > 0 || extendedDays.length > 0) {
+      const healedRows = blocks.map((block) => ({
+        weekly_program_id: input.weeklyProgramId,
+        preschool_id: input.preschoolId,
+        class_id: programRow.class_id || null,
+        created_by: programRow.created_by || input.sharedBy || null,
+        day_of_week: block.day_of_week,
+        block_order: block.block_order,
+        block_type: block.block_type,
+        title: block.title,
+        start_time: block.start_time || null,
+        end_time: block.end_time || null,
+        objectives: block.objectives || [],
+        materials: block.materials || [],
+        transition_cue: block.transition_cue || null,
+        notes: block.notes || null,
+        parent_tip: block.parent_tip || null,
+      }));
 
-      if (missingDayRows.length > 0) {
-        const { error: healError } = await supabase.from('daily_program_blocks').insert(missingDayRows);
+      const { error: deleteError } = await supabase
+        .from('daily_program_blocks')
+        .delete()
+        .eq('weekly_program_id', input.weeklyProgramId);
+
+      if (deleteError) {
+        console.warn('[weekly_program.share.coverage_delete_failed]', {
+          weeklyProgramId: input.weeklyProgramId,
+          missingDays: autoFilledDays,
+          extendedDays,
+          error: deleteError.message || 'delete_failed',
+        });
+      } else if (healedRows.length > 0) {
+        const { error: healError } = await supabase.from('daily_program_blocks').insert(healedRows);
         if (healError) {
-          console.warn('[weekly_program.share.auto_fill_failed]', {
+          console.warn('[weekly_program.share.coverage_insert_failed]', {
             weeklyProgramId: input.weeklyProgramId,
             missingDays: autoFilledDays,
+            extendedDays,
             error: healError.message || 'insert_failed',
           });
         } else {
-          console.info('[weekly_program.share.auto_filled_days]', {
+          console.info('[weekly_program.share.coverage_normalized]', {
             weeklyProgramId: input.weeklyProgramId,
             missingDays: autoFilledDays,
+            extendedDays,
           });
         }
+      } else {
+        console.info('[weekly_program.share.coverage_no_rows_after_heal]', {
+          weeklyProgramId: input.weeklyProgramId,
+          missingDays: autoFilledDays,
+          extendedDays,
+        });
       }
     }
 

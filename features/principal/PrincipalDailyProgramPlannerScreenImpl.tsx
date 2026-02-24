@@ -40,6 +40,8 @@ const DAY_LABELS: Record<number, string> = {
   6: 'Saturday',
   7: 'Sunday',
 };
+const MIN_DAY_END_MINUTES = 13 * 60 + 30; // 13:30
+const DEFAULT_DAY_CLOSE_MINUTES = 14 * 60; // 14:00
 
 function toDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -349,16 +351,66 @@ function toHHMM(totalMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function enforceMinimumDayEndCoverage(
+  day: (typeof DAY_ORDER)[number],
+  dayBlocks: DailyProgramBlock[],
+  pickupCutoffMinutes: number,
+): DailyProgramBlock[] {
+  if (dayBlocks.length === 0) return dayBlocks;
+
+  let latestEndMinutes: number | null = null;
+  for (const block of dayBlocks) {
+    const end = block.end_time ? toMinutes(String(block.end_time)) : null;
+    if (end !== null && (latestEndMinutes === null || end > latestEndMinutes)) {
+      latestEndMinutes = end;
+    }
+  }
+
+  if (latestEndMinutes !== null && latestEndMinutes >= MIN_DAY_END_MINUTES) {
+    return dayBlocks;
+  }
+
+  const startMinutes = latestEndMinutes ?? Math.max(0, MIN_DAY_END_MINUTES - 45);
+  const endMinutes = Math.max(
+    MIN_DAY_END_MINUTES,
+    Math.min(pickupCutoffMinutes, Math.max(startMinutes + 30, DEFAULT_DAY_CLOSE_MINUTES)),
+  );
+
+  const extended = [
+    ...dayBlocks,
+    {
+      day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      block_order: dayBlocks.length + 1,
+      block_type: 'transition',
+      title: 'Afternoon Close & Dismissal Preparation',
+      start_time: toHHMM(startMinutes),
+      end_time: toHHMM(endMinutes),
+      objectives: ['Orderly end-of-day reflection', 'Prepare learners for pickup'],
+      materials: ['Routine chart', 'School bags'],
+      transition_cue: 'Pack away and prepare for pickup calmly.',
+      notes: 'Auto-added so the daily routine always runs to at least 13:30.',
+      parent_tip: null,
+    } as DailyProgramBlock,
+  ];
+
+  return extended.map((block, index) => ({
+    ...block,
+    day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+    block_order: index + 1,
+  }));
+}
+
 function applyTimeRulesToBlocks(
   blocks: DailyProgramBlock[],
   rules: ProgramTimeRules,
   requestedDailyMinutes: number,
 ): DailyProgramBlock[] {
   const arrivalStart = toMinutes(rules.arrivalStartTime);
-  const pickupCutoff = toMinutes(rules.pickupCutoffTime);
-  if (arrivalStart === null || pickupCutoff === null || pickupCutoff <= arrivalStart) {
+  const rawPickupCutoff = toMinutes(rules.pickupCutoffTime);
+  if (arrivalStart === null || rawPickupCutoff === null || rawPickupCutoff <= arrivalStart) {
     return blocks;
   }
+  const pickupCutoff = Math.max(rawPickupCutoff, MIN_DAY_END_MINUTES);
 
   const weekdayBlocks = blocks.filter((block) =>
     DAY_ORDER.includes(Number(block.day_of_week) as (typeof DAY_ORDER)[number]),
@@ -383,14 +435,15 @@ function applyTimeRulesToBlocks(
     });
 
     if (hasStrictValidTimes) {
+      const normalizedDay = dayBlocks.map((block, index) => ({
+        ...block,
+        day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        block_order: index + 1,
+        start_time: normalizeTime(String(block.start_time || '')),
+        end_time: normalizeTime(String(block.end_time || '')),
+      }));
       timedBlocks.push(
-        ...dayBlocks.map((block, index) => ({
-          ...block,
-          day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
-          block_order: index + 1,
-          start_time: normalizeTime(String(block.start_time || '')),
-          end_time: normalizeTime(String(block.end_time || '')),
-        })),
+        ...enforceMinimumDayEndCoverage(day, normalizedDay, pickupCutoff),
       );
       continue;
     }
@@ -399,9 +452,10 @@ function applyTimeRulesToBlocks(
     const targetMinutes = Math.max(120, Number.isFinite(requestedDailyMinutes) ? requestedDailyMinutes : totalWindow);
     const usableMinutes = Math.max(60, Math.min(totalWindow, targetMinutes));
     const slotMinutes = Math.max(20, Math.floor(usableMinutes / dayBlocks.length));
-    const dayEnd = Math.min(pickupCutoff, arrivalStart + usableMinutes);
+    const dayEnd = Math.min(pickupCutoff, Math.max(MIN_DAY_END_MINUTES, arrivalStart + usableMinutes));
 
     let cursor = arrivalStart;
+    const autoTimedDayBlocks: DailyProgramBlock[] = [];
     dayBlocks.forEach((block, index) => {
       const start = cursor;
       const preferredEnd = index === dayBlocks.length - 1 ? dayEnd : start + slotMinutes;
@@ -409,7 +463,7 @@ function applyTimeRulesToBlocks(
       if (end <= start) end = Math.min(pickupCutoff, start + 20);
       if (end <= start) end = Math.min(pickupCutoff, start + 1);
 
-      timedBlocks.push({
+      autoTimedDayBlocks.push({
         ...block,
         day_of_week: day as 1 | 2 | 3 | 4 | 5 | 6 | 7,
         block_order: index + 1,
@@ -418,6 +472,7 @@ function applyTimeRulesToBlocks(
       });
       cursor = end;
     });
+    timedBlocks.push(...enforceMinimumDayEndCoverage(day, autoTimedDayBlocks, pickupCutoff));
   }
 
   return [...timedBlocks, ...nonWeekdayBlocks].sort((a, b) =>
@@ -1421,11 +1476,28 @@ export default function PrincipalDailyProgramPlannerScreen() {
       return start < arrivalStart || end > pickupCutoff;
     }).length;
 
+    const shortDays = DAY_ORDER.filter((day) => {
+      const dayBlocks = blocks.filter((block) => Number(block.day_of_week) === day);
+      if (dayBlocks.length === 0) return true;
+
+      let latestEnd: number | null = null;
+      for (const block of dayBlocks) {
+        const end = block.end_time ? toMinutes(String(block.end_time)) : null;
+        if (end !== null && (latestEnd === null || end > latestEnd)) {
+          latestEnd = end;
+        }
+      }
+
+      return latestEnd === null || latestEnd < MIN_DAY_END_MINUTES;
+    });
+
     return {
       total: blocks.length,
       missingTimes,
       missingTitles,
       outOfWindow,
+      shortDaysCount: shortDays.length,
+      shortDays,
       missingEssentialsCount: missingEssentials.length,
       missingEssentials,
     };
@@ -1449,6 +1521,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     draftInsights.missingTimes === 0 &&
     draftInsights.missingTitles === 0 &&
     draftInsights.outOfWindow === 0 &&
+    draftInsights.shortDaysCount === 0 &&
     draftInsights.missingEssentialsCount === 0;
 
   const readinessScore = useMemo(() => {
@@ -2040,9 +2113,9 @@ export default function PrincipalDailyProgramPlannerScreen() {
             </TouchableOpacity>
           </View>
           <TouchableOpacity
-            style={[styles.successBtn, (sharingParents || !draft) && styles.buttonDisabled]}
+            style={[styles.successBtn, (sharingParents || !draft || !shareReady) && styles.buttonDisabled]}
             onPress={() => void shareWithParents()}
-            disabled={sharingParents || !draft}
+            disabled={sharingParents || !draft || !shareReady}
           >
             {sharingParents ? <EduDashSpinner size="small" color="#fff" /> : <Ionicons name="megaphone-outline" size={16} color="#fff" />}
             <Text style={styles.successBtnText}>{sharingParents ? 'Sharing...' : 'Share with Parents'}</Text>
@@ -2112,10 +2185,19 @@ export default function PrincipalDailyProgramPlannerScreen() {
                 <Text style={styles.draftInsightValue}>{draftInsights.outOfWindow}</Text>
               </View>
               <View style={styles.draftInsightPill}>
+                <Text style={styles.draftInsightLabel}>Short Days (&lt;13:30)</Text>
+                <Text style={styles.draftInsightValue}>{draftInsights.shortDaysCount}</Text>
+              </View>
+              <View style={styles.draftInsightPill}>
                 <Text style={styles.draftInsightLabel}>Missing Essentials</Text>
                 <Text style={styles.draftInsightValue}>{draftInsights.missingEssentialsCount}</Text>
               </View>
             </View>
+            {draftInsights.shortDaysCount > 0 && (
+              <Text style={styles.sectionHint}>
+                Extend these days to 13:30 or later: {draftInsights.shortDays.map((day) => DAY_LABELS[day]).join(', ')}
+              </Text>
+            )}
             {draftInsights.missingEssentialsCount > 0 && (
               <Text style={styles.sectionHint}>
                 Still missing: {draftInsights.missingEssentials.join(', ')}

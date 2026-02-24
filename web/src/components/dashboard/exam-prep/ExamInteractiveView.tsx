@@ -73,6 +73,28 @@ interface QuestionFeedback {
   marks: number;
 }
 
+type BrowserSpeechResult = {
+  transcript?: string;
+};
+
+type BrowserSpeechEvent = {
+  results: ArrayLike<ArrayLike<BrowserSpeechResult>>;
+};
+
+interface BrowserSpeechRecognition {
+  lang: string;
+  maxAlternatives: number;
+  onresult: ((event: BrowserSpeechEvent) => void) | null;
+  start: () => void;
+}
+
+type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+
+type BrowserSpeechWindow = Window & {
+  SpeechRecognition?: BrowserSpeechRecognitionCtor;
+  webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+};
+
 export function ExamInteractiveView({ exam, generationId, userId, onClose, onSubmitted }: ExamInteractiveViewProps) {
   const [studentAnswers, setStudentAnswers] = useState<StudentAnswers>({});
   const [submitted, setSubmitted] = useState(false);
@@ -264,15 +286,15 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const handleVoiceAnswer = useCallback((_questionId: string, _callback: (answer: string) => void) => {
     // Voice answer: web uses SpeechRecognition API
     if (typeof window === 'undefined') return;
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition })
-        .SpeechRecognition ??
-      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
+
+    const speechWindow = window as BrowserSpeechWindow;
+    const SpeechRecognitionCtor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
+
+    const recognition = new SpeechRecognitionCtor();
     recognition.lang = a11y.selectedLanguage;
     recognition.maxAlternatives = 1;
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: BrowserSpeechEvent) => {
       const spoken = event.results[0]?.[0]?.transcript?.trim().toUpperCase() ?? '';
       const letter = spoken.charAt(0);
       if (['A', 'B', 'C', 'D'].includes(letter)) {

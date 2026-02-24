@@ -4,8 +4,8 @@
  * Memoized to prevent flash on new messages
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, Pressable, StyleSheet, Image, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Image, Dimensions, Linking, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MessageTicks } from './MessageTicks';
@@ -63,6 +63,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   isFirstInGroup = true,
   isLastInGroup = true,
 }) => {
+  const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const name = getSenderName(msg.sender);
   const avatarInitials = React.useMemo(() => {
     const first = String(msg.sender?.first_name || '').trim();
@@ -267,21 +268,73 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               </View>
             ) : (() => {
               const imageMatch = msg.content?.match(/\[image\]\((.+?)\)/);
+              const videoMatch = msg.content?.match(/\[video\]\((.+?)\)/);
+              const screenWidth = Dimensions.get('window').width;
+              const maxMediaW = Math.min(screenWidth * 0.72, 280);
+              const maxMediaH = 320;
+              const mediaRadius = 12;
               if (imageMatch) {
                 const imageUrl = imageMatch[1];
-                const screenWidth = Dimensions.get('window').width;
-                const maxW = Math.min(screenWidth * 0.6, 260);
+                const caption = msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim();
                 return (
-                  <View>
-                    <Image
-                      source={{ uri: imageUrl }}
-                      style={{ width: maxW, height: maxW * 0.75, borderRadius: 10 }}
-                      resizeMode="cover"
-                    />
-                    {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim() ? (
-                      <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 6 }]}>
-                        {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim()}
-                      </Text>
+                  <View style={styles.mediaWrap}>
+                    <TouchableOpacity
+                      activeOpacity={0.95}
+                      onPress={() => imageUrl && setFullScreenImageUrl(imageUrl)}
+                      style={[styles.mediaImageContainer, { maxWidth: maxMediaW, borderRadius: mediaRadius }]}
+                    >
+                      <Image
+                        source={{ uri: imageUrl }}
+                        style={[styles.mediaImage, { width: maxMediaW, height: Math.min(maxMediaW * 0.75, maxMediaH), borderRadius: mediaRadius }]}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                    {caption ? (
+                      <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 8 }]}>{caption}</Text>
+                    ) : null}
+                    <Modal
+                      visible={!!fullScreenImageUrl}
+                      transparent
+                      animationType="fade"
+                      onRequestClose={() => setFullScreenImageUrl(null)}
+                    >
+                      <Pressable style={styles.fullScreenOverlay} onPress={() => setFullScreenImageUrl(null)}>
+                        <View style={styles.fullScreenImageWrap}>
+                          <Image
+                            source={{ uri: fullScreenImageUrl || '' }}
+                            style={styles.fullScreenImage}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <TouchableOpacity
+                          style={styles.fullScreenCloseBtn}
+                          onPress={() => setFullScreenImageUrl(null)}
+                          hitSlop={16}
+                        >
+                          <Ionicons name="close-circle" size={40} color="rgba(255,255,255,0.9)" />
+                        </TouchableOpacity>
+                      </Pressable>
+                    </Modal>
+                  </View>
+                );
+              }
+              if (videoMatch) {
+                const videoUrl = videoMatch[1];
+                const caption = msg.content.replace(/🎬 Video\n?/, '').replace(/\[video\]\(.+?\)/, '').trim();
+                return (
+                  <View style={styles.mediaWrap}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => videoUrl && Linking.openURL(videoUrl).catch(() => {})}
+                      style={[styles.mediaVideoContainer, { width: maxMediaW, borderRadius: mediaRadius }]}
+                    >
+                      <View style={styles.mediaVideoPlaceholder}>
+                        <Ionicons name="play-circle" size={56} color={isOwn ? 'rgba(255,255,255,0.9)' : '#94a3b8'} />
+                        <Text style={[styles.mediaVideoLabel, { color: isOwn ? 'rgba(255,255,255,0.85)' : '#cbd5e1' }]}>Video</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {caption ? (
+                      <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 8 }]}>{caption}</Text>
                     ) : null}
                   </View>
                 );
@@ -373,7 +426,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 const styles = StyleSheet.create({
   container: {
     marginVertical: 2,
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
     width: '100%',
     maxWidth: '100%',
   },
@@ -402,16 +455,16 @@ const styles = StyleSheet.create({
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 3,
+    gap: 4,
     width: '100%',
   },
   bubbleRowOwn: {
     justifyContent: 'flex-end',
-    paddingRight: 2,
+    paddingRight: 4,
   },
   bubbleRowOther: {
     justifyContent: 'flex-start',
-    paddingLeft: 2,
+    paddingLeft: 4,
   },
   senderAvatar: {
     width: 28,
@@ -422,7 +475,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148, 163, 184, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 3,
+    marginRight: 0,
     marginBottom: 2,
     flexShrink: 0,
   },
@@ -437,7 +490,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   senderAvatarSpacer: {
-    width: 31,
+    width: 32,
   },
   voiceBubbleWrapper: {
     maxWidth: '84%',
@@ -447,7 +500,7 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     fontWeight: '600', 
     marginBottom: 4, 
-    marginLeft: 8,
+    marginLeft: 6,
     color: '#a78bfa',
   },
   bubble: { 
@@ -513,6 +566,54 @@ const styles = StyleSheet.create({
   callBackText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  mediaWrap: {
+    marginTop: 2,
+  },
+  mediaImageContainer: {
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  mediaImage: {},
+  mediaVideoContainer: {
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    minHeight: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaVideoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+  },
+  mediaVideoLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  fullScreenOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImageWrap: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullScreenCloseBtn: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    zIndex: 10,
   },
   voiceContainer: {
     marginBottom: 2,

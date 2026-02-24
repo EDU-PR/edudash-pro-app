@@ -36,9 +36,15 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
   // Load conversation from database
   const loadConversation = useCallback(async () => {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        return;
+      }
+
       const { data, error } = await supabase
         .from('ai_conversations')
         .select('messages')
+        .eq('user_id', userData.user.id)
         .eq('conversation_id', conversationId)
         .maybeSingle();
 
@@ -79,6 +85,7 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
       const { data: existing } = await supabase
         .from('ai_conversations')
         .select('id')
+        .eq('user_id', userData.user.id)
         .eq('conversation_id', conversationId)
         .maybeSingle();
 
@@ -95,6 +102,7 @@ export function useChatLogic({ scope, conversationId, messages, setMessages, use
         await supabase
           .from('ai_conversations')
           .update(conversationData)
+          .eq('user_id', userData.user.id)
           .eq('conversation_id', conversationId);
       } else {
         await supabase

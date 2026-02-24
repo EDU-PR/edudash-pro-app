@@ -13,15 +13,9 @@ interface ExamPeriod {
 
 // ⚠️ OFFICIAL DBE EXAM DATES - Updated from education.gov.za
 // Source: https://www.education.gov.za/Curriculum/NationalSeniorCertificate(NSC)Examinations.aspx
-// Auto-calculate status based on current date
-const getCurrentDate = () => {
-  const now = new Date();
-  return now.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
-};
-
 const getExamStatus = (examDate: string): 'upcoming' | 'today' | 'completed' => {
-  const today = getCurrentDate();
-  const examDateObj = new Date(examDate + ' 2025');
+  const examYear = new Date().getFullYear();
+  const examDateObj = new Date(`${examDate} ${examYear}`);
   const todayObj = new Date();
   
   // Normalize to start of day

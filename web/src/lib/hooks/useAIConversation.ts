@@ -5,7 +5,7 @@
  * Automatically loads and saves conversation history.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export interface AIMessage {
@@ -26,7 +26,7 @@ export interface AIConversation {
 }
 
 export function useAIConversation(conversationId: string | null) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,11 +40,20 @@ export function useAIConversation(conversationId: string | null) {
     
     const loadConversation = async () => {
       try {
+        const { data: userData, error: authError } = await supabase.auth.getUser();
+        if (authError || !userData.user) {
+          if (authError) {
+            console.error('[useAIConversation] Auth error:', authError);
+          }
+          return;
+        }
+
         const { data, error } = await supabase
           .from('ai_conversations')
           .select('messages, title')
+          .eq('user_id', userData.user.id)
           .eq('conversation_id', conversationId)
-          .single();
+          .maybeSingle();
         
         if (error && error.code !== 'PGRST116') { // Not found is OK
           console.error('[useAIConversation] Load error:', error);
@@ -63,7 +72,7 @@ export function useAIConversation(conversationId: string | null) {
     };
     
     loadConversation();
-  }, [conversationId]);
+  }, [conversationId, supabase]);
   
   /**
    * Save messages to database
@@ -91,16 +100,37 @@ export function useAIConversation(conversationId: string | null) {
         .single();
       
       // Upsert conversation
-      const { error } = await supabase.from('ai_conversations').upsert({
+      const payload = {
         conversation_id: conversationId,
         user_id: sessionData.session.user.id,
         preschool_id: profile?.preschool_id || null, // NULL for independent parents
         title: title || 'Untitled Conversation',
         messages: newMessages,
         updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'conversation_id'
-      });
+      };
+
+      const { data: existingConversation, error: existingError } = await supabase
+        .from('ai_conversations')
+        .select('id')
+        .eq('user_id', sessionData.session.user.id)
+        .eq('conversation_id', conversationId)
+        .maybeSingle();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('[useAIConversation] Lookup error:', existingError);
+        setError(existingError.message);
+        return false;
+      }
+
+      const { error } = existingConversation
+        ? await supabase
+            .from('ai_conversations')
+            .update(payload)
+            .eq('id', existingConversation.id)
+            .eq('user_id', sessionData.session.user.id)
+        : await supabase
+            .from('ai_conversations')
+            .insert(payload);
       
       if (error) {
         console.error('[useAIConversation] Save error:', error);
@@ -124,9 +154,18 @@ export function useAIConversation(conversationId: string | null) {
     if (!conversationId) return false;
     
     try {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError || !userData.user) {
+        if (authError) {
+          console.error('[useAIConversation] Auth error:', authError);
+        }
+        return false;
+      }
+
       const { error } = await supabase
         .from('ai_conversations')
         .delete()
+        .eq('user_id', userData.user.id)
         .eq('conversation_id', conversationId);
       
       if (error) {
@@ -156,16 +195,26 @@ export function useAIConversation(conversationId: string | null) {
  * Hook to fetch all user conversations (for history view)
  */
 export function useAIConversationList() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     const fetchConversations = async () => {
       try {
+        const { data: userData, error: authError } = await supabase.auth.getUser();
+        if (authError || !userData.user) {
+          if (authError) {
+            console.error('[useAIConversationList] Auth error:', authError);
+          }
+          setConversations([]);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('ai_conversations')
           .select('*')
+          .eq('user_id', userData.user.id)
           .order('updated_at', { ascending: false })
           .limit(50);
         
@@ -182,7 +231,7 @@ export function useAIConversationList() {
     };
     
     fetchConversations();
-  }, []);
+  }, [supabase]);
   
   return { conversations, loading, refetch: () => {} };
 }

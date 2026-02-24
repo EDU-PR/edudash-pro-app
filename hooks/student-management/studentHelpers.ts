@@ -51,6 +51,9 @@ export function formatAge(
   return `${ageYears} years`;
 }
 
+/** Preschool age group names configurable per school (principals/admins). */
+export const PRESCHOOL_AGE_GROUP_NAMES = ['Curious Cubs', 'Little Explorers', 'Panda'] as const;
+
 export function getAgeGroupColor(
   ageGroupName: string | undefined,
   schoolType: string,
@@ -59,6 +62,12 @@ export function getAgeGroupColor(
 
   if (schoolType === 'preschool') {
     switch (ageGroupName) {
+      case 'Curious Cubs':
+        return '#EC4899';
+      case 'Little Explorers':
+        return '#8B5CF6';
+      case 'Panda':
+        return '#059669';
       case 'Toddlers':
         return '#EC4899';
       case 'Preschool 3-4':
@@ -121,13 +130,35 @@ export function filterStudents(
   });
 }
 
+/**
+ * Returns age group counts. For preschool, only Curious Cubs, Little Explorers, Panda
+ * (and Other, Unassigned) are shown; other names are collapsed into "Other".
+ */
 export function getAgeGroupStats(
   students: Student[],
+  schoolType: string = 'preschool',
 ): Record<string, number> {
-  const stats: Record<string, number> = {};
+  const raw: Record<string, number> = {};
   students.forEach((student) => {
     const group = student.age_group_name || 'Unassigned';
-    stats[group] = (stats[group] || 0) + 1;
+    raw[group] = (raw[group] || 0) + 1;
   });
+  if (schoolType !== 'preschool') return raw;
+  const stats: Record<string, number> = {};
+  let otherCount = 0;
+  Object.entries(raw).forEach(([name, count]) => {
+    if (PRESCHOOL_AGE_GROUP_NAMES.includes(name as any)) {
+      stats[name] = count;
+    } else if (name === 'Unassigned') {
+      stats[name] = count;
+    } else {
+      otherCount += count;
+    }
+  });
+  if (otherCount > 0) stats['Other'] = otherCount;
+  PRESCHOOL_AGE_GROUP_NAMES.forEach((name) => {
+    if (!(name in stats)) stats[name] = 0;
+  });
+  if (!('Unassigned' in stats)) stats['Unassigned'] = 0;
   return stats;
 }

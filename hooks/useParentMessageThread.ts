@@ -25,6 +25,10 @@ try { assertSupabase = require('@/lib/supabase').assertSupabase; } catch { asser
 try { const h = require('@/hooks/useParentMessaging'); useThreadMessages = h.useThreadMessages; useSendMessage = h.useSendMessage; useMarkThreadRead = h.useMarkThreadRead; useRealtimeMessages = h.useParentMessagesRealtime || (() => {}); } catch { useThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} }); useSendMessage = () => ({ mutateAsync: async () => ({}), isLoading: false }); useMarkThreadRead = () => ({ mutate: () => {} }); }
 try { const w = require('@/components/messaging/ChatWallpaperPicker'); getStoredWallpaper = w.getStoredWallpaper; WALLPAPER_PRESETS = w.WALLPAPER_PRESETS || []; } catch {}
 try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
+let FileSystem: typeof import('expo-file-system/legacy') | null = null;
+let base64ToUint8Array: (b: string) => Uint8Array = () => new Uint8Array(0);
+try { FileSystem = require('expo-file-system/legacy'); } catch {}
+try { base64ToUint8Array = require('@/lib/utils/base64').base64ToUint8Array; } catch {}
 export type ChatRow = { type: 'date'; key: string; label: string } | { type: 'message'; key: string; msg: Message; isFirstInGroup: boolean; isLastInGroup: boolean };
 export type ThreadParticipant = {
   user_id: string;
@@ -217,15 +221,27 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
     Vibration.vibrate([0, 30, 50, 30]);
     try {
       const supabase = assertSupabase();
-      const extension = mimeType.split('/')[1] || 'jpg';
-      const fileName = `${userId}/${threadId}/${Date.now()}.${extension}`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const { error: uploadError } = await supabase.storage.from('message-attachments').upload(fileName, blob, { contentType: mimeType });
+      const ext = mimeType.split('/')[1]?.replace(/\+.*$/, '') || 'jpg';
+      const fileName = `${userId}/${threadId}/${Date.now()}.${ext}`;
+      let fileData: Blob | Uint8Array;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        fileData = await response.blob();
+      } else if (FileSystem && uri) {
+        const base64Data = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        fileData = base64ToUint8Array(base64Data);
+      } else {
+        throw new Error('File system not available');
+      }
+      const { error: uploadError } = await supabase.storage.from('message-attachments').upload(fileName, fileData, { contentType: mimeType });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('message-attachments').getPublicUrl(fileName);
-      await sendMessage({ threadId, content: `📷 Photo\n[image](${urlData.publicUrl})` });
-      toast.success('Photo sent');
+      const isVideo = mimeType.startsWith('video/');
+      const content = isVideo
+        ? `🎬 Video\n[video](${urlData.publicUrl})`
+        : `📷 Photo\n[image](${urlData.publicUrl})`;
+      await sendMessage({ threadId, content });
+      toast.success(isVideo ? 'Video sent' : 'Photo sent');
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) { logger.error('ParentThread', 'Image send failed:', err); toast.error('Failed to send photo.'); }
   }, [threadId, userId, sendMessage]);

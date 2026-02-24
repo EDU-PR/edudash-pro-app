@@ -5,9 +5,16 @@ export interface YearPlanConfig {
   numberOfTerms: number;
   ageGroups: string[];
   focusAreas: string[];
+  planningFramework: 'caps_ncf_hybrid' | 'grade_rr_52_week' | 'custom';
+  strictTemplateMode: boolean;
+  separateAgeGroupTracks: boolean;
   includeExcursions: boolean;
   includeMeetings: boolean;
+  includeAssessmentGuidance: boolean;
+  includeInclusionAdaptations: boolean;
+  includeHomeLinkExtensions: boolean;
   budgetLevel: 'low' | 'medium' | 'high';
+  principalRules: string;
   specialConsiderations: string;
 }
 
@@ -106,13 +113,26 @@ export const FOCUS_AREAS = [
   'CAPS Alignment',
 ];
 
+export const PLANNING_FRAMEWORKS = [
+  { id: 'caps_ncf_hybrid', label: 'CAPS + NCF Hybrid' },
+  { id: 'grade_rr_52_week', label: 'Grade RR 52-Week Structure' },
+  { id: 'custom', label: 'Custom Framework' },
+] as const;
+
 export const getInitialConfig = (): YearPlanConfig => ({
   academicYear: new Date().getFullYear(),
   numberOfTerms: 4,
   ageGroups: ['3-4', '4-5', '5-6'],
   focusAreas: ['Language Development', 'Numeracy & Math', 'Physical Development'],
+  planningFramework: 'caps_ncf_hybrid',
+  strictTemplateMode: false,
+  separateAgeGroupTracks: true,
   includeExcursions: true,
   includeMeetings: true,
+  includeAssessmentGuidance: true,
+  includeInclusionAdaptations: true,
+  includeHomeLinkExtensions: true,
   budgetLevel: 'medium',
+  principalRules: '',
   specialConsiderations: '',
 });

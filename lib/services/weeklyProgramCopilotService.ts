@@ -1473,11 +1473,11 @@ const normalizeAIResponse = (
     return d >= 1 && d <= 5;
   });
 
-  if (blocks.length === 0) {
-    throw new Error('AI response did not include any daily program blocks');
-  }
+  const safeBlocks = blocks.length > 0
+    ? blocks
+    : WEEKDAY_SEQUENCE.flatMap((day) => createFallbackWeekdayBlocks(day));
 
-  const weekdayCoveredBlocks = ensureWeekdayCoverage(blocks);
+  const weekdayCoveredBlocks = ensureWeekdayCoverage(safeBlocks);
   const fullDayBlocks = ensureFullDayCoverage(weekdayCoveredBlocks);
   const normalizedBlocks = ensureDailyWeatherRepetition(fullDayBlocks);
   const initialCoverage = computeCapsCoverage(normalizedBlocks);

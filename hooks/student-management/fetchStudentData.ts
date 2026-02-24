@@ -28,14 +28,29 @@ export async function fetchStudentData(
     .eq('id', preschoolId)
     .single();
 
-  const { data: ageGroupsData } = await assertSupabase()
+  // Prefer per-school age groups (preschool_id); fall back to school_type for backwards compatibility
+  const schoolType = school?.school_type || 'preschool';
+  let ageGroupsData: any[] | null = null;
+  const baseSelect =
+    'id, name, min_age_months, max_age_months, age_min, age_max, school_type, description';
+  const { data: perSchool, error: perSchoolErr } = await assertSupabase()
     .from('age_groups')
-    .select(
-      'id, name, min_age_months, max_age_months, age_min, age_max, school_type, description',
-    )
-    .eq('school_type', school?.school_type || 'preschool')
+    .select(baseSelect)
+    .eq('preschool_id', preschoolId)
     .eq('is_active', true)
     .order('min_age_months');
+  if (!perSchoolErr && perSchool && perSchool.length > 0) {
+    ageGroupsData = perSchool;
+  }
+  if (!ageGroupsData || ageGroupsData.length === 0) {
+    const { data: byType } = await assertSupabase()
+      .from('age_groups')
+      .select(baseSelect)
+      .eq('school_type', schoolType)
+      .eq('is_active', true)
+      .order('min_age_months');
+    ageGroupsData = byType;
+  }
 
   const { data: classesData } = await assertSupabase()
     .from('classes')

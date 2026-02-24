@@ -66,6 +66,7 @@ export function ExamBuilderLauncher({
         <ConversationalExamBuilder
           grade={selectedGrade}
           subject={selectedSubject}
+          language={selectedLanguage}
           onClose={handleClose}
           onSave={handleSaveExam}
         />
