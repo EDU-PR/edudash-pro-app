@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,7 +25,10 @@ import {
   type ProgramTimeRules,
 } from '@/lib/services/weeklyProgramService';
 import { canUseFeature, getQuotaStatus, type QuotaStatus } from '@/lib/ai/limits';
+import { incrementUsage } from '@/lib/ai/usage';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useAlertModal } from '@/components/ui/AlertModal';
+import { fetchThemeForWeek } from '@/lib/services/curriculumThemeService';
 
 const DAY_ORDER = [1, 2, 3, 4, 5] as const;
 const DAY_LABELS: Record<number, string> = {
@@ -70,8 +74,21 @@ function normalizeTime(value: string): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function timeToDate(hhmm: string): Date {
+  const [h, m] = (hhmm || '07:30').split(':').map(Number);
+  const d = new Date();
+  d.setHours(Number.isFinite(h) ? h : 7, Number.isFinite(m) ? m : 30, 0, 0);
+  return d;
+}
+
+function dateToTime(d: Date): string {
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 const buildDefaultRules = (): ProgramTimeRules => ({
-  arrivalStartTime: '07:30',
+  arrivalStartTime: '06:00',
   arrivalCutoffTime: '08:30',
   pickupStartTime: '13:00',
   pickupCutoffTime: '14:00',
@@ -150,7 +167,7 @@ const SMART_PRESETS: PlannerPreset[] = [
     budgetLevel: 'medium',
     includeAssessment: true,
     rules: {
-      arrivalStartTime: '07:30',
+      arrivalStartTime: '06:00',
       arrivalCutoffTime: '08:30',
       pickupStartTime: '12:30',
       pickupCutoffTime: '13:30',
@@ -167,7 +184,7 @@ const SMART_PRESETS: PlannerPreset[] = [
     budgetLevel: 'high',
     includeAssessment: true,
     rules: {
-      arrivalStartTime: '07:00',
+      arrivalStartTime: '06:00',
       arrivalCutoffTime: '08:30',
       pickupStartTime: '16:00',
       pickupCutoffTime: '17:00',
@@ -455,6 +472,7 @@ function withSchoolNamedTitle(rawTitle: string | null | undefined, schoolName: s
 export default function PrincipalDailyProgramPlannerScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
+  const { showAlert, AlertModalComponent } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const organizationId = extractOrganizationId(profile);
@@ -490,6 +508,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [selectedPresetId, setSelectedPresetId] = useState<PlannerPreset['id'] | null>(null);
 
   const [rules, setRules] = useState<ProgramTimeRules>(buildDefaultRules());
+  const [timePickerField, setTimePickerField] = useState<'arrivalStart' | 'arrivalCutoff' | 'pickupStart' | 'pickupCutoff' | null>(null);
   const [plannerPreferencesReady, setPlannerPreferencesReady] = useState(false);
 
   const [generating, setGenerating] = useState(false);
@@ -505,6 +524,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
   const [draft, setDraft] = useState<WeeklyProgramDraft | null>(null);
   const [programs, setPrograms] = useState<WeeklyProgramDraft[]>([]);
   const [draftViewMode, setDraftViewMode] = useState<'edit' | 'cards'>('edit');
+  const [programToRegenerateAfterLoad, setProgramToRegenerateAfterLoad] = useState<WeeklyProgramDraft | null>(null);
 
   const plannerPreferenceKey = useMemo(() => {
     if (!organizationId || !userId) return null;
@@ -639,25 +659,70 @@ export default function PrincipalDailyProgramPlannerScreen() {
     setRefreshing(false);
   }, [loadPrograms, refreshLessonQuota]);
 
+  const loadFromYearPlan = useCallback(async () => {
+    if (!organizationId || !weekStartDate.trim()) {
+      showAlert({
+        title: 'Missing info',
+        message: 'Set your week start date first, then load from the year plan.',
+        type: 'warning',
+      });
+      return;
+    }
+    try {
+      const theme = await fetchThemeForWeek(organizationId, weekStartDate.trim());
+      if (!theme) {
+        showAlert({
+          title: 'No theme found',
+          message: 'No curriculum theme overlaps this week. Create a theme in the AI Year Planner first.',
+          type: 'info',
+        });
+        return;
+      }
+      setThemeTitle(theme.title);
+      const objectives = Array.isArray(theme.learning_objectives)
+        ? theme.learning_objectives.join(', ')
+        : typeof theme.learning_objectives === 'string'
+          ? theme.learning_objectives
+          : '';
+      setWeeklyObjectives(objectives);
+      showAlert({
+        title: 'Loaded from Year Plan',
+        message: `Theme "${theme.title}" and objectives have been pre-filled.`,
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('[PrincipalDailyProgramPlanner] loadFromYearPlan failed:', error);
+      showAlert({
+        title: 'Load failed',
+        message: 'Could not fetch theme from the year plan. Please try again.',
+        type: 'error',
+      });
+    }
+  }, [organizationId, weekStartDate, showAlert]);
+
   const runGeneration = useCallback(async (mode: 'generate' | 'regenerate') => {
     if (!organizationId || !userId) {
-      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      showAlert({ title: 'Missing profile', message: 'Please sign in again to continue.', type: 'warning' });
       return;
     }
 
     if (!themeTitle.trim()) {
-      Alert.alert('Theme required', 'Please add a weekly theme.');
+      showAlert({ title: 'Theme required', message: 'Please add a weekly theme.', type: 'warning' });
       return;
     }
 
     if (!ageGroup.trim()) {
-      Alert.alert('Age group required', 'Please specify the learner age group.');
+      showAlert({ title: 'Age group required', message: 'Please specify the learner age group.', type: 'warning' });
       return;
     }
 
     const safeDailyMinutes = Number(dailyMinutes);
     if (!Number.isFinite(safeDailyMinutes) || safeDailyMinutes < 120) {
-      Alert.alert('Daily minutes too low', 'Use at least 120 minutes so Dash can build a realistic routine.');
+      showAlert({
+        title: 'Daily minutes too low',
+        message: 'Use at least 120 minutes so Dash can build a realistic routine.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -666,31 +731,38 @@ export default function PrincipalDailyProgramPlannerScreen() {
         .filter((question) => String(preflight[question.key] || '').trim().length < 6)
         .map((question) => question.label)
         .join('\n');
-      Alert.alert(
-        'Complete Preflight First',
-        `Answer all five preflight questions before generation:\n\n${missing}`,
-      );
-      return;
-    }
-
-    try {
-      const gate = await canUseFeature('lesson_generation', 1);
-      setLessonQuota(gate.status);
-      if (!gate.allowed) {
-        const message = gate.status.limit > 0
-          ? `You have used ${gate.status.used} of ${gate.status.limit} AI routine generations this month.`
-          : 'Your monthly AI routine generation limit is reached.';
-        Alert.alert('Monthly AI limit reached', message);
-        return;
-      }
-    } catch (error) {
-      console.warn('[PrincipalDailyProgramPlanner] Quota check failed:', error);
-      Alert.alert('Quota check unavailable', 'Could not verify your routine generation quota. Please try again.');
+      showAlert({
+        title: 'Complete Preflight First',
+        message: `Answer all five preflight questions before generation:\n\n${missing}`,
+        type: 'warning',
+      });
       return;
     }
 
     setGenerationMode(mode);
     setGenerating(true);
+
+    try {
+      const gate = await canUseFeature('lesson_generation', 1);
+      setLessonQuota(gate.status);
+      if (!gate.allowed) {
+        setGenerating(false);
+        const message = gate.status.limit > 0
+          ? `You have used ${gate.status.used} of ${gate.status.limit} AI routine generations this month.`
+          : 'Your monthly AI routine generation limit is reached.';
+        showAlert({ title: 'Monthly AI limit reached', message, type: 'warning' });
+        return;
+      }
+    } catch (error) {
+      setGenerating(false);
+      console.warn('[PrincipalDailyProgramPlanner] Quota check failed:', error);
+      showAlert({
+        title: 'Quota check unavailable',
+        message: 'Could not verify your routine generation quota. Please try again.',
+        type: 'warning',
+      });
+      return;
+    }
     try {
       const generated = await WeeklyProgramCopilotService.generateWeeklyProgramFromTerm({
         preschoolId: organizationId,
@@ -748,16 +820,31 @@ export default function PrincipalDailyProgramPlannerScreen() {
       setSaveAdvisory(null);
       setDraftViewMode('cards');
 
+      // Count successful generation against quota (school-wide)
+      void incrementUsage('lesson_generation', 1).catch(() => {
+        /* best-effort; quota refresh will reflect server state */
+      });
+
       if (mode === 'regenerate') {
-        Alert.alert(
-          'Draft refreshed',
-          'Dash regenerated this routine using your current setup and preflight answers. Saved plans remain unchanged until you save again.',
-        );
+        showAlert({
+          title: 'Draft refreshed',
+          message:
+            'Dash regenerated this routine using your current setup and preflight answers. Saved plans remain unchanged until you save again.',
+          type: 'success',
+        });
       } else {
-        Alert.alert('Draft ready', 'AI generated your daily routine. Review and share when ready.');
+        showAlert({
+          title: 'Draft ready',
+          message: 'AI generated your daily routine. Review and share when ready.',
+          type: 'success',
+        });
       }
     } catch (error: unknown) {
-      Alert.alert('Generation failed', error instanceof Error ? error.message : 'Could not generate program.');
+      showAlert({
+        title: 'Generation failed',
+        message: error instanceof Error ? error.message : 'Could not generate program.',
+        type: 'error',
+      });
     } finally {
       setGenerating(false);
       setGenerationMode('generate');
@@ -786,6 +873,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
     preflightComplete,
     confirmedAssumptions,
     refreshLessonQuota,
+    showAlert,
   ]);
 
   const generateProgram = useCallback(() => {
@@ -794,34 +882,38 @@ export default function PrincipalDailyProgramPlannerScreen() {
 
   const regenerateProgram = useCallback(() => {
     if (!draft) {
-      Alert.alert('No draft', 'Generate a routine first, then you can re-generate variations.');
+      showAlert({
+        title: 'No draft',
+        message: 'Generate a routine first, then you can re-generate variations.',
+        type: 'warning',
+      });
       return;
     }
 
-    Alert.alert(
-      'Re-generate this draft?',
-      'Dash will replace the current draft blocks using your current setup and preflight answers. Saved plans stay unchanged.',
-      [
+    showAlert({
+      title: 'Re-generate this draft?',
+      message:
+        'Dash will replace the current draft blocks using your current setup and preflight answers. Saved plans stay unchanged.',
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Re-generate',
           style: 'destructive',
-          onPress: () => {
-            void runGeneration('regenerate');
-          },
+          onPress: () => void runGeneration('regenerate'),
         },
       ],
-    );
-  }, [draft, runGeneration]);
+    });
+  }, [draft, runGeneration, showAlert]);
 
   const saveDraft = useCallback(async (): Promise<WeeklyProgramDraft | null> => {
     if (!draft) {
-      Alert.alert('No draft', 'Generate or load a draft first.');
+      showAlert({ title: 'No draft', message: 'Generate or load a draft first.', type: 'warning' });
       return null;
     }
 
     if (!organizationId || !userId) {
-      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      showAlert({ title: 'Missing profile', message: 'Please sign in again to continue.', type: 'warning' });
       return null;
     }
 
@@ -855,36 +947,41 @@ export default function PrincipalDailyProgramPlannerScreen() {
       setDraft(saved);
       setSaveAdvisory(saved.save_warnings?.[0] || null);
       await loadPrograms();
-      Alert.alert(
-        'Saved',
-        saved.save_warnings?.[0]
+      showAlert({
+        title: 'Saved',
+        message: saved.save_warnings?.[0]
           ? `Daily routine draft saved.\n\n${saved.save_warnings[0]}`
           : 'Daily routine draft saved successfully.',
-      );
+        type: 'success',
+      });
       return saved;
     } catch (error: unknown) {
-      Alert.alert('Save failed', error instanceof Error ? error.message : 'Failed to save draft.');
+      showAlert({
+        title: 'Save failed',
+        message: error instanceof Error ? error.message : 'Failed to save draft.',
+        type: 'error',
+      });
       return null;
     } finally {
       setSaving(false);
     }
-  }, [ageGroup, dailyMinutes, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate, preflight, confirmedAssumptions, rules]);
+  }, [ageGroup, dailyMinutes, draft, loadPrograms, organizationId, schoolName, themeTitle, userId, weekStartDate, preflight, confirmedAssumptions, rules, showAlert]);
 
   const shareWithParents = useCallback(async (programOverride?: WeeklyProgramDraft) => {
     const activeProgram = programOverride || draft;
     if (!activeProgram) {
-      Alert.alert('No program', 'Generate or load a program before sharing.');
+      showAlert({ title: 'No program', message: 'Generate or load a program before sharing.', type: 'warning' });
       return;
     }
 
     if (!organizationId || !userId) {
-      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      showAlert({ title: 'Missing profile', message: 'Please sign in again to continue.', type: 'warning' });
       return;
     }
 
     const { normalized, issues } = WeeklyProgramService.validateProgramTimeRules(rules);
     if (issues.length > 0) {
-      Alert.alert('Fix time rules', issues.join('\n'));
+      showAlert({ title: 'Fix time rules', message: issues.join('\n'), type: 'warning' });
       return;
     }
 
@@ -908,32 +1005,41 @@ export default function PrincipalDailyProgramPlannerScreen() {
       });
 
       await loadPrograms();
-      Alert.alert(
-        'Shared with Parents',
-        'Routine shared with strict arrival and pickup rules. Parents received a published announcement.',
-      );
+      showAlert({
+        title: 'Shared with Parents',
+        message: 'Routine shared with strict arrival and pickup rules. Parents received a published announcement.',
+        type: 'success',
+      });
     } catch (error: unknown) {
-      Alert.alert('Share failed', error instanceof Error ? error.message : 'Could not share routine.');
+      showAlert({
+        title: 'Share failed',
+        message: error instanceof Error ? error.message : 'Could not share routine.',
+        type: 'error',
+      });
     } finally {
       setSharingParents(false);
     }
-  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
+  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId, showAlert]);
 
   const shareWithTeachers = useCallback(async (programOverride?: WeeklyProgramDraft) => {
     const activeProgram = programOverride || draft;
     if (!activeProgram) {
-      Alert.alert('No program', 'Generate or load a program before sharing with teachers.');
+      showAlert({
+        title: 'No program',
+        message: 'Generate or load a program before sharing with teachers.',
+        type: 'warning',
+      });
       return;
     }
 
     if (!organizationId || !userId) {
-      Alert.alert('Missing profile', 'Please sign in again to continue.');
+      showAlert({ title: 'Missing profile', message: 'Please sign in again to continue.', type: 'warning' });
       return;
     }
 
     const { normalized, issues } = WeeklyProgramService.validateProgramTimeRules(rules);
     if (issues.length > 0) {
-      Alert.alert('Fix time rules', issues.join('\n'));
+      showAlert({ title: 'Fix time rules', message: issues.join('\n'), type: 'warning' });
       return;
     }
 
@@ -957,34 +1063,45 @@ export default function PrincipalDailyProgramPlannerScreen() {
       });
 
       await loadPrograms();
-      Alert.alert(
-        'Shared with Teachers',
-        'Routine brief shared with all teachers. Dashboards and in-app notifications are now updated.',
-      );
+      showAlert({
+        title: 'Shared with Teachers',
+        message: 'Routine brief shared with all teachers. Dashboards and in-app notifications are now updated.',
+        type: 'success',
+      });
     } catch (error: unknown) {
-      Alert.alert('Share failed', error instanceof Error ? error.message : 'Could not share routine with teachers.');
+      showAlert({
+        title: 'Share failed',
+        message: error instanceof Error ? error.message : 'Could not share routine with teachers.',
+        type: 'error',
+      });
     } finally {
       setSharingTeachers(false);
     }
-  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId]);
+  }, [draft, loadPrograms, organizationId, rules, saveDraft, userId, showAlert]);
 
-  const deleteSavedProgram = useCallback((program: WeeklyProgramDraft) => {
-    const programId = String(program.id || '').trim();
-    if (!programId || !organizationId) {
-      Alert.alert('Delete unavailable', 'This saved routine could not be identified. Refresh and try again.');
-      return;
-    }
+  const deleteSavedProgram = useCallback(
+    (program: WeeklyProgramDraft) => {
+      const programId = String(program.id || '').trim();
+      if (!programId || !organizationId) {
+        showAlert({
+          title: 'Delete unavailable',
+          message: 'This saved routine could not be identified. Refresh and try again.',
+          type: 'warning',
+        });
+        return;
+      }
 
-    Alert.alert(
-      'Delete saved plan?',
-      'This will permanently remove the saved daily routine and its block schedule from the planner.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
+      showAlert({
+        title: 'Delete saved plan?',
+        message:
+          'This will permanently remove the saved daily routine and its block schedule from the planner.',
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
               setDeletingProgramId(programId);
               try {
                 await WeeklyProgramService.deleteWeeklyProgram({
@@ -996,21 +1113,23 @@ export default function PrincipalDailyProgramPlannerScreen() {
                 setPrograms((prev) => prev.filter((entry) => entry.id !== programId));
                 setSaveAdvisory(null);
                 await loadPrograms();
-                Alert.alert('Deleted', 'Saved daily routine deleted.');
+                showAlert({ title: 'Deleted', message: 'Saved daily routine deleted.', type: 'success' });
               } catch (error: unknown) {
-                Alert.alert(
-                  'Delete failed',
-                  error instanceof Error ? error.message : 'Could not delete this saved routine.',
-                );
+                showAlert({
+                  title: 'Delete failed',
+                  message: error instanceof Error ? error.message : 'Could not delete this saved routine.',
+                  type: 'error',
+                });
               } finally {
                 setDeletingProgramId((prev) => (prev === programId ? null : prev));
               }
-            })();
+            },
           },
-        },
-      ],
-    );
-  }, [loadPrograms, organizationId]);
+        ],
+      });
+    },
+    [loadPrograms, organizationId, showAlert],
+  );
 
   const applyPreset = useCallback((preset: 'half_day' | 'full_day' | 'aftercare') => {
     if (preset === 'half_day') {
@@ -1117,46 +1236,101 @@ export default function PrincipalDailyProgramPlannerScreen() {
       const remaining = prev.blocks
         .filter((block) => !(block.day_of_week === day && block.block_order === order))
         .map((block) => ({ ...block }));
-
-      return {
-        ...prev,
-        blocks: remaining,
-      };
+      return { ...prev, blocks: remaining };
     });
   }, []);
 
-  const loadProgramIntoEditor = useCallback((program: WeeklyProgramDraft) => {
-    const rawTitle = String(program.title || '').trim();
-    const normalizedTheme = (() => {
-      if (!rawTitle) return '';
-      if (!schoolName) return rawTitle;
-      const schoolPrefix = `${schoolName.toLowerCase()}:`;
-      const lower = rawTitle.toLowerCase();
-      if (lower.startsWith(schoolPrefix)) {
-        return rawTitle.slice(schoolPrefix.length).trim();
+  const moveBlock = useCallback((day: number, order: number, direction: 'up' | 'down') => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const dayBlocks = prev.blocks
+        .filter((b) => b.day_of_week === day)
+        .slice()
+        .sort((a, b) => a.block_order - b.block_order);
+
+      const idx = dayBlocks.findIndex((b) => b.block_order === order);
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= dayBlocks.length) return prev;
+
+      const newDayBlocks = [...dayBlocks];
+      [newDayBlocks[idx], newDayBlocks[swapIdx]] = [newDayBlocks[swapIdx], newDayBlocks[idx]];
+      const reordered = newDayBlocks.map((b, i) => ({ ...b, block_order: i + 1 }));
+
+      const otherBlocks = prev.blocks.filter((b) => b.day_of_week !== day);
+      return { ...prev, blocks: [...otherBlocks, ...reordered] };
+    });
+  }, []);
+
+  const copyBlockToAllDays = useCallback((day: number, order: number) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const source = prev.blocks.find((b) => b.day_of_week === day && b.block_order === order);
+      if (!source) return prev;
+
+      const allDays = [1, 2, 3, 4, 5] as const;
+      let blocks = [...prev.blocks];
+      for (const d of allDays) {
+        if (d === day) continue;
+        const existing = blocks.filter((b) => b.day_of_week === d);
+        const nextOrder = existing.length > 0 ? Math.max(...existing.map((b) => b.block_order)) + 1 : 1;
+        blocks.push({ ...source, day_of_week: d, block_order: nextOrder });
       }
-      return rawTitle;
-    })();
-    setSelectedPresetId(null);
-    setWeekStartDate(startOfWeekMonday(program.week_start_date));
-    setThemeTitle(normalizedTheme || themeTitle);
-    setAgeGroup(program.age_group || '3-6');
-    setDailyMinutes('300');
-    setWeeklyObjectives(program.summary || weeklyObjectives);
-    const maybePreflight = (program as any)?.generation_context?.preflight;
-    if (maybePreflight && typeof maybePreflight === 'object') {
-      setPreflight({
-        nonNegotiableAnchors: String((maybePreflight as any).nonNegotiableAnchors || ''),
-        fixedWeeklyEvents: String((maybePreflight as any).fixedWeeklyEvents || ''),
-        afterLunchPattern: String((maybePreflight as any).afterLunchPattern || ''),
-        resourceConstraints: String((maybePreflight as any).resourceConstraints || ''),
-        safetyCompliance: String((maybePreflight as any).safetyCompliance || ''),
-      });
-    }
-    setDraft(program);
-    setDraftViewMode('edit');
-    Alert.alert('Loaded', 'Program loaded into editor.');
-  }, [schoolName, themeTitle, weeklyObjectives]);
+      return { ...prev, blocks };
+    });
+    showAlert({ title: 'Copied', message: 'Block copied to all other weekdays.', type: 'success' });
+  }, [showAlert]);
+
+  const loadProgramIntoEditor = useCallback(
+    (program: WeeklyProgramDraft, options?: { skipAlert?: boolean }) => {
+      const rawTitle = String(program.title || '').trim();
+      const normalizedTheme = (() => {
+        if (!rawTitle) return '';
+        if (!schoolName) return rawTitle;
+        const schoolPrefix = `${schoolName.toLowerCase()}:`;
+        const lower = rawTitle.toLowerCase();
+        if (lower.startsWith(schoolPrefix)) {
+          return rawTitle.slice(schoolPrefix.length).trim();
+        }
+        return rawTitle;
+      })();
+      setSelectedPresetId(null);
+      setWeekStartDate(startOfWeekMonday(program.week_start_date));
+      setThemeTitle(normalizedTheme || themeTitle);
+      setAgeGroup(program.age_group || '3-6');
+      setDailyMinutes('300');
+      setWeeklyObjectives(program.summary || weeklyObjectives);
+      const maybePreflight = (program as any)?.generation_context?.preflight;
+      if (maybePreflight && typeof maybePreflight === 'object') {
+        setPreflight({
+          nonNegotiableAnchors: String((maybePreflight as any).nonNegotiableAnchors || ''),
+          fixedWeeklyEvents: String((maybePreflight as any).fixedWeeklyEvents || ''),
+          afterLunchPattern: String((maybePreflight as any).afterLunchPattern || ''),
+          resourceConstraints: String((maybePreflight as any).resourceConstraints || ''),
+          safetyCompliance: String((maybePreflight as any).safetyCompliance || ''),
+        });
+      }
+      setDraft(program);
+      setDraftViewMode('edit');
+      if (!options?.skipAlert) {
+        showAlert({ title: 'Loaded', message: 'Program loaded into editor.', type: 'success' });
+      }
+    },
+    [schoolName, themeTitle, weeklyObjectives, showAlert],
+  );
+
+  const regenerateFromSavedProgram = useCallback(
+    (program: WeeklyProgramDraft) => {
+      setProgramToRegenerateAfterLoad(program);
+      loadProgramIntoEditor(program, { skipAlert: true });
+    },
+    [loadProgramIntoEditor],
+  );
+
+  useEffect(() => {
+    if (!programToRegenerateAfterLoad || !draft?.id || draft.id !== programToRegenerateAfterLoad.id) return;
+    setProgramToRegenerateAfterLoad(null);
+    void runGeneration('regenerate');
+  }, [programToRegenerateAfterLoad, draft?.id, runGeneration]);
 
   const programStats = useMemo(() => {
     const draftBlocks = draft?.blocks || [];
@@ -1453,6 +1627,10 @@ export default function PrincipalDailyProgramPlannerScreen() {
               ))}
             </View>
           )}
+          <TouchableOpacity style={styles.inlineBtn} onPress={loadFromYearPlan}>
+            <Ionicons name="calendar-outline" size={14} color={theme.primary} />
+            <Text style={styles.inlineBtnText}>Load from Year Plan</Text>
+          </TouchableOpacity>
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
@@ -1605,52 +1783,116 @@ export default function PrincipalDailyProgramPlannerScreen() {
           <View style={styles.row}>
             <View style={styles.halfInput}>
               <Text style={styles.fieldLabel}>Arrival Starts</Text>
-              <TextInput
-                style={styles.input}
-                value={rules.arrivalStartTime}
-                onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalStartTime: normalizeTime(value) }))}
-                placeholder="HH:MM"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="none"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  value={rules.arrivalStartTime}
+                  onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalStartTime: normalizeTime(value) }))}
+                  placeholder="HH:MM"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={styles.timePickerBtn}
+                  onPress={() => setTimePickerField('arrivalStart')}
+                  accessibilityLabel="Set arrival start time"
+                >
+                  <Ionicons name="time-outline" size={22} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.halfInput}>
               <Text style={styles.fieldLabel}>Arrival Cutoff</Text>
-              <TextInput
-                style={styles.input}
-                value={rules.arrivalCutoffTime}
-                onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalCutoffTime: normalizeTime(value) }))}
-                placeholder="HH:MM"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="none"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  value={rules.arrivalCutoffTime}
+                  onChangeText={(value) => setRules((prev) => ({ ...prev, arrivalCutoffTime: normalizeTime(value) }))}
+                  placeholder="HH:MM"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={styles.timePickerBtn}
+                  onPress={() => setTimePickerField('arrivalCutoff')}
+                  accessibilityLabel="Set arrival cutoff time"
+                >
+                  <Ionicons name="time-outline" size={22} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
               <Text style={styles.fieldLabel}>Pickup Starts</Text>
-              <TextInput
-                style={styles.input}
-                value={rules.pickupStartTime}
-                onChangeText={(value) => setRules((prev) => ({ ...prev, pickupStartTime: normalizeTime(value) }))}
-                placeholder="HH:MM"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="none"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  value={rules.pickupStartTime}
+                  onChangeText={(value) => setRules((prev) => ({ ...prev, pickupStartTime: normalizeTime(value) }))}
+                  placeholder="HH:MM"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={styles.timePickerBtn}
+                  onPress={() => setTimePickerField('pickupStart')}
+                  accessibilityLabel="Set pickup start time"
+                >
+                  <Ionicons name="time-outline" size={22} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.halfInput}>
               <Text style={styles.fieldLabel}>Pickup Cutoff</Text>
-              <TextInput
-                style={styles.input}
-                value={rules.pickupCutoffTime}
-                onChangeText={(value) => setRules((prev) => ({ ...prev, pickupCutoffTime: normalizeTime(value) }))}
-                placeholder="HH:MM"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="none"
-              />
+              <View style={styles.timeInputRow}>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  value={rules.pickupCutoffTime}
+                  onChangeText={(value) => setRules((prev) => ({ ...prev, pickupCutoffTime: normalizeTime(value) }))}
+                  placeholder="HH:MM"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={styles.timePickerBtn}
+                  onPress={() => setTimePickerField('pickupCutoff')}
+                  accessibilityLabel="Set pickup cutoff time"
+                >
+                  <Ionicons name="time-outline" size={22} color={theme.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
+
+          {timePickerField && (
+            <DateTimePicker
+              value={timePickerField === 'arrivalStart'
+                ? timeToDate(rules.arrivalStartTime)
+                : timePickerField === 'arrivalCutoff'
+                  ? timeToDate(rules.arrivalCutoffTime)
+                  : timePickerField === 'pickupStart'
+                    ? timeToDate(rules.pickupStartTime)
+                    : timeToDate(rules.pickupCutoffTime)}
+              mode="time"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(event, date) => {
+                if (Platform.OS === 'android' && event.type === 'dismissed') {
+                  setTimePickerField(null);
+                  return;
+                }
+                if (date) {
+                  const t = dateToTime(date);
+                  if (timePickerField === 'arrivalStart') setRules((prev) => ({ ...prev, arrivalStartTime: t }));
+                  else if (timePickerField === 'arrivalCutoff') setRules((prev) => ({ ...prev, arrivalCutoffTime: t }));
+                  else if (timePickerField === 'pickupStart') setRules((prev) => ({ ...prev, pickupStartTime: t }));
+                  else if (timePickerField === 'pickupCutoff') setRules((prev) => ({ ...prev, pickupCutoffTime: t }));
+                }
+                setTimePickerField(null);
+              }}
+            />
+          )}
 
           <View style={styles.presetRow}>
             <TouchableOpacity style={styles.presetBtn} onPress={() => applyPreset('half_day')}>
@@ -1901,13 +2143,27 @@ export default function PrincipalDailyProgramPlannerScreen() {
                           <View key={`${day}-${block.block_order}`} style={styles.previewBlockCard}>
                             <View style={styles.previewBlockMetaRow}>
                               <Text style={styles.previewBlockOrder}>#{block.block_order}</Text>
-                              <Text style={styles.previewBlockTime}>
-                                {(block.start_time && String(block.start_time)) || '--:--'} - {(block.end_time && String(block.end_time)) || '--:--'}
-                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                {!!block.block_type && (
+                                  <View style={[styles.statusPill, { paddingHorizontal: 6, paddingVertical: 2 }]}>
+                                    <Text style={[styles.statusPillText, { fontSize: 10 }]}>
+                                      {String(block.block_type).replace('_', ' ')}
+                                    </Text>
+                                  </View>
+                                )}
+                                <Text style={styles.previewBlockTime}>
+                                  {(block.start_time && String(block.start_time)) || '--:--'} - {(block.end_time && String(block.end_time)) || '--:--'}
+                                </Text>
+                              </View>
                             </View>
                             <Text style={styles.previewBlockTitle}>
                               {String(block.title || '').trim() || 'Untitled block'}
                             </Text>
+                            {Array.isArray(block.objectives) && block.objectives.length > 0 && (
+                              <Text style={[styles.previewBlockNote, { color: theme.primary + 'cc' }]}>
+                                {block.objectives.slice(0, 2).join(' • ')}
+                              </Text>
+                            )}
                             {!!String(block.notes || '').trim() && (
                               <Text style={styles.previewBlockNote}>{String(block.notes)}</Text>
                             )}
@@ -1937,14 +2193,61 @@ export default function PrincipalDailyProgramPlannerScreen() {
                     {dayBlocks.length === 0 ? (
                       <Text style={styles.dayEmpty}>No blocks yet.</Text>
                     ) : (
-                      dayBlocks.map((block) => (
+                      dayBlocks.map((block, blockIdx) => (
                         <View key={`${day}-${block.block_order}`} style={styles.blockCard}>
+                          {/* Header row: order badge, move buttons, delete */}
                           <View style={styles.blockTitleRow}>
                             <Text style={styles.blockBadge}>#{block.block_order}</Text>
-                            <TouchableOpacity onPress={() => removeBlock(day, block.block_order)}>
-                              <Ionicons name="trash-outline" size={16} color={theme.error} />
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <TouchableOpacity
+                                onPress={() => moveBlock(day, block.block_order, 'up')}
+                                disabled={blockIdx === 0}
+                                style={{ opacity: blockIdx === 0 ? 0.3 : 1 }}
+                                accessibilityLabel="Move block up"
+                              >
+                                <Ionicons name="chevron-up" size={18} color={theme.primary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => moveBlock(day, block.block_order, 'down')}
+                                disabled={blockIdx === dayBlocks.length - 1}
+                                style={{ opacity: blockIdx === dayBlocks.length - 1 ? 0.3 : 1 }}
+                                accessibilityLabel="Move block down"
+                              >
+                                <Ionicons name="chevron-down" size={18} color={theme.primary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => copyBlockToAllDays(day, block.block_order)}
+                                accessibilityLabel="Copy to all days"
+                              >
+                                <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => removeBlock(day, block.block_order)}>
+                                <Ionicons name="trash-outline" size={16} color={theme.error} />
+                              </TouchableOpacity>
+                            </View>
                           </View>
+
+                          {/* Block type chips */}
+                          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Type</Text>
+                          <View style={styles.chipRow}>
+                            {(['circle_time', 'learning', 'movement', 'outdoor', 'meal', 'nap', 'assessment', 'transition', 'other'] as const).map((bt) => {
+                              const active = block.block_type === bt;
+                              return (
+                                <TouchableOpacity
+                                  key={bt}
+                                  style={[styles.quickChip, active && { backgroundColor: theme.primary }]}
+                                  onPress={() => updateDraftBlock(day, block.block_order, { block_type: bt })}
+                                >
+                                  <Text style={[styles.quickChipText, active && { color: '#fff' }]}>
+                                    {bt.replace('_', ' ')}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+
+                          {/* Title */}
+                          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Title</Text>
                           <TextInput
                             style={styles.input}
                             value={block.title}
@@ -1952,28 +2255,62 @@ export default function PrincipalDailyProgramPlannerScreen() {
                             placeholder="Block title"
                             placeholderTextColor={theme.textSecondary}
                           />
+
+                          {/* Times */}
                           <View style={styles.row}>
-                            <TextInput
-                              style={[styles.input, styles.halfInput]}
-                              value={String(block.start_time || '')}
-                              onChangeText={(value) => updateDraftBlock(day, block.block_order, { start_time: normalizeTime(value) })}
-                              placeholder="Start HH:MM"
-                              placeholderTextColor={theme.textSecondary}
-                              autoCapitalize="none"
-                            />
-                            <TextInput
-                              style={[styles.input, styles.halfInput]}
-                              value={String(block.end_time || '')}
-                              onChangeText={(value) => updateDraftBlock(day, block.block_order, { end_time: normalizeTime(value) })}
-                              placeholder="End HH:MM"
-                              placeholderTextColor={theme.textSecondary}
-                              autoCapitalize="none"
-                            />
+                            <View style={styles.halfInput}>
+                              <Text style={styles.fieldLabel}>Start</Text>
+                              <TextInput
+                                style={styles.input}
+                                value={String(block.start_time || '')}
+                                onChangeText={(value) => updateDraftBlock(day, block.block_order, { start_time: normalizeTime(value) })}
+                                placeholder="HH:MM"
+                                placeholderTextColor={theme.textSecondary}
+                                autoCapitalize="none"
+                              />
+                            </View>
+                            <View style={styles.halfInput}>
+                              <Text style={styles.fieldLabel}>End</Text>
+                              <TextInput
+                                style={styles.input}
+                                value={String(block.end_time || '')}
+                                onChangeText={(value) => updateDraftBlock(day, block.block_order, { end_time: normalizeTime(value) })}
+                                placeholder="HH:MM"
+                                placeholderTextColor={theme.textSecondary}
+                                autoCapitalize="none"
+                              />
+                            </View>
                           </View>
+
+                          {/* Objectives */}
+                          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Objectives</Text>
+                          <TextInput
+                            style={[styles.input, { minHeight: 52 }]}
+                            value={(block.objectives || []).join(', ')}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, {
+                              objectives: value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean),
+                            })}
+                            placeholder="Objectives (comma-separated)"
+                            placeholderTextColor={theme.textSecondary}
+                            multiline
+                          />
+
+                          {/* Transition cue */}
+                          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Transition cue</Text>
+                          <TextInput
+                            style={styles.input}
+                            value={block.transition_cue || ''}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { transition_cue: value || null })}
+                            placeholder="e.g. Ring bell, tidy up, line up"
+                            placeholderTextColor={theme.textSecondary}
+                          />
+
+                          {/* Staff note */}
+                          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Staff note</Text>
                           <TextInput
                             style={styles.input}
                             value={block.notes || ''}
-                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { notes: value })}
+                            onChangeText={(value) => updateDraftBlock(day, block.block_order, { notes: value || null })}
                             placeholder="Staff note (optional)"
                             placeholderTextColor={theme.textSecondary}
                           />
@@ -2011,6 +2348,14 @@ export default function PrincipalDailyProgramPlannerScreen() {
                     <Ionicons name="create-outline" size={14} color={theme.primary} />
                     <Text style={styles.inlineBtnText}>Edit</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.inlineBtn, generating && styles.buttonDisabled]}
+                    onPress={() => regenerateFromSavedProgram(program)}
+                    disabled={generating}
+                  >
+                    <Ionicons name="refresh-outline" size={14} color={theme.primary} />
+                    <Text style={styles.inlineBtnText}>Regenerate</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.inlineBtn} onPress={() => void shareWithTeachers(program)}>
                     <Ionicons name="people-outline" size={14} color={theme.primary} />
                     <Text style={styles.inlineBtnText}>Share Teachers</Text>
@@ -2039,6 +2384,7 @@ export default function PrincipalDailyProgramPlannerScreen() {
           )}
         </View>
       </ScrollView>
+      <AlertModalComponent />
     </DesktopLayout>
   );
 }
@@ -2240,6 +2586,23 @@ const createStyles = (theme: any) =>
       paddingHorizontal: 11,
       paddingVertical: 10,
       fontSize: 14,
+    },
+    timeInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    timeInput: {
+      flex: 1,
+    },
+    timePickerBtn: {
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary + '40',
+      backgroundColor: theme.primary + '12',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     row: {
       flexDirection: 'row',

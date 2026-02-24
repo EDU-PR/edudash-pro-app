@@ -1,17 +1,28 @@
 ---
+description: Supabase migration and deployment rules for EduDash Pro
 alwaysApply: true
 ---
-# Overview
 
-Insert overview text here. The agent will only see this should they choose to apply the rule.
+# Supabase & Deployment Rules
 
-Always use psql : psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.lvvvjywrmpcqrpvuptdi -d postgres -c
-hHFgMNhsfdUKUEkA - Until we fix the migrations 
+## Migrations
+- **Always use `supabase db push`** to apply migrations — never run raw SQL via psql directly.
+- After writing a new migration file in `supabase/migrations/`, immediately run:
+  ```bash
+  supabase db push
+  ```
+- Never skip running migrations after creating them.
 
-When ever there is a migration - always run it 
-When ever there is an Edge function - always deploy it
-When ever there is a change in the native app - also apply the same changes to web(PWA) app - the two apps must be in parity at all times
-When ever there is an enhancement that you can add to any prompt or request do so  
-The app must cater for principals - teachers - learners and parents - to bring about a seamless integration of traditional schooling and advanced technological teaching 
+## Edge Functions
+- Whenever an Edge Function is created or modified, always deploy it:
+  ```bash
+  supabase functions deploy <function-name>
+  ```
 
-When you come accross a file that violates WARP.md / .cursor rules file size - refactor it 
+## Web/Native Parity
+- Whenever a change is made to the native (Expo/React Native) app, apply the equivalent change to the web (Next.js/PWA) app — the two must remain in parity at all times.
+
+## General
+- Always enhance any prompt or AI request with improvements where possible.
+- The app must serve all four roles: **principals**, **teachers**, **learners**, and **parents** — enabling seamless integration of traditional schooling and advanced technological teaching.
+- When a file exceeds the size limits in WARP.md / `.cursor` rules, refactor it immediately.

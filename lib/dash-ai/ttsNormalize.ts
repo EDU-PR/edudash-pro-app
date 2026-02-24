@@ -42,6 +42,34 @@ const CONTRACTION_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bweren't\b/gi, 'were not'],
 ];
 
+const NORMALIZE_CACHE_MAX = 200;
+const normalizeCache = new Map<string, string>();
+
+function getCacheKey(input: string, options: TTSNormalizeOptions): string {
+  const expand = options.expandContractions !== false;
+  const phonics = options.phonicsMode === true;
+  const preserve = options.preservePhonicsMarkers ?? phonics;
+  return `${expand ? 1 : 0}|${phonics ? 1 : 0}|${preserve ? 1 : 0}|${input}`;
+}
+
+function getCachedNormalized(key: string): string | null {
+  const cached = normalizeCache.get(key);
+  if (typeof cached !== 'string') return null;
+  // Refresh LRU position
+  normalizeCache.delete(key);
+  normalizeCache.set(key, cached);
+  return cached;
+}
+
+function setCachedNormalized(key: string, value: string): void {
+  if (normalizeCache.has(key)) normalizeCache.delete(key);
+  normalizeCache.set(key, value);
+  if (normalizeCache.size > NORMALIZE_CACHE_MAX) {
+    const oldest = normalizeCache.keys().next().value;
+    if (oldest) normalizeCache.delete(oldest);
+  }
+}
+
 /** Map of common sustained-sound text to their single-letter marker */
 const SUSTAINED_SOUND_MAP: Record<string, string> = {
   sss: 's', mmm: 'm', fff: 'f', zzz: 'z', nnn: 'n', lll: 'l',
@@ -199,7 +227,15 @@ function normalizeAcronymsForNaturalSpeech(text: string, phonicsMode: boolean): 
 }
 
 function stripMarkdownAndMeta(text: string, preservePhonicsMarkers: boolean): string {
-  let next = text
+  let next = text;
+
+  // Strip [WHITEBOARD]...[/WHITEBOARD] blocks FIRST — they are visual-only UI elements
+  // and must never be spoken regardless of phonics mode.
+  next = next.replace(/\[WHITEBOARD\][\s\S]*?\[\/WHITEBOARD\]/gi, '');
+  // Also strip any orphan/unclosed WHITEBOARD tags the AI may emit
+  next = next.replace(/\[\/?\s*WHITEBOARD\s*\]/gi, '');
+
+  next = next
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`[^`]+`/g, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -241,7 +277,14 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
     preservePhonicsMarkers = phonicsMode,
   } = options;
 
-  let text = String(input || '')
+  const rawInput = String(input || '');
+  const cacheKey = getCacheKey(rawInput, options);
+  const cachedValue = getCachedNormalized(cacheKey);
+  if (cachedValue !== null) {
+    return cachedValue;
+  }
+
+  let text = rawInput
     .replace(/\r\n/g, '\n')
     .replace(/[“”«»"]/g, '')
     .replace(/[‘’]/g, "'");
@@ -274,7 +317,7 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
   text = collapseRepeatedLetterSounds(text, phonicsMode);
   text = normalizePhonicsMarkers(text, phonicsMode, preservePhonicsMarkers);
 
-  return text
+  const normalized = text
     .replace(/\bIt socks\b/g, "It's socks")
     .replace(/\bit socks\b/g, "it's socks")
     .replace(/\bCorrect answer:\s*/gi, '')
@@ -286,6 +329,8 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
     .replace(/\s{2,}/g, ' ')
     .replace(/\.\s*\./g, '. ')
     .trim();
+  setCachedNormalized(cacheKey, normalized);
+  return normalized;
 }
 
 export function normalizeForTTSPhonics(input: string): string {

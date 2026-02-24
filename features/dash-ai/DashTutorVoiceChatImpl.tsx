@@ -16,6 +16,8 @@ import {
   Text,
   TouchableOpacity,
   Platform,
+  Animated,
+  StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -138,6 +140,10 @@ export default function DashTutorVoiceChat() {
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage | null>(null);
   const [voiceErrorBanner, setVoiceErrorBanner] = useState<string | null>(null);
   const [whiteboardContent, setWhiteboardContent] = useState<WhiteboardContent | null>(null);
+  // Active phonics practice target — shown as a prominent "Practice Now" card
+  const [phonicsPracticeTarget, setPhonicsPracticeTarget] = useState<PendingPhonicsTarget | null>(null);
+  const [phonicsPracticeResult, setPhonicsPracticeResult] = useState<{ accuracy: number; encouragement: string } | null>(null);
+  const practiceGlowAnim = useRef(new Animated.Value(0)).current;
 
   const listRef = useRef<FlashListRef<ChatMessageData>>(null);
   const voiceOrbRef = useRef<VoiceOrbRefType>(null);
@@ -162,6 +168,19 @@ export default function DashTutorVoiceChat() {
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
   }, [isSpeaking]);
+
+  // Pulse glow animation for the phonics practice card
+  useEffect(() => {
+    if (!phonicsPracticeTarget) return;
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(practiceGlowAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(practiceGlowAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [phonicsPracticeTarget, practiceGlowAnim]);
 
   const languageLabel = useMemo(
     () => findLanguageName(preferredLanguage),
@@ -431,6 +450,8 @@ export default function DashTutorVoiceChat() {
     const extracted = extractPhonicsTarget(assistantText, 'assistant');
     if (extracted) {
       phonicsTargetRef.current = extracted;
+      setPhonicsPracticeTarget(extracted);
+      setPhonicsPracticeResult(null);
     }
   }, []);
 
@@ -442,20 +463,21 @@ export default function DashTutorVoiceChat() {
     if (!meta?.audioBase64) return;
 
     const normalizedTranscript = String(transcript || '').trim();
-    if (!normalizedTranscript) return;
 
     const activeTarget = phonicsTargetRef.current;
     const targetIsFresh = !!activeTarget && (Date.now() - activeTarget.updatedAt) < PHONICS_TARGET_STALE_MS;
-    const learnerTarget = extractPhonicsTarget(normalizedTranscript, 'learner');
-    const shouldAssess =
-      Boolean(learnerTarget) ||
-      Boolean(targetIsFresh);
+    const learnerTarget = normalizedTranscript ? extractPhonicsTarget(normalizedTranscript, 'learner') : null;
+    const shouldAssess = Boolean(learnerTarget) || Boolean(targetIsFresh);
 
     if (!shouldAssess) return;
 
     const resolvedTarget = targetIsFresh ? activeTarget : learnerTarget;
-    const referenceText = resolvedTarget?.referenceText || normalizedTranscript;
+    // When child attempts a sound in isolation the transcript may be empty —
+    // fall back to the target's referenceText so the assessment still runs.
+    const referenceText = resolvedTarget?.referenceText || normalizedTranscript || resolvedTarget?.targetPhoneme || '';
     const targetPhoneme = resolvedTarget?.targetPhoneme || null;
+
+    if (!referenceText) return;
 
     try {
       const result = await assessPhonicsAttempt({
@@ -474,6 +496,15 @@ export default function DashTutorVoiceChat() {
           targetPhoneme: phoneme,
           accuracy,
         });
+
+        // Update the Practice card with the result
+        const score = Math.round(accuracy);
+        const encouragement =
+          score >= 80 ? 'Great job! 🌟' :
+          score >= 60 ? 'Good try! Keep going!' :
+          'Try again — you\'ve got this!';
+        setPhonicsPracticeResult({ accuracy: score, encouragement });
+
         if (accuracy < 60 && phoneme) {
           lastLowAccuracyPhonemeRef.current = { targetPhoneme: phoneme, updatedAt: Date.now() };
         }
@@ -874,11 +905,23 @@ export default function DashTutorVoiceChat() {
     });
     if (language) setPreferredLanguage(language);
     if (voiceErrorBanner) setVoiceErrorBanner(null);
-    if (formatted.trim()) {
+
+    // Always run phonics assessment when audio is present and there's a fresh target,
+    // even if the STT transcript is empty (isolated sounds like "sss" may not transcribe).
+    const hasFreshTarget =
+      !!phonicsTargetRef.current &&
+      (Date.now() - phonicsTargetRef.current.updatedAt) < PHONICS_TARGET_STALE_MS;
+    if (meta?.audioBase64 && hasFreshTarget) {
       void submitPhonicsAssessment(formatted, language, meta);
+    }
+
+    if (formatted.trim()) {
+      if (!meta?.audioBase64 || !hasFreshTarget) {
+        void submitPhonicsAssessment(formatted, language, meta);
+      }
       sendMessage(formatted);
     }
-  }, [sendMessage, submitPhonicsAssessment, voiceErrorBanner]);
+  }, [sendMessage, submitPhonicsAssessment, voiceErrorBanner, orgType]);
 
   const statusLabel = isProcessing
     ? 'Thinking...'
@@ -955,6 +998,65 @@ export default function DashTutorVoiceChat() {
         </View>
       )}
 
+      {phonicsPracticeTarget && (
+        <Animated.View
+          style={[
+            phonicsPracticeStyles.card,
+            {
+              backgroundColor: theme.surface,
+              borderColor: '#6366f1',
+              opacity: practiceGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }),
+              transform: [{ scale: practiceGlowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.99, 1.01] }) }],
+            },
+          ]}
+        >
+          <View style={phonicsPracticeStyles.cardHeader}>
+            <View style={phonicsPracticeStyles.iconBadge}>
+              <Ionicons name="mic" size={16} color="#fff" />
+            </View>
+            {/* eslint-disable-next-line i18next/no-literal-string */}
+            <Text style={[phonicsPracticeStyles.cardTitle, { color: theme.text }]}>Practice Time!</Text>
+            <TouchableOpacity
+              onPress={() => { setPhonicsPracticeTarget(null); setPhonicsPracticeResult(null); }}
+              style={phonicsPracticeStyles.dismissBtn}
+            >
+              <Ionicons name="close" size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={phonicsPracticeStyles.phonemeRow}>
+            <Text style={phonicsPracticeStyles.phonemeDisplay}>
+              {phonicsPracticeTarget.targetPhoneme
+                ? `/${phonicsPracticeTarget.targetPhoneme}/`
+                : phonicsPracticeTarget.referenceText}
+            </Text>
+            {/* eslint-disable-next-line i18next/no-literal-string */}
+            <Text style={[phonicsPracticeStyles.phonemeHint, { color: theme.textSecondary }]}>
+              Say the sound out loud
+            </Text>
+          </View>
+
+          {phonicsPracticeResult ? (
+            <View style={phonicsPracticeStyles.resultRow}>
+              <Ionicons
+                name={phonicsPracticeResult.accuracy >= 60 ? 'checkmark-circle' : 'refresh-circle'}
+                size={20}
+                color={phonicsPracticeResult.accuracy >= 80 ? '#22c55e' : phonicsPracticeResult.accuracy >= 60 ? '#f59e0b' : '#ef4444'}
+              />
+              <Text style={[phonicsPracticeStyles.resultText, { color: theme.text }]}>
+                {phonicsPracticeResult.encouragement}
+                {phonicsPracticeResult.accuracy > 0 && ` (${phonicsPracticeResult.accuracy}%)`}
+              </Text>
+            </View>
+          ) : (
+            // eslint-disable-next-line i18next/no-literal-string
+            <Text style={[phonicsPracticeStyles.listenHint, { color: theme.textSecondary }]}>
+              <Ionicons name="ear-outline" size={13} /> Dash is listening when you speak…
+            </Text>
+          )}
+        </Animated.View>
+      )}
+
       {isVoiceMode && VoiceOrb && (
         <View style={[styles.voiceDock, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
           <View style={styles.voiceDockHeader}>
@@ -994,3 +1096,72 @@ export default function DashTutorVoiceChat() {
     </SafeAreaView>
   );
 }
+
+const phonicsPracticeStyles = StyleSheet.create({
+  card: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 12px rgba(99,102,241,0.18)' },
+      default: { elevation: 4 },
+    }),
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  iconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  dismissBtn: {
+    padding: 4,
+  },
+  phonemeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  phonemeDisplay: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#6366f1',
+    letterSpacing: 2,
+  },
+  phonemeHint: {
+    fontSize: 13,
+    flex: 1,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  resultText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  listenHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+});

@@ -1,11 +1,16 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Modal, View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTeacherDashboard } from '@/hooks/useDashboardData';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { buildReminderEventsFromBlocks, useNextActivityReminder } from '@/hooks/useNextActivityReminder';
+
+function toWeekdayMondayFirst(value: Date): number {
+  return value.getDay() === 0 ? 7 : value.getDay();
+}
 
 const formatRange = (start?: string | null, end?: string | null) => {
   if (!start && !end) return 'Time not set';
@@ -29,10 +34,52 @@ export default function TeacherDailyProgramPlannerScreen() {
   const { data, loading, refresh } = useTeacherDashboard();
   const routine = data?.todayRoutine || null;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const [reminderSoundEnabled, setReminderSoundEnabled] = useState(true);
+
+  const reminderBlocksByDay = useMemo(() => {
+    if (!routine?.blocks?.length) return {};
+    const todayDay = toWeekdayMondayFirst(new Date());
+    const blocks = routine.blocks.map((b) => ({
+      id: b.id,
+      title: b.title,
+      start_time: b.startTime ?? null,
+    }));
+    return { [todayDay]: blocks };
+  }, [routine?.blocks]);
+
+  const reminderEvents = useMemo(
+    () => buildReminderEventsFromBlocks(reminderBlocksByDay),
+    [reminderBlocksByDay],
+  );
+
+  const { overlay, notice, dismissOverlay } = useNextActivityReminder({
+    events: reminderEvents,
+    soundEnabled: reminderSoundEnabled,
+    enabled: !!routine && reminderEvents.length > 0,
+  });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Stack.Screen options={{ headerShown: false }} />
+
+      {overlay ? (
+        <Modal visible={true} transparent animationType="fade" onRequestClose={dismissOverlay}>
+          <TouchableOpacity style={styles.reminderOverlayBackdrop} activeOpacity={1} onPress={dismissOverlay}>
+            <View style={[styles.reminderOverlayContent, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
+              <Text style={[styles.reminderOverlayLabel, { color: theme.textSecondary }]}>Reminder</Text>
+              <Text style={[styles.reminderOverlayMinutes, { color: theme.text }]}>{overlay.threshold} min</Text>
+              <Text style={[styles.reminderOverlayTitle, { color: theme.text }]}>{overlay.title}</Text>
+              <Text style={[styles.reminderOverlayHint, { color: theme.textSecondary }]}>Prepare transition now.</Text>
+              <TouchableOpacity
+                style={[styles.reminderOverlayButton, { borderColor: theme.primary, backgroundColor: `${theme.primary}22` }]}
+                onPress={dismissOverlay}
+              >
+                <Text style={[styles.reminderOverlayButtonText, { color: theme.primary }]}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      ) : null}
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -59,13 +106,36 @@ export default function TeacherDailyProgramPlannerScreen() {
                   {formatDate(routine.weekStartDate)} - {formatDate(routine.weekEndDate)} • {routine.blockCount} blocks
                 </Text>
                 {routine.nextBlockTitle ? (
-                  <View style={styles.nextBlockPill}>
-                    <Ionicons name="time-outline" size={14} color="#fff" />
-                    <Text style={styles.nextBlockText}>
-                      Next: {routine.nextBlockTitle}
-                      {routine.nextBlockStart ? ` at ${routine.nextBlockStart}` : ''}
-                    </Text>
-                  </View>
+                  <>
+                    <View style={styles.nextBlockRow}>
+                      <View style={styles.nextBlockPill}>
+                        <Ionicons name="time-outline" size={14} color="#fff" />
+                        <Text style={styles.nextBlockText}>
+                          Next: {routine.nextBlockTitle}
+                          {routine.nextBlockStart ? ` at ${routine.nextBlockStart}` : ''}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.reminderSoundToggle, { borderColor: reminderSoundEnabled ? theme.primary : theme.border }]}
+                        onPress={() => setReminderSoundEnabled((prev) => !prev)}
+                      >
+                        <Ionicons
+                          name={reminderSoundEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+                          size={14}
+                          color={reminderSoundEnabled ? theme.primary : theme.textSecondary}
+                        />
+                        <Text style={[styles.reminderSoundToggleText, { color: reminderSoundEnabled ? theme.primary : theme.textSecondary }]}>
+                          {reminderSoundEnabled ? 'Sound on' : 'Sound off'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {notice ? (
+                      <View style={[styles.reminderNotice, { backgroundColor: `${theme.primary}18`, borderColor: theme.primary }]}>
+                        <Ionicons name="notifications-outline" size={12} color={theme.primary} />
+                        <Text style={[styles.reminderNoticeText, { color: theme.text }]}>{notice}</Text>
+                      </View>
+                    ) : null}
+                  </>
                 ) : null}
               </View>
 
@@ -173,7 +243,7 @@ const createStyles = (theme: any) =>
     scrollContent: {
       padding: 16,
       gap: 14,
-      paddingBottom: 36,
+      paddingBottom: 20,
     },
     card: {
       backgroundColor: theme.surface,
@@ -193,8 +263,14 @@ const createStyles = (theme: any) =>
       fontSize: 13,
       lineHeight: 19,
     },
-    nextBlockPill: {
+    nextBlockRow: {
       marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    nextBlockPill: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
@@ -207,6 +283,80 @@ const createStyles = (theme: any) =>
     nextBlockText: {
       color: '#fff',
       fontSize: 12,
+      fontWeight: '700',
+    },
+    reminderSoundToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    reminderSoundToggleText: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    reminderNotice: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    reminderNoticeText: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    reminderOverlayBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    reminderOverlayContent: {
+      borderWidth: 1,
+      borderRadius: 20,
+      padding: 24,
+      alignItems: 'center',
+      minWidth: 260,
+    },
+    reminderOverlayLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 2,
+      textTransform: 'uppercase',
+    },
+    reminderOverlayMinutes: {
+      fontSize: 40,
+      fontWeight: '900',
+      marginTop: 8,
+    },
+    reminderOverlayTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    reminderOverlayHint: {
+      fontSize: 12,
+      marginTop: 4,
+    },
+    reminderOverlayButton: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      marginTop: 16,
+    },
+    reminderOverlayButtonText: {
+      fontSize: 14,
       fontWeight: '700',
     },
     blockListCard: {

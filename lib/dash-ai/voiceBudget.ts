@@ -118,11 +118,24 @@ function buildBudgetFromServerRow(row: ServerBudgetRow, tier?: string | null): V
 }
 
 async function getServerVoiceBudget(tier?: string | null): Promise<VoiceBudget | null> {
+  const feature = String(VOICE_FEATURE || '').trim().toLowerCase();
+  if (!feature) {
+    throw new Error('VOICE_FEATURE is not configured');
+  }
   const { data, error } = await assertSupabase().rpc('get_daily_media_budget', {
-    p_feature: VOICE_FEATURE,
-    p_tier: normalizeTier(tier),
+    p_feature: feature,
+    p_tier: normalizeTier(tier) || 'free',
   });
-  if (error) throw error;
+  if (error) {
+    console.error('[VoiceBudget] get_daily_media_budget failed', {
+      code: (error as any)?.code,
+      message: (error as any)?.message,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      tier: normalizeTier(tier),
+    });
+    throw error;
+  }
   const row = parseServerBudgetRow(data);
   if (!row) return null;
   return buildBudgetFromServerRow(row, tier);

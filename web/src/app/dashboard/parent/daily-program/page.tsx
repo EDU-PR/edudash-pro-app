@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import {
+  BellRing,
   CalendarDays,
   ChevronDown,
   ChevronUp,
@@ -15,7 +16,10 @@ import {
   Route,
   Sparkles,
   User,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
+import { buildReminderEventsFromBlocks, useNextActivityReminder } from '@/hooks/useNextActivityReminder';
 
 type ChildRow = {
   id: string;
@@ -432,8 +436,59 @@ function ParentDailyProgramPageContent() {
     return Object.values(blocksByDay).reduce((sum, list) => sum + list.length, 0);
   }, [blocksByDay]);
 
+  const [reminderSoundEnabled, setReminderSoundEnabled] = useState(true);
+  const reminderEvents = useMemo(
+    () => buildReminderEventsFromBlocks(blocksByDay, toDateOnly(new Date())),
+    [blocksByDay],
+  );
+  const { overlay, notice, dismissOverlay } = useNextActivityReminder({
+    events: reminderEvents,
+    soundEnabled: reminderSoundEnabled,
+    enabled: !!program && reminderEvents.length > 0,
+  });
+
   return (
     <ParentShell hideHeader={true}>
+      {overlay ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reminder-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={dismissOverlay}
+        >
+          <div
+            className="card"
+            style={{
+              minWidth: 260,
+              padding: 24,
+              textAlign: 'center',
+              border: '1px solid var(--primary)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="reminder-title" style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--textSecondary)', margin: 0 }}>
+              Reminder
+            </p>
+            <p style={{ fontSize: 40, fontWeight: 900, marginTop: 8 }}>{overlay.threshold} min</p>
+            <p style={{ fontSize: 17, fontWeight: 700, marginTop: 12 }}>{overlay.title}</p>
+            <p style={{ fontSize: 12, marginTop: 4, color: 'var(--textSecondary)' }}>Prepare transition now.</p>
+            <button type="button" className="btn btnSecondary" onClick={dismissOverlay} style={{ marginTop: 16 }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="section" style={{ display: 'grid', gap: 16 }}>
         <div className="card" style={{ padding: 20, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
@@ -544,22 +599,60 @@ function ParentDailyProgramPageContent() {
                 <span>{formatWeekRange(program.week_start_date, program.week_end_date)}</span>
               </div>
               {nextBlock ? (
-                <div
-                  style={{
-                    border: '1px solid var(--primary)',
-                    background: 'color-mix(in srgb, var(--primary) 14%, transparent)',
-                    borderRadius: 10,
-                    padding: '10px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Clock3 className="icon16" style={{ color: 'var(--primary)' }} />
-                  <div style={{ fontSize: 14 }}>
-                    <strong>Next block:</strong> {nextBlock.title} ({formatTimeRange(nextBlock.start_time, nextBlock.end_time)})
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 180,
+                        border: '1px solid var(--primary)',
+                        background: 'color-mix(in srgb, var(--primary) 14%, transparent)',
+                        borderRadius: 10,
+                        padding: '10px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <Clock3 className="icon16" style={{ color: 'var(--primary)' }} />
+                      <div style={{ fontSize: 14 }}>
+                        <strong>Next block:</strong> {nextBlock.title} ({formatTimeRange(nextBlock.start_time, nextBlock.end_time)})
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btnSecondary"
+                      onClick={() => setReminderSoundEnabled((prev) => !prev)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 12px',
+                        fontSize: 12,
+                        borderColor: reminderSoundEnabled ? 'var(--primary)' : 'var(--border)',
+                      }}
+                    >
+                      {reminderSoundEnabled ? <Volume2 className="icon16" /> : <VolumeX className="icon16" />}
+                      {reminderSoundEnabled ? 'Sound on' : 'Sound off'}
+                    </button>
                   </div>
-                </div>
+                  {notice ? (
+                    <div
+                      style={{
+                        border: '1px solid var(--primary)',
+                        background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
+                        borderRadius: 10,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <BellRing className="icon16" style={{ color: 'var(--primary)' }} />
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>{notice}</span>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
               {program.summary ? (
                 <p style={{ color: 'var(--textLight)', margin: 0, whiteSpace: 'pre-wrap' }}>{program.summary}</p>

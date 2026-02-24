@@ -586,22 +586,50 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       priority: 'high',
       channelId: 'default'
     },
-    lesson_assigned: {
-      title: '📚 New Lesson Assigned',
-      body: context.student_name 
-        ? `${context.student_name} has been assigned: ${context.assignment_title || 'a new lesson'}` 
-        : `Your child has been assigned: ${context.assignment_title || 'a new lesson'}`,
-      data: {
-        type: 'lesson_assignment',
-        assignment_id: context.assignment_id,
-        student_id: context.student_id,
-        screen: 'lesson-detail'
-      },
-      sound: 'default',
-      badge: 1,
-      priority: 'normal',
-      channelId: 'homework'
-    },
+    lesson_assigned: (() => {
+      // Contextual title/body based on delivery_mode so parents receive
+      // appropriate messaging instead of generic "assigned a lesson" text.
+      const deliveryMode = context.delivery_mode as string | undefined;
+      const childName = context.student_name as string | undefined;
+      const activityTitle = context.assignment_title as string | undefined;
+
+      let title: string;
+      let body: string;
+
+      if (deliveryMode === 'playground') {
+        title = '🎮 New Dash Activity';
+        body = childName
+          ? `New Dash activity for ${childName}: ${activityTitle || 'a fun practice activity'}`
+          : `New Dash activity: ${activityTitle || 'a fun practice activity'}`;
+      } else if (deliveryMode === 'take_home') {
+        title = '🏠 Take-Home Activity';
+        body = childName
+          ? `Take-home activity for ${childName}: ${activityTitle || 'a reinforcement activity'}`
+          : `Take-home activity: ${activityTitle || 'a reinforcement activity'}`;
+      } else {
+        // class_activity — informational, not homework
+        title = '📚 Today\'s Class';
+        body = childName
+          ? `${childName}'s class will work on: ${activityTitle || 'a new lesson today'}`
+          : `Class activity: ${activityTitle || 'a new lesson today'}`;
+      }
+
+      return {
+        title,
+        body,
+        data: {
+          type: 'lesson_assignment',
+          assignment_id: context.assignment_id,
+          student_id: context.student_id,
+          delivery_mode: deliveryMode,
+          screen: deliveryMode === 'playground' ? 'dash-playground' : 'lesson-detail',
+        },
+        sound: 'default',
+        badge: 1,
+        priority: 'normal',
+        channelId: 'homework',
+      };
+    })(),
     // School calendar events
     school_event_created: {
       title: '📅 New School Event',
@@ -2219,13 +2247,15 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
       }
 
       case 'lesson_assigned':
-        // Get assignment and student details for notification
+        // Get assignment + student + delivery context for notification copy
         if (request.assignment_id) {
           const { data: assignment } = await supabase
             .from('lesson_assignments')
             .select(`
               id,
+              delivery_mode,
               lesson:lessons(id, title, subject),
+              interactive_activity:interactive_activities(id, title),
               student:students(id, first_name, last_name)
             `)
             .eq('id', request.assignment_id)
@@ -2233,13 +2263,29 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
 
           if (assignment) {
             context.assignment_id = assignment.id;
-            if (assignment.lesson) {
-              context.assignment_title = assignment.lesson.title;
-              context.subject = assignment.lesson.subject;
-            }
-            if (assignment.student) {
-              context.student_id = assignment.student.id;
-              context.student_name = `${assignment.student.first_name} ${assignment.student.last_name}`;
+            context.delivery_mode = assignment.delivery_mode ?? 'class_activity';
+
+            // Playground assignments use interactive activity title; others use lesson title
+            const interactiveTitle = Array.isArray(assignment.interactive_activity)
+              ? assignment.interactive_activity[0]?.title
+              : (assignment.interactive_activity as any)?.title;
+            const lessonTitle = Array.isArray(assignment.lesson)
+              ? assignment.lesson[0]?.title
+              : (assignment.lesson as any)?.title;
+            const lessonSubject = Array.isArray(assignment.lesson)
+              ? assignment.lesson[0]?.subject
+              : (assignment.lesson as any)?.subject;
+
+            context.assignment_title = (context.delivery_mode === 'playground' ? interactiveTitle : null)
+              ?? lessonTitle;
+            context.subject = lessonSubject;
+
+            const student = Array.isArray(assignment.student)
+              ? assignment.student[0]
+              : (assignment.student as any);
+            if (student) {
+              context.student_id = student.id;
+              context.student_name = `${student.first_name} ${student.last_name}`;
             }
           }
         } else if (request.student_id) {

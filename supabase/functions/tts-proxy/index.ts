@@ -100,14 +100,18 @@ const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
  * Phonics pacing policy:
  * - Do NOT slow entire sentences in phonics mode (keep natural pace).
  * - Only slow/hold the phoneme segments (slash markers) for clarity.
+ * - Sustained/continuant phonemes (s, f, m, n, l, r, v, z, h, sh, th) use a
+ *   much slower rate than stop consonants so children can clearly hear the sound.
  */
 // ── Phonics pacing — values MUST match lib/dash-ai/ttsConstants.ts (SSOT) ──
 const DEFAULT_PHONICS_SPEAKING_RATE = 0;     // AZURE_RATE_PHONICS
-const PHONICS_PHONEME_RATE = -18;            // AZURE_RATE_PHONEME
-const PHONICS_MARKER_BREAK_MS = 220;
-const PHONICS_BLEND_SEGMENT_BREAK_MS = 250;
-const PHONICS_BLEND_FINAL_BREAK_MS = 320;
-const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;
+const PHONICS_PHONEME_RATE = -18;            // AZURE_RATE_PHONEME (stop consonants)
+const PHONICS_SUSTAINED_RATE = -42;          // much slower for continuant phonemes
+const PHONICS_MARKER_BREAK_MS = 320;         // pause after each phoneme marker
+const PHONICS_SUSTAINED_BREAK_MS = 380;      // longer pause after sustained phonemes
+const PHONICS_BLEND_SEGMENT_BREAK_MS = 280;
+const PHONICS_BLEND_FINAL_BREAK_MS = 360;
+const PHONICS_FALLBACK_LETTER_BREAK_MS = 250;
 
 /** Audio format for pronunciation assessment & streaming */
 const STREAMING_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
@@ -297,7 +301,18 @@ function phonemeTagSustained(tokenRaw: string): string {
     sound = SUSTAINED_PHONEME_TEXT[token] || token;
   }
 
-  return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(ipa)}">${escapeXml(sound)}</phoneme></prosody>`;
+  // Use a much slower rate for sustained/continuant phonemes so children
+  // can hear the full sound clearly (e.g. /s/ → "ssss", not a quick burst).
+  return `<prosody rate="${PHONICS_SUSTAINED_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(ipa)}">${escapeXml(sound)}</phoneme></prosody>`;
+}
+
+/** Strip [WHITEBOARD]...[/WHITEBOARD] blocks and orphan tags before SSML conversion. */
+function stripWhiteboardTags(text: string): string {
+  return text
+    .replace(/\[WHITEBOARD\][\s\S]*?\[\/WHITEBOARD\]/gi, ' ')
+    .replace(/\[\/?\s*WHITEBOARD\s*\]/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function buildBlendSSML(blend: string): string {
@@ -372,13 +387,17 @@ function normalizeAcronymsForSpeech(input: string): string {
 }
 
 function convertPhonicsMarkersToSSML(rawText: string): string {
-  let text = escapeXml(normalizeChoiceLabelsForSpeech(rawText || ''));
+  // Strip whiteboard blocks before converting — they are visual-only and must not be spoken.
+  const cleaned = stripWhiteboardTags(rawText || '');
+  let text = escapeXml(normalizeChoiceLabelsForSpeech(cleaned));
+
+  const isSustained = (token: string) => SUSTAIN_CONSONANTS.has(token);
 
   const markerTokenToSSML = (tokenRaw: string): string => {
     const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
     if (!token) return '';
     if (token.length === 1) {
-      return SUSTAIN_CONSONANTS.has(token)
+      return isSustained(token)
         ? phonemeTagSustained(token)
         : phonemeTag(token);
     }
@@ -388,7 +407,7 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
 
     const digraphLetter = DIGRAPH_FALLBACK_TO_LETTER[token];
     if (digraphLetter) {
-      return SUSTAIN_CONSONANTS.has(token)
+      return isSustained(token)
         ? phonemeTagSustained(token)
         : phonemeTag(digraphLetter);
     }
@@ -404,27 +423,32 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
     return escapeXml(token);
   };
 
-  // /b/ markers -> <phoneme> tags + short pause
+  const breakAfterMarker = (token: string) =>
+    isSustained(token)
+      ? `<break time="${PHONICS_SUSTAINED_BREAK_MS}ms"/>`
+      : `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+
+  // /b/ markers -> <phoneme> tags + appropriate pause
   text = text.replace(
     /\/\s*([a-z]{1,8})\s*\//gi,
-    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+    (_, token: string) => markerTokenToSSML(token) + breakAfterMarker(token.toLowerCase().replace(/[^a-z]/g, ''))
   );
-  // [b] markers → <phoneme> tags + pause
+  // [b] markers → <phoneme> tags + appropriate pause
   text = text.replace(
     /\[\s*([a-z]{1,8})\s*\]/gi,
-    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+    (_, token: string) => markerTokenToSSML(token) + breakAfterMarker(token.toLowerCase().replace(/[^a-z]/g, ''))
   );
   // c-a-t markers → blending SSML
   text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
 
   // Convert repeated digraph cues like "sh sh sh" into sustained phoneme tags.
   text = text.replace(SPACED_REPEATED_DIGRAPH_PATTERN, (_match, token: string) => {
-    return `${phonemeTagSustained(token)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+    return `${phonemeTagSustained(token)}<break time="${PHONICS_SUSTAINED_BREAK_MS}ms"/>`;
   });
 
   // Convert repeated single-letter cues like "s s s s" into sustained phoneme tags.
   text = text.replace(SPACED_REPEATED_LETTER_PATTERN, (_match, letter: string) => {
-    return `${phonemeTagSustained(letter)}<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`;
+    return `${phonemeTagSustained(letter)}<break time="${PHONICS_SUSTAINED_BREAK_MS}ms"/>`;
   });
 
   // Fallback: catch bare sustained-sound text that slipped past the prompt
@@ -1284,7 +1308,8 @@ Deno.serve(async (req) => {
       if (!text) {
         return jsonResponse(400, { error: 'Missing text' });
       }
-      const spokenText = normalizeAcronymsForSpeech(text);
+      // Strip [WHITEBOARD] blocks before TTS
+      const spokenText = normalizeAcronymsForSpeech(stripWhiteboardTags(text));
 
       const languageRaw = String(body.language || body.lang || 'en');
       const { bcp47: streamBcp47 } = normalizeLanguage(languageRaw);
@@ -1379,7 +1404,8 @@ Deno.serve(async (req) => {
     if (!text) {
       return jsonResponse(400, { error: 'Missing text' });
     }
-    const spokenText = normalizeAcronymsForSpeech(text);
+    // Strip [WHITEBOARD] blocks before TTS — they are visual-only UI elements
+    const spokenText = normalizeAcronymsForSpeech(stripWhiteboardTags(text));
 
     const languageRaw = String(body.language || body.lang || 'en');
     const { short: language, bcp47 } = normalizeLanguage(languageRaw);

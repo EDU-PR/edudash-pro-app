@@ -32,7 +32,11 @@
     "retry": "Retry",
     "students": "Students",
     "work": "Work",
-    "dash": "Dash"
+    "dash": "Dash",
+    "enroll": "Bhalisela",
+    "team": "Iqembu",
+    "fees": "Imirahu",
+    "grades": "Amazinga"
   },
   "auth": {
     "signIn": "Ngena",
@@ -159,7 +163,12 @@
     "sign_in_with_email_link": "Sign in with Email Link (No Password)",
     "sign_up": "Sign Up",
     "verification_failed_message": "Email verification failed. Please try signing in to request a new verification email.",
-    "verification_failed_title": "Verification Failed"
+    "verification_failed_title": "Verification Failed",
+    "welcome": {
+      "title": "Wamukelekile",
+      "subtitle": "Ngena ku-akhawunti yakho noma dala entsha.",
+      "quick_access": "Ukufinyelela okusheshayo nge-Face ID / Isigxivizo"
+    }
   },
   "roles": {
     "parent": "Umzali",

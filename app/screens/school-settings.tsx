@@ -50,6 +50,8 @@ export default function SchoolSettingsScreen() {
   const [savingUniformFeature, setSavingUniformFeature] = useState(false);
   const [savingStationeryFeature, setSavingStationeryFeature] = useState(false);
   const [savingFinancePrivacy, setSavingFinancePrivacy] = useState(false);
+  const [savingGroupCreatorSetting, setSavingGroupCreatorSetting] = useState(false);
+  const [groupCreatorAutoAddAsAdmin, setGroupCreatorAutoAddAsAdmin] = useState(true);
   const [number, setNumber] = useState('');
   const [uniformOrdersEnabled, setUniformOrdersEnabled] = useState(false);
   const [stationeryEnabled, setStationeryEnabled] = useState(false);
@@ -122,6 +124,16 @@ export default function SchoolSettingsScreen() {
           setFinancialReportsSettings(
             mergedSettings?.features?.financialReports || DEFAULT_SCHOOL_SETTINGS.features.financialReports
           );
+        }
+
+        // Load preschool_settings (group creator auto-add)
+        const { data: psData } = await supabase
+          .from('preschool_settings')
+          .select('group_creator_auto_add_as_admin')
+          .eq('preschool_id', profile.organization_id)
+          .maybeSingle();
+        if (active && psData) {
+          setGroupCreatorAutoAddAsAdmin(psData.group_creator_auto_add_as_admin !== false);
         }
 
         // Load bank details
@@ -336,6 +348,32 @@ export default function SchoolSettingsScreen() {
       showError('Error', e?.message || 'Failed to save stationery setting');
     } finally {
       setSavingStationeryFeature(false);
+    }
+  };
+
+  const saveGroupCreatorSetting = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      setSavingGroupCreatorSetting(true);
+      const supabase = assertSupabase();
+      const { error } = await supabase
+        .from('preschool_settings')
+        .upsert(
+          { preschool_id: profile.organization_id, group_creator_auto_add_as_admin: groupCreatorAutoAddAsAdmin },
+          { onConflict: 'preschool_id' }
+        );
+      if (error) throw error;
+      setSuccessModal({
+        visible: true,
+        title: '✓ Saved',
+        message: groupCreatorAutoAddAsAdmin
+          ? 'Teachers who create class groups will be automatically added as admins.'
+          : 'Teachers who create class groups will not be automatically added (only class teacher and parents).',
+      });
+    } catch (e: any) {
+      showError('Error', e?.message || 'Failed to save group setting');
+    } finally {
+      setSavingGroupCreatorSetting(false);
     }
   };
 
@@ -608,6 +646,39 @@ export default function SchoolSettingsScreen() {
                     <>
                       <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
                       <Text style={styles.btnText}>Save Uniform Order Setting</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="chatbubbles-outline" size={24} color={theme.primary} />
+                  <Text style={styles.sectionTitle}>Messaging & Groups</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  When teachers create class groups, automatically add them as admins. Turn off if you prefer only the class teacher and parents in each group.
+                </Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Auto-add teacher as admin when they create a group</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, groupCreatorAutoAddAsAdmin && styles.switchPillActive]}
+                    onPress={() => setGroupCreatorAutoAddAsAdmin((prev) => !prev)}
+                  >
+                    <Text style={[styles.switchPillText, groupCreatorAutoAddAsAdmin && styles.switchPillTextActive]}>
+                      {groupCreatorAutoAddAsAdmin ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.btn} onPress={saveGroupCreatorSetting} disabled={savingGroupCreatorSetting}>
+                  {savingGroupCreatorSetting ? (
+                    <EduDashSpinner color={theme.onPrimary} />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.btnText}>Save Group Setting</Text>
                     </>
                   )}
                 </TouchableOpacity>

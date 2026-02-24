@@ -433,6 +433,7 @@ export const createTeacherDashboardStyles = (
     },
     routineActionsRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       alignItems: 'center',
       gap: 8,
       marginTop: 2,

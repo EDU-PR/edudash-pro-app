@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,10 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import {
+  buildReminderEventsFromBlocks,
+  useNextActivityReminder,
+} from '@/hooks/useNextActivityReminder';
 
 type ChildRow = {
   id: string;
@@ -194,6 +199,18 @@ export default function ParentDailyProgramScreen() {
   const [loadingProgram, setLoadingProgram] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reminderSoundEnabled, setReminderSoundEnabled] = useState(true);
+
+  const reminderEvents = useMemo(
+    () => buildReminderEventsFromBlocks(blocksByDay, toDateOnly(new Date())),
+    [blocksByDay],
+  );
+
+  const { overlay, notice, dismissOverlay } = useNextActivityReminder({
+    events: reminderEvents,
+    soundEnabled: reminderSoundEnabled,
+    enabled: !!program && reminderEvents.length > 0,
+  });
 
   const selectedChild = useMemo(
     () => children.find((child) => child.id === selectedChildId) || null,
@@ -258,24 +275,39 @@ export default function ParentDailyProgramScreen() {
 
   const loadProgram = useCallback(
     async (child: ChildRow | null) => {
-      if (!child?.preschool_id) {
+      // Resolve school ID — prefer preschool_id, fall back to organization_id
+      const schoolId = child?.preschool_id || (child as any)?.organization_id || null;
+      if (!schoolId) {
         setProgram(null);
         setBlocksByDay(EMPTY_BLOCKS_BY_DAY);
         setUpcomingReminders([]);
         return;
       }
 
-      const todayIso = toDateOnly(new Date());
-      const todayDay = toWeekdayMondayFirst(new Date());
+      const today = new Date();
+      const todayIso = toDateOnly(today);
+      const todayDay = toWeekdayMondayFirst(today);
+
+      // Use a ±7 day window so parents can see:
+      // - This week's routine (today falls within the week)
+      // - Next week's routine if the principal published it on a weekend
+      // - Last week's routine as a fallback if nothing is current
+      const windowStart = new Date(today);
+      windowStart.setDate(windowStart.getDate() - 7);
+      const windowEnd = new Date(today);
+      windowEnd.setDate(windowEnd.getDate() + 7);
+      const windowStartIso = toDateOnly(windowStart);
+      const windowEndIso = toDateOnly(windowEnd);
 
       const { data: programRows, error: programError } = await supabase
         .from('weekly_programs')
         .select('id, class_id, title, summary, week_start_date, week_end_date, status, published_at, updated_at, created_at')
-        .eq('preschool_id', child.preschool_id)
-        .lte('week_start_date', todayIso)
-        .gte('week_end_date', todayIso)
-        .order('published_at', { ascending: false })
-        .order('updated_at', { ascending: false });
+        .eq('preschool_id', schoolId)
+        .eq('status', 'published')
+        .gte('week_end_date', windowStartIso)
+        .lte('week_start_date', windowEndIso)
+        .order('week_start_date', { ascending: false })
+        .order('published_at', { ascending: false });
 
       if (programError) {
         throw new Error(programError.message || 'Failed to load daily routine');
@@ -290,14 +322,27 @@ export default function ParentDailyProgramScreen() {
       }
 
       candidates.sort((a, b) => {
-        const aClassMatch = a.class_id && child.class_id && a.class_id === child.class_id ? 15 : 0;
-        const bClassMatch = b.class_id && child.class_id && b.class_id === child.class_id ? 15 : 0;
-        const aScore = statusScore(a.status) + aClassMatch;
-        const bScore = statusScore(b.status) + bClassMatch;
+        // Highest priority: class-specific match for the child
+        const aClassMatch = a.class_id && child?.class_id && a.class_id === child.class_id ? 20 : 0;
+        const bClassMatch = b.class_id && child?.class_id && b.class_id === child.class_id ? 20 : 0;
+
+        // Next: prefer the program whose week contains today
+        const containsToday = (p: ProgramRow) =>
+          p.week_start_date <= todayIso && p.week_end_date >= todayIso;
+        // Then: prefer upcoming week over past week
+        const isFuture = (p: ProgramRow) => p.week_start_date > todayIso;
+        const isPast = (p: ProgramRow) => p.week_end_date < todayIso;
+
+        const weekBonus = (p: ProgramRow) =>
+          containsToday(p) ? 30 : isFuture(p) ? 10 : isPast(p) ? 0 : 0;
+
+        const aScore = statusScore(a.status) + aClassMatch + weekBonus(a);
+        const bScore = statusScore(b.status) + bClassMatch + weekBonus(b);
         if (aScore !== bScore) return bScore - aScore;
 
-        const aUpdated = new Date(String(a.updated_at || a.created_at || 0)).getTime();
-        const bUpdated = new Date(String(b.updated_at || b.created_at || 0)).getTime();
+        // Finally: most recently published wins
+        const aUpdated = new Date(String(a.published_at || a.updated_at || a.created_at || 0)).getTime();
+        const bUpdated = new Date(String(b.published_at || b.updated_at || b.created_at || 0)).getTime();
         return bUpdated - aUpdated;
       });
 
@@ -463,6 +508,34 @@ export default function ParentDailyProgramScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {overlay ? (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={dismissOverlay}
+        >
+          <TouchableOpacity
+            style={styles.reminderOverlayBackdrop}
+            activeOpacity={1}
+            onPress={dismissOverlay}
+          >
+            <View style={[styles.reminderOverlayContent, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
+              <Text style={[styles.reminderOverlayLabel, { color: theme.textSecondary }]}>Reminder</Text>
+              <Text style={[styles.reminderOverlayMinutes, { color: theme.text }]}>{overlay.threshold} min</Text>
+              <Text style={[styles.reminderOverlayTitle, { color: theme.text }]}>{overlay.title}</Text>
+              <Text style={[styles.reminderOverlayHint, { color: theme.textSecondary }]}>Prepare transition now.</Text>
+              <TouchableOpacity
+                style={[styles.reminderOverlayButton, { borderColor: theme.primary, backgroundColor: `${theme.primary}22` }]}
+                onPress={dismissOverlay}
+              >
+                <Text style={[styles.reminderOverlayButtonText, { color: theme.primary }]}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      ) : null}
+
       <SubPageHeader
         title="Daily Program"
         subtitle="Published school routine and timings"
@@ -571,12 +644,35 @@ export default function ParentDailyProgramScreen() {
               </View>
 
               {nextBlock ? (
-                <View style={[styles.nextBlockCard, { borderColor: theme.primary, backgroundColor: `${theme.primary}15` }]}>
-                  <Ionicons name="time-outline" size={16} color={theme.primary} />
-                  <Text style={[styles.nextBlockText, { color: theme.text }]}>
-                    Next: {nextBlock.title} ({formatTimeRange(nextBlock.start_time, nextBlock.end_time)})
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.nextBlockRow}>
+                    <View style={[styles.nextBlockCard, { borderColor: theme.primary, backgroundColor: `${theme.primary}15` }]}>
+                      <Ionicons name="time-outline" size={16} color={theme.primary} />
+                      <Text style={[styles.nextBlockText, { color: theme.text }]}>
+                        Next: {nextBlock.title} ({formatTimeRange(nextBlock.start_time, nextBlock.end_time)})
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.reminderSoundToggle, { borderColor: reminderSoundEnabled ? theme.primary : theme.border }]}
+                      onPress={() => setReminderSoundEnabled((prev) => !prev)}
+                    >
+                      <Ionicons
+                        name={reminderSoundEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+                        size={16}
+                        color={reminderSoundEnabled ? theme.primary : theme.textSecondary}
+                      />
+                      <Text style={[styles.reminderSoundToggleText, { color: reminderSoundEnabled ? theme.primary : theme.textSecondary }]}>
+                        {reminderSoundEnabled ? 'Sound on' : 'Sound off'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {notice ? (
+                    <View style={[styles.reminderNotice, { backgroundColor: `${theme.primary}18`, borderColor: theme.primary }]}>
+                      <Ionicons name="notifications-outline" size={14} color={theme.primary} />
+                      <Text style={[styles.reminderNoticeText, { color: theme.text }]}>{notice}</Text>
+                    </View>
+                  ) : null}
+                </>
               ) : null}
 
               {program.summary ? (
@@ -815,7 +911,15 @@ const createStyles = (theme: any) =>
       fontWeight: '800',
       letterSpacing: 0.6,
     },
+    nextBlockRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
     nextBlockCard: {
+      flex: 1,
+      minWidth: 140,
       borderWidth: 1,
       borderRadius: 10,
       paddingHorizontal: 10,
@@ -828,6 +932,80 @@ const createStyles = (theme: any) =>
       flex: 1,
       fontSize: 13,
       fontWeight: '600',
+    },
+    reminderSoundToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    reminderSoundToggleText: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    reminderNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginTop: 4,
+    },
+    reminderNoticeText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    reminderOverlayBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    reminderOverlayContent: {
+      borderWidth: 1,
+      borderRadius: 20,
+      padding: 24,
+      alignItems: 'center',
+      minWidth: 260,
+    },
+    reminderOverlayLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 2,
+      textTransform: 'uppercase',
+    },
+    reminderOverlayMinutes: {
+      fontSize: 40,
+      fontWeight: '900',
+      marginTop: 8,
+    },
+    reminderOverlayTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    reminderOverlayHint: {
+      fontSize: 12,
+      marginTop: 4,
+    },
+    reminderOverlayButton: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      marginTop: 16,
+    },
+    reminderOverlayButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
     },
     reminderList: {
       gap: 8,

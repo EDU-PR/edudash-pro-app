@@ -17,6 +17,8 @@ export interface StudentProgress {
   overdueAssignments: number;
   completionRate: number;
   averageScore: number | null;
+  averageStars: number | null;
+  domainBreakdown: Array<{ domain: string; count: number; averageScore: number | null; averageStars: number | null }>;
   totalTimeSpent: number; // minutes
   lastActivityDate: string | null;
   streak: number;
@@ -32,6 +34,7 @@ export interface LessonProgressDetail {
   status: 'assigned' | 'in_progress' | 'completed' | 'overdue';
   completedAt: string | null;
   score: number | null;
+  stars: number | null;
   timeSpentMinutes: number | null;
 }
 
@@ -42,9 +45,58 @@ export interface ProgressSummary {
   averageScore: number | null;
   totalTimeSpent: number;
   topSubjects: { subject: string; count: number }[];
+  topDomains: { domain: string; count: number }[];
   improvements: string[];
   areasToWork: string[];
 }
+
+const toDayKey = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+const calculateStreak = (completedAtValues: Array<string | null | undefined>): number => {
+  const uniqueDays = Array.from(
+    new Set(completedAtValues.map((value) => toDayKey(value)).filter(Boolean) as string[]),
+  ).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+  if (uniqueDays.length === 0) return 0;
+  let streak = 1;
+  for (let idx = 1; idx < uniqueDays.length; idx += 1) {
+    const prev = new Date(`${uniqueDays[idx - 1]}T00:00:00.000Z`);
+    const curr = new Date(`${uniqueDays[idx]}T00:00:00.000Z`);
+    const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86_400_000);
+    if (diffDays === 1) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+  return streak;
+};
+
+const parseStarsFromFeedback = (feedback: unknown): number | null => {
+  if (!feedback || typeof feedback !== 'object') return null;
+  const stars = (feedback as Record<string, unknown>).stars;
+  const parsed = typeof stars === 'string' ? Number.parseInt(stars, 10) : Number(stars);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(3, parsed)) : null;
+};
+
+const parseDomainFromFeedback = (feedback: unknown): string | null => {
+  if (!feedback || typeof feedback !== 'object') return null;
+  const activityMeta = (feedback as Record<string, unknown>).activity_meta;
+  if (!activityMeta || typeof activityMeta !== 'object') return null;
+  const domainRaw = String((activityMeta as Record<string, unknown>).domain || '').trim().toLowerCase();
+  return domainRaw || null;
+};
+
+const toAverage = (values: Array<number | null | undefined>): number | null => {
+  const numbers = values.filter((value): value is number => Number.isFinite(value as number));
+  if (numbers.length === 0) return null;
+  return Math.round(numbers.reduce((sum, value) => sum + value, 0) / numbers.length);
+};
 
 interface UseLessonProgressReturn {
   // Single student data
@@ -103,7 +155,7 @@ export function useLessonProgress(options: {
       // Get completions for this student
       const { data: completions, error: completionError } = await supabase
         .from('lesson_completions')
-        .select('*')
+        .select('assignment_id, score, time_spent_minutes, completed_at, feedback')
         .eq('student_id', studentId);
       
       if (completionError) throw completionError;
@@ -134,7 +186,29 @@ export function useLessonProgress(options: {
         ? Math.round(scores.reduce((a, b) => (a || 0) + (b || 0), 0) / scores.length) 
         : null;
       
+      const stars = completions?.map((c) => parseStarsFromFeedback(c.feedback)) || [];
+      const averageStars = toAverage(stars);
       const totalTimeSpent = completions?.reduce((sum, c) => sum + (c.time_spent_minutes || 0), 0) || 0;
+      const streak = calculateStreak(completions?.map((c) => c.completed_at) || []);
+      const domainStats = new Map<string, { count: number; scores: number[]; stars: number[] }>();
+      (completions || []).forEach((completion) => {
+        const domain = parseDomainFromFeedback(completion.feedback);
+        if (!domain) return;
+        const current = domainStats.get(domain) || { count: 0, scores: [], stars: [] };
+        current.count += 1;
+        if (completion.score !== null && Number.isFinite(completion.score)) current.scores.push(Number(completion.score));
+        const completionStars = parseStarsFromFeedback(completion.feedback);
+        if (completionStars !== null) current.stars.push(completionStars);
+        domainStats.set(domain, current);
+      });
+      const domainBreakdown = Array.from(domainStats.entries())
+        .map(([domain, stats]) => ({
+          domain,
+          count: stats.count,
+          averageScore: stats.scores.length ? Math.round(stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length) : null,
+          averageStars: stats.stars.length ? Math.round(stats.stars.reduce((a, b) => a + b, 0) / stats.stars.length) : null,
+        }))
+        .sort((a, b) => b.count - a.count);
       
       const lastCompletion = completions?.sort((a, b) => 
         new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
@@ -154,6 +228,7 @@ export function useLessonProgress(options: {
           status: a.status as any,
           completedAt: completion?.completed_at || null,
           score: completion?.score || null,
+          stars: parseStarsFromFeedback(completion?.feedback) ?? null,
           timeSpentMinutes: completion?.time_spent_minutes || null,
         };
       });
@@ -178,6 +253,7 @@ export function useLessonProgress(options: {
         averageScore,
         totalTimeSpent,
         topSubjects,
+        topDomains: domainBreakdown.slice(0, 3).map((item) => ({ domain: item.domain, count: item.count })),
         improvements: averageScore && averageScore >= 80 
           ? ['Great progress in completing lessons!'] 
           : [],
@@ -196,9 +272,11 @@ export function useLessonProgress(options: {
           overdueAssignments,
           completionRate,
           averageScore,
+          averageStars,
+          domainBreakdown,
           totalTimeSpent,
           lastActivityDate: lastCompletion?.completed_at || null,
-          streak: 0, // TODO: Calculate streak
+          streak,
         },
         progressDetails,
         summary,
@@ -250,7 +328,7 @@ export function useLessonProgress(options: {
       // Get all completions
       const { data: completions, error: completionError } = await supabase
         .from('lesson_completions')
-        .select('student_id, score, time_spent_minutes, completed_at')
+        .select('student_id, score, time_spent_minutes, completed_at, feedback')
         .in('student_id', studentIdList);
       
       if (completionError) throw completionError;
@@ -271,6 +349,26 @@ export function useLessonProgress(options: {
         const averageScore = scores.length > 0 
           ? Math.round(scores.reduce((a, b) => (a || 0) + (b || 0), 0) / scores.length) 
           : null;
+        const averageStars = toAverage(studentCompletions.map((c) => parseStarsFromFeedback(c.feedback)));
+        const domainStats = new Map<string, { count: number; scores: number[]; stars: number[] }>();
+        studentCompletions.forEach((completion) => {
+          const domain = parseDomainFromFeedback(completion.feedback);
+          if (!domain) return;
+          const current = domainStats.get(domain) || { count: 0, scores: [], stars: [] };
+          current.count += 1;
+          if (completion.score !== null && Number.isFinite(completion.score)) current.scores.push(Number(completion.score));
+          const completionStars = parseStarsFromFeedback(completion.feedback);
+          if (completionStars !== null) current.stars.push(completionStars);
+          domainStats.set(domain, current);
+        });
+        const domainBreakdown = Array.from(domainStats.entries())
+          .map(([domain, stats]) => ({
+            domain,
+            count: stats.count,
+            averageScore: stats.scores.length ? Math.round(stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length) : null,
+            averageStars: stats.stars.length ? Math.round(stats.stars.reduce((a, b) => a + b, 0) / stats.stars.length) : null,
+          }))
+          .sort((a, b) => b.count - a.count);
         
         const totalTimeSpent = studentCompletions.reduce((sum, c) => sum + (c.time_spent_minutes || 0), 0);
         
@@ -289,9 +387,11 @@ export function useLessonProgress(options: {
             ? Math.round((completedAssignments / totalAssignments) * 100) 
             : 0,
           averageScore,
+          averageStars,
+          domainBreakdown,
           totalTimeSpent,
           lastActivityDate: lastCompletion?.completed_at || null,
-          streak: 0,
+          streak: calculateStreak(studentCompletions.map((c) => c.completed_at)),
         };
       });
     },
@@ -350,7 +450,7 @@ export function useParentProgress(parentId: string | undefined) {
         
         const { data: completions } = await supabase
           .from('lesson_completions')
-          .select('score, time_spent_minutes, completed_at')
+          .select('score, time_spent_minutes, completed_at, feedback')
           .eq('student_id', child.id);
         
         const totalAssignments = assignments?.length || 0;
@@ -360,6 +460,16 @@ export function useParentProgress(parentId: string | undefined) {
         const averageScore = scores.length > 0 
           ? Math.round(scores.reduce((a, b) => (a || 0) + (b || 0), 0) / scores.length) 
           : null;
+        const averageStars = toAverage((completions || []).map((c) => parseStarsFromFeedback(c.feedback)));
+        const domainCounts = new Map<string, number>();
+        (completions || []).forEach((completion) => {
+          const domain = parseDomainFromFeedback(completion.feedback);
+          if (!domain) return;
+          domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+        });
+        const domainBreakdown = Array.from(domainCounts.entries())
+          .map(([domain, count]) => ({ domain, count }))
+          .sort((a, b) => b.count - a.count);
         
         return {
           studentId: child.id,
@@ -371,6 +481,9 @@ export function useParentProgress(parentId: string | undefined) {
             ? Math.round((completedAssignments / totalAssignments) * 100) 
             : 0,
           averageScore,
+          averageStars,
+          domainBreakdown,
+          streak: calculateStreak((completions || []).map((c) => c.completed_at)),
           overdueCount: assignments?.filter(a => 
             a.status !== 'completed' && a.due_date && new Date(a.due_date) < new Date()
           ).length || 0,

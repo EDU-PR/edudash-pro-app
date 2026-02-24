@@ -18,7 +18,8 @@ export type OrbSound =
   | 'response'    // AI ready to respond
   | 'confirm'     // Action confirmed
   | 'error'       // Error state
-  | 'dismiss';    // Modal close
+  | 'dismiss'     // Modal close
+  | 'reminder';   // Next activity / routine block chime (15/10/5 min alert)
 
 interface SoundConfig {
   file: any;  // require() asset
@@ -62,6 +63,10 @@ const SOUND_ASSETS: Record<OrbSound, SoundConfig> = {
   dismiss: { 
     file: require('@/assets/sounds/notification.wav'), 
     volume: 0.2 
+  },
+  reminder: { 
+    file: require('@/assets/sounds/notification.wav'), 
+    volume: 0.6 
   },
 };
 

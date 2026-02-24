@@ -143,6 +143,11 @@ export const createProgressStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 20,
   },
+  headerBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   overviewTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -158,6 +163,20 @@ export const createProgressStyles = (theme: any) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#10B981',
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F9731620',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  streakBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F97316',
   },
   ringContainer: {
     alignItems: 'center',
@@ -222,6 +241,18 @@ export const createProgressStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme.textSecondary,
     marginTop: 2,
+  },
+  starsSummaryRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  starsSummaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.textSecondary,
   },
   sectionCard: {
     backgroundColor: theme.card,
@@ -341,6 +372,38 @@ export const createProgressStyles = (theme: any) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#8B5CF6',
+  },
+  domainBreakdownContainer: {
+    gap: 8,
+  },
+  domainItem: {
+    gap: 4,
+  },
+  domainLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  domainLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
+    textTransform: 'capitalize',
+  },
+  domainMeta: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  domainBarTrack: {
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: theme.border,
+    overflow: 'hidden',
+  },
+  domainBarFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#5A409D',
   },
   feedbackContainer: {
     marginTop: 12,

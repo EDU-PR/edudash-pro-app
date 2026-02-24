@@ -18,7 +18,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const WHITEBOARD_REGEX = /\[WHITEBOARD\]([\s\S]*?)\[\/WHITEBOARD\]/gi;
+// Always create a fresh regex instance — module-level `g`/`gi` regexes are stateful
+// and cause .exec() to return null on subsequent calls once lastIndex advances past a match.
+function whiteboardRegex(): RegExp {
+  return /\[WHITEBOARD\]([\s\S]*?)\[\/WHITEBOARD\]/gi;
+}
+
+// Matches orphan/unclosed WHITEBOARD tags (e.g. AI omits closing tag)
+function orphanTagRegex(): RegExp {
+  return /\[\/?\s*WHITEBOARD\s*\]/gi;
+}
 
 export interface WhiteboardContent {
   raw: string;
@@ -27,7 +36,7 @@ export interface WhiteboardContent {
 
 /** Extract whiteboard content from AI response. Returns null if none. */
 export function extractWhiteboardContent(response: string): WhiteboardContent | null {
-  const match = WHITEBOARD_REGEX.exec(response);
+  const match = whiteboardRegex().exec(response);
   if (!match?.[1]) return null;
   const raw = match[1].trim();
   if (!raw) return null;
@@ -38,9 +47,13 @@ export function extractWhiteboardContent(response: string): WhiteboardContent | 
   return { raw, lines };
 }
 
-/** Strip [WHITEBOARD] blocks from display text (show rest of response). */
+/** Strip [WHITEBOARD]...[/WHITEBOARD] blocks (and orphan tags) from display text. */
 export function stripWhiteboardFromDisplay(text: string): string {
-  return text.replace(WHITEBOARD_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
+  return text
+    .replace(whiteboardRegex(), '')
+    .replace(orphanTagRegex(), '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export interface DashTutorWhiteboardProps {

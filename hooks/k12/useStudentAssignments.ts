@@ -80,23 +80,41 @@ export function useStudentAssignments() {
     const fetchAssignments = async () => {
       try {
         const supabase = assertSupabase();
+
+        // Only fetch 'playground' assignments — digital activities students can actually
+        // do on their device. Classroom group activities (class_activity) and parent-guided
+        // take-home notes (take_home) are not student-facing in this context.
         const { data, error } = await supabase
           .from('lesson_assignments')
-          .select('id, title, subject, due_at, status')
+          .select(`
+            id,
+            due_date,
+            status,
+            delivery_mode,
+            lesson:lessons(title, subject, duration_minutes),
+            interactive_activity:interactive_activities(id, title)
+          `)
           .eq('student_id', user.id)
-          .in('status', ['pending', 'in_progress'])
-          .order('due_at', { ascending: true })
+          .eq('delivery_mode', 'playground')
+          .in('status', ['assigned', 'in_progress'])
+          .order('due_date', { ascending: true, nullsFirst: false })
           .limit(20);
 
         if (error || !data || cancelled) return;
 
-        const mapped: FeatureItem[] = data.map((a: any) => ({
-          id: a.id,
-          title: a.title || 'Untitled Assignment',
-          subtitle: `${formatDueDate(a.due_at)} • ${a.status === 'in_progress' ? 'In progress' : 'Not started'}`,
-          icon: getSubjectIcon(a.subject || '') as any,
-          tone: getSubjectTone(a.subject || ''),
-        }));
+        const mapped: FeatureItem[] = (data as any[]).map((a) => {
+          const lesson = Array.isArray(a.lesson) ? a.lesson[0] : a.lesson;
+          const activity = Array.isArray(a.interactive_activity) ? a.interactive_activity[0] : a.interactive_activity;
+          const title = activity?.title || lesson?.title || 'Playground Activity';
+          const subject = lesson?.subject || '';
+          return {
+            id: a.id,
+            title,
+            subtitle: `${formatDueDate(a.due_date)} • ${a.status === 'in_progress' ? 'In progress' : 'Not started'}`,
+            icon: getSubjectIcon(subject) as any,
+            tone: getSubjectTone(subject),
+          };
+        });
 
         setItems(mapped);
       } catch {

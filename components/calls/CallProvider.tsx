@@ -553,6 +553,9 @@ export function CallProvider({ children }: CallProviderProps) {
 
     console.log('[CallProvider] Setting up incoming call listener for user:', currentUserId);
 
+    // Push notifications (FCM/Expo) are the primary wake path for
+    // background/terminated app states. Keep Realtime only as a foreground
+    // enhancer to avoid depending on websocket delivery for wake-up scenarios.
     const channel = getSupabase()
       .channel(`incoming-calls-${currentUserId}`)
       .on(

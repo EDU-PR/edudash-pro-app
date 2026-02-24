@@ -32,7 +32,11 @@
     "regions": "Regions",
     "students": "Students",
     "work": "Work",
-    "dash": "Dash"
+    "dash": "Dash",
+    "enroll": "Anmelden",
+    "team": "Team",
+    "fees": "Gebühren",
+    "grades": "Noten"
   },
   "auth": {
     "signIn": "Anmelden",
@@ -159,7 +163,12 @@
     "sign_in_with_email_link": "Sign in with Email Link (No Password)",
     "sign_up": "Sign Up",
     "verification_failed_message": "Email verification failed. Please try signing in to request a new verification email.",
-    "verification_failed_title": "Verification Failed"
+    "verification_failed_title": "Verification Failed",
+    "welcome": {
+      "title": "Willkommen",
+      "subtitle": "Melden Sie sich an oder erstellen Sie ein neues Konto.",
+      "quick_access": "Schnellzugriff mit Face ID / Fingerabdruck"
+    }
   },
   "ai": {
     "homework": {

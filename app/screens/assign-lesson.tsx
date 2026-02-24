@@ -6,7 +6,9 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,9 +64,12 @@ export default function AssignLessonScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ lessonId?: string; studentId?: string; classId?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ lessonId?: string; studentId?: string; classId?: string; mode?: string; deliveryMode?: string }>();
   const isActivityOnlyMode = params.mode === 'activity-only';
+  // delivery_mode passed from the teacher lesson action menu
+  const deliveryMode = (params.deliveryMode as 'class_activity' | 'playground' | 'take_home' | undefined) ?? 'class_activity';
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps, AlertModalComponent } = useAlertModal();
   
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -73,7 +78,8 @@ export default function AssignLessonScreen() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
-  const [assignToClass, setAssignToClass] = useState(false);
+  // class_activity defaults to class-wide assignment (not individual students)
+  const [assignToClass, setAssignToClass] = useState(deliveryMode === 'class_activity');
   const [attachPlaygroundActivity, setAttachPlaygroundActivity] = useState(false);
   const [playgroundActivityId, setPlaygroundActivityId] = useState<string | null>(
     PRESCHOOL_ACTIVITIES[0]?.id ?? null,
@@ -185,7 +191,7 @@ export default function AssignLessonScreen() {
         }
       } catch (err) {
         console.error('[AssignLesson] Fetch error:', err);
-        Alert.alert('Error', 'Failed to load data');
+        showAlert({ title: 'Error', message: 'Failed to load data', type: 'error' });
       } finally {
         setLoading(false);
       }
@@ -196,22 +202,22 @@ export default function AssignLessonScreen() {
   
   const handleAssign = async () => {
     if (!isActivityOnlyMode && !selectedLesson) {
-      Alert.alert('Error', 'Please select a lesson');
+      showAlert({ title: 'Error', message: 'Please select a lesson', type: 'error' });
       return;
     }
     
     if (!assignToClass && selectedStudents.length === 0) {
-      Alert.alert('Error', 'Please select at least one student');
+      showAlert({ title: 'Error', message: 'Please select at least one student', type: 'error' });
       return;
     }
     
     if (assignToClass && !selectedClass) {
-      Alert.alert('Error', 'Please select a class');
+      showAlert({ title: 'Error', message: 'Please select a class', type: 'error' });
       return;
     }
 
     if ((attachPlaygroundActivity || isActivityOnlyMode) && !playgroundActivityId) {
-      Alert.alert('Error', 'Please select a Dash Playground activity');
+      showAlert({ title: 'Error', message: 'Please select a Dash Playground activity', type: 'error' });
       return;
     }
     
@@ -221,7 +227,7 @@ export default function AssignLessonScreen() {
 
       if (attachPlaygroundActivity || isActivityOnlyMode) {
         if (!organizationId || !teacherId) {
-          Alert.alert('Error', 'Teacher profile is required for Dash Playground activities.');
+          showAlert({ title: 'Error', message: 'Teacher profile is required for Dash Playground activities.', type: 'error' });
           return;
         }
         const interactiveActivity = await ensurePlaygroundInteractiveActivity({
@@ -248,6 +254,7 @@ export default function AssignLessonScreen() {
         interactive_activity_id: interactiveActivityId,
         lesson_type: interactiveActivityId ? ('interactive' as const) : ('standard' as const),
         stem_category: 'none' as const,
+        delivery_mode: interactiveActivityId ? ('playground' as const) : deliveryMode,
       };
       
       if (assignToClass && selectedClass) {
@@ -269,19 +276,20 @@ export default function AssignLessonScreen() {
       }
       
       if (success) {
-        Alert.alert(
-          'Success',
-          assignToClass
+        showAlert({
+          title: '✅ Lesson Assigned',
+          message: assignToClass
             ? `Lesson assigned to ${selectedClass?.name}${interactiveActivityId ? ' with Dash Playground activity' : ''}`
             : `Lesson assigned to ${selectedStudents.length} student(s)${interactiveActivityId ? ' with Dash Playground activity' : ''}`,
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+          type: 'success',
+          buttons: [{ text: 'OK', onPress: () => router.back() }],
+        });
       } else {
-        Alert.alert('Error', 'Failed to assign lesson');
+        showAlert({ title: 'Error', message: 'Failed to assign lesson', type: 'error' });
       }
     } catch (err) {
       console.error('[AssignLesson] Assign error:', err);
-      Alert.alert('Error', 'Failed to assign lesson');
+      showAlert({ title: 'Error', message: 'Failed to assign lesson', type: 'error' });
     }
   };
   
@@ -349,7 +357,13 @@ export default function AssignLessonScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>
-              {isActivityOnlyMode ? 'Assign Playground Activity' : 'Assign Lesson'}
+              {isActivityOnlyMode
+                ? 'Assign Playground Activity'
+                : deliveryMode === 'class_activity'
+                  ? 'Add to Today\'s Class'
+                  : deliveryMode === 'take_home'
+                    ? 'Send Take-Home Activity'
+                    : 'Assign Lesson'}
             </Text>
             <Text style={styles.headerSubtitle}>Step {step} of 3</Text>
           </View>
@@ -392,9 +406,10 @@ export default function AssignLessonScreen() {
           )}
           
           {!isActivityOnlyMode && (
-          <FlatList
+          <FlashList
             data={filteredLessons}
             keyExtractor={item => item.id}
+            estimatedItemSize={72}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[
@@ -649,9 +664,10 @@ export default function AssignLessonScreen() {
                 </Text>
               </View>
               
-              <FlatList
+              <FlashList
                 data={filteredStudents}
                 keyExtractor={item => item.id}
+                estimatedItemSize={64}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[
@@ -684,9 +700,10 @@ export default function AssignLessonScreen() {
               />
             </>
           ) : (
-            <FlatList
+            <FlashList
               data={classes}
               keyExtractor={item => item.id}
+              estimatedItemSize={64}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
@@ -865,6 +882,7 @@ export default function AssignLessonScreen() {
           </View>
         </ScrollView>
       )}
+      <AlertModalComponent />
     </View>
   );
 }

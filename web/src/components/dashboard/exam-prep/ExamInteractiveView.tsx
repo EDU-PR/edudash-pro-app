@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X, Download, Volume2, VolumeX, Pause, Play } from 'lucide-react';
 import { ParsedExam, ExamQuestion, gradeAnswer } from '@/lib/examParser';
 import { useExamSession } from '@/lib/hooks/useExamSession';
@@ -16,6 +16,14 @@ import remarkGfm from 'remark-gfm';
 import { ExamDiagram } from './ExamDiagram';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
+import {
+  ExamAccessibilityBar,
+  QuestionAccessibilityControls,
+  AlternativeTextPanel,
+  DEFAULT_ACCESSIBILITY_SETTINGS,
+  FONT_SIZE_SCALE,
+} from './ExamAccessibilityBar';
+import type { AccessibilitySettings, SupportedLang } from './ExamAccessibilityBar';
 
 // Helper component to render text with optional math support
 // Only uses KaTeX if the text contains actual math expressions
@@ -84,12 +92,20 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [savingExam, setSavingExam] = useState(false);
-  
+
+  // ── Accessibility state ────────────────────────────────────────────────────
+  const [a11y, setA11y] = useState<AccessibilitySettings>(DEFAULT_ACCESSIBILITY_SETTINGS);
+  const [simplifiedTexts, setSimplifiedTexts] = useState<Record<string, string>>({});
+  const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
+  const [loadingSimplify, setLoadingSimplify] = useState<Record<string, boolean>>({});
+  const [loadingTranslate, setLoadingTranslate] = useState<Record<string, boolean>>({});
+  const autoReadRef = useRef<boolean>(false);
+  autoReadRef.current = a11y.autoReadQuestions;
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
   };
-  
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
   const { speak, pause, resume, stop, isSpeaking, isPaused, isSupported: ttsSupported, error: ttsError, quota: ttsQuota, userTier: ttsUserTier, voicePreference, setVoice, checkQuota: checkTTSQuota } = useTTS(userId);
@@ -188,7 +204,91 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
       ...prev,
       [questionId]: answer,
     }));
-  };  
+  };
+
+  // ── Accessibility helpers ──────────────────────────────────────────────────
+
+  const handleReadAloud = useCallback((text: string, questionId?: string) => {
+    if (questionId) setSpeakingQuestionId(questionId);
+    speak(text, { style: 'friendly', rate: 0, pitch: 0 });
+  }, [speak]);
+
+  const handleSimplify = useCallback(async (questionId: string, text: string): Promise<string | null> => {
+    if (simplifiedTexts[questionId]) return simplifiedTexts[questionId];
+    setLoadingSimplify((p) => ({ ...p, [questionId]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-gateway', {
+        body: {
+          action: 'general_assistance',
+          messages: [{
+            role: 'user',
+            content: `Rewrite this exam question in very simple, clear language for a learner who is still learning English. Keep it as short as possible. Do NOT give the answer. Only rewrite the question.\n\nOriginal question: "${text}"\n\nSimplified version (1-2 sentences only):`,
+          }],
+          model: 'claude-3-5-haiku-20241022',
+          maxTokens: 200,
+        },
+      });
+      const simplified: string = error ? text : (String(data?.content || text));
+      setSimplifiedTexts((p) => ({ ...p, [questionId]: simplified }));
+      return simplified;
+    } catch {
+      return null;
+    } finally {
+      setLoadingSimplify((p) => ({ ...p, [questionId]: false }));
+    }
+  }, [simplifiedTexts, supabase]);
+
+  const handleTranslate = useCallback(async (questionId: string, text: string, targetLang: SupportedLang): Promise<string | null> => {
+    if (translatedTexts[questionId]) return translatedTexts[questionId];
+    setLoadingTranslate((p) => ({ ...p, [questionId]: true }));
+    const langNames: Record<string, string> = {
+      'af-ZA': 'Afrikaans', 'zu-ZA': 'isiZulu', 'xh-ZA': 'isiXhosa',
+      'st-ZA': 'Sesotho', 'tn-ZA': 'Setswana', 'nso-ZA': 'Sepedi',
+      'ss-ZA': 'siSwati', 've-ZA': 'Tshivenda', 'ts-ZA': 'Xitsonga', 'nr-ZA': 'isiNdebele',
+    };
+    const langName = langNames[targetLang] ?? targetLang;
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-gateway', {
+        body: {
+          action: 'general_assistance',
+          messages: [{
+            role: 'user',
+            content: `Translate ONLY this exam question to ${langName}. Do NOT answer the question. Keep the same meaning. Return ONLY the translation, no preamble.\n\nQuestion: "${text}"`,
+          }],
+          model: 'claude-3-5-haiku-20241022',
+          maxTokens: 300,
+        },
+      });
+      const translated: string = error ? text : (String(data?.content || text));
+      setTranslatedTexts((p) => ({ ...p, [questionId]: translated }));
+      return translated;
+    } catch {
+      return null;
+    } finally {
+      setLoadingTranslate((p) => ({ ...p, [questionId]: false }));
+    }
+  }, [translatedTexts, supabase]);
+
+  const handleVoiceAnswer = useCallback((_questionId: string, _callback: (answer: string) => void) => {
+    // Voice answer: web uses SpeechRecognition API
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition =
+      (window as unknown as { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition })
+        .SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.lang = a11y.selectedLanguage;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const spoken = event.results[0]?.[0]?.transcript?.trim().toUpperCase() ?? '';
+      const letter = spoken.charAt(0);
+      if (['A', 'B', 'C', 'D'].includes(letter)) {
+        _callback(letter);
+      }
+    };
+    recognition.start();
+  }, [a11y.selectedLanguage]);  
   
   /**
    * Get AI-powered explanations for incorrect answers
@@ -404,13 +504,38 @@ Every question you attempt is helping you learn and grow. Keep up the great work
           <div style={{ flex: 1 }}>
             <p style={{ 
               fontWeight: 600, 
-              fontSize: isMobile ? 17 : 16, 
+              fontSize: (isMobile ? 17 : 16) * FONT_SIZE_SCALE[a11y.fontSize], 
               lineHeight: 1.5, 
               marginBottom: 'var(--space-2)',
               fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
             }}>
               <MathText text={question.text} />
             </p>
+            {/* Accessibility: per-question controls */}
+            <QuestionAccessibilityControls
+              questionId={question.id}
+              questionText={question.text}
+              settings={a11y}
+              onReadAloud={(t) => handleReadAloud(t, question.id)}
+              onVoiceAnswer={handleVoiceAnswer}
+              onSimplify={handleSimplify}
+              onTranslate={handleTranslate}
+              simplifiedText={simplifiedTexts[question.id]}
+              translatedText={translatedTexts[question.id]}
+              isLoadingSimplify={loadingSimplify[question.id]}
+              isLoadingTranslate={loadingTranslate[question.id]}
+              isSpeakingThisQuestion={speakingQuestionId === question.id && isSpeaking}
+            />
+            {/* Show simplified / translated text panels */}
+            <AlternativeTextPanel
+              simplifiedText={simplifiedTexts[question.id]}
+              translatedText={translatedTexts[question.id]}
+              translatedLangLabel={SA_LANGUAGES_MAP[a11y.selectedLanguage]}
+              onDismissSimplified={() => setSimplifiedTexts((p) => { const n = { ...p }; delete n[question.id]; return n; })}
+              onDismissTranslated={() => setTranslatedTexts((p) => { const n = { ...p }; delete n[question.id]; return n; })}
+              fontSize={a11y.fontSize}
+              onReadAloud={(t) => handleReadAloud(t, question.id)}
+            />
           </div>
           <div style={{
             background: 'linear-gradient(135deg, var(--primary), rgba(124, 58, 237, 0.85))',
@@ -780,6 +905,12 @@ Every question you attempt is helping you learn and grow. Keep up the great work
   const answeredCount = Object.values(studentAnswers).filter(a => a.trim() !== '').length;
   const totalQuestions = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
 
+  const SA_LANGUAGES_MAP: Record<SupportedLang, string> = {
+    'en-ZA': 'English', 'af-ZA': 'Afrikaans', 'zu-ZA': 'isiZulu', 'xh-ZA': 'isiXhosa',
+    'st-ZA': 'Sesotho', 'tn-ZA': 'Setswana', 'nso-ZA': 'Sepedi', 'ss-ZA': 'siSwati',
+    've-ZA': 'Tshivenda', 'ts-ZA': 'Xitsonga', 'nr-ZA': 'isiNdebele',
+  };
+
   return (
     <div style={{ 
       width: '100%',
@@ -788,6 +919,15 @@ Every question you attempt is helping you learn and grow. Keep up the great work
       minHeight: '100vh',
       background: isMobile ? 'var(--bg)' : 'transparent',
     }}>
+      {/* Accessibility Bar */}
+      <ExamAccessibilityBar
+        settings={a11y}
+        onChange={setA11y}
+        isSpeaking={isSpeaking}
+        onStopSpeaking={() => { stop(); setSpeakingQuestionId(null); }}
+        userId={userId}
+      />
+
       {/* Header */}
       <div style={{
         padding: isMobile ? 'var(--space-4)' : 'var(--space-5)',

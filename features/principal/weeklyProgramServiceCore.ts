@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import type { DailyProgramBlock, WeeklyProgramDraft } from '@/types/ecd-planning';
+import { fetchThemeForWeek } from '@/lib/services/curriculumThemeService';
 
 export interface ProgramTimeRules {
   arrivalStartTime: string;
@@ -392,6 +393,49 @@ export class WeeklyProgramService {
     return validateRules(rules);
   }
 
+  /** Get the most recent weekly program for an organization (for teacher lesson alignment) */
+  static async getActiveWeeklyProgramForOrganization(preschoolId: string): Promise<WeeklyProgramDraft | null> {
+    const programs = await this.listWeeklyPrograms({ preschoolId, limit: 1 });
+    return programs[0] ?? null;
+  }
+
+  /** Format weekly program as context string for lesson generation alignment */
+  static formatRoutineForLessonContext(program: WeeklyProgramDraft): string {
+    const blocks = (program.blocks || []).filter((b) => {
+      const d = Math.min(7, Math.max(1, Number(b.day_of_week) || 1));
+      return d >= 1 && d <= 5;
+    });
+    const byDay = new Map<number, typeof blocks>();
+    for (const b of blocks) {
+      const d = Math.min(7, Math.max(1, Number(b.day_of_week) || 1)) as 1 | 2 | 3 | 4 | 5;
+      const list = byDay.get(d) || [];
+      list.push(b);
+      byDay.set(d, list);
+    }
+    for (const [day, list] of byDay) {
+      byDay.set(day, list.sort((a, b) => (a.block_order || 0) - (b.block_order || 0)));
+    }
+    const lines: string[] = [
+      `Weekly Routine: ${program.title || 'Program'} (${program.week_start_date || ''} - ${program.week_end_date || ''})`,
+      'Align your lesson with these blocks. Do not deviate from the routine structure.',
+      '',
+    ];
+    for (let day = 1; day <= 5; day++) {
+      const dayBlocks = byDay.get(day) || [];
+      const label = DAY_LABELS[day] || `Day ${day}`;
+      lines.push(`${label}:`);
+      for (const b of dayBlocks) {
+        const time = b.start_time && b.end_time ? `${b.start_time}-${b.end_time}` : 'TBD';
+        lines.push(`  - ${time} [${b.block_type}]: ${b.title || 'Block'}`);
+        if (Array.isArray(b.objectives) && b.objectives.length > 0) {
+          lines.push(`    Objectives: ${b.objectives.join('; ')}`);
+        }
+      }
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
   static async listWeeklyPrograms(params: {
     preschoolId: string;
     limit?: number;
@@ -490,11 +534,17 @@ export class WeeklyProgramService {
     const blocks = normalizedCoverage.blocks;
     const autoFilledDays = normalizedCoverage.filledDays;
 
+    let themeId = weeklyProgram.theme_id || null;
+    if (!themeId && weeklyProgram.preschool_id) {
+      const theme = await fetchThemeForWeek(weeklyProgram.preschool_id, weekStartDate);
+      if (theme) themeId = theme.id;
+    }
+
     const basePayload = {
       preschool_id: weeklyProgram.preschool_id,
       class_id: weeklyProgram.class_id || null,
       term_id: weeklyProgram.term_id || null,
-      theme_id: weeklyProgram.theme_id || null,
+      theme_id: themeId,
       created_by: weeklyProgram.created_by,
       week_start_date: weekStartDate,
       week_end_date: weekEndDate,

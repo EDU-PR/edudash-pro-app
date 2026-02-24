@@ -45,6 +45,7 @@ export default function PrincipalAIYearPlannerScreen() {
     setExpandedTerm,
     generateYearPlan,
     savePlanToDatabase,
+    updatePlan,
   } = useAIYearPlanner({ organizationId: orgId, userId: user?.id, onShowAlert: showAlert });
   
   // Modal state
@@ -101,6 +102,7 @@ export default function PrincipalAIYearPlannerScreen() {
           onToggleExpandTerm={setExpandedTerm}
           onSave={savePlanToDatabase}
           onRegenerate={() => setShowConfigModal(true)}
+          onUpdatePlan={updatePlan}
         />
       )}
       

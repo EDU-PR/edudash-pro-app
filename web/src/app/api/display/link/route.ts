@@ -23,6 +23,13 @@ function getBearerToken(request: Request): string | null {
   return match?.[1]?.trim() || null;
 }
 
+function getServiceClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient(url, key);
+}
+
 async function resolveOrgIdForUser(
   supabase: SupabaseClient,
   userId: string,
@@ -32,7 +39,35 @@ async function resolveOrgIdForUser(
     .select('organization_id, preschool_id')
     .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
     .maybeSingle();
-  return profile?.organization_id || profile?.preschool_id || null;
+  let org = profile?.organization_id || profile?.preschool_id || null;
+  if (org) return org;
+
+  const serviceClient = getServiceClient();
+  if (!serviceClient) return null;
+
+  const { data: serviceProfile } = await serviceClient
+    .from('profiles')
+    .select('organization_id, preschool_id')
+    .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
+    .maybeSingle();
+  org = serviceProfile?.organization_id || serviceProfile?.preschool_id || null;
+  if (org) return org;
+
+  const { data: teacherRow } = await serviceClient
+    .from('teachers')
+    .select('preschool_id')
+    .or(`user_id.eq.${userId},auth_user_id.eq.${userId}`)
+    .maybeSingle();
+  if (teacherRow?.preschool_id) return teacherRow.preschool_id;
+
+  const { data: orgMember } = await serviceClient
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return orgMember?.organization_id || null;
 }
 
 /**

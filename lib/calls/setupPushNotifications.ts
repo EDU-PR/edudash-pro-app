@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFCMToken } from './CallHeadlessTask';
+import { getFCMToken, onFCMTokenRefresh } from './CallHeadlessTask';
 import { upsertPushDeviceViaRPC } from '@/lib/notifications';
 
 // Resolve project ID from active EAS runtime config first.
@@ -202,5 +202,18 @@ export async function setupIncomingCallNotifications(userId: string): Promise<vo
     console.log('[PushNotifications] ✅ Ready to receive incoming calls');
   } else {
     console.warn('[PushNotifications] ⚠️ Push notifications may not work');
+  }
+
+  // Keep FCM token fresh while session is active.
+  const unsubscribe = onFCMTokenRefresh(async () => {
+    try {
+      await savePushTokenToProfile(userId);
+    } catch (error) {
+      console.warn('[PushNotifications] Failed to persist refreshed FCM token:', error);
+    }
+  });
+
+  if (unsubscribe) {
+    console.log('[PushNotifications] ✅ FCM token refresh listener attached');
   }
 }

@@ -207,7 +207,7 @@ Rules:
 - Include mark allocation on every question.
 - Use age-appropriate cognitive progression and South African context.
 - Provide a valid correctAnswer and explanation for each question.
-- At least 2 sections and at least 12 questions for practice_test unless user requests shorter.
+- At least 2 sections and at least 20 questions for practice_test (do not go below 20).
 - Prefer concise, clean question text.
 `;
 
@@ -276,7 +276,7 @@ function buildLocalFallbackExam(
   contextSummary: ExamContextSummary,
 ) {
   const focusTopics = contextSummary.focusTopics.length > 0
-    ? contextSummary.focusTopics.slice(0, 6)
+    ? contextSummary.focusTopics.slice(0, 10)
     : [
         `${subject} fundamentals`,
         `core ${subject} concepts`,
@@ -284,9 +284,9 @@ function buildLocalFallbackExam(
       ];
 
   const weakTopics = contextSummary.weakTopics.slice(0, 3);
-  const revisionTopics = [...new Set([...weakTopics, ...focusTopics])].slice(0, 6);
+  const revisionTopics = [...new Set([...weakTopics, ...focusTopics])].slice(0, 10);
 
-  const sectionAQuestions = focusTopics.slice(0, 6).map((topic, index) => ({
+  const sectionAQuestions = focusTopics.slice(0, 10).map((topic, index) => ({
     id: `A${index + 1}`,
     type: 'multiple_choice',
     marks: 2,
@@ -301,7 +301,7 @@ function buildLocalFallbackExam(
     explanation: `A strong CAPS-aligned answer should include accurate terminology and an example tied to ${topic}.`,
   }));
 
-  const sectionBQuestions = revisionTopics.map((topic, index) => ({
+  const sectionBQuestions = revisionTopics.slice(0, 10).map((topic, index) => ({
     id: `B${index + 1}`,
     type: 'short_answer',
     marks: 3,
@@ -315,7 +315,7 @@ function buildLocalFallbackExam(
     grade,
     subject,
     duration: '60 minutes',
-    totalMarks: 30,
+    totalMarks: 50,
     sections: [
       {
         name: 'Section A: Multiple Choice',
@@ -349,27 +349,27 @@ function getQuestionCountPolicy(grade: string, examType: string): { min: number;
     if (level >= 10) return { min: 28, max: 40 };
     if (level >= 7) return { min: 22, max: 30 };
     if (level >= 4) return { min: 20, max: 24 };
-    return { min: 12, max: 18 };
+    return { min: 20, max: 24 };
   }
 
   if (type === 'flashcards') {
     if (level >= 10) return { min: 20, max: 32 };
-    if (level >= 7) return { min: 16, max: 24 };
-    return { min: 12, max: 18 };
+    if (level >= 7) return { min: 20, max: 24 };
+    return { min: 20, max: 24 };
   }
 
   if (type === 'study_guide') {
-    if (level >= 10) return { min: 12, max: 20 };
-    return { min: 8, max: 14 };
+    if (level >= 10) return { min: 20, max: 24 };
+    return { min: 20, max: 24 };
   }
 
   if (type === 'revision_notes') {
-    if (level >= 10) return { min: 14, max: 24 };
-    if (level >= 7) return { min: 12, max: 20 };
-    return { min: 10, max: 16 };
+    if (level >= 10) return { min: 20, max: 24 };
+    if (level >= 7) return { min: 20, max: 24 };
+    return { min: 20, max: 24 };
   }
 
-  return { min: 12, max: 20 };
+  return { min: 20, max: 24 };
 }
 
 function getMinimumQuestionCount(grade: string, examType: string): number {

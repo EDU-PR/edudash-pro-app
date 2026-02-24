@@ -83,8 +83,8 @@ export function CompactModelPicker({
           style={[
             styles.trigger,
             {
-              backgroundColor: `${selectedColor}26`,
-              borderColor: `${selectedColor}A8`,
+              backgroundColor: `${selectedColor}36`,
+              borderColor: `${selectedColor}B0`,
               opacity: disabled ? 0.55 : 1,
             },
           ]}
@@ -113,7 +113,7 @@ export function CompactModelPicker({
                 left,
                 width: popoverWidth,
                 borderColor: theme.border,
-                backgroundColor: `${theme.surface}F2`,
+                backgroundColor: theme.surface,
               },
             ]}
             onPress={(event) => event.stopPropagation()}
@@ -130,7 +130,7 @@ export function CompactModelPicker({
                     styles.row,
                     {
                       borderColor: active ? `${modelColor}BB` : theme.border,
-                      backgroundColor: active ? `${modelColor}1A` : theme.surfaceVariant,
+                      backgroundColor: active ? `${modelColor}28` : theme.surfaceVariant,
                     },
                   ]}
                   accessibilityRole="button"

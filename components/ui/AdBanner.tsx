@@ -8,6 +8,7 @@ import { shouldShowAds } from '@/lib/ads/gating';
 import { getAdUnitId } from '@/lib/ads/config';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import { track } from '@/lib/analytics';
+import * as Device from 'expo-device';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AdBannerProps {
@@ -26,6 +27,9 @@ export default function AdBanner({
   const [adLoaded, setAdLoaded] = useState(false);
   const [adFailed, setAdFailed] = useState(false);
   const [showAds, setShowAds] = useState(false);
+  const isHuaweiNoGmsRiskDevice = Platform.OS === 'android'
+    && (String(Device.brand || '').toLowerCase().includes('huawei')
+      || String(Device.manufacturer || '').toLowerCase().includes('huawei'));
 
   // Check if ads should be shown
   useEffect(() => {
@@ -58,6 +62,7 @@ export default function AdBanner({
   // Explicitly exclude web platform to prevent bundling issues
   if (Platform.OS === 'web') return null;
   if (Platform.OS !== 'android') return null;
+  if (isHuaweiNoGmsRiskDevice) return null;
 
   // Lazy-require the native module to avoid crashes if the dev client
   // wasn't built with react-native-google-mobile-ads.

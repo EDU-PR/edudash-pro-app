@@ -1,12 +1,12 @@
 // Generated Year Plan View Component
-// Displays the AI-generated year plan overview
+// Displays the AI-generated year plan overview with inline editing
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { GeneratedYearPlan, YearPlanMonthlyBucket } from './types';
+import type { GeneratedYearPlan, GeneratedTerm, YearPlanMonthlyBucket } from './types';
 import { TermCard } from './TermCard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -17,6 +17,7 @@ interface GeneratedPlanViewProps {
   onToggleExpandTerm: (termNumber: number | null) => void;
   onSave: () => void;
   onRegenerate: () => void;
+  onUpdatePlan: (updater: (plan: GeneratedYearPlan) => GeneratedYearPlan) => void;
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -40,11 +41,13 @@ export function GeneratedPlanView({
   onToggleExpandTerm,
   onSave,
   onRegenerate,
+  onUpdatePlan,
 }: GeneratedPlanViewProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = createStyles(theme, insets.bottom);
   const [mode, setMode] = useState<'terms' | 'monthly'>('monthly');
+  const [isEditing, setIsEditing] = useState(false);
 
   const monthlyByMonth = useMemo(() => {
     const map = new Map<number, Record<YearPlanMonthlyBucket, string[]>>();
@@ -68,13 +71,43 @@ export function GeneratedPlanView({
     return map;
   }, [plan.monthlyEntries]);
 
+  const updateTerm = (termNumber: number, updater: (term: GeneratedTerm) => GeneratedTerm) => {
+    onUpdatePlan((p) => ({
+      ...p,
+      terms: p.terms.map((t) => (t.termNumber === termNumber ? updater(t) : t)),
+    }));
+  };
+
   return (
     <ScrollView style={styles.planContainer} contentContainerStyle={styles.planContent}>
       {/* Plan Overview */}
       <View style={styles.overviewCard}>
-        <Text style={styles.overviewTitle}>Academic Year {plan.academicYear}</Text>
-        <Text style={styles.overviewVision}>{plan.schoolVision}</Text>
-        
+        <View style={styles.overviewTitleRow}>
+          <Text style={styles.overviewTitle}>Academic Year {plan.academicYear}</Text>
+          <TouchableOpacity
+            style={[styles.editToggleBtn, isEditing && styles.editToggleBtnActive]}
+            onPress={() => setIsEditing((prev) => !prev)}
+          >
+            <Ionicons name={isEditing ? 'checkmark' : 'create-outline'} size={16} color={isEditing ? '#fff' : theme.primary} />
+            <Text style={[styles.editToggleText, isEditing && styles.editToggleTextActive]}>
+              {isEditing ? 'Done' : 'Edit Plan'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isEditing ? (
+          <TextInput
+            style={styles.visionInput}
+            value={plan.schoolVision}
+            onChangeText={(v) => onUpdatePlan((p) => ({ ...p, schoolVision: v }))}
+            placeholder="School vision statement"
+            placeholderTextColor={theme.textSecondary}
+            multiline
+          />
+        ) : (
+          <Text style={styles.overviewVision}>{plan.schoolVision}</Text>
+        )}
+
         <View style={styles.overviewStats}>
           <View style={styles.overviewStat}>
             <Text style={styles.statValue}>{plan.terms.length}</Text>
@@ -93,10 +126,20 @@ export function GeneratedPlanView({
             <Text style={styles.statLabel}>Excursions</Text>
           </View>
         </View>
-        
+
         <View style={styles.budgetRow}>
           <Ionicons name="wallet-outline" size={18} color={theme.textSecondary} />
-          <Text style={styles.budgetText}>Estimated Budget: {plan.budgetEstimate}</Text>
+          {isEditing ? (
+            <TextInput
+              style={styles.budgetInput}
+              value={plan.budgetEstimate}
+              onChangeText={(v) => onUpdatePlan((p) => ({ ...p, budgetEstimate: v }))}
+              placeholder="e.g. R15,000"
+              placeholderTextColor={theme.textSecondary}
+            />
+          ) : (
+            <Text style={styles.budgetText}>Estimated Budget: {plan.budgetEstimate}</Text>
+          )}
         </View>
       </View>
 
@@ -117,11 +160,51 @@ export function GeneratedPlanView({
       
       {/* Annual Goals */}
       <View style={styles.goalsCard}>
-        <Text style={styles.goalsTitle}>Annual Goals</Text>
+        <View style={styles.goalsTitleRow}>
+          <Text style={styles.goalsTitle}>Annual Goals</Text>
+          {isEditing && (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => onUpdatePlan((p) => ({ ...p, annualGoals: [...p.annualGoals, 'New goal'] }))}
+            >
+              <Ionicons name="add" size={16} color={theme.primary} />
+              <Text style={styles.addBtnText}>Add</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {plan.annualGoals.map((goal, idx) => (
           <View key={idx} style={styles.goalItem}>
             <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-            <Text style={styles.goalText}>{goal}</Text>
+            {isEditing ? (
+              <>
+                <TextInput
+                  style={[styles.goalInput, { flex: 1 }]}
+                  value={goal}
+                  onChangeText={(v) =>
+                    onUpdatePlan((p) => ({
+                      ...p,
+                      annualGoals: p.annualGoals.map((g, i) => (i === idx ? v : g)),
+                    }))
+                  }
+                  placeholder="Annual goal"
+                  placeholderTextColor={theme.textSecondary}
+                  multiline
+                />
+                <TouchableOpacity
+                  onPress={() =>
+                    onUpdatePlan((p) => ({
+                      ...p,
+                      annualGoals: p.annualGoals.filter((_, i) => i !== idx),
+                    }))
+                  }
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons name="trash-outline" size={16} color={theme.error || '#ef4444'} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.goalText}>{goal}</Text>
+            )}
           </View>
         ))}
       </View>
@@ -170,9 +253,11 @@ export function GeneratedPlanView({
               key={term.termNumber}
               term={term}
               isExpanded={expandedTerm === term.termNumber}
+              isEditing={isEditing}
               onToggleExpand={() => onToggleExpandTerm(
                 expandedTerm === term.termNumber ? null : term.termNumber
               )}
+              onUpdateTerm={(updater) => updateTerm(term.termNumber, updater)}
             />
           ))}
         </>
@@ -223,11 +308,91 @@ const createStyles = (theme: any, insetBottom: number) =>
       borderWidth: 1,
       borderColor: theme.border,
     },
+    overviewTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
     overviewTitle: {
       fontSize: 22,
       fontWeight: 'bold',
       color: theme.text,
-      marginBottom: 8,
+    },
+    editToggleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary,
+    },
+    editToggleBtnActive: {
+      backgroundColor: theme.primary,
+    },
+    editToggleText: {
+      fontSize: 13,
+      color: theme.primary,
+      fontWeight: '600',
+    },
+    editToggleTextActive: {
+      color: '#fff',
+    },
+    visionInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      padding: 10,
+      fontSize: 14,
+      color: theme.text,
+      backgroundColor: theme.background,
+      marginBottom: 12,
+      minHeight: 60,
+    },
+    budgetInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      fontSize: 14,
+      color: theme.text,
+      backgroundColor: theme.background,
+      marginLeft: 8,
+    },
+    goalsTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    addBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.primary,
+    },
+    addBtnText: {
+      fontSize: 13,
+      color: theme.primary,
+      fontWeight: '600',
+    },
+    goalInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      fontSize: 14,
+      color: theme.text,
+      backgroundColor: theme.background,
     },
     overviewVision: {
       fontSize: 15,
@@ -235,6 +400,7 @@ const createStyles = (theme: any, insetBottom: number) =>
       fontStyle: 'italic',
       lineHeight: 22,
       marginBottom: 16,
+      marginTop: 8,
     },
     overviewStats: {
       flexDirection: 'row',
@@ -306,7 +472,6 @@ const createStyles = (theme: any, insetBottom: number) =>
       fontSize: 18,
       fontWeight: '600',
       color: theme.text,
-      marginBottom: 12,
     },
     goalItem: {
       flexDirection: 'row',

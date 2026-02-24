@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 import type { ResolvedSchoolType } from '@/lib/tenant/schoolTypeResolver';
 
 export interface TeacherShellProps {
+  title?: string;
   tenantSlug?: string;
   userEmail?: string;
   userName?: string;

@@ -20,6 +20,7 @@ import {
   SCHOOL_ADMIN_DASH_TAB,
 } from '@/lib/navigation/navManifest';
 import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
+import { useNotifications } from '@/hooks/useNotifications';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 360;
@@ -466,9 +467,17 @@ const TAB_ITEMS: TabItem[] = [
   },
 ];
 
+const MESSAGE_TAB_IDS = new Set([
+  'parent-children',
+  'teacher-message-list',
+  'principal-messages',
+  'learner-messages',
+]);
+
 export function BottomTabBar() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
+  const { messages: unreadMessages } = useNotifications();
   const { hideFeesOnDashboards } = useFinancePrivacyMode();
   const router = useRouter();
   const pathname = usePathname();
@@ -761,6 +770,29 @@ export function BottomTabBar() {
     centerLabelActive: {
       color: navActiveColor,
     },
+    badgeWrapper: {
+      position: 'relative' as const,
+    },
+    badge: {
+      position: 'absolute' as const,
+      top: -3,
+      right: -5,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: '#EF4444',
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: 3,
+      borderWidth: 1.5,
+      borderColor: navBackgroundColor,
+    },
+    badgeText: {
+      fontSize: 9,
+      fontWeight: '700' as const,
+      color: '#fff',
+      lineHeight: 11,
+    },
   });
 
   // Sort tabs so the center tab (if any) is in the middle position
@@ -801,6 +833,9 @@ export function BottomTabBar() {
           );
         }
 
+        const isMessageTab = MESSAGE_TAB_IDS.has(tab.id);
+        const badgeCount = isMessageTab ? unreadMessages : 0;
+
         return (
           <TouchableOpacity
             key={tab.id}
@@ -808,12 +843,19 @@ export function BottomTabBar() {
             onPress={() => router.push(tab.route as any)}
             activeOpacity={0.7}
           >
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, styles.badgeWrapper]}>
               <Ionicons
                 name={(active ? tab.activeIcon : tab.icon) as any}
                 size={isCompact ? 20 : 22}
                 color={active ? navActiveColor : navInactiveColor}
               />
+              {badgeCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {badgeCount > 99 ? '99+' : String(badgeCount)}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
               {t(`navigation.${tab.label.toLowerCase()}`, { defaultValue: tab.label })}

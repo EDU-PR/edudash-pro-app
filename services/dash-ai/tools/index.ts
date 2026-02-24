@@ -23,6 +23,7 @@ import { StudentTutorTool } from './StudentTutorTool';
 import { LearningProgressTool } from './LearningProgressTool';
 import { MistakePatternTool } from './MistakePatternTool';
 import { ContextAwareResourceTool } from './ContextAwareResourceTool';
+import { GetChildAcademicSnapshotTool, GenerateStudyPlanTool } from './ChildAcademicSnapshotTool';
 
 /**
  * Initialize all tools and register them with the registry.
@@ -49,6 +50,10 @@ export function initializeTools(): void {
   // Register Resource & Context Tools
   DashToolRegistry.registerTool(UserContextTool);
   DashToolRegistry.registerTool(ContextAwareResourceTool);
+
+  // Register Parent-focused Tools
+  DashToolRegistry.registerTool(GetChildAcademicSnapshotTool);
+  DashToolRegistry.registerTool(GenerateStudyPlanTool);
 
   // TODO: Add more tools here as they're implemented:
   // DashToolRegistry.registerTool(NavigationTool);
@@ -78,3 +83,4 @@ export { StudentTutorTool } from './StudentTutorTool';
 export { LearningProgressTool } from './LearningProgressTool';
 export { MistakePatternTool } from './MistakePatternTool';
 export { ContextAwareResourceTool } from './ContextAwareResourceTool';
+export { GetChildAcademicSnapshotTool, GenerateStudyPlanTool } from './ChildAcademicSnapshotTool';

@@ -283,7 +283,7 @@ interface NotificationProviderProps {
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   children,
 }) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
   const lastUserIdRef = useRef<string | null>(null);
@@ -640,19 +640,72 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       )
       .subscribe();
 
-    // Subscribe to new announcements
+    // Subscribe to new announcements (scoped to the user's school)
+    const orgId: string | null =
+      (profile as any)?.preschool_id ||
+      (profile as any)?.organization_id ||
+      null;
+
+    const announcementsChannelConfig: Record<string, unknown> = {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'announcements',
+    };
+    if (orgId) {
+      announcementsChannelConfig.filter = `preschool_id=eq.${orgId}`;
+    }
+
     const announcementsSubscription = client
       .channel(`notifications-announcements-${userId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'announcements',
-        },
-        () => {
-          // Invalidate announcements count when new announcement arrives
+        announcementsChannelConfig as any,
+        async (payload: any) => {
+          // Invalidate count so badge + dot updates immediately
           queryClient.invalidateQueries({ queryKey: QUERY_KEYS.announcements(userId) });
+
+          // Show in-app notification banner when app is in foreground
+          const isForeground = AppState.currentState === 'active';
+          if (!isForeground) return;
+
+          const announcement = payload.new as {
+            id?: string;
+            title?: string;
+            content?: string;
+            priority?: string;
+          } | null;
+
+          const title = announcement?.title || 'New School Announcement';
+          const preview = announcement?.content
+            ? announcement.content.length > 80
+              ? `${announcement.content.substring(0, 77)}…`
+              : announcement.content
+            : 'A new announcement from your school.';
+
+          try {
+            await Notifications.scheduleNotificationAsync({
+              identifier: `announcement-${announcement?.id ?? Date.now()}`,
+              content: {
+                title: `📢 ${title}`,
+                body: preview,
+                data: {
+                  type: 'announcement',
+                  announcement_id: announcement?.id,
+                  screen: 'announcements',
+                },
+                sound: soundEnabledRef.current ? 'default' : undefined,
+              },
+              trigger: null,
+            });
+
+            if (hapticsEnabledRef.current) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            }
+
+            logger.debug('NotificationContext', 'Showed in-app banner for announcement:', title);
+          } catch (notifError) {
+            logger.warn('NotificationContext', 'Failed to show announcement notification:', notifError);
+          }
         }
       )
       .subscribe();
@@ -667,7 +720,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
       subscriptionsRef.current = [];
     };
-  }, [userId, queryClient]);
+  }, [userId, profile, queryClient]);
 
   // -------------------------------------------------------------------------
   // App State & Focus Handling

@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { Calendar, Plus, Pencil, Trash2, X, BookOpen, Coffee, Users, Trophy, GraduationCap, Clock } from 'lucide-react';
+import { Calendar, Plus, Pencil, Trash2, X, BookOpen, Coffee, Users, Trophy, GraduationCap, Clock, Printer, FileDown } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface TimetableSlot {
   id: string;
@@ -79,6 +81,7 @@ export default function TimetablePage() {
   const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [form, setForm] = useState<{
     start_time: string;
     end_time: string;
@@ -127,6 +130,51 @@ export default function TimetablePage() {
   }, [preschoolId, supabase]);
 
   const daySlots = slots.filter((s) => s.day_of_week === selectedDay);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  const handleSavePDF = useCallback(() => {
+    setExporting(true);
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Timetable Management', 105, yPos, { align: 'center' });
+      yPos += 8;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${DAYS[selectedDay]} • ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 12;
+      const headers = ['Time', 'Subject / Activity', 'Room'];
+      const rows = daySlots.map((s) => [
+        `${s.start_time?.slice(0, 5) || ''} – ${s.end_time?.slice(0, 5) || ''}`,
+        s.subject || s.activity_type || '',
+        s.room || '-',
+      ]);
+      if (rows.length === 0) {
+        doc.text('No classes scheduled', 20, yPos);
+      } else {
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: yPos,
+          theme: 'grid',
+          headStyles: { fillColor: [124, 58, 237] },
+        });
+      }
+      doc.setFontSize(9);
+      doc.setTextColor(128, 128, 128);
+      doc.text('EduDash Pro', 105, doc.internal.pageSize.height - 10, { align: 'center' });
+      doc.save(`timetable-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  }, [slots, selectedDay, daySlots]);
 
   const openCreate = () => {
     setEditingSlot(null);
@@ -300,13 +348,26 @@ export default function TimetablePage() {
             <h1 className="h1">Timetable Management</h1>
             <p style={{ color: 'var(--muted)', fontSize: 14 }}>Manage weekly class schedules and teacher assignments</p>
           </div>
-          <button
-            className="qa"
-            onClick={openCreate}
-            style={{ background: 'var(--primary)', color: 'white', border: 'none', gap: 6 }}
-          >
-            <Plus size={16} /> Add Slot
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="qa" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Printer size={16} /> Print
+            </button>
+            <button
+              className="qa"
+              onClick={handleSavePDF}
+              disabled={exporting}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <FileDown size={16} /> {exporting ? 'Saving...' : 'Save PDF'}
+            </button>
+            <button
+              className="qa"
+              onClick={openCreate}
+              style={{ background: 'var(--primary)', color: 'white', border: 'none', gap: 6 }}
+            >
+              <Plus size={16} /> Add Slot
+            </button>
+          </div>
         </div>
 
         {/* Day Tabs */}

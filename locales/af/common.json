@@ -171,7 +171,11 @@
     "regions": "Regions",
     "students": "Students",
     "work": "Work",
-    "dash": "Dash"
+    "dash": "Dash",
+    "enroll": "Inskryf",
+    "team": "Span",
+    "fees": "Gelde",
+    "grades": "Grade"
   },
   "auth": {
     "signIn": "Teken In",

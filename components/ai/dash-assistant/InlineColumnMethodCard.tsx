@@ -219,9 +219,11 @@ export const InlineColumnMethodCard: React.FC<InlineColumnMethodCardProps> = ({
             {Array.from({ length: model.columns }).map((_, colIndex) => {
               const colRight = model.columns - 1 - colIndex;
               const carry = model.carryInByColRight.get(colRight) || 0;
+              const isRevealed = completed || revealedSteps > colRight;
+              const displayCarry = isRevealed && carry > 0 ? String(carry) : '';
               return (
                 <Text key={`carry-${colIndex}`} style={[styles.cellCarry, { color: mutedColor }]}>
-                  {carry > 0 ? String(carry) : ''}
+                  {displayCarry || '\u00A0'}
                 </Text>
               );
             })}
@@ -257,11 +259,22 @@ export const InlineColumnMethodCard: React.FC<InlineColumnMethodCardProps> = ({
 
         <View style={styles.gridRow}>
           <Text style={[styles.sign, { color: textColor }]}>=</Text>
-          {model.paddedResult.split('').map((char, colIndex) => (
-            <Text key={`result-${colIndex}`} style={[styles.cellResult, { color: theme.colors.primary }]}>
-              {char.trim()}
-            </Text>
-          ))}
+          {model.paddedResult.split('').map((char, colIndex) => {
+            const colRight = model.columns - 1 - colIndex;
+            const isRevealed = completed || revealedSteps > colRight;
+            const displayChar = isRevealed ? (char.trim() || '') : '_';
+            return (
+              <Text
+                key={`result-${colIndex}`}
+                style={[
+                  styles.cellResult,
+                  { color: isRevealed ? theme.colors.primary : mutedColor },
+                ]}
+              >
+                {displayChar || '\u00A0'}
+              </Text>
+            );
+          })}
         </View>
       </View>
 

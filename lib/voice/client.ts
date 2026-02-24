@@ -34,7 +34,7 @@ class VoiceServiceClient {
    * @param request TTS request parameters
    * @returns Audio URL and metadata
    */
-  async synthesize(request: TTSRequest): Promise<TTSResponse> {
+  async synthesize(request: TTSRequest, options?: { streamMode?: boolean }): Promise<TTSResponse> {
     const supabase = assertSupabase();
     
     try {
@@ -51,7 +51,7 @@ class VoiceServiceClient {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          action: 'synthesize',
+          action: options?.streamMode ? 'stream' : 'synthesize',
           ...request,
         }),
       });
@@ -64,6 +64,19 @@ class VoiceServiceClient {
           errorData.provider,
           errorData
         );
+      }
+
+      if (options?.streamMode) {
+        const audioBuffer = await response.arrayBuffer();
+        const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+        const audioBlobUrl = URL.createObjectURL(audioBlob);
+        return {
+          audio_url: audioBlobUrl,
+          audio_blob_url: audioBlobUrl,
+          cache_hit: false,
+          provider: 'azure',
+          content_hash: '',
+        } as TTSResponse;
       }
 
       const raw = await response.json();

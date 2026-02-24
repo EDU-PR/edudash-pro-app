@@ -29,6 +29,7 @@ import {
   resolvePdfPreviewTarget,
   sanitizeGeneratedPdfUrl,
 } from './pdfPreviewUtils';
+import { isValidFollowUp } from '@/hooks/dash-assistant/assistantHelpers';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -263,6 +264,47 @@ const buildToolChartPreview = (
 
 const VISUAL_PLACEHOLDER_REGEX = /\[(diagram|chart|graph)\]/gi;
 
+/** Repairs common AI JSON errors (e.g. "en", instead of "language":"en") to avoid raw display. */
+const repairInteractiveJson = (raw: string): string => {
+  let s = raw;
+  // Fix standalone language codes: "en", or "af", -> "language":"en",
+  s = s.replace(/"([a-z]{2})",\s*(?=\s*["\}\]])/g, '"language":"$1",');
+  // Fix "language": "en", with stray commas
+  s = s.replace(/"language"\s*:\s*"([^"]+)"\s*,?\s*,/g, '"language":"$1",');
+  return s;
+};
+
+const normalizeInteractiveJsonFences = (content: string): string => {
+  const source = String(content || '');
+  if (!source.includes('```json')) return source;
+  return source.replace(/```json\s*([\s\S]*?)```/gi, (full, jsonBlock) => {
+    let raw = String(jsonBlock || '').trim();
+    if (!raw) return full;
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      raw = repairInteractiveJson(raw);
+      try {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return ''; // Strip unparseable blocks so raw JSON is never shown
+      }
+    }
+    const type = String(parsed?.type || '').trim().toLowerCase();
+    if (type === 'spelling_practice') return `\`\`\`spelling\n${raw}\n\`\`\``;
+    if (type === 'column_addition') return `\`\`\`column\n${raw}\n\`\`\``;
+    if (type === 'quiz_question') return `\`\`\`quiz\n${raw}\n\`\`\``;
+    return full;
+  });
+};
+
+/** Strips raw interactive JSON blocks from prose so they are not shown as text. */
+const stripRawInteractiveJsonFromProse = (content: string): string => {
+  const source = String(content || '');
+  return source.replace(/\{\s*"type"\s*:\s*"(spelling_practice|column_addition|quiz_question)"[\s\S]*?\}\s*/g, '');
+};
+
 const parseNumberToken = (token: string): number => {
   const parsed = Number(String(token || '').replace(/,/g, '').trim());
   return Number.isFinite(parsed) ? parsed : NaN;
@@ -433,14 +475,17 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       new Set(
         rawSuggestions
           .map((item: unknown) => String(item || '').trim())
-          .filter((item) => item.length >= 4),
+          .filter((item) => item.length >= 4 && isValidFollowUp(item)),
       ),
     );
     return deduped.slice(0, 4);
   }, [extractFollowUps, isUser, message.content, message.metadata?.suggested_actions, showFollowUps]);
 
   const sanitizeAssistantContent = (content: string) => {
-    return replaceVisualPlaceholders(content || '').trim();
+    const step1 = replaceVisualPlaceholders(content || '');
+    const step2 = normalizeInteractiveJsonFences(step1);
+    const step3 = stripRawInteractiveJsonFromProse(step2);
+    return step3.trim();
   };
 
   const assistantContent = sanitizeAssistantContent(message.content || '');
@@ -864,27 +909,32 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   };
 
   const safeParseSpellingJson = (raw: string): SpellingPracticePayload | null => {
-    const cleaned = String(raw || '').trim();
+    let cleaned = String(raw || '').trim();
     if (!cleaned) return null;
 
     const wrapped = `\`\`\`spelling\n${cleaned}\n\`\`\``;
-    const parsed = parseSpellingPayload(wrapped);
+    let parsed = parseSpellingPayload(wrapped);
     if (parsed) return parsed;
 
+    let direct: unknown = null;
     try {
-      const direct = JSON.parse(cleaned);
-      if (
-        direct &&
-        typeof direct === 'object' &&
-        (direct as any).type === 'spelling_practice' &&
-        typeof (direct as any).word === 'string'
-      ) {
-        return direct as SpellingPracticePayload;
-      }
+      direct = JSON.parse(cleaned);
     } catch {
-      // Keep null fallback to fenced markdown render below.
+      cleaned = repairInteractiveJson(cleaned);
+      try {
+        direct = JSON.parse(cleaned);
+      } catch {
+        return null;
+      }
     }
-
+    if (
+      direct &&
+      typeof direct === 'object' &&
+      (direct as any).type === 'spelling_practice' &&
+      typeof (direct as any).word === 'string'
+    ) {
+      return direct as SpellingPracticePayload;
+    }
     return null;
   };
 
@@ -1510,22 +1560,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       />
                     );
                   }
-                  return Markdown ? (
-                    <Markdown key={`quiz-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
-                      {'```quiz\n' + segment.content + '\n```'}
-                    </Markdown>
-                  ) : (
-                    <Text
-                      key={`quiz-fallback-text-${message.id}-${segmentIndex}`}
-                      style={[
-                        styles.messageText,
-                        { color: theme.text },
-                      ]}
-                      selectable={true}
-                    >
-                      {`Quiz:\n${segment.content}`}
-                    </Text>
-                  );
+                  return null;
                 }
                 if (segment.type === 'column') {
                   const payload = safeParseColumnJson(segment.content);
@@ -1537,22 +1572,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       />
                     );
                   }
-                  return Markdown ? (
-                    <Markdown key={`column-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
-                      {'```column\n' + segment.content + '\n```'}
-                    </Markdown>
-                  ) : (
-                    <Text
-                      key={`column-fallback-text-${message.id}-${segmentIndex}`}
-                      style={[
-                        styles.messageText,
-                        { color: theme.text },
-                      ]}
-                      selectable={true}
-                    >
-                      {`Column Method:\n${segment.content}`}
-                    </Text>
-                  );
+                  return null;
                 }
                 if (segment.type === 'spelling') {
                   const payload = safeParseSpellingJson(segment.content);
@@ -1564,22 +1584,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       />
                     );
                   }
-                  return Markdown ? (
-                    <Markdown key={`spelling-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
-                      {'```spelling\n' + segment.content + '\n```'}
-                    </Markdown>
-                  ) : (
-                    <Text
-                      key={`spelling-fallback-text-${message.id}-${segmentIndex}`}
-                      style={[
-                        styles.messageText,
-                        { color: theme.text },
-                      ]}
-                      selectable={true}
-                    >
-                      {`Spelling Practice:\n${segment.content}`}
-                    </Text>
-                  );
+                  // Never show raw JSON; omit unparseable spelling blocks
+                  return null;
                 }
                 return (
                   Markdown ? (

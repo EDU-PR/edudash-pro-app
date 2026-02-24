@@ -516,6 +516,18 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={styles.routineSecondaryButton}
+              onPress={() => router.push('/screens/room-display-connect' as any)}
+              activeOpacity={0.9}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="tv-outline" size={14} color={theme.primary} />
+                <Text style={styles.routineSecondaryButtonText}>
+                  {t('teacher.show_on_tv', { defaultValue: 'Show on TV' })}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.routineSecondaryButton, !dashboardData?.todayRoutine && styles.routineSecondaryButtonDisabled]}
               onPress={handleScheduleRoutineReminders}
               activeOpacity={0.9}

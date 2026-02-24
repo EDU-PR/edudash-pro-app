@@ -52,6 +52,7 @@ export interface CompleteAssignedPlaygroundActivityParams {
   result: ActivityResult;
   difficulty: PlaygroundDifficultyLevel;
   activityMeta?: Record<string, unknown>;
+  assignedContext?: 'school' | 'aftercare' | 'home';
 }
 
 const toSubject = (domain: string): string => {
@@ -221,7 +222,7 @@ export async function ensurePlaygroundInteractiveActivity(
 export async function completeAssignedPlaygroundActivity(
   params: CompleteAssignedPlaygroundActivityParams,
 ): Promise<any> {
-  const { assignmentId, result, difficulty, activityMeta = {} } = params;
+  const { assignmentId, result, difficulty, activityMeta = {}, assignedContext = 'home' } = params;
   const score = result.totalRounds > 0
     ? Math.round((result.correctAnswers / result.totalRounds) * 100)
     : 0;
@@ -233,6 +234,7 @@ export async function completeAssignedPlaygroundActivity(
     used_hints: result.usedHints,
     completed_at: result.completedAt,
     source: 'dash_playground',
+    assigned_context: assignedContext,
   };
 
   const client = assertSupabase() as any;

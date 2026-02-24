@@ -32,7 +32,11 @@
     "regions": "Regions",
     "students": "Students",
     "work": "Work",
-    "dash": "Dash"
+    "dash": "Dash",
+    "enroll": "Matricular",
+    "team": "Equipa",
+    "fees": "Taxas",
+    "grades": "Notas"
   },
   "auth": {
     "signIn": "Entrar",
@@ -159,7 +163,12 @@
     "sign_in_with_email_link": "Sign in with Email Link (No Password)",
     "sign_up": "Sign Up",
     "verification_failed_message": "Email verification failed. Please try signing in to request a new verification email.",
-    "verification_failed_title": "Verification Failed"
+    "verification_failed_title": "Verification Failed",
+    "welcome": {
+      "title": "Bem-vindo",
+      "subtitle": "Inicie sessão na sua conta ou crie uma nova.",
+      "quick_access": "Acesso rápido com Face ID / Impressão digital"
+    }
   },
   "ai": {
     "homework": {

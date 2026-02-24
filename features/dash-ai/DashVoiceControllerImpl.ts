@@ -191,72 +191,63 @@ export class DashVoiceController {
       voice_id?: string;
     }
   ): Promise<void> {
-    const { assertSupabase } = await import('@/lib/supabase');
-    const supabase = assertSupabase();
-    
     // The Edge Function expects short codes (af, zu, xh, nso, en)
     const shortCode = this.mapLanguageCode(language);
-    
+
     try {
-      const { data, error } = await supabase.functions.invoke('tts-proxy', {
-        // rate/pitch are in -50..50 scale; 0 = normal (1.0x)
-        body: {
+      const response = await voiceService.synthesize(
+        {
           text,
-          language: shortCode,
+          language: shortCode as any,
           voice_id: options?.voice_id || undefined,
-          rate: Number.isFinite(options?.rate as number) ? Number(options?.rate) : 0,
+          speaking_rate: Number.isFinite(options?.rate as number) ? Number(options?.rate) : 0,
           pitch: Number.isFinite(options?.pitch as number) ? Number(options?.pitch) : 0,
           phonics_mode: options?.phonicsMode === true,
-        }
-      });
-      
-      if (error) {
-        console.error('[DashVoiceController] TTS proxy error:', error);
-        throw new Error(error.message || 'TTS proxy invocation failed');
-      }
-      
-      if (!data) {
-        throw new Error('No data returned from TTS proxy');
-      }
-      
-      // Check if Edge Function suggests fallback to device
-      if (data.fallback === 'device') {
-        console.log('[DashVoiceController] Azure TTS unavailable, Edge Function returned device fallback');
-        throw new Error('Edge Function returned device fallback');
-      }
-      
-      if (!data.audio_url) {
-        console.error('[DashVoiceController] No audio URL in response:', data);
+        },
+        { streamMode: true },
+      );
+
+      if (!response.audio_url) {
         throw new Error('No audio URL in TTS response');
       }
-      
-      // Detect dynamic language fallback from Edge Function
-      if (data.language_fallback === true && data.actual_voice) {
-        const actualLang = (data.actual_voice as string).split('-').slice(0, 1).join('') || 'en';
-        callbacks?.onLanguageFallback?.(language, actualLang);
+
+      // Best-effort prefetch of the next sentence while current chunk plays.
+      const sentenceChunks = text
+        .split(/[.!?]\s+/)
+        .map((chunk) => chunk.trim())
+        .filter((chunk) => chunk.length > 12);
+      if (sentenceChunks.length > 1) {
+        const nextChunk = sentenceChunks[1];
+        void voiceService.synthesize(
+          {
+            text: nextChunk,
+            language: shortCode as any,
+            voice_id: options?.voice_id || undefined,
+            speaking_rate: Number.isFinite(options?.rate as number) ? Number(options?.rate) : 0,
+            pitch: Number.isFinite(options?.pitch as number) ? Number(options?.pitch) : 0,
+            phonics_mode: options?.phonicsMode === true,
+          },
+          { streamMode: true },
+        ).catch(() => undefined);
       }
-      
-      // Check if speech was aborted before playing
+
       if (this.isSpeechAborted) {
-        console.log('[DashVoiceController] Speech aborted before playback started');
         callbacks?.onStopped?.();
         return;
       }
-      
+
       callbacks?.onStart?.();
-      
+
       const { audioManager } = await import('@/lib/voice/audio');
       let playbackError = false;
-      await audioManager.play(data.audio_url, (state) => {
+      await audioManager.play(response.audio_url, (state) => {
         if (this.isSpeechAborted) {
-          console.log('[DashVoiceController] Speech aborted during playback');
           void audioManager.stop();
           callbacks?.onStopped?.();
           return;
         }
         if (state.error) {
           playbackError = true;
-          console.error('[DashVoiceController] Audio playback error:', state.error);
           callbacks?.onError?.(new Error(state.error));
         }
       });
