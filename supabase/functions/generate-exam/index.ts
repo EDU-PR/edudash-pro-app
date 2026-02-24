@@ -720,6 +720,27 @@ function isLanguageSubject(subject: string): boolean {
   );
 }
 
+function getLanguageReadingFallback(language: string): { passage: string; instruction: string } {
+  const normalizedLanguage = normalizeText(language);
+  const safeLanguageLabel = String(language || '').trim() || 'the selected language';
+
+  if (normalizedLanguage.includes('afrikaans') || normalizedLanguage.startsWith('af')) {
+    return {
+      passage: `Lees die storie hieronder en beantwoord die vrae wat volg.
+
+Mia en haar broer, Tumi, het Saterdag vroeg op hul oupa se plaas gaan help. Hulle het eers die hoenders gevoer, daarna groente geplant en later saam met Oupa die kraal skoongemaak. Teen die middag het dit begin reen, maar hulle het onder die stoep gesit en stories geluister. Voor hulle huis toe is, het Ouma vir hulle warm sop gegee en almal het saam gelag.`,
+      instruction: 'Lees die teks sorgvuldig en antwoord in Afrikaans.',
+    };
+  }
+
+  return {
+    passage: `Read the story below and answer the questions that follow.
+
+Mia and her brother, Tumi, went early on Saturday to help on their grandfather's farm. They first fed the chickens, then planted vegetables, and later cleaned the cattle pen with Grandpa. By midday it started raining, so they sat under the veranda and listened to stories. Before going home, Grandma gave them warm soup and everyone laughed together.`,
+    instruction: `Read the passage carefully and answer in ${safeLanguageLabel}.`,
+  };
+}
+
 function ensureLanguageReadingPassage(exam: any, subject: string, grade: string, language: string) {
   if (!isLanguageSubject(subject)) return exam;
 
@@ -741,13 +762,9 @@ function ensureLanguageReadingPassage(exam: any, subject: string, grade: string,
   const existingPassage = String(first?.readingPassage || first?.reading_passage || first?.instructions || '').trim();
   if (existingPassage.length >= 120) return exam;
 
-  first.readingPassage = `Lees die storie hieronder en beantwoord die vrae wat volg.
-
-Mia en haar broer, Tumi, het Saterdag vroeg op hul oupa se plaas gaan help. Hulle het eers die hoenders gevoer, daarna groente geplant en later saam met Oupa die kraal skoongemaak. Teen die middag het dit begin reën, maar hulle het onder die stoep gesit en stories geluister. Voor hulle huis toe is, het Ouma vir hulle warm sop gegee en almal het saam gelag.
-
-Read the passage carefully and answer in ${language}.`;
-
-  first.instructions = `Grade: ${grade}. Read the passage first, then answer with full meaning and context clues.`;
+  const fallback = getLanguageReadingFallback(language);
+  first.readingPassage = `${fallback.passage}\n\n${fallback.instruction}`;
+  first.instructions = `Grade: ${grade}. ${fallback.instruction}`;
   return exam;
 }
 

@@ -42,6 +42,7 @@ interface ExamQuestion {
 interface ConversationalExamBuilderProps {
   grade: string;
   subject: string;
+  language?: string;
   onClose: () => void;
   onSave?: (exam: any) => void;
 }
@@ -49,12 +50,14 @@ interface ConversationalExamBuilderProps {
 export function ConversationalExamBuilder({ 
   grade, 
   subject, 
+  language = 'English',
   onClose,
   onSave 
 }: ConversationalExamBuilderProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [availableTopics, setAvailableTopics] = useState<string[]>([]);
   const [conversationState, setConversationState] = useState<{
     stage: 'greeting' | 'topic_selection' | 'exam_scope' | 'question_types' | 'generating' | 'refining' | 'complete';
     selectedTopics: string[];
@@ -126,7 +129,7 @@ export function ConversationalExamBuilder({
 
     addMessage({
       role: 'assistant',
-      content: `Hi! 👋 I'm Dash AI, and I'm here to help you create a CAPS-aligned ${gradeLabel} ${subject} exam.\n\nLet me guide you through building the perfect practice test. We'll do this step-by-step, and you can adjust anything along the way.\n\nFirst, let me suggest some topics based on the CAPS curriculum...`,
+      content: `Hi! 👋 I'm Dash AI, and I'm here to help you create a CAPS-aligned ${gradeLabel} ${subject} exam.\n\nI'll generate all sections in ${language}. Let me guide you through building the perfect practice test step-by-step, and you can adjust anything along the way.\n\nFirst, let me suggest some topics based on the CAPS curriculum...`,
     });
 
     // Simulate thinking then show topics
@@ -175,6 +178,7 @@ export function ConversationalExamBuilder({
   };
 
   const showTopicSelection = (topics: string[]) => {
+    setAvailableTopics(topics);
     setIsTyping(false);
     addMessage({
       role: 'assistant',
@@ -313,12 +317,13 @@ export function ConversationalExamBuilder({
       
       // Try to get session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      let token = sessionData?.session?.access_token;
       
       console.log('[ConversationalExamBuilder] Session data:', sessionData);
       console.log('[ConversationalExamBuilder] Session error:', sessionError);
       
       // Check if we have a valid session
-      if (sessionError || !sessionData?.session) {
+      if (sessionError || !token) {
         console.error('[ConversationalExamBuilder] No valid session found');
         
         // Try to refresh the session
@@ -328,11 +333,9 @@ export function ConversationalExamBuilder({
           throw new Error('Authentication required. Please refresh the page and try again.');
         }
         
-        const token = refreshData.session.access_token;
+        token = refreshData.session.access_token;
         console.log('[ConversationalExamBuilder] Session refreshed, got token');
       }
-      
-      const token = sessionData?.session?.access_token;
 
       if (!token) {
         throw new Error('Authentication required. Please refresh the page and try again.');
@@ -361,6 +364,7 @@ export function ConversationalExamBuilder({
               topics: conversationState.selectedTopics,
               section: sectionLabel,
               conversational: true,
+              language,
             }
           },
         },
@@ -468,6 +472,9 @@ export function ConversationalExamBuilder({
     const gradeLabel = grade.replace('grade_', 'Grade ').replace('_', ' ');
     const spec = getGradeSpec(grade);
     const marksForSection = Math.floor((conversationState.totalMarks || spec.totalMarks) / 3);
+    const topicsForPrompt = conversationState.selectedTopics.length > 0
+      ? conversationState.selectedTopics.join(', ')
+      : 'core CAPS curriculum topics';
 
     // Determine section-specific ranges and focus
     let range: readonly [number, number] = [6, 10] as const;
@@ -477,7 +484,9 @@ export function ConversationalExamBuilder({
     else if (sectionLabel === 'C') { range = spec.ps as [number, number]; focus = 'problem solving / calculations (5-10 marks each)'; }
 
     // Build prompt with grade-aware ranges
-    return `Create Section ${sectionLabel} for a ${gradeLabel} ${subject} CAPS exam covering: ${conversationState.selectedTopics.slice(0, 2).join(' and ')}.
+    return `Create Section ${sectionLabel} for a ${gradeLabel} ${subject} CAPS exam covering the following topics: ${topicsForPrompt}.
+
+Generate all section content in ${language}.
 
 Include ${marksForSection} marks worth of questions focused on ${focus}. Aim for ${range[0]}-${range[1]} questions in this section.
 
@@ -617,7 +626,7 @@ Return **JSON only** in this exact structure (no markdown, no extra text):
     }
 
     if (id === 'all-topics') {
-      const allTopics = getExampleTopics(grade, subject);
+      const allTopics = availableTopics.length > 0 ? availableTopics : getExampleTopics(grade, subject);
       setConversationState(prev => ({ ...prev, selectedTopics: allTopics }));
       handleTopicSelection(allTopics);
       return;

@@ -196,9 +196,18 @@ export default function StudentManagementScreen() {
       </View>
 
       {/* Age Group Overview for Preschools */}
-      {schoolInfo?.school_type === 'preschool' && Object.keys(ageGroupStats).length > 0 && (
+      {schoolInfo?.school_type === 'preschool' && (
         <View style={styles.ageGroupOverview}>
-          <Text style={styles.sectionTitle}>Age Group Distribution</Text>
+          <View style={styles.ageGroupSectionHeader}>
+            <Text style={styles.sectionTitle}>Age Group Distribution</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/screens/principal-age-groups')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.manageAgeGroupsLink}>Manage</Text>
+            </TouchableOpacity>
+          </View>
+          {Object.keys(ageGroupStats).length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.ageGroupsRow}>
               {Object.entries(ageGroupStats).map(([groupName, count]) => (
@@ -222,6 +231,11 @@ export default function StudentManagementScreen() {
               ))}
             </View>
           </ScrollView>
+          ) : (
+            <Text style={styles.ageGroupEmptyHint}>
+              Configure Curious Cubs, Little Explorers, and Panda under Manage.
+            </Text>
+          )}
         </View>
       )}
 
@@ -537,11 +551,26 @@ const createStyles = (theme: any) => StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
   },
+  ageGroupSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: theme.text,
-    marginBottom: 12,
+  },
+  manageAgeGroupsLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.primary,
+  },
+  ageGroupEmptyHint: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    fontStyle: 'italic',
   },
   ageGroupsRow: {
     flexDirection: 'row',

@@ -5,4 +5,5 @@ export {
   formatAge,
   getAgeGroupColor,
   getSchoolTypeDisplay,
+  PRESCHOOL_AGE_GROUP_NAMES,
 } from './studentHelpers';

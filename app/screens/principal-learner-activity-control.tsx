@@ -197,7 +197,7 @@ export default function PrincipalLearnerActivityControlScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.container, { flex: 1 }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Learner Activity Control',
@@ -206,7 +206,7 @@ export default function PrincipalLearnerActivityControlScreen() {
           headerTitleStyle: { color: theme.text },
         }}
       />
-      <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <View style={{ flex: 1 }}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
@@ -282,8 +282,8 @@ export default function PrincipalLearnerActivityControlScreen() {
             </Text>
           </View>
         </ScrollView>
-      </SafeAreaView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 

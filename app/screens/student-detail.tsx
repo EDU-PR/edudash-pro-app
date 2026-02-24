@@ -523,6 +523,8 @@ export default function StudentDetailScreen() {
           <ParentContactSection
             student={student}
             theme={theme}
+            canManageGuardian={canAssignClass}
+            onGuardianLinked={loadStudentData}
           />
         )}
 

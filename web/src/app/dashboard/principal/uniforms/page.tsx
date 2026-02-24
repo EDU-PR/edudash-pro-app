@@ -102,6 +102,7 @@ export default function UniformsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sizeFilter, setSizeFilter] = useState('all');
   const [error, setError] = useState<string | null>(null);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -250,6 +251,45 @@ export default function UniformsPage() {
     () => rows.filter((row) => needsGeneratedBackNumber(row.tshirt_number)).length,
     [rows]
   );
+
+  const markUniformPaid = async (row: DisplayRow) => {
+    if (!schoolId || !row.studentId || markingPaidId) return;
+    const confirm = window.confirm(
+      `Mark ${row.childName}'s uniform as paid? This will add a uniform payment record and update dashboards.`
+    );
+    if (!confirm) return;
+
+    try {
+      setMarkingPaidId(row.id);
+      const { error: insertError } = await supabase
+        .from('payments')
+        .insert({
+          student_id: row.studentId,
+          preschool_id: schoolId,
+          amount: 0,
+          amount_cents: 0,
+          currency: 'ZAR',
+          status: 'completed',
+          description: `Uniform payment marked paid by school for ${row.childName}`,
+          metadata: {
+            payment_context: 'uniform',
+            fee_type: 'uniform',
+          },
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      await loadUniforms();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to mark uniform as paid.');
+    } finally {
+      setMarkingPaidId(null);
+    }
+  };
 
   const generateMissingNumbers = async () => {
     if (!schoolId || generatingNumbers) return;
@@ -559,7 +599,44 @@ export default function UniformsPage() {
                   {filteredRows.map((row) => (
                     <tr key={row.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: 12 }}>
-                        <div style={{ fontWeight: 600 }}>{row.childName}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>{row.childName}</span>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <span
+                              className={`payment-chip ${row.paymentStatus === 'paid' ? 'payment-paid' : 'payment-unpaid'}`}
+                              style={{
+                                fontSize: 10,
+                                padding: '3px 8px',
+                                borderRadius: 999,
+                                border: '1px solid transparent',
+                                backgroundColor:
+                                  row.paymentStatus === 'paid' ? '#dcfce7' : '#fee2e2',
+                                color: row.paymentStatus === 'paid' ? '#166534' : '#991b1b',
+                                borderColor:
+                                  row.paymentStatus === 'paid' ? '#86efac' : '#fca5a5',
+                              }}
+                            >
+                              {row.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
+                            </span>
+                            {row.paymentStatus !== 'paid' && (
+                              <button
+                                type="button"
+                                className="btn btnSecondary"
+                                style={{ paddingInline: 8, fontSize: 11 }}
+                                disabled={markingPaidId === row.id}
+                                onClick={() => markUniformPaid(row)}
+                              >
+                                {markingPaidId === row.id ? 'Marking…' : 'Mark Paid'}
+                              </button>
+                            )}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ padding: 12 }}>{row.ageYears}</td>
                       <td style={{ padding: 12 }}>{row.tshirtSize}</td>

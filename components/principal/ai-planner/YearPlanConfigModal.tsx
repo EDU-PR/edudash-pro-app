@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { YearPlanConfig } from './types';
-import { AGE_GROUPS, FOCUS_AREAS, getInitialConfig } from './types';
+import { AGE_GROUPS, FOCUS_AREAS, PLANNING_FRAMEWORKS, getInitialConfig } from './types';
 import { createStyles } from './YearPlanConfigModal.styles';
 
 interface YearPlanConfigModalProps {
@@ -128,6 +128,38 @@ export function YearPlanConfigModal({
               ))}
             </View>
           </View>
+
+          {/* Planning Framework */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Planning Framework</Text>
+            <View style={styles.focusAreaSelector}>
+              {PLANNING_FRAMEWORKS.map((framework) => (
+                <TouchableOpacity
+                  key={framework.id}
+                  style={[
+                    styles.focusAreaOption,
+                    config.planningFramework === framework.id && styles.focusAreaOptionActive,
+                  ]}
+                  onPress={() =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      planningFramework: framework.id,
+                      strictTemplateMode: framework.id === 'grade_rr_52_week' ? true : prev.strictTemplateMode,
+                    }))
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.focusAreaOptionText,
+                      config.planningFramework === framework.id && styles.focusAreaOptionTextActive,
+                    ]}
+                  >
+                    {framework.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
           
           {/* Age Groups */}
           <View style={styles.formGroup}>
@@ -208,6 +240,77 @@ export function YearPlanConfigModal({
                 <View style={[styles.toggleThumb, config.includeMeetings && styles.toggleThumbActive]} />
               </View>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => setConfig(prev => ({ ...prev, separateAgeGroupTracks: !prev.separateAgeGroupTracks }))}
+            >
+              <View style={styles.toggleInfo}>
+                <Ionicons name="layers-outline" size={20} color={theme.text} />
+                <Text style={styles.toggleLabel}>Separate Age-Group Tracks</Text>
+              </View>
+              <View style={[styles.toggle, config.separateAgeGroupTracks && styles.toggleActive]}>
+                <View style={[styles.toggleThumb, config.separateAgeGroupTracks && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() => setConfig(prev => ({ ...prev, strictTemplateMode: !prev.strictTemplateMode }))}
+            >
+              <View style={styles.toggleInfo}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={theme.text} />
+                <Text style={styles.toggleLabel}>Strict Template Lock</Text>
+              </View>
+              <View style={[styles.toggle, config.strictTemplateMode && styles.toggleActive]}>
+                <View style={[styles.toggleThumb, config.strictTemplateMode && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() =>
+                setConfig(prev => ({ ...prev, includeAssessmentGuidance: !prev.includeAssessmentGuidance }))
+              }
+            >
+              <View style={styles.toggleInfo}>
+                <Ionicons name="checkmark-done-outline" size={20} color={theme.text} />
+                <Text style={styles.toggleLabel}>Include Assessment Guidance</Text>
+              </View>
+              <View style={[styles.toggle, config.includeAssessmentGuidance && styles.toggleActive]}>
+                <View style={[styles.toggleThumb, config.includeAssessmentGuidance && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() =>
+                setConfig(prev => ({ ...prev, includeInclusionAdaptations: !prev.includeInclusionAdaptations }))
+              }
+            >
+              <View style={styles.toggleInfo}>
+                <Ionicons name="accessibility-outline" size={20} color={theme.text} />
+                <Text style={styles.toggleLabel}>Include Inclusion Adaptations</Text>
+              </View>
+              <View style={[styles.toggle, config.includeInclusionAdaptations && styles.toggleActive]}>
+                <View style={[styles.toggleThumb, config.includeInclusionAdaptations && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={() =>
+                setConfig(prev => ({ ...prev, includeHomeLinkExtensions: !prev.includeHomeLinkExtensions }))
+              }
+            >
+              <View style={styles.toggleInfo}>
+                <Ionicons name="home-outline" size={20} color={theme.text} />
+                <Text style={styles.toggleLabel}>Include Home-Link Extensions</Text>
+              </View>
+              <View style={[styles.toggle, config.includeHomeLinkExtensions && styles.toggleActive]}>
+                <View style={[styles.toggleThumb, config.includeHomeLinkExtensions && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
           </View>
           
           {/* Budget Level */}
@@ -241,6 +344,19 @@ export function YearPlanConfigModal({
             </View>
           </View>
           
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Principal Rules for AI (Optional)</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={config.principalRules}
+              onChangeText={(text) => setConfig(prev => ({ ...prev, principalRules: text }))}
+              placeholder="Add non-negotiable rules (e.g., separate nap policy by age, fixed reporting milestones, teacher moderation expectations)."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              numberOfLines={4}
+            />
+          </View>
+
           {/* Special Considerations */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Special Considerations (Optional)</Text>

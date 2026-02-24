@@ -128,9 +128,7 @@ const CRITERIA_RESPONSE_PATTERNS: RegExp[] = [
 ];
 
 const CRITERIA_LINE_START_REGEX = /^\s*(?:[-*]\s*)?([a-z]|[1-9][0-9]?)\)\s*(.+?)\s*$/i;
-const CRITERIA_NEXT_LABEL_INLINE_REGEX = /\s+(?:[a-z]|[1-9][0-9]?)\)\s+/i;
-
-export type CriteriaHeading = {
+const CRITERIA_NEXT_LABEL_INLINE_REGEX = /\s+(?:[a-z]|[1-9][0-9]?)\)\s+/i;export type CriteriaHeading = {
   label: string;
   criterionText: string;
   heading: string;

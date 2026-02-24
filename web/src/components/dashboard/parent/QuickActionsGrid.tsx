@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import {
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
   Users, Sparkles, Target, Library, FileCheck, Bot, Phone, Video, ChevronDown, Settings,
+  Clipboard,
   CheckCircle2, Clock3
 } from 'lucide-react';
 import { QuickCallModal } from '@/components/calls/QuickCallModal';
@@ -116,7 +117,7 @@ export function QuickActionsGrid({
       { id: 'ebooks', icon: Library, label: t('dashboard.parent.quick_actions.ebooks', { defaultValue: 'E-Books' }), href: '/dashboard/parent/ebooks', color: '#3b82f6' },
       { id: 'robotics_lab', icon: Bot, label: t('dashboard.parent.quick_actions.robotics_lab', { defaultValue: 'Robotics Lab' }), href: '/dashboard/parent/robotics', color: '#f59e0b' },
       ...(isK12Org && isExamEligible ? [
-        { id: 'exam_prep', icon: Target, label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), href: '/dashboard/parent/generate-exam', color: '#10b981' },
+        { id: 'exam_prep', icon: Target, label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), href: '/dashboard/parent/exam-prep', color: '#10b981' },
         { id: 'my_exams', icon: FileCheck, label: t('dashboard.parent.quick_actions.my_exams', { defaultValue: 'My Exams' }), href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
       ] : []),
       { id: 'payments', icon: DollarSign, label: t('dashboard.parent.quick_actions.payments', { defaultValue: 'Payments' }), href: '/dashboard/parent/payments', color: '#f59e0b', subtitle: feesSubtitle, glow: feesGlow },

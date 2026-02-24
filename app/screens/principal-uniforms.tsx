@@ -42,12 +42,14 @@ export default function PrincipalUniformsScreen() {
     () => new Map()
   );
   const [parentProfilesById, setParentProfilesById] = useState<Record<string, ParentProfile>>({});
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
 
   const {
     bulkMessaging,
     singleMessagingTargetId,
     bulkMessageUnpaid,
     bulkMessageNoOrder,
+    bulkMessageConfirmNumbers,
     messageSingleParent,
   } = useUniformMessaging({
     userId: user?.id,
@@ -288,6 +290,18 @@ export default function PrincipalUniformsScreen() {
             }
             : row
         )));
+
+        // Notify parents to confirm newly assigned numbers
+        const assignedIds = new Set(assignments.map((a) => a.id));
+        const confirmTargets = submittedRows
+          .filter((row) => assignedIds.has(row.id))
+          .map((row) => ({
+            ...row,
+            tshirtNumber: assignmentMap.get(row.id) || row.tshirtNumber,
+          }));
+        if (confirmTargets.length > 0) {
+          await bulkMessageConfirmNumbers(confirmTargets);
+        }
       }
 
       await load();
@@ -323,7 +337,7 @@ export default function PrincipalUniformsScreen() {
     } finally {
       setGeneratingNumbers(false);
     }
-  }, [schoolId, rows, load, missingCount, showAlert]);
+  }, [schoolId, rows, load, missingCount, showAlert, submittedRows, bulkMessageConfirmNumbers]);
 
   const handleGenerateNumbersPress = useCallback(() => {
     if (!schoolId) return;
@@ -604,6 +618,71 @@ export default function PrincipalUniformsScreen() {
                         </Text>
                       </TouchableOpacity>
                     ) : null}
+                    {item.paymentStatus !== 'paid' && schoolId && (
+                      <TouchableOpacity
+                        style={[
+                          styles.inlineActionButton,
+                          { borderColor: theme.success + '66', backgroundColor: theme.success + '18', marginTop: 8 },
+                        ]}
+                        onPress={() => {
+                          if (markingPaidId) return;
+                          showAlert({
+                            title: 'Mark Uniform Paid',
+                            message:
+                              `Mark ${item.childName}'s uniform as paid? This will add a uniform payment record and update dashboards.`,
+                            type: 'info',
+                            buttons: [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Mark Paid',
+                                onPress: async () => {
+                                  try {
+                                    setMarkingPaidId(item.id);
+                                    const supabase = assertSupabase();
+                                    const { error } = await supabase
+                                      .from('payments')
+                                      .insert({
+                                        student_id: item.studentId,
+                                        preschool_id: schoolId,
+                                        amount: 0,
+                                        amount_cents: 0,
+                                        currency: 'ZAR',
+                                        status: 'completed',
+                                        description: `Uniform payment marked paid by school for ${item.childName}`,
+                                        metadata: {
+                                          payment_context: 'uniform',
+                                          fee_type: 'uniform',
+                                        },
+                                      })
+                                      .select('id')
+                                      .single();
+                                    if (error) {
+                                      throw error;
+                                    }
+                                    await load();
+                                  } catch (e: any) {
+                                    showAlert({
+                                      title: 'Payment Update Failed',
+                                      message: e?.message || 'Unable to mark uniform as paid right now.',
+                                      type: 'error',
+                                      buttons: [{ text: 'OK' }],
+                                    });
+                                  } finally {
+                                    setMarkingPaidId(null);
+                                  }
+                                },
+                              },
+                            ],
+                          });
+                        }}
+                        disabled={markingPaidId === item.id || bulkMessaging !== null}
+                      >
+                        <Ionicons name="checkmark-done-outline" size={14} color={theme.success} />
+                        <Text style={[styles.inlineActionButtonText, { color: theme.success }]}>
+                          {markingPaidId === item.id ? 'Marking Paid...' : 'Mark Paid'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </>
                 )}
               </View>

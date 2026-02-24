@@ -1,26 +1,82 @@
 /**
  * Parent Contact Section Component
- * Shows parent/guardian info with call, SMS, email actions
+ * Shows parent/guardian info with call, SMS, email actions.
+ * Principals/admins can link a second parent by email.
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Linking,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail } from './types';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { assertSupabase } from '@/lib/supabase';
 
 interface ParentContactSectionProps {
   student: StudentDetail;
   theme: ThemeColors;
+  /** When true, show "Link second parent by email" block (principal/admin) */
+  canManageGuardian?: boolean;
+  /** Called after successfully linking a guardian so parent screen can refetch */
+  onGuardianLinked?: () => void;
 }
 
 export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   student,
   theme,
+  canManageGuardian = false,
+  onGuardianLinked,
 }) => {
   const styles = createStyles(theme);
   const { showAlert, alertProps } = useAlertModal();
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkingGuardian, setLinkingGuardian] = useState(false);
+
+  const handleLinkGuardianByEmail = async () => {
+    const email = linkEmail.trim().toLowerCase();
+    if (!email) {
+      showAlert({ title: 'Email required', message: 'Enter the second parent\'s email address.', type: 'warning' });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showAlert({ title: 'Invalid email', message: 'Please enter a valid email address.', type: 'warning' });
+      return;
+    }
+    setLinkingGuardian(true);
+    try {
+      const supabase = assertSupabase();
+      const { data, error } = await supabase.rpc('principal_link_guardian_by_email', {
+        p_student_id: student.id,
+        p_email: email,
+      });
+      if (error) {
+        showAlert({ title: 'Link failed', message: error.message || 'Could not link guardian.', type: 'error' });
+        return;
+      }
+      const result = data as { error?: string } | null;
+      if (result?.error) {
+        showAlert({ title: 'Link failed', message: result.error, type: 'error' });
+        return;
+      }
+      showAlert({
+        title: 'Second parent linked',
+        message: 'The second parent/guardian has been linked. They can now access this student.',
+        type: 'success',
+        buttons: [{ text: 'OK', onPress: () => { setLinkEmail(''); onGuardianLinked?.(); } }],
+      });
+    } finally {
+      setLinkingGuardian(false);
+    }
+  };
 
   const handleContact = (
     type: 'call' | 'email' | 'sms',
@@ -71,6 +127,8 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   const showGuardian =
     !!(guardianContact.name || guardianContact.email || guardianContact.phone) &&
     student.guardian_id !== student.parent_id;
+
+  const canAddSecondGuardian = canManageGuardian && !showGuardian;
 
   const renderContactCard = (contact: typeof parentContact) => (
     <View style={styles.contactCard} key={contact.label}>
@@ -127,6 +185,37 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
           !showGuardian && (
             <Text style={styles.noContact}>No parent or guardian contact information</Text>
           )}
+        {canAddSecondGuardian && (
+          <View style={styles.linkGuardianCard}>
+            <Text style={styles.linkGuardianTitle}>Add second parent or guardian</Text>
+            <Text style={styles.linkGuardianHint}>Link by their account email</Text>
+            <TextInput
+              style={styles.linkGuardianInput}
+              placeholder="Second parent's email"
+              placeholderTextColor={theme.textSecondary}
+              value={linkEmail}
+              onChangeText={setLinkEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!linkingGuardian}
+            />
+            <TouchableOpacity
+              style={[styles.linkGuardianButton, linkingGuardian && styles.linkGuardianButtonDisabled]}
+              onPress={handleLinkGuardianByEmail}
+              disabled={linkingGuardian}
+            >
+              {linkingGuardian ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <View style={styles.linkGuardianButtonContent}>
+                  <Ionicons name="person-add" size={18} color="#fff" style={styles.linkGuardianButtonIcon} />
+                  <Text style={styles.linkGuardianButtonText}>Link by email</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
       <AlertModal {...alertProps} />
     </>
@@ -191,5 +280,56 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 16,
     color: '#999',
     fontStyle: 'italic',
+  },
+  linkGuardianCard: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  linkGuardianTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  linkGuardianHint: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    marginBottom: 10,
+  },
+  linkGuardianInput: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: theme.text,
+    marginBottom: 10,
+  },
+  linkGuardianButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  linkGuardianButtonDisabled: {
+    opacity: 0.7,
+  },
+  linkGuardianButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  linkGuardianButtonIcon: {
+    marginRight: 8,
+  },
+  linkGuardianButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

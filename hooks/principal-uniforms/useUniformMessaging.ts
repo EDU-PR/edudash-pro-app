@@ -77,7 +77,7 @@ async function sendPush(params: {
 
 export function useUniformMessaging(opts: UseUniformMessagingOptions) {
   const { userId, schoolId, profile, showAlert } = opts;
-  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid' | 'no_order'>(null);
+  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid' | 'no_order' | 'confirm_numbers'>(null);
   const [singleMessagingTargetId, setSingleMessagingTargetId] = useState<string | null>(null);
 
   const senderName = (profile as any)?.full_name
@@ -85,7 +85,9 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
     || 'School';
 
   const sendBulk = useCallback(async (
-    targets: DisplayRow[], type: 'missing' | 'unpaid' | 'no_order', buildContent: (row: DisplayRow) => { content: string; subject: string },
+    targets: DisplayRow[],
+    type: 'missing' | 'unpaid' | 'no_order' | 'confirm_numbers',
+    buildContent: (row: DisplayRow) => { content: string; subject: string },
   ) => {
     if (!userId || !schoolId || bulkMessaging) return;
     if (!targets.length) {
@@ -106,6 +108,7 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
     const label =
       type === 'missing' ? 'missing uniform sizes'
       : type === 'no_order' ? 'no uniform orders'
+      : type === 'confirm_numbers' ? 'new T-shirt numbers to confirm'
       : 'unpaid uniform orders';
     showAlert({
       title:
@@ -113,7 +116,9 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
           ? 'Message Missing Sizes'
           : type === 'no_order'
             ? 'Message No-Order Parents'
-            : 'Message Unpaid Uniform Orders',
+            : type === 'confirm_numbers'
+              ? 'Confirm T-shirt Numbers'
+              : 'Message Unpaid Uniform Orders',
       message: 'Send an in-app message to ' + targets.length + ' parent(s) with ' + label + '?',
       type: 'warning',
       buttons: [
@@ -185,6 +190,23 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
           "'s uniform order. Please submit size, quantities, and select whether your child has a previous back number (or no number)." +
           codeLine + ' Thank you.',
         subject: 'Uniform Order Needed • ' + row.childName,
+      };
+    });
+  }, [sendBulk]);
+
+  const bulkMessageConfirmNumbers = useCallback(async (assignedRows: DisplayRow[]) => {
+    const targets = assignedRows.filter((r) => r.parentId);
+    await sendBulk(targets, 'confirm_numbers', (row) => {
+      const codeLine = row.studentCode ? ' Student code: ' + row.studentCode + '.' : '';
+      const numberLine = row.tshirtNumber ? ' Their current T-shirt number is ' + row.tshirtNumber + '.' : '';
+      return {
+        content:
+          'Hi ' + (row.parentName || 'Parent') +
+          ', we have assigned a uniform back number for ' + row.childName + '.' +
+          numberLine +
+          ' Please confirm that this number matches the shirt your child will use, or update the T-shirt number in the app if needed.' +
+          codeLine + ' Thank you.',
+        subject: 'Uniform Number • ' + row.childName,
       };
     });
   }, [sendBulk]);
@@ -291,6 +313,7 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
     bulkMessageMissing,
     bulkMessageUnpaid,
     bulkMessageNoOrder,
+    bulkMessageConfirmNumbers,
     messageSingleParent,
   };
 }

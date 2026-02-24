@@ -86,7 +86,7 @@ function GenerateExamContent() {
   const [examBlueprintAudit, setExamBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
   const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
-  const hasStartedRef = useRef(false);
+  const lastRunKeyRef = useRef<string | null>(null);
   
   // Get params from URL
   const grade = searchParams.get('grade');
@@ -106,7 +106,25 @@ function GenerateExamContent() {
   const activeKey = typeof window !== 'undefined' && grade && subject && examType
     ? `ACTIVE_EXAM_${grade}_${subject}_${examType}`
     : null;
+
+  const generationRunKey = useMemo(
+    () => JSON.stringify({
+      grade: grade || '',
+      subject: subject || '',
+      examType: examType || '',
+      existingExamId: existingExamId || '',
+      customPrompt: customPrompt || '',
+      studentId: studentId || '',
+      classId: classId || '',
+      schoolId: schoolId || '',
+      language: language || '',
+      useTeacherContext: useTeacherContext || '',
+    }),
+    [grade, subject, examType, existingExamId, customPrompt, studentId, classId, schoolId, language, useTeacherContext]
+  );
   
+  // Intentionally keyed by generationRunKey to avoid duplicate invokes
+  // while allowing URL-param changes to trigger a fresh run.
   useEffect(() => {
     if (!grade || !subject || !examType) {
       setError('Missing exam parameters. Please go back and try again.');
@@ -114,11 +132,15 @@ function GenerateExamContent() {
       return;
     }
     
-    if (!userId || dashboardLoading || hasStartedRef.current) {
+    if (!userId || dashboardLoading) {
+      return;
+    }
+
+    if (lastRunKeyRef.current === generationRunKey) {
       return;
     }
     
-    hasStartedRef.current = true;
+    lastRunKeyRef.current = generationRunKey;
     
     // Try to load existing exam first
     if (existingExamId || activeKey) {
@@ -127,7 +149,7 @@ function GenerateExamContent() {
     } else {
       generateNewExam();
     }
-  }, [grade, subject, examType, userId, dashboardLoading]);
+  }, [grade, subject, examType, userId, dashboardLoading, existingExamId, activeKey, generationRunKey]); // eslint-disable-line react-hooks/exhaustive-deps
   
   /**
    * Load existing exam from database
@@ -265,7 +287,7 @@ function GenerateExamContent() {
   };
   
   const handleRetry = () => {
-    hasStartedRef.current = false;
+    lastRunKeyRef.current = null;
     generateNewExam();
   };
   

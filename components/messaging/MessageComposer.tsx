@@ -233,42 +233,69 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     }
   }, [showComposerAlert]);
 
-  // Handle gallery/attachment picker
+  // Handle gallery/attachment picker (images and videos)
   const handleAttachment = useCallback(async () => {
     if (!onImageAttach) {
-      toast.info('Image attachments not supported in this chat', 'Attachments');
+      toast.info('Attachments not supported in this chat', 'Attachments');
       return;
     }
-    
     try {
       const hasPermission = await ensureImageLibraryPermission();
-      
       if (!hasPermission) {
         showComposerAlert(
           'Permission Required',
-          'Please grant gallery access to attach images.',
+          'Please grant gallery access to attach images and videos.',
           'warning',
         );
         return;
       }
-      
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.8,
         allowsEditing: false,
-        allowsMultipleSelection: false,
+        allowsMultipleSelection: true,
+        videoMaxDuration: 120,
       });
-      
       if (!result.canceled && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const mimeType = asset.mimeType || 'image/jpeg';
-        setPendingImage({ uri: asset.uri, mimeType });
+        const assets = result.assets;
+        const items = assets.map((a) => ({
+          uri: a.uri,
+          mimeType: a.mimeType || ((a as { type?: string }).type === 'video' ? 'video/mp4' : 'image/jpeg'),
+        }));
+        const videos = items.filter((i) => i.mimeType.startsWith('video/'));
+        const images = items.filter((i) => !i.mimeType.startsWith('video/'));
+        if (items.length === 1) {
+          if (videos.length === 1) {
+            setSendingImage(true);
+            try {
+              await onImageAttach(items[0].uri, items[0].mimeType);
+            } finally {
+              setSendingImage(false);
+            }
+          } else {
+            setPendingImage(items[0]);
+          }
+          return;
+        }
+        setSendingImage(true);
+        try {
+          for (let i = 0; i < items.length; i++) {
+            const { uri, mimeType } = items[i];
+            const isVideo = mimeType.startsWith('video/');
+            await onImageAttach(uri, mimeType);
+          }
+          if (items.length > 1) {
+            toast.success(`${items.length} items sent`, 'Attachments');
+          }
+        } finally {
+          setSendingImage(false);
+        }
       }
     } catch (error) {
       console.error('[MessageComposer] Attachment error:', error);
-      toast.error('Failed to pick image. Please try again.', 'Attachments');
+      toast.error('Failed to pick media. Please try again.', 'Attachments');
     }
-  }, [showComposerAlert]);
+  }, [showComposerAlert, onImageAttach]);
 
   const handleConfirmImage = useCallback(async (uri: string) => {
     if (!onImageAttach || !pendingImage) return;

@@ -104,7 +104,10 @@ export function useStudentManagement({ showAlert }: UseStudentManagementParams) 
 
   // Derived
   const filteredStudents = filterStudents(students, filters);
-  const ageGroupStats = getAgeGroupStats(filteredStudents);
+  const ageGroupStats = getAgeGroupStats(
+    filteredStudents,
+    schoolInfo?.school_type || 'preschool',
+  );
 
   // Print ID cards
   const handlePrintIdCards = useCallback(async () => {

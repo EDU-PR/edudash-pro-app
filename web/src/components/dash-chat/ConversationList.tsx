@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MessageSquare, Trash2, Clock, CheckSquare, Square } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -27,17 +27,26 @@ export function ConversationList({
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const supabase = createClient();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+
+      if (!userData.user) {
+        setCurrentUserId(null);
+        setConversations([]);
+        return;
+      }
+
+      setCurrentUserId(userData.user.id);
+
       const { data, error } = await supabase
         .from('ai_conversations')
         .select('id, conversation_id, title, updated_at, messages')
+        .eq('user_id', userData.user.id)
         .order('updated_at', { ascending: false })
         .limit(20);
 
@@ -57,22 +66,28 @@ export function ConversationList({
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
 
   const deleteConversation = async (conversationId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
     if (!confirm('Delete this conversation?')) return;
+    if (!currentUserId) return;
 
     try {
       const { error } = await supabase
         .from('ai_conversations')
         .delete()
+        .eq('user_id', currentUserId)
         .eq('conversation_id', conversationId);
 
       if (error) throw error;
 
-      setConversations(conversations.filter(c => c.conversation_id !== conversationId));
+      setConversations((prev) => prev.filter(c => c.conversation_id !== conversationId));
       
       if (activeConversationId === conversationId) {
         onNewConversation();
@@ -105,6 +120,7 @@ export function ConversationList({
 
   const deleteBulk = async () => {
     if (selectedIds.size === 0) return;
+    if (!currentUserId) return;
     
     if (!confirm(`Delete ${selectedIds.size} conversation(s)?`)) return;
 
@@ -112,11 +128,12 @@ export function ConversationList({
       const { error } = await supabase
         .from('ai_conversations')
         .delete()
+        .eq('user_id', currentUserId)
         .in('conversation_id', Array.from(selectedIds));
 
       if (error) throw error;
 
-      setConversations(conversations.filter(c => !selectedIds.has(c.conversation_id)));
+      setConversations((prev) => prev.filter(c => !selectedIds.has(c.conversation_id)));
       
       if (activeConversationId && selectedIds.has(activeConversationId)) {
         onNewConversation();
