@@ -329,7 +329,7 @@ export class DashVoiceController {
       }
       
       const options: any = {
-        language: voiceSettings.language,
+        language: this.mapToDeviceLocale(voiceSettings?.language || 'en'),
         pitch: adjustedPitch,
         rate: adjustedRate,
         onStart: () => {

@@ -327,22 +327,22 @@ export default function ParentProgressScreen() {
                   <View style={styles.topSubjectsContainer}>
                     <Text style={styles.topSubjectsTitle}>Domain Progress</Text>
                     <View style={styles.domainBreakdownContainer}>
-                      {selectedProgress.domainBreakdown.slice(0, 4).map((domain) => (
-                        <View key={domain.domain} style={styles.domainItem}>
+                      {selectedProgress.domainBreakdown.slice(0, 4).filter(Boolean).map((domain) => (
+                        <View key={domain?.domain ?? 'unknown'} style={styles.domainItem}>
                           <View style={styles.domainLabelRow}>
                             <Text style={styles.domainLabel}>
-                              {domain.domain.replace(/_/g, ' ')}
+                              {(domain?.domain ?? '').replace(/_/g, ' ')}
                             </Text>
                             <Text style={styles.domainMeta}>
-                              {domain.count} done
-                              {domain.averageStars !== null ? ` • ${domain.averageStars}/3★` : ''}
+                              {domain?.count ?? 0} done
+                              {domain?.averageStars != null ? ` • ${domain.averageStars}/3★` : ''}
                             </Text>
                           </View>
                           <View style={styles.domainBarTrack}>
                             <View
                               style={[
                                 styles.domainBarFill,
-                                { width: `${clampPercent(domain.count * 20)}%` },
+                                { width: `${clampPercent((domain?.count ?? 0) * 20)}%` },
                               ]}
                             />
                           </View>

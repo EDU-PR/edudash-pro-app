@@ -166,10 +166,11 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
   useEffect(() => { checkBudget(); }, [checkBudget]);
 
   const speakWithDevice = useCallback(async (cleaned: string) => {
+    const safeLocale = (language || 'en-ZA').trim() || 'en-ZA';
     await withTimeout(
       new Promise<void>((resolve) => {
         Speech.speak(cleaned, {
-          language, rate, pitch,
+          language: safeLocale, rate, pitch,
           onDone: resolve,
           onError: () => resolve(),
           onStopped: resolve,

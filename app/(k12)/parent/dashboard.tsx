@@ -1036,9 +1036,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
               </Text>
             </View>
           ) : (
-            recentLearningCompletions.map((entry) => (
+            recentLearningCompletions.filter(Boolean).map((entry) => (
               <View
-                key={entry.id}
+                key={entry?.id ?? 'unknown'}
                 style={[
                   styles.updateCard,
                   {
@@ -1052,15 +1052,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
                   <Ionicons name="checkmark-done" size={18} color="#10B981" />
                 </View>
                 <View style={styles.updateInfo}>
-                  <Text style={[styles.updateChild, { color: theme.textSecondary }]}>{entry.child}</Text>
+                  <Text style={[styles.updateChild, { color: theme.textSecondary }]}>{entry?.child ?? ''}</Text>
                   <Text style={[styles.updateMessage, { color: theme.text }]}>
-                    {entry.averageScore !== null
-                      ? `Avg score ${entry.averageScore}% • completion ${entry.completionRate}%`
-                      : `Completion ${entry.completionRate}%`}
+                    {entry?.averageScore != null
+                      ? `Avg score ${entry.averageScore}% • completion ${entry?.completionRate ?? 0}%`
+                      : `Completion ${entry?.completionRate ?? 0}%`}
                   </Text>
                 </View>
                 <Text style={[styles.updateTime, { color: theme.textSecondary }]}>
-                  {entry.averageStars !== null ? `${entry.averageStars}/3★` : '--'}
+                  {entry?.averageStars != null ? `${entry.averageStars}/3★` : '--'}
                 </Text>
               </View>
             ))
