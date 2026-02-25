@@ -164,6 +164,8 @@ interface AlertState {
     onPress?: () => void;
     style?: 'default' | 'cancel' | 'destructive';
   }>;
+  autoDismissMs?: number;
+  bannerMode?: boolean;
 }
 
 interface UseDashAssistantReturn {
@@ -258,6 +260,26 @@ const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
 const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 const GENERIC_ACK_PATTERN = /^(ok(?:ay)?|sure|got it|let me|working on|one moment|please wait)\b/i;
+
+function getStreamingPlaceholder(userMessage: string): string {
+  const lower = userMessage.toLowerCase().trim();
+  if (/^(hi|hello|hey|howzit|good\s*(morning|afternoon|evening)|sup)\b/.test(lower)) {
+    return 'Hey there! 👋';
+  }
+  if (lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('why') || lower.startsWith('can you') || lower.endsWith('?')) {
+    return 'Let me think about that...';
+  }
+  if (lower.includes('worksheet') || lower.includes('homework') || lower.includes('generate') || lower.includes('create')) {
+    return 'Creating that for you...';
+  }
+  if (lower.includes('quiz') || lower.includes('test me') || lower.includes('practice')) {
+    return 'Setting up your practice...';
+  }
+  if (lower.includes('math') || lower.includes('calculate') || lower.includes('solve')) {
+    return 'Working on the math...';
+  }
+  return 'Thinking...';
+}
 
 type ResponseLifecycleState = 'idle' | 'draft_streaming' | 'committed' | 'finalized';
 
@@ -392,14 +414,28 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     message: '',
   });
   
-  // Helper to show alerts
-  const showAlert = useCallback((config: Omit<AlertState, 'visible'>) => {
-    setAlertState({ ...config, visible: true });
-  }, []);
-  
-  // Helper to hide alerts
+  const autoDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const hideAlert = useCallback(() => {
     setAlertState(prev => ({ ...prev, visible: false }));
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+  }, []);
+
+  const showAlert = useCallback((config: Omit<AlertState, 'visible'>) => {
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+    setAlertState({ ...config, visible: true });
+    if (config.autoDismissMs && config.autoDismissMs > 0) {
+      autoDismissTimerRef.current = setTimeout(() => {
+        setAlertState(prev => ({ ...prev, visible: false }));
+        autoDismissTimerRef.current = null;
+      }, config.autoDismissMs);
+    }
   }, []);
   
   // Refs
@@ -1579,7 +1615,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         let streamTextDraft = '';
         let streamPaintFrame: number | null = null;
         let lastStreamAutoScrollAt = 0;
-        const instantPlaceholder = 'Got it. Let me work on that now...';
+        const instantPlaceholder = getStreamingPlaceholder(text);
         setResponseLifecycleState(requestId, 'draft_streaming', instantPlaceholder);
         setStreamingMessageId(tempStreamingMsgId);
         setStreamingContent(instantPlaceholder);

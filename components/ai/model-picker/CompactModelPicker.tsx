@@ -112,13 +112,24 @@ export function CompactModelPicker({
                 top,
                 left,
                 width: popoverWidth,
+                maxHeight: windowHeight * 0.6,
                 borderColor: theme.border,
                 backgroundColor: theme.surface,
               },
             ]}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text style={[styles.title, { color: theme.textSecondary }]}>Model Engine</Text>
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: theme.textSecondary }]}>Select Model</Text>
+              <TouchableOpacity
+                onPress={closePicker}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close model picker"
+              >
+                <Ionicons name="close" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
             {models.map((model) => {
               const modelColor = getDashModelColor(model.id, theme.primary);
               const locked = canSelectModel ? !canSelectModel(model.id) : false;
@@ -187,7 +198,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(2,6,23,0.2)',
+    backgroundColor: 'rgba(2,6,23,0.55)',
   },
   popover: {
     position: 'absolute',
@@ -202,6 +213,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 18,
     elevation: 18,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: {
     fontSize: 11,

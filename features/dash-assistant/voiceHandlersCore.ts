@@ -364,8 +364,16 @@ export async function speakDashResponse(params: {
       let messageText = 'We had trouble speaking that response. Try again or disable voice.';
 
       if (normalized.includes('tts_free_tier_blocked')) {
-        title = 'Voice Limit Reached';
-        messageText = 'Your plan does not include voice playback. Upgrade to unlock Dash voice.';
+        setVoiceEnabled(false);
+        showAlert({
+          title: '',
+          message: 'Voice is a premium feature. Text responses still work perfectly! 💬',
+          type: 'info',
+          icon: 'chatbubble-ellipses-outline',
+          autoDismissMs: 4000,
+          bannerMode: true,
+        });
+        return;
       } else if (
         normalized.includes('auth_required') ||
         normalized.includes('unauthorized') ||

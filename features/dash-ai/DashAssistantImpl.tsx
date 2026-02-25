@@ -993,15 +993,51 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
 
           {/* Modals */}
-          <AlertModal
-            visible={alertState.visible}
-            title={alertState.title}
-            message={alertState.message}
-            type={alertState.type}
-            icon={alertState.icon as any}
-            buttons={alertState.buttons}
-            onClose={hideAlert}
-          />
+          {alertState.bannerMode ? (
+            alertState.visible && (
+              <View style={{
+                position: 'absolute',
+                bottom: 100,
+                left: 16,
+                right: 16,
+                backgroundColor: theme.surface,
+                borderRadius: 12,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.18,
+                shadowRadius: 10,
+                elevation: 8,
+                borderWidth: 1,
+                borderColor: theme.border,
+                zIndex: 999,
+              }}>
+                {alertState.icon && (
+                  <Ionicons name={alertState.icon as any} size={20} color={theme.primary} />
+                )}
+                <Text style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '500' }}>
+                  {alertState.message}
+                </Text>
+                <TouchableOpacity onPress={hideAlert} hitSlop={8}>
+                  <Ionicons name="close" size={18} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )
+          ) : (
+            <AlertModal
+              visible={alertState.visible}
+              title={alertState.title}
+              message={alertState.message}
+              type={alertState.type}
+              icon={alertState.icon as any}
+              buttons={alertState.buttons}
+              onClose={hideAlert}
+            />
+          )}
           <AttachmentOptionsSheet
             visible={attachmentSheetVisible}
             onClose={closeAttachmentSheet}

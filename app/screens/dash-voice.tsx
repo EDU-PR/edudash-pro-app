@@ -104,6 +104,26 @@ const buildPdfTitleFromPrompt = (prompt: string): string => {
   return base.charAt(0).toUpperCase() + base.slice(1);
 };
 
+function getStreamingPlaceholder(userMessage: string): string {
+  const lower = userMessage.toLowerCase().trim();
+  if (/^(hi|hello|hey|howzit|good\s*(morning|afternoon|evening)|sup)\b/.test(lower)) {
+    return 'Hey there! 👋';
+  }
+  if (lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('why') || lower.startsWith('can you') || lower.endsWith('?')) {
+    return 'Let me think about that...';
+  }
+  if (lower.includes('worksheet') || lower.includes('homework') || lower.includes('generate') || lower.includes('create')) {
+    return 'Creating that for you...';
+  }
+  if (lower.includes('quiz') || lower.includes('test me') || lower.includes('practice')) {
+    return 'Setting up your practice...';
+  }
+  if (lower.includes('math') || lower.includes('calculate') || lower.includes('solve')) {
+    return 'Working on the math...';
+  }
+  return 'Thinking...';
+}
+
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
 if (!isWeb) {
@@ -603,7 +623,7 @@ export default function DashVoiceScreen() {
     speechQueueRef.current = [];
     setIsProcessing(true);
     setLastResponse('');
-    setStreamingText('Got it. Let me work on that now...');
+    setStreamingText(getStreamingPlaceholder(trimmed));
 
     // Add user message to history (use ref to avoid dependency on state)
     const updatedHistory = [...conversationHistoryRef.current, { role: 'user' as const, content: trimmed }];
