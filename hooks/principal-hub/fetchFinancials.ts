@@ -23,6 +23,19 @@ export interface FinancialRawResult {
   errorMessage?: string | null;
 }
 
+type SettledResult<T> =
+  | { status: 'fulfilled'; value: T }
+  | { status: 'rejected'; reason: unknown };
+
+async function settle<T>(promise: Promise<T>): Promise<SettledResult<T>> {
+  try {
+    const value = await promise;
+    return { status: 'fulfilled', value };
+  } catch (reason) {
+    return { status: 'rejected', reason };
+  }
+}
+
 /**
  * Fetch current- and previous-month collected totals (allocated to billing month)
  * from `get_finance_month_snapshot`.
@@ -37,9 +50,10 @@ export async function fetchFinancials(
   const previousMonth = toMonthStart(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 
   try {
-    const [currentResult, previousResult] = await Promise.allSettled([
-      FinancialDataService.getMonthSnapshot(preschoolId, currentMonth),
-      FinancialDataService.getMonthSnapshot(preschoolId, previousMonth),
+    // Hermes-safe replacement for Promise.allSettled (not available on some production devices).
+    const [currentResult, previousResult] = await Promise.all([
+      settle(FinancialDataService.getMonthSnapshot(preschoolId, currentMonth)),
+      settle(FinancialDataService.getMonthSnapshot(preschoolId, previousMonth)),
     ]);
 
     const currentSnapshot = currentResult.status === 'fulfilled' ? currentResult.value : null;
