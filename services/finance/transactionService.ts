@@ -12,7 +12,7 @@ import {
   getFeeLabel,
   getFeeCategoryLabel,
   isAdvancePayment,
-} from './feeHelpers';
+} from '@/services/finance/feeHelpers';
 import { mapPaymentStatus, mapPettyCashStatus, normalizeCategoryLabel } from './statusHelpers';
 
 export async function getRecentTransactions(
