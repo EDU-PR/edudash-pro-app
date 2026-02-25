@@ -52,3 +52,5 @@ These are gitignored. The Supabase anon key and URL are committed in `eas.json` 
 - The web app uses `--webpack` flag in its dev command (not Turbopack) due to compatibility needs.
 - The Expo web build uses custom stubs in `lib/stubs/` for native-only modules (ads, biometrics, RevenueCat, etc.). If you see module resolution errors when running Expo web, check `metro.config.js` for the stub mappings.
 - Auth session is stored in localStorage under key `edudash-auth-session`. For automated browser testing, you can authenticate via the Supabase API and inject the session JSON into localStorage.
+- The `organization_members` table has no `status` column. Use `membership_status` for membership state or `seat_status` for seat-based access. Queries filtering on `status` will return 400.
+- Database migrations can be applied via psql: `PGPASSWORD=hHFgMNhsfdUKUEkA psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.lvvvjywrmpcqrpvuptdi -d postgres -c "$(cat <migration_file>)"`
