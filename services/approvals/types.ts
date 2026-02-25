@@ -17,6 +17,7 @@ export interface ProofOfPayment {
   // Payment details
   payment_amount: number;
   payment_date: string;
+  payment_for_month?: string;
   payment_method: 'bank_transfer' | 'eft' | 'cash' | 'cheque' | 'mobile_payment' | 'card' | 'other';
   payment_reference?: string;
   bank_name?: string;

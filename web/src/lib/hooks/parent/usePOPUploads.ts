@@ -29,6 +29,7 @@ export interface POPUpload {
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
+  payment_for_month?: string;
   payment_reference?: string;
   
   // Status and review
@@ -59,6 +60,7 @@ export interface CreatePOPUploadData {
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
+  payment_for_month?: string;
   payment_reference?: string;
 }
 
@@ -211,6 +213,7 @@ export function useCreatePOPUpload() {
         payment_amount: data.payment_amount,
         payment_method: data.payment_method,
         payment_date: data.payment_date,
+        payment_for_month: data.payment_for_month,
         payment_reference: data.payment_reference,
       };
       

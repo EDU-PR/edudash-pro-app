@@ -29,6 +29,7 @@ interface FeeStructure {
   name: string;
   description?: string;
   amount: number;
+  due_day_of_month?: number | null;
   fee_type:
     | 'registration'
     | 'tuition'
@@ -122,6 +123,7 @@ export default function FeeManagementScreen() {
     name: '',
     description: '',
     amount: '',
+    due_day_of_month: '',
     fee_type: 'tuition' as FeeStructure['fee_type'],
     frequency: 'monthly' as FeeStructure['frequency'],
     is_active: true,
@@ -149,7 +151,7 @@ export default function FeeManagementScreen() {
       // Fetch fee structures (canonical first: school_fee_structures)
       const { data: schoolFeesData, error: schoolFeesError } = await supabase
         .from('school_fee_structures')
-        .select('id, name, description, amount_cents, fee_category, billing_frequency, is_active')
+        .select('id, name, description, amount_cents, fee_category, billing_frequency, due_day_of_month, is_active')
         .eq('preschool_id', organizationId)
         .order('fee_category', { ascending: true });
 
@@ -158,11 +160,12 @@ export default function FeeManagementScreen() {
           schoolFeesData.map((row: any) => ({
             id: row.id,
             name: row.name,
-            description: row.description || '',
-            amount: Number(row.amount_cents || 0) / 100,
-            fee_type: (row.fee_category || 'other') as FeeStructure['fee_type'],
-            frequency: (row.billing_frequency || 'monthly') as FeeStructure['frequency'],
-            is_active: row.is_active !== false,
+              description: row.description || '',
+              amount: Number(row.amount_cents || 0) / 100,
+              due_day_of_month: row.due_day_of_month ?? null,
+              fee_type: (row.fee_category || 'other') as FeeStructure['fee_type'],
+              frequency: (row.billing_frequency || 'monthly') as FeeStructure['frequency'],
+              is_active: row.is_active !== false,
             source: 'school_fee_structures' as const,
           })),
         );
@@ -173,7 +176,7 @@ export default function FeeManagementScreen() {
 
         const { data: legacyFeesData, error: legacyFeesError } = await supabase
           .from('fee_structures')
-          .select('id, name, description, amount, fee_type, frequency, is_active')
+          .select('id, name, description, amount, fee_type, frequency, due_day, is_active')
           .eq('preschool_id', organizationId)
           .order('fee_type', { ascending: true });
 
@@ -184,6 +187,7 @@ export default function FeeManagementScreen() {
             name: row.name,
             description: row.description || '',
             amount: Number(row.amount || 0),
+            due_day_of_month: row.due_day ?? null,
             fee_type: (row.fee_type || 'other') as FeeStructure['fee_type'],
             frequency: (row.frequency || 'monthly') as FeeStructure['frequency'],
             is_active: row.is_active !== false,
@@ -261,6 +265,13 @@ export default function FeeManagementScreen() {
       showAlert({ title: 'Validation', message: 'Please fill in name and amount', type: 'warning' });
       return;
     }
+
+    const parsedDueDay = feeForm.due_day_of_month.trim() ? Number.parseInt(feeForm.due_day_of_month, 10) : Number.NaN;
+    const dueDayOfMonth = Number.isFinite(parsedDueDay) ? Math.min(Math.max(parsedDueDay, 1), 28) : null;
+    if (feeForm.due_day_of_month.trim() && !Number.isFinite(parsedDueDay)) {
+      showAlert({ title: 'Validation', message: 'Due day must be a number between 1 and 28.', type: 'warning' });
+      return;
+    }
     
     setSaving(true);
     try {
@@ -273,6 +284,7 @@ export default function FeeManagementScreen() {
         amount_cents: Math.round(amountValue * 100),
         fee_category: canonicalFeeCategory,
         billing_frequency: feeForm.frequency,
+        due_day_of_month: dueDayOfMonth,
         is_active: feeForm.is_active,
         preschool_id: organizationId,
         created_by: profile?.id || user?.id || null,
@@ -283,6 +295,7 @@ export default function FeeManagementScreen() {
         amount: amountValue,
         fee_type: feeForm.fee_type,
         frequency: feeForm.frequency,
+        due_day: dueDayOfMonth,
         is_active: feeForm.is_active,
         preschool_id: organizationId,
         created_by: profile?.id || user?.id || null,
@@ -549,6 +562,7 @@ export default function FeeManagementScreen() {
       name: '',
       description: '',
       amount: '',
+      due_day_of_month: '',
       fee_type: 'tuition',
       frequency: 'monthly',
       is_active: true,
@@ -576,6 +590,7 @@ export default function FeeManagementScreen() {
       name: fee.name,
       description: fee.description || '',
       amount: fee.amount.toString(),
+      due_day_of_month: fee.due_day_of_month != null ? String(fee.due_day_of_month) : '',
       fee_type: fee.fee_type,
       frequency: fee.frequency,
       is_active: fee.is_active,
@@ -685,6 +700,11 @@ export default function FeeManagementScreen() {
                     <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
                       {fee.frequency.replace('_', '-')} • {fee.is_active ? '✅ Active' : '❌ Inactive'}
                     </Text>
+                    {fee.due_day_of_month != null && (
+                      <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
+                        Due day: {fee.due_day_of_month}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 <View style={styles.feeCardRight}>
@@ -843,6 +863,19 @@ export default function FeeManagementScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={[styles.label, { color: theme.text }]}>Due Day of Month (1-28)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                value={feeForm.due_day_of_month}
+                onChangeText={(v) => setFeeForm({ ...feeForm, due_day_of_month: v.replace(/[^0-9]/g, '') })}
+                placeholder="e.g. 7"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+              />
+              <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 4 }}>
+                Leave blank to use default due-date scheduling.
+              </Text>
               
               <Text style={[styles.label, { color: theme.text }]}>Description (optional)</Text>
               <TextInput

@@ -583,6 +583,14 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     fontWeight: '600',
     color: theme.primary,
   },
+  rescheduleButton: {
+    backgroundColor: (theme.info || theme.primary) + '15',
+  },
+  rescheduleButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.info || theme.primary,
+  },
   paidButton: {
     backgroundColor: theme.success + '15',
   },

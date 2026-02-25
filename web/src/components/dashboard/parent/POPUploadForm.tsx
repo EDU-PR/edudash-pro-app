@@ -19,7 +19,20 @@ interface POPUploadFormProps {
   defaultAmount?: number;
   defaultDescription?: string;
   defaultFeeId?: string;
+  defaultPaymentForMonth?: string;
 }
+
+const normalizeMonthFieldValue = (value?: string | null): string => {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed.slice(0, 7);
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
 
 export function POPUploadForm({
   linkedChildren,
@@ -29,6 +42,7 @@ export function POPUploadForm({
   defaultAmount,
   defaultDescription,
   defaultFeeId,
+  defaultPaymentForMonth,
 }: POPUploadFormProps) {
   const { upload, uploading, error, success, reset } = useCreatePOPUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,12 +58,20 @@ export function POPUploadForm({
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [paymentMethod, setPaymentMethod] = useState('EFT');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentForMonth, setPaymentForMonth] = useState(
+    normalizeMonthFieldValue(defaultPaymentForMonth) || new Date().toISOString().slice(0, 7)
+  );
   const [description, setDescription] = useState(defaultDescription ?? '');
   const [feeId] = useState(defaultFeeId ?? '');
   const isUniformPayment = feeId.startsWith('uniform:');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const normalizeMonthToISO = (value: string): string => {
+    const monthField = normalizeMonthFieldValue(value);
+    return monthField ? `${monthField}-01` : '';
+  };
 
   const handleFileSelect = (file: File) => {
     setValidationError(null);
@@ -107,9 +129,7 @@ export function POPUploadForm({
       return;
     }
 
-    const normalizedDate = isUniformPayment
-      ? new Date().toISOString().split('T')[0]
-      : paymentDate?.trim();
+    const normalizedDate = paymentDate?.trim();
     if (!normalizedDate) {
       setValidationError('Please select the payment date');
       return;
@@ -125,6 +145,11 @@ export function POPUploadForm({
       setValidationError('Payment date is invalid');
       return;
     }
+    const monthIso = normalizeMonthToISO(paymentForMonth || '');
+    if (!monthIso) {
+      setValidationError('Please select the billing month for this payment');
+      return;
+    }
     
     // Get the selected child's student_code for the payment reference
     const childData = linkedChildren.find(c => c.id === selectedChild);
@@ -136,6 +161,7 @@ export function POPUploadForm({
     const finalDescription = normalizedDescription || fallbackDescription || undefined;
     
     const finalPaymentDate = isoDate || new Date().toISOString().split('T')[0];
+    const finalPaymentForMonth = monthIso;
 
     const result = await upload({
       student_id: selectedChild,
@@ -146,6 +172,7 @@ export function POPUploadForm({
       payment_amount: amountValue,
       payment_method: paymentMethod,
       payment_date: finalPaymentDate,
+      payment_for_month: finalPaymentForMonth,
       payment_reference: studentCode, // Always use the child's unique code
     });
     
@@ -287,8 +314,8 @@ export function POPUploadForm({
         </div>
       </div>
 
-      {/* Payment Method & Date Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: isUniformPayment ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      {/* Payment Method, Date & Month */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
         <div>
           <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
             Payment Method
@@ -305,22 +332,34 @@ export function POPUploadForm({
             <option value="Other">Other</option>
           </select>
         </div>
-
-        {!isUniformPayment && (
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-              Payment Date
-            </label>
-            <input
-              type="date"
-              value={paymentDate}
-              onChange={(e) => setPaymentDate(e.target.value)}
-              className="input"
-              style={{ width: '100%' }}
-              max={new Date().toISOString().split('T')[0]}
-            />
-          </div>
-        )}
+        <div>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            Payment Date <span style={{ color: 'var(--primary)', fontWeight: 600 }}>*</span>
+          </label>
+          <input
+            type="date"
+            value={paymentDate}
+            onChange={(e) => setPaymentDate(e.target.value)}
+            className="input"
+            style={{ width: '100%' }}
+            max={new Date().toISOString().split('T')[0]}
+          />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            Billing Month <span style={{ color: 'var(--primary)', fontWeight: 600 }}>*</span>
+          </label>
+          <input
+            type="month"
+            value={paymentForMonth}
+            onChange={(e) => setPaymentForMonth(e.target.value)}
+            className="input"
+            style={{ width: '100%' }}
+          />
+          <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12, color: 'var(--muted)' }}>
+            Required for monthly fee matching.
+          </p>
+        </div>
       </div>
 
       {/* Description */}

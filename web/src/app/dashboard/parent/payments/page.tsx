@@ -42,6 +42,7 @@ interface StudentFee {
   description: string;
   amount: number;
   due_date: string;
+  billing_month?: string;
   grace_period_days?: number;
   paid_date?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived' | 'pending_verification';
@@ -76,6 +77,7 @@ interface POPUpload {
   status: 'pending' | 'approved' | 'rejected' | 'needs_revision';
   payment_amount?: number | null;
   payment_date?: string | null;
+  payment_for_month?: string | null;
   payment_reference?: string | null;
   created_at: string;
 }
@@ -184,16 +186,18 @@ export default function PaymentsPage() {
   };
 
   const resolvePopStatus = (fee: StudentFee, uploads: POPUpload[]): POPUpload['status'] | undefined => {
-    if (!fee.due_date) return undefined;
-    const feeDate = new Date(fee.due_date);
+    const monthSource = fee.billing_month || fee.due_date;
+    if (!monthSource) return undefined;
+    const feeDate = new Date(monthSource);
     if (Number.isNaN(feeDate.getTime())) return undefined;
 
     const matching = uploads.find((upload) => {
-      if (!upload.payment_date && !upload.payment_amount) return false;
-      if (upload.payment_date) {
-        const paymentDate = new Date(upload.payment_date);
-        if (!Number.isNaN(paymentDate.getTime())) {
-          const sameMonth = paymentDate.getMonth() === feeDate.getMonth() && paymentDate.getFullYear() === feeDate.getFullYear();
+      if (!upload.payment_for_month && !upload.payment_date && !upload.payment_amount) return false;
+      const periodValue = upload.payment_for_month || upload.payment_date || upload.created_at;
+      if (periodValue) {
+        const periodDate = new Date(periodValue);
+        if (!Number.isNaN(periodDate.getTime())) {
+          const sameMonth = periodDate.getMonth() === feeDate.getMonth() && periodDate.getFullYear() === feeDate.getFullYear();
           if (sameMonth) return true;
         }
       }
@@ -364,7 +368,7 @@ export default function PaymentsPage() {
     const fetchFees = async () => {
       const { data: uploads } = await supabase
         .from('pop_uploads')
-        .select('id, student_id, upload_type, status, payment_amount, payment_date, payment_reference, created_at')
+        .select('id, student_id, upload_type, status, payment_amount, payment_date, payment_for_month, payment_reference, created_at')
         .eq('student_id', selectedChildId)
         .eq('upload_type', 'proof_of_payment')
         .order('created_at', { ascending: false });
@@ -1066,6 +1070,8 @@ export default function PaymentsPage() {
                                 params.set('feeId', fee.id);
                                 const desc = fee.description || getFeeTypeLabel(fee.fee_type);
                                 if (desc) params.set('feeDescription', desc);
+                                const billingMonthSource = fee.billing_month || fee.due_date;
+                                if (billingMonthSource) params.set('billingMonth', billingMonthSource);
                                 router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
                               }}
                               disabled={isPendingVerification}
@@ -1234,6 +1240,7 @@ export default function PaymentsPage() {
                             <li>Accepted formats: PDF, JPG, PNG</li>
                             <li>Maximum file size: 10MB</li>
                             <li>Include payment reference number if available</li>
+                            <li>Select the billing month when uploading POP</li>
                             <li>School will review and confirm payment within 24-48 hours</li>
                           </ul>
                         </div>

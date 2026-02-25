@@ -21,7 +21,7 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { WaiveFeeModal } from '@/components/principal/WaiveFeeModal';
 import { AdjustFeeModal } from '@/components/principal/AdjustFeeModal';
 import { ChangeClassModal } from '@/components/principal/ChangeClassModal';
-import { useStudentFeeData, useStudentFeeActions, formatCurrency, formatDate } from '@/hooks/student-fees';
+import { useStudentFeeData, useStudentFeeActions, formatCurrency, formatDate, type StudentFee } from '@/hooks/student-fees';
 import { createStyles } from '@/lib/screen-styles/principal-student-fees.styles';
 import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
 import FinancePasswordPrompt from '@/components/security/FinancePasswordPrompt';
@@ -77,6 +77,8 @@ export default function StudentFeeManagementScreen() {
   const [correctionTimeline, setCorrectionTimeline] = useState<FeeCorrectionTimelineRow[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [selectedDueDateFee, setSelectedDueDateFee] = useState<StudentFee | null>(null);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const actions = useStudentFeeActions({
     student: data.student,
     setStudent: data.setStudent,
@@ -131,6 +133,12 @@ export default function StudentFeeManagementScreen() {
     await data.onRefresh();
     await loadCorrectionTimeline();
   }, [data.onRefresh, loadCorrectionTimeline]);
+
+  const openDueDatePicker = useCallback((fee: StudentFee) => {
+    if (!actions.canManageFees || actions.saving) return;
+    setSelectedDueDateFee(fee);
+    setShowDueDatePicker(true);
+  }, [actions.canManageFees, actions.saving]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -439,6 +447,21 @@ export default function StudentFeeManagementScreen() {
             }}
           />
         )}
+        {showDueDatePicker && (
+          <DateTimePicker
+            value={selectedDueDateFee?.due_date ? new Date(selectedDueDateFee.due_date) : new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_, selectedDate) => {
+              if (Platform.OS !== 'ios') setShowDueDatePicker(false);
+              if (selectedDate && selectedDueDateFee) {
+                void actions.handleUpdateFeeDueDate(selectedDueDateFee, selectedDate);
+              }
+              if (Platform.OS === 'ios') setShowDueDatePicker(false);
+              setSelectedDueDateFee(null);
+            }}
+          />
+        )}
 
         {/* Summary Cards */}
         <View style={styles.summaryRow}>
@@ -517,6 +540,8 @@ export default function StudentFeeManagementScreen() {
                 actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_paid';
               const isMarkUnpaidBusy =
                 actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_unpaid';
+              const isDueDateUpdateBusy =
+                actions.processingFeeId === fee.id && actions.processingFeeAction === 'update_due_date';
               return (
                 <View key={fee.id} style={styles.feeCard}>
                   <View style={styles.feeHeader}>
@@ -602,6 +627,24 @@ export default function StudentFeeManagementScreen() {
                         >
                           <Ionicons name="create" size={16} color={theme.primary} />
                           <Text style={styles.adjustButtonText}>Adjust</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.actionButton,
+                            styles.rescheduleButton,
+                            (!actions.canManageFees || actions.saving || isDueDateUpdateBusy) && { opacity: 0.7 },
+                          ]}
+                          disabled={!actions.canManageFees || actions.saving || isDueDateUpdateBusy}
+                          onPress={() => openDueDatePicker(fee)}
+                        >
+                          {isDueDateUpdateBusy ? (
+                            <EduDashSpinner size="small" color={theme.info || theme.primary} />
+                          ) : (
+                            <Ionicons name="calendar-outline" size={16} color={theme.info || theme.primary} />
+                          )}
+                          <Text style={styles.rescheduleButtonText}>
+                            {isDueDateUpdateBusy ? 'Updating...' : 'Reschedule'}
+                          </Text>
                         </TouchableOpacity>
                       </View>
                       {actions.canDeleteFees && (

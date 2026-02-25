@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
 import type { Student, StudentFee, ClassOption, ModalType } from './types';
-import { getSupabaseErrorMessage, type ShowAlert } from './feeActionUtils';
+import { getSupabaseErrorMessage, resolvePendingLikeStatus, type ShowAlert } from './feeActionUtils';
 import { markFeePaid, markFeeUnpaid, handleReceiptAction as receiptAction } from './feeStatusActions';
 import { waiveFee, adjustFee } from './feeModificationActions';
 import { changeStudentClass, syncTuitionFeesToClass } from './classChangeActions';
@@ -46,7 +46,7 @@ export interface StudentFeeActionsReturn {
   syncingTuitionFees: boolean;
   updatingRegistrationStatus: boolean;
   processingFeeId: string | null;
-  processingFeeAction: 'mark_paid' | 'mark_unpaid' | 'delete' | null;
+  processingFeeAction: 'mark_paid' | 'mark_unpaid' | 'delete' | 'update_due_date' | null;
   modalType: ModalType;
   setModalType: (t: ModalType) => void;
   selectedFee: StudentFee | null;
@@ -79,6 +79,7 @@ export interface StudentFeeActionsReturn {
   handleMarkPaid: (fee: StudentFee) => Promise<void>;
   handleMarkUnpaid: (fee: StudentFee) => Promise<void>;
   handleDeleteFee: (fee: StudentFee) => Promise<void>;
+  handleUpdateFeeDueDate: (fee: StudentFee, dueDate: Date) => Promise<void>;
   handleReceiptAction: (fee: StudentFee) => Promise<void>;
   handleSyncTuitionFeesToClass: () => Promise<void>;
   handleSetRegistrationPaidStatus: (isPaid: boolean) => Promise<void>;
@@ -107,7 +108,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const [syncingTuitionFees, setSyncingTuitionFees] = useState(false);
   const [updatingRegistrationStatus, setUpdatingRegistrationStatus] = useState(false);
   const [processingFeeId, setProcessingFeeId] = useState<string | null>(null);
-  const [processingFeeAction, setProcessingFeeAction] = useState<'mark_paid' | 'mark_unpaid' | 'delete' | null>(null);
+  const [processingFeeAction, setProcessingFeeAction] = useState<'mark_paid' | 'mark_unpaid' | 'delete' | 'update_due_date' | null>(null);
   const [modalType, setModalType] = useState<ModalType>(null);
   const [selectedFee, setSelectedFee] = useState<StudentFee | null>(null);
   const [showEnrollmentPicker, setShowEnrollmentPicker] = useState(false);
@@ -302,6 +303,86 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     }
   };
 
+  const handleUpdateFeeDueDate = useCallback(async (fee: StudentFee, dueDate: Date) => {
+    if (!canManageFees) {
+      deny('Fee due-date updates are limited to finance administrators and principals.');
+      return;
+    }
+    if (!profile?.id || !student || processingFeeId) return;
+
+    const normalizedDueDate = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const dueDateIso = normalizedDueDate.toISOString().split('T')[0];
+    const billingMonthIso = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1).toISOString().split('T')[0];
+    const nowIso = new Date().toISOString();
+
+    const amountPaid = Number(fee.amount_paid || 0);
+    const computedOutstanding = Number.isFinite(Number(fee.amount_outstanding))
+      ? Number(fee.amount_outstanding)
+      : Math.max(Number(fee.final_amount || fee.amount || 0) - amountPaid, 0);
+    const nextStatus =
+      fee.status === 'paid' || fee.status === 'waived'
+        ? fee.status
+        : resolvePendingLikeStatus(
+            { ...fee, due_date: dueDateIso },
+            Math.max(computedOutstanding, 0),
+            amountPaid,
+          );
+
+    setProcessingFeeId(fee.id);
+    setProcessingFeeAction('update_due_date');
+    setSaving(true);
+    try {
+      const auditResult = await writeFeeCorrectionAudit({
+        organizationId: organizationId || student.preschool_id || null,
+        studentId: fee.student_id,
+        studentFeeId: fee.id,
+        action: 'adjust',
+        reason: `Fee due date changed from ${fee.due_date} to ${dueDateIso}.`,
+        beforeSnapshot: {
+          due_date: fee.due_date,
+          billing_month: fee.billing_month || null,
+          status: fee.status,
+        },
+        afterSnapshot: {
+          due_date: dueDateIso,
+          billing_month: billingMonthIso,
+          status: nextStatus,
+        },
+        metadata: {
+          adjustment_type: 'due_date',
+        },
+        actorId: profile.id,
+        actorRole: profile.role || null,
+        sourceScreen: 'principal-student-fees',
+      });
+
+      if (!auditResult.ok) {
+        throw new Error(auditResult.error || 'audit_log_failed');
+      }
+
+      await assertSupabase()
+        .from('student_fees')
+        .update({
+          due_date: dueDateIso,
+          billing_month: billingMonthIso,
+          status: nextStatus,
+          updated_at: nowIso,
+        })
+        .eq('id', fee.id)
+        .throwOnError();
+
+      showAlert('Due Date Updated', 'Fee due date updated successfully.', 'success');
+      await loadFees(student);
+    } catch (error: any) {
+      console.error('[StudentFees] handleUpdateFeeDueDate failed', { feeId: fee.id, error });
+      showAlert('Update Failed', getSupabaseErrorMessage(error, 'Failed to update due date.'), 'error');
+    } finally {
+      setSaving(false);
+      setProcessingFeeId(null);
+      setProcessingFeeAction(null);
+    }
+  }, [canManageFees, deny, loadFees, organizationId, processingFeeId, profile?.id, profile?.role, showAlert, student]);
+
   const handleDeleteFee = useCallback(async (fee: StudentFee) => {
     if (!canDeleteFees) {
       deny('Fee-row deletion is principal-scoped for your school.');
@@ -323,7 +404,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
         billing_month: fee.billing_month || null,
       };
 
-      await writeFeeCorrectionAudit({
+      const auditResult = await writeFeeCorrectionAudit({
         organizationId: organizationId || student.preschool_id || null,
         studentId: fee.student_id,
         studentFeeId: fee.id,
@@ -338,6 +419,10 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
         actorRole: profile.role || null,
         sourceScreen: 'principal-student-fees',
       });
+
+      if (!auditResult.ok) {
+        throw new Error(auditResult.error || 'audit_log_failed');
+      }
 
       await assertSupabase()
         .from('student_fees')
@@ -381,6 +466,6 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     newClassId, setNewClassId, classRegistrationFee, setClassRegistrationFee,
     classFeeHint, setClassFeeHint, loadingSuggestedFee, canSubmitClassCorrection,
     handleWaiveFee, handleAdjustFee, handleChangeClass, handleUpdateEnrollmentDate, handleDeactivateStudent,
-    handleMarkPaid, handleMarkUnpaid, handleDeleteFee, handleReceiptAction, handleSyncTuitionFeesToClass, handleSetRegistrationPaidStatus, prefillRegistrationFeeForClass,
+    handleMarkPaid, handleMarkUnpaid, handleDeleteFee, handleUpdateFeeDueDate, handleReceiptAction, handleSyncTuitionFeesToClass, handleSetRegistrationPaidStatus, prefillRegistrationFeeForClass,
   };
 }

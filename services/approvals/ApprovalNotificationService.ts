@@ -36,13 +36,17 @@ export class ApprovalNotificationService {
       }
 
       const amount = FinancialDataService.formatCurrency(pop.payment_amount);
+      const billingMonthLabel = pop.payment_for_month
+        ? new Date(pop.payment_for_month).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
+        : null;
+      const billingMonthSuffix = billingMonthLabel ? ` for ${billingMonthLabel}` : '';
 
       await supabase
         .from('push_notifications')
         .insert({
           recipient_user_id: preschool.principal_id,
           title: '💰 New Payment Received',
-          body: `${pop.parent_name} submitted proof of payment for ${amount}. Tap to review.`,
+          body: `${pop.parent_name} submitted proof of payment for ${amount}${billingMonthSuffix}. Tap to review.`,
           notification_type: 'payment_submitted',
           preschool_id: pop.preschool_id,
           status: 'sent',
@@ -52,6 +56,7 @@ export class ApprovalNotificationService {
             parent_name: pop.parent_name,
             amount: pop.payment_amount,
             student_id: pop.student_id,
+            payment_for_month: pop.payment_for_month,
             action_url: '/dashboard/principal/approvals',
             channel: 'educational',
             priority: 'high'
@@ -111,6 +116,7 @@ export class ApprovalNotificationService {
             payment_purpose: pop.payment_purpose,
             fee_type: pop.fee_type,
             payment_reference: pop.payment_reference,
+            payment_for_month: pop.payment_for_month,
             action_url: '/dashboard/parent/payments',
             channel: 'educational',
             priority: 'high',
@@ -140,6 +146,7 @@ export class ApprovalNotificationService {
                 payment_purpose: pop.payment_purpose,
                 fee_type: pop.fee_type,
                 payment_reference: pop.payment_reference,
+                payment_for_month: pop.payment_for_month,
                 action_url: '/dashboard/parent/payments',
                 channel: 'educational',
                 priority: 'high',
@@ -191,6 +198,7 @@ export class ApprovalNotificationService {
             payment_purpose: pop.payment_purpose,
             fee_type: pop.fee_type,
             payment_reference: pop.payment_reference,
+            payment_for_month: pop.payment_for_month,
             action_url: '/dashboard/parent/payments',
             channel: 'urgent',
             priority: 'high',
@@ -219,6 +227,7 @@ export class ApprovalNotificationService {
                 payment_purpose: pop.payment_purpose,
                 fee_type: pop.fee_type,
                 payment_reference: pop.payment_reference,
+                payment_for_month: pop.payment_for_month,
                 action_url: '/dashboard/parent/payments',
                 channel: 'urgent',
                 priority: 'high',
