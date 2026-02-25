@@ -141,7 +141,7 @@ export async function getReceivablesSnapshot(
   const monthScopedQuery = await assertSupabase()
     .from('student_fees')
     .select(
-      `id, student_id, status, due_date, billing_month, amount, final_amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status, preschool_id, organization_id)`,
+      `id, student_id, status, due_date, billing_month, amount, final_amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status, enrollment_date, preschool_id, organization_id)`,
     )
     .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
     .eq('billing_month', month)
@@ -158,7 +158,7 @@ export async function getReceivablesSnapshot(
     const fallbackQuery = await assertSupabase()
       .from('student_fees')
       .select(
-        `id, student_id, status, due_date, amount, final_amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status, preschool_id, organization_id)`,
+        `id, student_id, status, due_date, amount, final_amount, amount_paid, amount_outstanding, students!inner(id, first_name, last_name, is_active, status, enrollment_date, preschool_id, organization_id)`,
       )
       .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
       .gte('due_date', month)
@@ -191,15 +191,39 @@ export async function getReceivablesSnapshot(
     if (!studentId) continue;
     if (!isStudentActiveForReceivables(studentData)) continue;
 
+    const enrollmentDateValue = String(studentData?.enrollment_date || '').trim();
+    if (enrollmentDateValue) {
+      const enrollmentDate = new Date(enrollmentDateValue);
+      if (!Number.isNaN(enrollmentDate.getTime())) {
+        const enrollmentMonthStart = new Date(
+          enrollmentDate.getFullYear(),
+          enrollmentDate.getMonth(),
+          1,
+        );
+        const feeMonthValue = String(fee?.billing_month || fee?.due_date || '').trim();
+        if (feeMonthValue) {
+          const feeMonthDate = new Date(feeMonthValue);
+          if (!Number.isNaN(feeMonthDate.getTime())) {
+            const feeMonthStart = new Date(feeMonthDate.getFullYear(), feeMonthDate.getMonth(), 1);
+            if (feeMonthStart < enrollmentMonthStart) {
+              continue;
+            }
+          }
+        }
+      }
+    }
+
     const amount = getOutstandingAmountForFee(fee);
     if (!Number.isFinite(amount) || amount <= 0) continue;
 
     const dueDate = fee?.due_date ? new Date(fee.due_date) : null;
-    const isOverdue =
-      status === 'overdue' ||
-      (dueDate instanceof Date && !Number.isNaN(dueDate.getTime()) && dueDate < todayStart);
+    const isOverdueByStatus = status === 'overdue';
+    const isOverdueByDate =
+      dueDate instanceof Date && !Number.isNaN(dueDate.getTime()) && dueDate < todayStart;
+    const isVerificationPending = status === 'pending_verification';
+    const finalIsOverdue = !isVerificationPending && (isOverdueByStatus || isOverdueByDate);
 
-    if (isOverdue) {
+    if (finalIsOverdue) {
       overdueAmount += amount;
       overdueCount += 1;
       overdueStudents.add(studentId);
@@ -220,7 +244,7 @@ export async function getReceivablesSnapshot(
     };
 
     existing.outstanding_amount += amount;
-    if (isOverdue) existing.overdue_count += 1;
+    if (finalIsOverdue) existing.overdue_count += 1;
     else existing.pending_count += 1;
     studentMap.set(studentId, existing);
   }

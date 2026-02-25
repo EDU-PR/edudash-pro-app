@@ -10,7 +10,7 @@ import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 import type { FinanceOverviewData } from '../financial/types';
 import { withFinanceTenant } from './tenantUtils';
-import { fetchStudentFees, getPaidAmountForFee } from './feeHelpers';
+import { fetchStudentFees, getPaidAmountForFee } from '@/services/finance/feeHelpers';
 
 export async function getOverview(preschoolId?: string): Promise<FinanceOverviewData> {
   try {

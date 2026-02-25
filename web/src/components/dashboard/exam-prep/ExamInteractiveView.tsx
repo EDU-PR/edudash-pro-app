@@ -114,8 +114,6 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [savingExam, setSavingExam] = useState(false);
-
-  // ── Accessibility state ────────────────────────────────────────────────────
   const [a11y, setA11y] = useState<AccessibilitySettings>(DEFAULT_ACCESSIBILITY_SETTINGS);
   const [simplifiedTexts, setSimplifiedTexts] = useState<Record<string, string>>({});
   const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
@@ -123,7 +121,6 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [loadingTranslate, setLoadingTranslate] = useState<Record<string, boolean>>({});
   const autoReadRef = useRef<boolean>(false);
   autoReadRef.current = a11y.autoReadQuestions;
-
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
