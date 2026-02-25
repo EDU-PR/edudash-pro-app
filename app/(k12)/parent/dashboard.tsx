@@ -1,25 +1,20 @@
 /**
  * K-12 Parent Dashboard Screen
- * 
- * Main dashboard for K-12 school parents.
- * Shows children's progress, grades, attendance, and school updates.
- * 
+ *
+ * Thin shell that composes modular dashboard sections.
  * Routes here when: profile.organization_membership.school_type is one of:
  * - k12, k12_school, combined, primary, secondary, community_school
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform, Image, Animated } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
-import {
-  K12ThemeOverrideProvider,
-  useNextGenTheme,
-} from '@/contexts/K12NextGenThemeContext';
+import { K12ThemeOverrideProvider, useNextGenTheme } from '@/contexts/K12NextGenThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
 import { track } from '@/lib/analytics';
@@ -28,273 +23,108 @@ import { trackK12ParentQuickwinsRendered } from '@/lib/ai/trackingEvents';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
-import { calculateAge } from '@/lib/date-utils';
 import { nextGenK12Parent } from '@/contexts/theme/nextGenK12Parent';
+
 import { styles } from '@/domains/k12/components/K12ParentDashboard.styles';
 import { ChildCard } from '@/domains/k12/components/K12ParentChildCard';
-import { useK12ParentData } from '@/domains/k12/hooks/useK12ParentData';
+import { K12ParentHeroCard } from '@/domains/k12/components/K12ParentHeroCard';
+import { K12ParentUrgentBanner } from '@/domains/k12/components/K12ParentUrgentBanner';
+import { K12ParentQuickActions } from '@/domains/k12/components/K12ParentQuickActions';
+import { K12ParentLearningHub } from '@/domains/k12/components/K12ParentLearningHub';
+import { K12ParentActivityFeed } from '@/domains/k12/components/K12ParentActivityFeed';
+import { useK12ParentDashboard, toUuidOrUndefined } from '@/domains/k12/hooks/useK12ParentDashboard';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
-import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
-import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
-import { useSpotlightTarget } from '@/hooks/useSpotlightTarget';
-import { GlassCard } from '@/components/nextgen/GlassCard';
-import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
-import { Pill } from '@/components/nextgen/Pill';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
-import SubNavTabs from '@/components/nextgen/SubNavTabs';
-import FocusBanner from '@/components/nextgen/FocusBanner';
-import InlineTutorPreview from '@/components/nextgen/InlineTutorPreview';
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import {
   K12_PARENT_ACTIONS,
   buildK12ParentActionTarget,
   type K12ParentActionId,
 } from '@/lib/navigation/k12ParentActionMap';
-import { usePublishedRoutineStatus } from '@/hooks/usePublishedRoutineStatus';
-import * as Device from 'expo-device';
-import { useParentProgress } from '@/hooks/useLessonProgress';
-
-import EduDashSpinner from '@/components/ui/EduDashSpinner';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
-const SLOW_LEARNER_MODE_KEY = '@k12_parent_slow_learner_mode';
-
-type StarfieldPoint = {
-  top: `${number}%`;
-  left: `${number}%`;
-  size: number;
-  opacity: number;
-};
-
-const STARFIELD_POINTS: StarfieldPoint[] = [
-  { top: '6%', left: '12%', size: 2, opacity: 0.55 },
-  { top: '9%', left: '68%', size: 1.5, opacity: 0.5 },
-  { top: '14%', left: '33%', size: 1.8, opacity: 0.45 },
-  { top: '18%', left: '84%', size: 2.2, opacity: 0.58 },
-  { top: '23%', left: '20%', size: 1.6, opacity: 0.4 },
-  { top: '29%', left: '74%', size: 1.9, opacity: 0.54 },
-  { top: '36%', left: '9%', size: 1.3, opacity: 0.44 },
-  { top: '42%', left: '56%', size: 2.1, opacity: 0.52 },
-  { top: '49%', left: '89%', size: 1.4, opacity: 0.38 },
-  { top: '58%', left: '26%', size: 1.9, opacity: 0.5 },
-  { top: '64%', left: '63%', size: 1.6, opacity: 0.42 },
-  { top: '72%', left: '14%', size: 2, opacity: 0.57 },
-  { top: '79%', left: '48%', size: 1.7, opacity: 0.43 },
-  { top: '86%', left: '77%', size: 1.5, opacity: 0.4 },
-  { top: '92%', left: '30%', size: 2.1, opacity: 0.55 },
-];
 
 function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boolean }) {
-  const insets = useSafeAreaInsets();
   const { profile, user, loading: authLoading, profileLoading } = useAuth();
   const permissions = usePermissions();
   const { theme } = useNextGenTheme();
   const { t } = useTranslation();
   const { tier } = useSubscription();
   const { showAlert, alertProps } = useAlertModal();
-  const menuTourRef = useSpotlightTarget('parent-menu-tile');
-  const docsTourRef = useSpotlightTarget('parent-documents-tile');
-  const announcementsTourRef = useSpotlightTarget('parent-announcements-tile');
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
   const notificationCount = useNotificationBadgeCount();
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [activeSubTab] = useState('dashboard');
-  const [slowLearnerMode, setSlowLearnerMode] = useState(false);
-  const dashboardBottomPadding = quickWinsEnabled ? 100 : 80;
-  const isHuaweiNoGmsRiskDevice = Platform.OS === 'android'
-    && (String(Device.brand || '').toLowerCase().includes('huawei')
-      || String(Device.manufacturer || '').toLowerCase().includes('huawei'));
 
-
-  const SUB_NAV_TABS = useMemo(() => [
-    { id: 'dashboard', label: t('navigation.dashboard', { defaultValue: 'Dashboard' }) },
-    { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }) },
-    { id: 'grades', label: t('dashboard.parent.k12.grades', { defaultValue: 'Grades' }) },
-    { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }) },
-  ], [t]);
-
-  // Get school and user info from profile
-  const communitySchoolName = t('dashboard.parent.community_school', { defaultValue: 'My School' });
-  const schoolName = (profile as any)?.organization_membership?.organization_name ||
-                     (profile as any)?.organization_name ||
-                     communitySchoolName;
   const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.parent', { defaultValue: 'Parent' });
-  const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
-  const organizationId =
-    (profile as any)?.organization_membership?.organization_id ||
-    (profile as any)?.organization_id ||
-    (profile as any)?.preschool_id;
-  const routineStatus = usePublishedRoutineStatus(organizationId);
-  const { childrenProgress } = useParentProgress(user?.id);
-  const glowAnim = useRef(new Animated.Value(0)).current;
+  const p = profile as unknown as Record<string, unknown> | undefined;
+  const orgMembership = p?.organization_membership as Record<string, string> | undefined;
+  const organizationId: string | undefined =
+    orgMembership?.organization_id
+    ?? (p?.organization_id as string | undefined)
+    ?? (p?.preschool_id as string | undefined);
+  const schoolType = params.schoolType
+    || orgMembership?.school_type
+    || 'k12';
 
-  useEffect(() => {
-    if (!routineStatus.hasPublished) return;
-    const delay = setTimeout(() => {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-    }, 250);
-    return () => clearTimeout(delay);
-  }, [routineStatus.hasPublished, glowAnim]);
-
-  const tierBadgeLabel = useMemo(() => {
-    const normalizedTier = normalizeTierName(
-      String(tier || (profile as any)?.subscription_tier || 'free')
-    );
-    const displayTier = normalizedTier.charAt(0).toUpperCase() + normalizedTier.slice(1);
-    return `Tier: ${displayTier}`;
-  }, [profile, tier]);
-
-    // RBAC checks
   const canView = permissions?.hasRole ? permissions.hasRole('parent') : true;
   const hasAccess = permissions?.can ? permissions.can('access_mobile_app') : true;
 
-  // Use the K12 parent data hook for data fetching
-  // NOTE: Pass profile?.id (internal profile ID), NOT user?.id (auth user ID)
   const {
     children,
+    activeChild,
+    activeChildIndex,
+    switchChild,
+    dashboardSummary,
+    urgentItems,
     recentUpdates,
     upcomingEvents,
+    recentLearningCompletions,
     dataLoading,
     fetchChildrenData,
-  } = useK12ParentData(profile?.id, organizationId);
+    hasExamEligibleChild,
+    getGradeNumber,
+  } = useK12ParentDashboard(profile?.id, user?.id, organizationId);
 
-  const getGradeNumber = (value?: string | null): number => {
-    if (!value) return 0;
-    const normalized = value.toLowerCase();
-    if (normalized.includes('grade r') || normalized.trim() === 'r') return 0;
-    const match = normalized.match(/\d{1,2}/);
-    return match ? Number(match[0]) : 0;
-  };
+  const tierBadgeLabel = useMemo(() => {
+    const normalizedTier = normalizeTierName(
+      String(tier || (p as Record<string, unknown> | undefined)?.subscription_tier || 'free'),
+    );
+    return `Tier: ${normalizedTier.charAt(0).toUpperCase() + normalizedTier.slice(1)}`;
+  }, [profile, tier]);
 
-  const toUuidOrUndefined = (value?: string | null): string | undefined => {
-    const normalized = String(value || '').trim();
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      normalized,
-    )
-      ? normalized
-      : undefined;
-  };
+  const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
+  const canShowExamPrep = hasExamEligibleChild;
+  const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice') && canShowExamPrep;
+  const requiredExamTier = getRequiredTier('exam.practice');
 
-  const normalizeGradeLabel = (value?: string | null): string | null => {
-    if (!value) return null;
-    return value.replace(/^\s*grade\s+grade\s+/i, 'Grade ').replace(/\s+/g, ' ').trim();
-  };
-
-  const hasExamEligibleChild = useMemo(() => {
-    if (!children || children.length === 0) return false;
-    return children.some((child) => {
-      const gradeNum = getGradeNumber(child.grade);
-      if (gradeNum < 4) return false;
-      const ageYears = calculateAge(child.dateOfBirth);
-      return ageYears === null || ageYears >= 6;
-    });
-  }, [children]);
-
-  const dashboardSummary = useMemo(() => {
-    const totalChildren = children.length;
-    const pendingTasks = children.reduce((sum, child) => sum + Number(child.pendingAssignments || 0), 0);
-    const attendanceRate = totalChildren > 0
-      ? Math.round(children.reduce((sum, child) => sum + Number(child.attendance || 0), 0) / totalChildren)
-      : 0;
-    const leadChild = children.length > 0 ? children[0] : null;
-
-    return {
-      totalChildren,
-      pendingTasks,
-      attendanceRate,
-      leadChildName: leadChild?.name || null,
-      leadChildGrade: normalizeGradeLabel(leadChild?.grade),
-      leadChildClassName: leadChild?.className || null,
-      leadChildAttendance: Number(leadChild?.attendance || 0),
-      leadChildPendingTasks: Number(leadChild?.pendingAssignments || 0),
-      leadChildAvgGrade: leadChild?.avgGrade || null,
-    };
-  }, [children]);
-
-  const recentLearningCompletions = useMemo(() => {
-    return childrenProgress
-      .filter((item) => item.completedAssignments > 0)
-      .slice(0, 3)
-      .map((item) => ({
-        id: item.studentId,
-        child: item.studentName,
-        completionRate: item.completionRate,
-        averageScore: item.averageScore,
-        averageStars: item.averageStars,
-      }));
-  }, [childrenProgress]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(SLOW_LEARNER_MODE_KEY);
-        if (!mounted) return;
-        setSlowLearnerMode(String(raw || '').toLowerCase() === 'true');
-      } catch {
-        if (mounted) setSlowLearnerMode(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Track dashboard view
+  // ── Effects ──
   useEffect(() => {
     if (canView && hasAccess && user?.id) {
-      track('k12.parent.dashboard_view', {
-        user_id: user.id,
-        school_type: schoolType,
-        tier,
-        platform: Platform.OS,
-      });
+      track('k12.parent.dashboard_view', { user_id: user.id, school_type: schoolType, tier, platform: Platform.OS });
     }
   }, [canView, hasAccess, user?.id, schoolType, tier]);
 
   useEffect(() => {
     if (quickWinsEnabled) {
-      trackK12ParentQuickwinsRendered({
-        route: '/(k12)/parent/dashboard',
-        userId: user?.id || null,
-      });
+      trackK12ParentQuickwinsRendered({ route: '/(k12)/parent/dashboard', userId: user?.id || null });
     }
   }, [quickWinsEnabled, user?.id]);
 
-  // Load data on mount - use profile.id for data fetching
   useEffect(() => {
-    if (profile?.id && !authLoading && !profileLoading) {
-      fetchChildrenData();
-    }
+    if (profile?.id && !authLoading && !profileLoading) fetchChildrenData();
   }, [profile?.id, authLoading, profileLoading, fetchChildrenData]);
 
-  // Redirect if unauthorized or wrong role
-  const hasRedirectedRef = React.useRef(false);
+  const hasRedirectedRef = useRef(false);
   useEffect(() => {
     if (hasRedirectedRef.current) return;
     if (!authLoading && !profileLoading) {
-      if (!user?.id) {
-        hasRedirectedRef.current = true;
-        router.replace('/(auth)/sign-in');
-        return;
-      }
-      if (!canView || !hasAccess) {
-        hasRedirectedRef.current = true;
-        router.replace('/profiles-gate' as any);
-        return;
-      }
+      if (!user?.id) { hasRedirectedRef.current = true; router.replace('/(auth)/sign-in'); return; }
+      if (!canView || !hasAccess) { hasRedirectedRef.current = true; router.replace('/profiles-gate' as never); return; }
     }
   }, [authLoading, profileLoading, user?.id, canView, hasAccess]);
 
+  // ── Callbacks ──
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     track('k12.parent.dashboard_refresh', { user_id: user?.id });
@@ -303,10 +133,10 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   }, [user?.id, fetchChildrenData]);
 
   const pushAction = useCallback(
-    (actionId: K12ParentActionId, params?: Record<string, string | number | boolean | undefined>) => {
-      router.push(buildK12ParentActionTarget(actionId, params) as any);
+    (actionId: K12ParentActionId, actionParams?: Record<string, string | number | boolean | undefined>) => {
+      router.push(buildK12ParentActionTarget(actionId, actionParams) as never);
     },
-    []
+    [],
   );
 
   const handleQuickAction = useCallback((actionId: K12ParentActionId) => {
@@ -314,74 +144,28 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     pushAction(actionId);
   }, [pushAction, user?.id]);
 
-  const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
-  const canShowExamPrep = hasExamEligibleChild;
-  const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice') && canShowExamPrep;
-  const requiredExamTier = getRequiredTier('exam.practice');
-  const quickActions = useMemo(() => ([
-    { id: 'children', actionId: 'children' as const, icon: 'people', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), color: '#4F46E5' },
-    { id: 'progress', actionId: 'progress' as const, icon: 'ribbon', label: t('dashboard.progress', { defaultValue: 'Progress' }), color: '#10B981' },
-    { id: 'attendance', actionId: 'attendance' as const, icon: 'calendar-outline', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), color: '#F59E0B' },
-    { id: 'messages', actionId: 'messages' as const, icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), color: '#3B82F6' },
-    { id: 'payments', actionId: 'payments' as const, icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), color: '#8B5CF6' },
-    { id: 'announcements', actionId: 'announcements' as const, icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), color: '#EF4444' },
-    { id: 'daily_program', actionId: 'daily_program' as const, icon: 'time', label: t('dashboard.parent.nav.daily_routine', { defaultValue: 'Daily Routine' }), color: '#0891B2' },
-    { id: 'menu', actionId: 'weekly_menu' as const, icon: 'restaurant-outline', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), color: '#F97316' },
-    { id: 'documents', actionId: 'documents' as const, icon: 'document-attach', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), color: '#14B8A6' },
-  ]), [t]);
-
-  const aiQuickActions = useMemo(() => ([
-    { id: 'homework', actionId: 'homework' as const, icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), color: '#06B6D4' },
-    { id: 'weekly-report', actionId: 'weekly_report' as const, icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), color: '#F97316' },
-  ]), [t]);
-
   const openTutorSession = useCallback(() => {
-    track('k12.parent.tutor_session_open', {
-      user_id: user?.id,
-      slow_learner_mode: slowLearnerMode,
-    });
-    pushAction('tutor_session', {
-      slowLearner: slowLearnerMode ? 'true' : 'false',
-    });
-  }, [pushAction, slowLearnerMode, user?.id]);
-
-  const toggleSlowLearnerMode = useCallback(async () => {
-    const next = !slowLearnerMode;
-    setSlowLearnerMode(next);
-    track('k12.parent.slow_learner_mode_toggle', {
-      user_id: user?.id,
-      enabled: next,
-    });
-    try {
-      await AsyncStorage.setItem(SLOW_LEARNER_MODE_KEY, String(next));
-    } catch {}
-  }, [slowLearnerMode, user?.id]);
+    track('k12.parent.tutor_session_open', { user_id: user?.id });
+    pushAction('tutor_session');
+  }, [pushAction, user?.id]);
 
   const handleExamBuilderPress = useCallback(() => {
     if (!canShowExamPrep) {
       showAlert({
         title: t('dashboard.parent.k12.exam_prep.not_ready_title', { defaultValue: 'Exam Builder Not Available Yet' }),
-        message: t('dashboard.parent.k12.exam_prep.not_ready_message', {
-          defaultValue: 'Exam Builder is available from Grade 4 and up. Tutor Mode remains available for interactive learning.',
-        }),
+        message: t('dashboard.parent.k12.exam_prep.not_ready_message', { defaultValue: 'Exam Builder is available from Grade 4 and up.' }),
         type: 'warning',
         buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'cancel' }],
       });
       return;
     }
-
     if (!canUseExamPrep) {
       const tierLabel = requiredExamTier
-        ? t(`subscription.${requiredExamTier}`, {
-            defaultValue: requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1),
-          })
+        ? t(`subscription.${requiredExamTier}`, { defaultValue: requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1) })
         : t('subscription.starter', { defaultValue: 'Starter' });
       showAlert({
         title: t('dashboard.parent.k12.exam_prep.locked_title', { defaultValue: 'Exam Prep Locked' }),
-        message: t('dashboard.parent.k12.exam_prep.locked_message', {
-          defaultValue: 'Exam Prep requires {{tier}} plan or higher.\\n\\nUpgrade your subscription to unlock this feature.',
-          tier: tierLabel,
-        }),
+        message: t('dashboard.parent.k12.exam_prep.locked_message', { defaultValue: 'Exam Prep requires {{tier}} plan or higher.', tier: tierLabel }),
         type: 'warning',
         buttons: [
           { text: t('common.not_now', { defaultValue: 'Not now' }), style: 'cancel' },
@@ -390,30 +174,16 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
       });
       return;
     }
-
     track('k12.parent.exam_builder_open', { user_id: user?.id });
-    // Pass child's grade so exam-prep can skip the grade-selection step
-    const leadChild = children.length > 0 ? children[0] : null;
-    const gradeNum = leadChild ? getGradeNumber(leadChild.grade) : 0;
+    const gradeNum = activeChild ? getGradeNumber(activeChild.grade) : 0;
     const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
-    const safeStudentId = toUuidOrUndefined(leadChild?.id || null);
-    const safeClassId = toUuidOrUndefined((leadChild as any)?.classId || (leadChild as any)?.class_id || null);
-    const safeSchoolId = toUuidOrUndefined(organizationId || null);
-    pushAction(
-      'exam_builder',
-      gradeParam
-        ? {
-            grade: gradeParam,
-            childName: leadChild?.name || '',
-            studentId: safeStudentId,
-            classId: safeClassId,
-            schoolId: safeSchoolId,
-          }
-        : undefined
-    );
-  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children, pushAction, organizationId]);
+    const safeStudentId = toUuidOrUndefined(activeChild?.id);
+    const safeClassId = toUuidOrUndefined(activeChild?.classId);
+    const safeSchoolId = toUuidOrUndefined(organizationId);
+    pushAction('exam_builder', gradeParam ? { grade: gradeParam, childName: activeChild?.name || '', studentId: safeStudentId, classId: safeClassId, schoolId: safeSchoolId } : undefined);
+  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, activeChild, pushAction, organizationId, getGradeNumber]);
 
-  const navItems = useMemo(() => ([
+  const navItems = useMemo(() => [
     { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: K12_PARENT_ACTIONS.dashboard_home.route },
     { id: 'children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: 'people', route: K12_PARENT_ACTIONS.children.route },
     { id: 'progress', label: t('dashboard.progress', { defaultValue: 'Progress' }), icon: 'ribbon', route: K12_PARENT_ACTIONS.progress.route },
@@ -427,33 +197,9 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: K12_PARENT_ACTIONS.documents.route },
     { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: K12_PARENT_ACTIONS.account.route },
     { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: K12_PARENT_ACTIONS.settings.route },
-  ]), [t]);
+  ], [t]);
 
-  const SectionHeaderCard = ({
-    title,
-    hint,
-    actionLabel,
-    onActionPress,
-  }: {
-    title: string;
-    hint: string;
-    actionLabel?: string;
-    onActionPress?: () => void;
-  }) => (
-    <GlassCard style={styles.sectionHeaderCard} padding={14}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionHeaderTitle, { color: theme.text }]}>{title}</Text>
-        {actionLabel && onActionPress && (
-          <TouchableOpacity onPress={onActionPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={[styles.sectionHeaderAction, { color: theme.primary }]}>{actionLabel}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      <Text style={[styles.sectionHeaderHint, { color: theme.textSecondary }]}>{hint}</Text>
-    </GlassCard>
-  );
-
-  // Loading state
+  // ── Loading state ──
   if (authLoading || profileLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -469,354 +215,67 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
+      {/* Cosmic backdrop (brand identity) */}
       <View pointerEvents="none" style={styles.cosmicBackdrop}>
-        <LinearGradient
-          colors={['#070B16', '#0F121E', '#131A2E']}
-          style={styles.cosmicBackdropFill}
-        />
+        <LinearGradient colors={['#070B16', '#0F121E', '#131A2E']} style={styles.cosmicBackdropFill} />
         <View style={[styles.nebulaGlow, styles.nebulaTop]} />
         <View style={[styles.nebulaGlow, styles.nebulaMid]} />
         <View style={[styles.nebulaGlow, styles.nebulaBottom]} />
-        {STARFIELD_POINTS.map((star, index) => (
-          <View
-            key={`star-${index}`}
-            style={[
-              styles.starDot,
-              {
-                top: star.top,
-                left: star.left,
-                width: star.size,
-                height: star.size,
-                opacity: star.opacity,
-              },
-            ]}
-          />
-        ))}
       </View>
 
-      {/* FIXED HEADER - Does not scroll */}
-      <View
-        style={[
-          styles.fixedHeader,
-          {
-            backgroundColor: quickWinsEnabled ? 'rgba(15,18,30,0.82)' : theme.background,
-            borderBottomColor: quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border,
-          },
-        ]}
-      >
+      {/* Fixed Header */}
+      <View style={[styles.fixedHeader, { backgroundColor: quickWinsEnabled ? 'rgba(15,18,30,0.82)' : theme.background, borderBottomColor: quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border }]}>
         <View style={styles.headerLeftSection}>
-          <TouchableOpacity
-            style={styles.hamburgerButton}
-            onPress={() => setIsDrawerOpen(true)}
-            accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}
-          >
+          <TouchableOpacity style={styles.hamburgerButton} onPress={() => setIsDrawerOpen(true)} accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}>
             <CosmicOrb size={30} isProcessing={false} isSpeaking={false} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrapper}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              EduDashPro
-            </Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>EduDashPro</Text>
           </View>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() => {
-              track('k12.parent.search_tap', { user_id: user?.id });
-              pushAction('search');
-            }}
-          >
+          <TouchableOpacity style={styles.notificationButton} onPress={() => { track('k12.parent.search_tap', { user_id: user?.id }); pushAction('search'); }}>
             <Ionicons name="search-outline" size={22} color={theme.text} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.notificationButton}
-            onPress={() => {
-              track('k12.parent.notifications_tap', { user_id: user?.id });
-              pushAction('notifications');
-            }}
-          >
+          <TouchableOpacity style={styles.notificationButton} onPress={() => { track('k12.parent.notifications_tap', { user_id: user?.id }); pushAction('notifications'); }}>
             <Ionicons name="notifications-outline" size={24} color={theme.text} />
             {notificationCount > 0 && (
               <View style={[styles.notificationBadge, { backgroundColor: theme.error }]}>
-                <Text style={styles.notificationBadgeText}>
-                  {notificationCount > 9 ? '9+' : notificationCount}
-                </Text>
+                <Text style={styles.notificationBadgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={() => {
-              track('k12.parent.profile_tap', { user_id: user?.id });
-              pushAction('profile');
-            }}
-          >
-            <LinearGradient
-              colors={quickWinsEnabled ? ['#1B314D', '#305E88'] : ['#F59E0B', '#D97706']}
-              style={styles.profileGradient}
-            >
-              <Text style={styles.profileInitial}>
-                {userName.charAt(0).toUpperCase()}
-              </Text>
+          <TouchableOpacity style={styles.profileButton} onPress={() => { track('k12.parent.profile_tap', { user_id: user?.id }); pushAction('profile'); }}>
+            <LinearGradient colors={quickWinsEnabled ? ['#1B314D', '#305E88'] : ['#F59E0B', '#D97706']} style={styles.profileGradient}>
+              <Text style={styles.profileInitial}>{userName.charAt(0).toUpperCase()}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* SUB-NAVIGATION TABS */}
-      {quickWinsEnabled && (
-        <SubNavTabs
-          tabs={SUB_NAV_TABS}
-          activeTab={activeSubTab}
-          onTabPress={(tabId) => {
-            // Don't setActiveSubTab — dashboard tab stays active;
-            // other tabs navigate to separate screens.
-            if (tabId === 'messages') pushAction('messages');
-            else if (tabId === 'grades') pushAction('grades');
-            else if (tabId === 'account') pushAction('account');
-          }}
-        />
-      )}
-
-      {/* SCROLLABLE CONTENT */}
+      {/* Scrollable Content */}
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: dashboardBottomPadding }]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.primary}
-          />
-        }
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: quickWinsEnabled ? 100 : 80 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        <LinearGradient
-          colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
-          style={styles.heroSummaryCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.heroSummaryTopRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.heroSummaryTitle, { color: theme.text }]}>
-                {dashboardSummary.leadChildName
-                  ? `${dashboardSummary.leadChildName}'s Dashboard`
-                  : t('dashboard.parentDashboard', { defaultValue: 'Parent Dashboard' })}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                {/* Grade badge with child avatar */}
-                <LinearGradient
-                  colors={['#3C8E62', '#2E7D59']}
-                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 6 }}
-                >
-                  <Ionicons name="school" size={12} color="#FFFFFF" />
-                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
-                    {dashboardSummary.leadChildGrade || 'Grade'}
-                  </Text>
-                </LinearGradient>
-                {children.length > 0 && children[0]?.avatarUrl ? (
-                  <Image
-                    source={{ uri: children[0].avatarUrl }}
-                    style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' }}
-                    onError={() => undefined}
-                  />
-                ) : null}
-              </View>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Pill
-                tone="accent"
-                compact
-                label={tierBadgeLabel}
-              />
-              <View style={{ marginTop: 6 }}>
-                <Pill
-                  tone="success"
-                  compact
-                  label={t('dashboard.parent.k12.tutor_badge', { defaultValue: 'Tutor Mode' })}
-                />
-              </View>
-            </View>
-          </View>
-          <View style={styles.heroSummaryStatsRow}>
-            <View style={styles.heroSummaryStat}>
-              <Text style={[styles.heroSummaryValue, { color: theme.text }]}>
-                {dashboardSummary.totalChildren}
-              </Text>
-              <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-                {t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' })}
-              </Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroSummaryStat}>
-              <Text style={[styles.heroSummaryValue, { color: '#3C8E62' }]}>
-                {dashboardSummary.attendanceRate}%
-              </Text>
-              <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-                {t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' })}
-              </Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroSummaryStat}>
-              <Text style={[styles.heroSummaryValue, { color: theme.text }]}>
-                {dashboardSummary.pendingTasks}
-              </Text>
-              <Text style={[styles.heroSummaryLabel, { color: theme.textSecondary }]}>
-                {t('teacher.pending', { defaultValue: 'Pending' })}
-              </Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        <GlassCard style={styles.currentClassCard} padding={0}>
-          <LinearGradient
-            colors={['rgba(90,64,157,0.22)', 'rgba(60,142,98,0.16)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.currentClassGradient}
-          >
-            <View style={styles.currentClassTopRow}>
-              <View style={styles.currentClassTitleWrap}>
-                <Text style={[styles.currentClassEyebrow, { color: theme.textSecondary }]}>
-                  {t('dashboard.parent.k12.current_class', { defaultValue: 'Current Class' })}
-                </Text>
-                <Text style={[styles.currentClassTitle, { color: theme.text }]}>
-                  {dashboardSummary.leadChildGrade || t('dashboard.parent.k12.class_overview', { defaultValue: 'Class Overview' })}
-                </Text>
-                <Text style={[styles.currentClassSubtitle, { color: theme.textSecondary }]}>
-                  {dashboardSummary.leadChildClassName || schoolName}
-                </Text>
-              </View>
-              <View style={styles.currentClassAverageChip}>
-                <Text style={[styles.currentClassAverageLabel, { color: theme.textSecondary }]}>
-                  {t('dashboard.parent.k12.avg_grade', { defaultValue: 'Avg Grade' })}
-                </Text>
-                <Text style={[styles.currentClassAverageValue, { color: theme.text }]}>
-                  {dashboardSummary.leadChildAvgGrade || '--'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.currentClassStatsRow}>
-              <View style={styles.currentClassStatPill}>
-                <Text style={[styles.currentClassStatValue, { color: theme.text }]}>
-                  {dashboardSummary.leadChildPendingTasks}
-                </Text>
-                <Text style={[styles.currentClassStatLabel, { color: theme.textSecondary }]}>
-                  {t('teacher.pending', { defaultValue: 'Pending' })}
-                </Text>
-              </View>
-
-              <View style={styles.currentClassStatPill}>
-                <Text style={[styles.currentClassStatValue, { color: '#3C8E62' }]}>
-                  {dashboardSummary.leadChildAttendance}%
-                </Text>
-                <Text style={[styles.currentClassStatLabel, { color: theme.textSecondary }]}>
-                  {t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' })}
-                </Text>
-              </View>
-
-              <View style={styles.currentClassStatPill}>
-                <Text style={[styles.currentClassStatValue, { color: theme.text }]}>
-                  {dashboardSummary.totalChildren}
-                </Text>
-                <Text style={[styles.currentClassStatLabel, { color: theme.textSecondary }]}>
-                  {t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' })}
-                </Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </GlassCard>
-
-        {/* Focus Banner */}
-        {dashboardSummary.leadChildName && quickWinsEnabled && (
-          <FocusBanner childName={dashboardSummary.leadChildName} />
-        )}
-
-        <TouchableOpacity style={styles.inlineTutorCard} activeOpacity={0.88} onPress={openTutorSession}>
-          <LinearGradient
-            colors={['#22433F', '#3C8E62', '#5A409D']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.inlineTutorGradient}
-          >
-            <View style={styles.inlineTutorHeader}>
-              <View style={styles.inlineTutorIcon}>
-                <Image source={ROBOT_MASCOT} style={styles.inlineTutorMascot} />
-              </View>
-              <View style={styles.inlineTutorTextWrap}>
-                <Text style={styles.inlineTutorTitle}>
-                  {t('dashboard.parent.k12.current_tutor_session', { defaultValue: 'Current Tutor Session' })}
-                </Text>
-                <Text style={styles.inlineTutorSubtitle}>
-                  {t('dashboard.parent.k12.current_tutor_hint', {
-                    defaultValue: 'Dash Tutor is ready for {{name}} with guided one-step coaching and revision prompts.',
-                    name: dashboardSummary.leadChildName || t('roles.student', { defaultValue: 'your learner' }),
-                  })}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.inlineTutorCta}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.inlineTutorCtaText}>
-                  {t('dashboard.parent.k12.tutor_cta', { defaultValue: 'Start Tutor Session' })}
-                </Text>
-                <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
-              </View>
-              <TouchableOpacity
-                onPress={toggleSlowLearnerMode}
-                activeOpacity={0.86}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: slowLearnerMode ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)',
-                  backgroundColor: slowLearnerMode ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.12)',
-                }}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: slowLearnerMode }}
-                accessibilityLabel={t('dashboard.parent.k12.slow_learner_mode', { defaultValue: 'Slow learner mode' })}
-              >
-                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                  {slowLearnerMode
-                    ? t('dashboard.parent.k12.slow_learner_mode_on', { defaultValue: 'Slow Mode On' })
-                    : t('dashboard.parent.k12.slow_learner_mode_off', { defaultValue: 'Slow Mode Off' })}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Inline Tutor Session Preview */}
-        {quickWinsEnabled && (
-          <InlineTutorPreview
-            childName={dashboardSummary.leadChildName || 'Learner'}
-            childGrade={dashboardSummary.leadChildGrade}
-            onOpenFullSession={openTutorSession}
-          />
-        )}
-
-        {/* Upgrade Banner (Free tier parents) */}
-        <InlineUpgradeBanner
-          screen="k12_parent_dashboard"
-          feature="dashboard_upgrade"
-          title={t('dashboard.parent.k12.upgrade.title', { defaultValue: 'Upgrade for more AI help' })}
-          description={t('dashboard.parent.k12.upgrade.description', { defaultValue: 'Unlock more Dash AI help, practice tools, and remove limits.' })}
+        <K12ParentHeroCard
+          children={children}
+          activeChildIndex={activeChildIndex}
+          onSwitchChild={switchChild}
+          dashboardSummary={dashboardSummary}
+          tierBadgeLabel={tierBadgeLabel}
+          theme={theme}
         />
 
-        {/* Ad Banner + Upgrade CTA (free tier only) */}
-        {!isHuaweiNoGmsRiskDevice && (
-          <AdBannerWithUpgrade screen="k12_parent_dashboard" showUpgradeCTA margin={10} />
-        )}
+        <K12ParentUrgentBanner
+          items={urgentItems}
+          onPress={(actionRoute) => handleQuickAction(actionRoute as K12ParentActionId)}
+          theme={theme}
+        />
 
         {/* Children Cards */}
         <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.parent.section.my_children', { defaultValue: 'My Children' })}
-            hint={t('dashboard.parent.section.my_children_hint', { defaultValue: 'Profiles, attendance, and progress for each child.' })}
-          />
           {dataLoading ? (
             <EduDashSpinner size="small" color={theme.primary} style={{ marginVertical: 20 }} />
           ) : children.length === 0 ? (
@@ -828,421 +287,39 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             </View>
           ) : (
             children.map((child) => (
-              <ChildCard key={child.id} child={child} colors={theme} onPressChild={(childId) => {
-                pushAction('child_detail', { childId });
-              }} />
+              <ChildCard key={child.id} child={child} colors={theme} onPressChild={(childId) => pushAction('child_detail', { childId })} />
             ))
           )}
         </View>
 
-        {/* Daily Routine Banner — only shown when principal has published this week's routine */}
-        <Animated.View
-          style={{
-            opacity: routineStatus.hasPublished
-              ? glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] })
-              : 0,
-            transform: [{ scale: routineStatus.hasPublished
-              ? glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.012] })
-              : 1,
-            }],
-            marginHorizontal: 0,
-            display: routineStatus.hasPublished ? 'flex' : 'none',
-          }}
-        >
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => {
-              track('k12.parent.daily_routine_tap', { user_id: user?.id });
-              handleQuickAction('daily_program');
-            }}
-          >
-            <LinearGradient
-              colors={['#0E4429', '#1A6B42', '#0891B2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={dailyRoutineStyles.banner}
-            >
-              {/* Glow ring */}
-              <Animated.View
-                style={[
-                  dailyRoutineStyles.glowRing,
-                  {
-                    opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.75] }),
-                  },
-                ]}
-              />
-              <View style={dailyRoutineStyles.bannerLeft}>
-                <View style={dailyRoutineStyles.iconWrap}>
-                  <Ionicons name="time" size={26} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={dailyRoutineStyles.bannerTitle}>Daily Routine Published</Text>
-                  <Text style={dailyRoutineStyles.bannerSub} numberOfLines={1}>
-                    {routineStatus.weekLabel || "This week's program is ready"}
-                  </Text>
-                </View>
-              </View>
-              <View style={dailyRoutineStyles.bannerRight}>
-                <View style={dailyRoutineStyles.badge}>
-                  <Text style={dailyRoutineStyles.badgeText}>NEW</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </Animated.View>
+        <K12ParentQuickActions onActionPress={handleQuickAction} theme={theme} quickWinsEnabled={quickWinsEnabled} />
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
-            hint={t('dashboard.quick_actions_hint', { defaultValue: 'Shortcuts to messages, attendance, payments, and announcements.' })}
-          />
-          <View style={styles.quickActionsGrid}>
-            {quickActions.map((action) => {
-              const tourRef = action.id === 'menu' ? menuTourRef
-                : action.id === 'documents' ? docsTourRef
-                : action.id === 'announcements' ? announcementsTourRef
-                : undefined;
-              const showBadge = action.id === 'daily_program' && routineStatus.hasPublished;
-              return (
-                <TouchableOpacity
-                  key={action.id}
-                  ref={tourRef}
-                  style={[
-                    styles.quickActionCard,
-                    {
-                      backgroundColor: quickWinsEnabled ? 'rgba(255,255,255,0.06)' : theme.surfaceVariant,
-                      borderColor: showBadge ? action.color : (quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border),
-                      borderWidth: showBadge ? 1.5 : 1,
-                    },
-                  ]}
-                  onPress={() => handleQuickAction(action.actionId)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
-                    <Ionicons name={action.icon as any} size={24} color={action.color} />
-                    {showBadge && (
-                      <View style={dailyRoutineStyles.dotBadge} />
-                    )}
-                  </View>
-                  <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+        <K12ParentLearningHub
+          leadChildName={dashboardSummary.activeChildName}
+          onOpenTutor={openTutorSession}
+          onExamBuilder={handleExamBuilderPress}
+          onHomework={() => handleQuickAction('homework')}
+          canShowExamPrep={canShowExamPrep}
+          quickWinsEnabled={quickWinsEnabled}
+          theme={theme}
+        />
 
-        {/* AI & Learning Tools - PWA Feature Migration */}
-        <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.parent.k12.ai_tools.title', { defaultValue: 'AI & Learning Tools' })}
-            hint={t('dashboard.parent.k12.ai_tools.hint', { defaultValue: 'Dash AI, exam prep, homework, and weekly reports.' })}
-          />
-          <View style={styles.learningHubGrid}>
-            <GradientActionCard
-              tone="purple"
-              gradientColors={quickWinsEnabled ? ['#23214D', '#5A409D'] : undefined}
-              ctaBackgroundColor={quickWinsEnabled ? '#5A409D' : undefined}
-              icon="document-text-outline"
-              badgeLabel={t('dashboard.parent.k12.exam_badge', { defaultValue: 'Exam Builder' })}
-              title={t('dashboard.parent.k12.exam_title', { defaultValue: 'Build Full Exam (Printable)' })}
-              description={t('dashboard.parent.k12.exam_description', { defaultValue: 'Generate a CAPS-aligned formal test paper for review or print.' })}
-              cta={t('dashboard.parent.k12.exam_cta', { defaultValue: 'Generate Formal Test Paper' })}
-              onPress={handleExamBuilderPress}
-              disabled={!canShowExamPrep}
-            />
-          </View>
-
-          <View style={styles.secondaryToolsGrid}>
-            {aiQuickActions.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={[
-                  styles.quickActionCard,
-                  {
-                    backgroundColor: quickWinsEnabled ? 'rgba(255,255,255,0.06)' : theme.surfaceVariant,
-                    borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border,
-                    borderWidth: 1,
-                  },
-                ]}
-                onPress={() => handleQuickAction(action.actionId)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
-                  <Ionicons name={action.icon as any} size={24} color={action.color} />
-                </View>
-                <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Recent Updates */}
-        <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })}
-            hint={t('dashboard.recent_activity_hint', { defaultValue: 'Latest updates from teachers and classwork.' })}
-            actionLabel={t('common.see_all', { defaultValue: 'See All' })}
-            onActionPress={() => {
-              track('k12.parent.see_all_updates_tap', { user_id: user?.id });
-              pushAction('see_all_activity');
-            }}
-          />
-          {recentUpdates.length === 0 ? (
-            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-              <Ionicons name="newspaper-outline" size={32} color={theme.textSecondary} />
-              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                {t('dashboard.noActivity', { defaultValue: 'No recent activity' })}
-              </Text>
-            </View>
-          ) : (
-            recentUpdates.map((update) => (
-              <View 
-                key={update.id} 
-                style={[
-                  styles.updateCard,
-                  {
-                    backgroundColor: theme.surface,
-                    borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.1)' : theme.border,
-                    borderWidth: quickWinsEnabled ? 1 : 0,
-                  },
-                ]}
-              >
-                <View style={[styles.updateIcon, { backgroundColor: update.color + '20' }]}>
-                  <Ionicons name={update.icon as any} size={18} color={update.color} />
-                </View>
-                <View style={styles.updateInfo}>
-                  <Text style={[styles.updateChild, { color: theme.textSecondary }]}>{update.child}</Text>
-                  <Text style={[styles.updateMessage, { color: theme.text }]}>{update.message}</Text>
-                </View>
-                <Text style={[styles.updateTime, { color: theme.textSecondary }]}>{update.time}</Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Learning Activity Snapshot */}
-        <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.parent.k12.learning_snapshot.title', { defaultValue: 'Recent Learning Activity' })}
-            hint={t('dashboard.parent.k12.learning_snapshot.hint', { defaultValue: 'Latest completion health from assigned work.' })}
-          />
-          {recentLearningCompletions.length === 0 ? (
-            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-              <Ionicons name="school-outline" size={32} color={theme.textSecondary} />
-              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                {t('dashboard.parent.k12.learning_snapshot.empty', { defaultValue: 'No completed learning activities yet' })}
-              </Text>
-            </View>
-          ) : (
-            recentLearningCompletions.filter(Boolean).map((entry) => (
-              <View
-                key={entry?.id ?? 'unknown'}
-                style={[
-                  styles.updateCard,
-                  {
-                    backgroundColor: theme.surface,
-                    borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.1)' : theme.border,
-                    borderWidth: quickWinsEnabled ? 1 : 0,
-                  },
-                ]}
-              >
-                <View style={[styles.updateIcon, { backgroundColor: '#10B98120' }]}>
-                  <Ionicons name="checkmark-done" size={18} color="#10B981" />
-                </View>
-                <View style={styles.updateInfo}>
-                  <Text style={[styles.updateChild, { color: theme.textSecondary }]}>{entry?.child ?? ''}</Text>
-                  <Text style={[styles.updateMessage, { color: theme.text }]}>
-                    {entry?.averageScore != null
-                      ? `Avg score ${entry.averageScore}% • completion ${entry?.completionRate ?? 0}%`
-                      : `Completion ${entry?.completionRate ?? 0}%`}
-                  </Text>
-                </View>
-                <Text style={[styles.updateTime, { color: theme.textSecondary }]}>
-                  {entry?.averageStars != null ? `${entry.averageStars}/3★` : '--'}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Upcoming Events */}
-        <View style={styles.section}>
-          <SectionHeaderCard
-            title={t('dashboard.upcoming_events', { defaultValue: 'Upcoming Events' })}
-            hint={t('dashboard.upcoming_events_hint', { defaultValue: 'Calendar reminders and important school dates.' })}
-            actionLabel={t('common.see_all', { defaultValue: 'See All' })}
-            onActionPress={() => {
-              track('k12.parent.see_all_events_tap', { user_id: user?.id });
-              pushAction('see_all_events');
-            }}
-          />
-          {upcomingEvents.length === 0 ? (
-            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-              <Ionicons name="calendar-outline" size={32} color={theme.textSecondary} />
-              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                {t('dashboard.upcoming_events_empty', { defaultValue: 'No upcoming events' })}
-              </Text>
-            </View>
-          ) : (
-            upcomingEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={[
-                  styles.eventCard,
-                  {
-                    backgroundColor: theme.surface,
-                    borderColor: quickWinsEnabled ? 'rgba(255,255,255,0.1)' : theme.border,
-                    borderWidth: quickWinsEnabled ? 1 : 0,
-                  },
-                ]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  track('k12.parent.event_tap', { eventId: event.id, user_id: user?.id });
-                  pushAction('event_detail', { date: event.date });
-                }}
-              >
-                <View style={[styles.eventDate, { backgroundColor: theme.primary + '20' }]}>
-                  <Text style={[styles.eventDateText, { color: theme.primary }]}>
-                    {event.date.split(' ')[1]}
-                  </Text>
-                  <Text style={[styles.eventMonthText, { color: theme.primary }]}>
-                    {event.date.split(' ')[0]}
-                  </Text>
-                </View>
-                <View style={styles.eventInfo}>
-                  <Text style={[styles.eventTitle, { color: theme.text }]}>{event.title}</Text>
-                  <Text style={[styles.eventTime, { color: theme.textSecondary }]}>{event.time}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-
-        {/* School Communication Card */}
-        <TouchableOpacity 
-          style={styles.communicationCard} 
-          activeOpacity={0.8}
-          onPress={() => {
-            track('k12.parent.school_communication_tap', { user_id: user?.id });
-            pushAction('school_communication');
-          }}
-        >
-          <LinearGradient
-            colors={quickWinsEnabled ? ['#1C1F2F', '#2A2F4A'] : ['#F59E0B', '#D97706']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.communicationGradient}
-          >
-            <View style={styles.communicationContent}>
-              <View style={styles.communicationIcon}>
-                <Ionicons name="school" size={28} color="#FFFFFF" />
-              </View>
-              <View style={styles.communicationText}>
-                <Text style={styles.communicationTitle}>
-                  {t('dashboard.parent.k12.communication.title', { defaultValue: 'School Communication' })}
-                </Text>
-                <Text style={styles.communicationSubtitle}>
-                  {t('dashboard.parent.k12.communication.subtitle', { defaultValue: 'Stay connected with teachers and school updates' })}
-                </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
+        <K12ParentActivityFeed
+          recentUpdates={recentUpdates}
+          recentLearningCompletions={recentLearningCompletions}
+          upcomingEvents={upcomingEvents}
+          onSeeAll={() => { track('k12.parent.see_all_updates_tap', { user_id: user?.id }); pushAction('see_all_activity'); }}
+          onEventPress={(eventId, eventDate) => { track('k12.parent.event_tap', { eventId, user_id: user?.id }); pushAction('event_detail', { date: eventDate }); }}
+          theme={theme}
+          quickWinsEnabled={quickWinsEnabled}
+        />
       </ScrollView>
 
       <AlertModal {...alertProps} />
-
-      {/* Mobile Navigation Drawer */}
-      <MobileNavDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        navItems={navItems}
-      />
+      <MobileNavDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} navItems={navItems} />
     </SafeAreaView>
   );
 }
-
-const dailyRoutineStyles = {
-  banner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
-    overflow: 'hidden' as const,
-    position: 'relative' as const,
-  },
-  glowRing: {
-    position: 'absolute' as const,
-    top: -10,
-    left: -10,
-    right: -10,
-    bottom: -10,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#0891B2',
-  },
-  bannerLeft: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 12,
-    flex: 1,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  bannerTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  bannerSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 2,
-  },
-  bannerRight: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-  },
-  badge: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800' as const,
-    color: '#fff',
-    letterSpacing: 0.6,
-  },
-  dotBadge: {
-    position: 'absolute' as const,
-    top: -3,
-    right: -3,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FF6B6B',
-    borderWidth: 1.5,
-    borderColor: '#000',
-  },
-};
 
 export default function K12ParentDashboardScreen() {
   const flags = getFeatureFlagsSync();
