@@ -32,7 +32,9 @@ Standard commands from `package.json`:
 - **Web**: `cd web && npm run lint`, `cd web && npm run typecheck`
 - **SOA**: `cd soa-web && npm run lint`
 
-Root lint has a `--max-warnings 200` threshold (currently ~175 warnings). Web lint has 6 pre-existing errors. Web typecheck has 7 pre-existing errors in `src/app/display/page.tsx`.
+Root lint has a `--max-warnings 200` threshold (currently ~170 warnings). The `npm run lint` command first runs `validate:progress-bars` (which audits web progress bar safety) then eslint; a failure from `validate:progress-bars` is pre-existing and does not indicate new issues. Web lint has 6 pre-existing errors. Web typecheck has 7 pre-existing errors in `src/app/display/page.tsx`.
+
+Typecheck (`npm run typecheck`) requires 8 GB heap via `NODE_OPTIONS=--max-old-space-size=8192` (already set in the `typecheck` script). Running bare `npx tsc --noEmit` without the extra memory will OOM on this codebase.
 
 ### Environment Files
 
