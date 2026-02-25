@@ -168,6 +168,21 @@ function normalizeMonthlyBucket(value: unknown): YearPlanMonthlyBucket {
   return 'holidays_closures';
 }
 
+function groupMonthlyEntries(entries: YearPlanMonthlyEntry[]): Map<number, YearPlanMonthlyEntry[]> {
+  const map = new Map<number, YearPlanMonthlyEntry[]>();
+  for (const entry of entries) {
+    const month = entry.month_index ?? 1;
+    const list = map.get(month) ?? [];
+    list.push(entry);
+    map.set(month, list);
+  }
+  return map;
+}
+
+function monthlyBucketLabel(bucket: YearPlanMonthlyBucket): string {
+  return MONTH_BUCKET_LABELS[bucket] ?? bucket;
+}
+
 function normalizeYearPlanModel(rawPlan: GeneratedYearPlan, fallbackSchoolName: string): GeneratedYearPlan {
   const monthlyInput = Array.isArray((rawPlan as any).monthly_entries)
     ? (rawPlan as any).monthly_entries
@@ -427,7 +442,7 @@ Always respond with valid JSON that matches the requested structure. Output only
     setError(null);
 
     try {
-      const normalizedPlan = normalizeGeneratedPlan(generatedPlan, preschoolName);
+      const normalizedPlan = normalizeYearPlanModel(generatedPlan, preschoolName);
       const planPayload = {
         ...normalizedPlan,
         config: {

@@ -46,6 +46,7 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
 
   const [customPrompt, setCustomPrompt] = useState('');
+  const [promptSystemPrefix, setPromptSystemPrefix] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
@@ -646,16 +647,6 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
     setCustomPrompt(prompt);
     setPromptSystemPrefix(extractPromptParts(prompt).systemPrefix);
     setShowPromptPreview(true);
-  };
-
-  const handleConfirmGenerate = () => {
-    if (!customPrompt) return;
-
-    if (userId && !guestMode) {
-      incrementUsage('exam_generation', 'success').catch(err => {
-        console.error('[ExamPrep] Failed to increment usage:', err);
-      });
-    }
     } catch (err) {
       setGenerateError('Failed to prepare exam generation. Please try again.');
       console.error('[ExamPrep] Generation error:', err);

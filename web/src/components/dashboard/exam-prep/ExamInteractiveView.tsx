@@ -114,6 +114,11 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [savingExam, setSavingExam] = useState(false);
+  const [a11y, setA11y] = useState<AccessibilitySettings>(DEFAULT_ACCESSIBILITY_SETTINGS);
+  const [simplifiedTexts, setSimplifiedTexts] = useState<Record<string, string>>({});
+  const [loadingSimplify, setLoadingSimplify] = useState<Record<string, boolean>>({});
+  const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
+  const [loadingTranslate, setLoadingTranslate] = useState<Record<string, boolean>>({});
   
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });

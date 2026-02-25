@@ -1041,7 +1041,7 @@ export default function FinanceControlCenterScreen() {
                 </View>
               </View>
               <Text style={styles.queueSubtext}>
-                {formatCurrency(item.payment_amount)} for{' '}
+                {formatCurrency(item.payment_amount)} submitted for{' '}
                 {new Date(displayMonth).toLocaleDateString('en-ZA', {
                   month: 'short',
                   year: 'numeric',
@@ -1066,11 +1066,21 @@ export default function FinanceControlCenterScreen() {
                       ]}
                     >
                       {selectedMonth
-                        ? `Month: ${new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}`
+                        ? `Accounting month: ${new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}`
                         : 'Select accounting month'}
                     </Text>
                   </TouchableOpacity>
                 </View>
+              )}
+              {selectedMonth && selectedMonth !== displayMonth && (
+                <Text style={styles.queueSubtext}>
+                  Allocation override: this POP will be posted to{' '}
+                  {new Date(selectedMonth).toLocaleDateString('en-ZA', {
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                  .
+                </Text>
               )}
               <View style={styles.queueMetaRow}>
                 <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20', borderColor: categoryColor + '55' }]}>

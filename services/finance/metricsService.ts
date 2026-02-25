@@ -10,7 +10,7 @@ import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 import type { FinancialMetrics, MonthlyTrendData } from '../financial/types';
 import { withFinanceTenant, isMissingFinanceTenantColumn } from './tenantUtils';
-import { fetchStudentFees, getPaidAmountForFee, getOutstandingAmountForFee } from './feeHelpers';
+import { fetchStudentFees, getPaidAmountForFee, getOutstandingAmountForFee } from '@/services/finance/feeHelpers';
 
 /**
  * Get financial metrics for a preschool.
