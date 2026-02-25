@@ -156,7 +156,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         await sendUpdateNotification();
         
         // Set app badge to show update available (use BadgeCoordinator to avoid wiping other categories)
-        if (Platform.OS !== 'web') {
+        if ((Platform.OS as string) !== 'web') {
           try {
             await BadgeCoordinator.setCategory('updates', 1);
           } catch (badgeError) {
@@ -310,7 +310,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     updateState({ isUpdateDownloaded: false });
     updateAlreadyDownloadedRef.current = false;
     // Clear badge when update is dismissed
-    if (Platform.OS !== 'web') {
+    if ((Platform.OS as string) !== 'web') {
       BadgeCoordinator.clearCategory('updates').catch(() => {});
     }
   };
@@ -401,7 +401,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         await sendUpdateNotification();
         
         // Set app badge to show update available
-        if (Platform.OS !== 'web') {
+        if ((Platform.OS as string) !== 'web') {
           try {
             await BadgeCoordinator.setCategory('updates', 1);
           } catch (badgeError) {
