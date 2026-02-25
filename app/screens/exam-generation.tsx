@@ -215,8 +215,8 @@ export default function ExamGenerationScreen() {
               </TouchableOpacity>
             </View>
           ) : null}
-          {/* Compact toggle so meta info doesn't crowd the exam view */}
-          {(contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) && (
+          {/* Compact toggle — only shown after exam is completed so it doesn't distract during the test */}
+          {completionSummary && (contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) && (
             <View style={[styles.auditToggleRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
               <TouchableOpacity
                 style={styles.auditToggleButton}

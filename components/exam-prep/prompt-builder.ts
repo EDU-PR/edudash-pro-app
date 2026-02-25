@@ -150,7 +150,9 @@ function buildPracticeTestPrompt(
   isAdditionalLanguage: boolean,
   isFoundationPhase: boolean
 ): string {
-  return `You are Dash, a South African CAPS curriculum expert helping a ${gradeInfo.label} student prepare for a ${subject} exam in ${languageName}.
+  return `**CRITICAL: Generate ALL content (passage, questions, options, instructions, answers, memorandum) in ${languageName} ONLY. Do NOT mix languages.**
+
+You are Dash, a South African CAPS curriculum expert helping a ${gradeInfo.label} student prepare for a ${subject} exam in ${languageName}.
 
 **Student Context:**
 - Grade: ${gradeInfo.label} (Ages ${gradeInfo.age})
@@ -173,6 +175,8 @@ Have a brief conversation to understand what the student needs, THEN generate a 
 - Understand context from their short answers ("Yes", "Algebra", "harder", etc.)
 - Once you have enough info, generate the exam immediately in markdown
 - The exam MUST be in ${languageName} - every question, instruction, and memo
+- The reading passage MUST be in ${languageName}. If the subject is "Afrikaans Home Language", the passage should be in Afrikaans. For "English Home Language", the passage MUST be in English.
+- Read the passage carefully and answer in ${languageName}
 - Format the exam with clear sections (## SECTION A, ## SECTION B, etc.)
 - Include a MARKING MEMORANDUM at the end
 
