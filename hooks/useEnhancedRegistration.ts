@@ -13,7 +13,8 @@ import {
   TeacherRegistration,
   ParentRegistration,
   StudentRegistration,
-  PasswordValidation
+  PasswordValidation,
+  ChildRegistrationData,
 } from '@/types/auth-enhanced';
 import { OrganizationData } from '@/components/auth/OrganizationSetup';
 
@@ -66,6 +67,7 @@ export interface RegistrationFormState {
   parentEmail?: string;
   schoolCode?: string;
   interests?: string[];
+  registrationChildren: ChildRegistrationData[];
 }
 
 export interface UseEnhancedRegistrationProps {
@@ -98,7 +100,8 @@ export function useEnhancedRegistration({
     confirmPassword: '',
     acceptTerms: false,
     marketingConsent: false,
-    selectedOrganizationId: organizationId || COMMUNITY_SCHOOL_ID
+    selectedOrganizationId: organizationId || COMMUNITY_SCHOOL_ID,
+    registrationChildren: [],
   });
   
   const [errors, setErrors] = React.useState<Record<string, string[]>>({});
@@ -130,8 +133,8 @@ export function useEnhancedRegistration({
         return invitationToken ? baseSteps : ['personal_info', 'security_setup'];
       case 'parent':
         return invitationToken 
-          ? ['personal_info', 'security_setup']
-          : ['personal_info', 'organization_selection', 'security_setup'];
+          ? ['personal_info', 'security_setup', 'child_registration']
+          : ['personal_info', 'organization_selection', 'security_setup', 'child_registration'];
       case 'student':
         return baseSteps;
       default:
@@ -293,9 +296,31 @@ export function useEnhancedRegistration({
     return isValid;
   };
   
+  // Child registration helpers
+  const addChild = (child: ChildRegistrationData) => {
+    setFormState(prev => ({
+      ...prev,
+      registrationChildren: [...prev.registrationChildren, child],
+    }));
+  };
+
+  const removeChild = (index: number) => {
+    setFormState(prev => ({
+      ...prev,
+      registrationChildren: prev.registrationChildren.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateChild = (index: number, child: ChildRegistrationData) => {
+    setFormState(prev => ({
+      ...prev,
+      registrationChildren: prev.registrationChildren.map((c, i) => (i === index ? child : c)),
+    }));
+  };
+
   // Navigation
   const handleNextStep = async () => {
-    if (!validateCurrentStep()) {
+    if (currentStep !== 'child_registration' && !validateCurrentStep()) {
       Alert.alert('Validation Error', 'Please correct the errors before continuing.', [{ text: 'OK' }]);
       return;
     }
@@ -309,6 +334,14 @@ export function useEnhancedRegistration({
     } else {
       setCurrentStep(availableSteps[currentStepIndex + 1]);
     }
+  };
+
+  const handleSkipChildRegistration = async () => {
+    if (!completedSteps.includes('child_registration')) {
+      setCompletedSteps(prev => [...prev, 'child_registration']);
+    }
+    setFormState(prev => ({ ...prev, registrationChildren: [] }));
+    await handleSubmit();
   };
   
   const handlePreviousStep = () => {
@@ -369,15 +402,27 @@ export function useEnhancedRegistration({
             bio: formState.bio
           } as TeacherRegistration;
           break;
-        case 'parent':
+        case 'parent': {
+          const legacyChildren = (formState.children || []).map(c => ({
+            firstName: c.firstName,
+            lastName: c.lastName,
+            grade: c.grade,
+            studentId: c.studentId,
+          }));
+          const newChildren = formState.registrationChildren.map(c => ({
+            firstName: c.firstName,
+            lastName: c.lastName,
+            grade: c.grade,
+          }));
           registration = {
             ...baseRegistration,
             role: 'parent',
             invitationToken: invitationToken || formState.invitationCode,
-            children: formState.children || [],
+            children: [...legacyChildren, ...newChildren],
             emergencyContact: formState.emergencyContact,
             organizationId: formState.selectedOrganizationId || COMMUNITY_SCHOOL_ID
           } as ParentRegistration;
+        }
           break;
         case 'student':
         default:
@@ -433,5 +478,9 @@ export function useEnhancedRegistration({
     handleNextStep,
     handlePreviousStep,
     handleStepChange,
+    handleSkipChildRegistration,
+    addChild,
+    removeChild,
+    updateChild,
   };
 }
