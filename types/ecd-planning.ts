@@ -93,6 +93,8 @@ export interface WeeklyPlan {
   updated_at: string;
 }
 
+export type SchoolType = 'preschool' | 'primary' | 'secondary' | 'combined';
+
 export type DailyProgramBlockType =
   | 'circle_time'
   | 'learning'
@@ -102,7 +104,29 @@ export type DailyProgramBlockType =
   | 'nap'
   | 'assessment'
   | 'transition'
+  | 'period'
+  | 'break'
+  | 'assembly'
+  | 'sports'
+  | 'study'
   | 'other';
+
+export interface K12TimetableSlot {
+  id: string;
+  school_id: string;
+  class_id: string | null;
+  teacher_id: string | null;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  subject: string | null;
+  activity_type: string;
+  room: string | null;
+  notes: string | null;
+  period_number: number | null;
+  is_break: boolean;
+  teacher_name: string | null;
+}
 
 export type DayOfWeek = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
