@@ -1,3 +1,0 @@
-module.exports=[234917,a=>{"use strict";var b=a.i(256856),c=a.i(755132),d=a.i(832315);function e(){let a=(0,d.useRouter)();return(0,c.useEffect)(()=>{a.replace("/dashboard/principal/learner-activity-control")},[a]),(0,b.jsx)("div",{className:"section",children:(0,b.jsx)("p",{style:{color:"var(--muted)"},children:"Opening learner lifecycle controls..."})})}a.s(["default",()=>e])}];
-
-//# sourceMappingURL=web_src_app_dashboard_principal_settings_learner-lifecycle_page_tsx_1cb81714._.js.map

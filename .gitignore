@@ -96,3 +96,4 @@ credentials.json
 .env*.local
 .env.eas.*
 env.local
+web/.next.bak*

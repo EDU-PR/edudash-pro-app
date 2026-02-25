@@ -1,3 +1,0 @@
-module.exports=[168248,a=>{"use strict";var b=a.i(280516);function c({children:a}){return(0,b.jsx)(b.Fragment,{children:a})}a.s(["default",()=>c,"metadata",0,{title:"Standalone Parent Dashboard | EduDash Pro",description:"Personal learning hub for independent parents - AI homework help, exam prep, and progress tracking"}])}];
-
-//# sourceMappingURL=web_src_app_dashboard_parent_standalone_layout_tsx_a8552d89._.js.map
