@@ -14,7 +14,7 @@ import type {
 import { withFinanceTenant } from './tenantUtils';
 import { normalizeMonthIso, nextMonthIso } from './dateHelpers';
 import { normalizePurposeLabel } from './resolvers';
-import { getOutstandingAmountForFee, isStudentActiveForReceivables } from './feeHelpers';
+import { getOutstandingAmountForFee, isStudentActiveForReceivables } from '@/services/finance/feeHelpers';
 
 export async function getMonthExpenseBreakdown(
   orgId: string,
