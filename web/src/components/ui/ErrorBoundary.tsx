@@ -57,9 +57,10 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
             <button
               onClick={() => window.location.reload()}
+              aria-label="Refresh the page to recover from error"
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors mx-auto"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
               Refresh Page
             </button>
           </div>
@@ -81,18 +82,19 @@ export function ErrorState({
   onRetry?: () => void;
 }) {
   return (
-    <div className="bg-gray-800 rounded-2xl p-12 text-center">
+    <div className="bg-gray-800 rounded-2xl p-12 text-center" role="alert">
       <div className="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-        <AlertCircle className="w-8 h-8 text-red-500" />
+        <AlertCircle className="w-8 h-8 text-red-500" aria-hidden="true" />
       </div>
       <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
       <p className="text-gray-400 mb-6">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
+          aria-label="Retry loading this content"
           className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4" aria-hidden="true" />
           Try Again
         </button>
       )}
