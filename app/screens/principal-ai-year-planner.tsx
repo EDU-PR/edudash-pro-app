@@ -13,6 +13,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useTranslation } from 'react-i18next';
@@ -128,7 +129,7 @@ export default function PrincipalAIYearPlannerScreen() {
   );
 }
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: ThemeColors) =>
   StyleSheet.create({
     container: {
       flex: 1,

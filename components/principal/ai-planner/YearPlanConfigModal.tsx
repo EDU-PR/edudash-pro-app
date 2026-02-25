@@ -1,7 +1,7 @@
 // Year Plan Configuration Modal - Refactored for WARP.md compliance
 // Configure AI year plan generation parameters
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { YearPlanConfig } from './types';
 import { AGE_GROUPS, FOCUS_AREAS, PLANNING_FRAMEWORKS, getInitialConfig } from './types';
 import { createStyles } from './YearPlanConfigModal.styles';
+
+const STORAGE_KEY = 'edudash:year_plan_last_config';
 
 interface YearPlanConfigModalProps {
   visible: boolean;
@@ -34,6 +37,21 @@ export function YearPlanConfigModal({
   const styles = createStyles(theme, insets.top, insets.bottom);
 
   const [config, setConfig] = useState<YearPlanConfig>(getInitialConfig());
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((stored) => {
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored) as Partial<YearPlanConfig>;
+            setConfig((prev) => ({ ...prev, ...parsed }));
+          } catch {
+            // ignore corrupt data
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const toggleAgeGroup = (group: string) => {
     setConfig(prev => ({
@@ -54,6 +72,7 @@ export function YearPlanConfigModal({
   };
 
   const handleGenerate = () => {
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config)).catch(() => {});
     onClose();
     onGenerate(config);
   };
