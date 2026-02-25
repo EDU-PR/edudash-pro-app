@@ -195,8 +195,9 @@ export default function ParentDashboard() {
   // Loading state
   if (loading) {
     return (
-      <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-        <div className="spinner"></div>
+      <div className="app" role="status" aria-label="Loading dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="spinner" aria-hidden="true"></div>
+        <span className="sr-only">Loading parent dashboard…</span>
       </div>
     );
   }
@@ -262,13 +263,13 @@ export default function ParentDashboard() {
   }
 
   const SectionEmptyState = ({ title, description, actionLabel, onAction }: SectionEmptyStateProps) => (
-    <div className="card" style={{ display: 'grid', gap: 12 }}>
+    <div className="card" role="status" style={{ display: 'grid', gap: 12 }}>
       <div>
         <div style={{ fontWeight: 600 }}>{title}</div>
         <p style={{ margin: '6px 0 0', color: 'var(--muted)' }}>{description}</p>
       </div>
       {actionLabel && onAction && (
-        <button className="btn btn-primary" onClick={onAction}>
+        <button className="btn btn-primary" aria-label={actionLabel} onClick={onAction}>
           {actionLabel}
         </button>
       )}
@@ -288,9 +289,10 @@ export default function ParentDashboard() {
         {/* Search Bar */}
         <div style={{ marginTop: 0, marginBottom: '20px' }}>
           <div style={{ position: 'relative' }}>
-            <Search className="searchIcon icon16" />
+            <Search className="searchIcon icon16" aria-hidden="true" />
             <input
               className="searchInput"
+              aria-label="Search dashboard"
               placeholder={COPY.searchPlaceholder}
               onKeyDown={(e) => {
                 const t = e.target as HTMLInputElement;
@@ -355,12 +357,14 @@ export default function ParentDashboard() {
               <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                 <button
                   className="btn btnSecondary"
+                  aria-label={`Manage ${featuredChild.firstName}'s profile`}
                   onClick={() => router.push('/dashboard/parent/children')}
                 >
                   Manage Child
                 </button>
                 <button
                   className="btn btnSecondary"
+                  aria-label={`View ${featuredChild.firstName}'s homework`}
                   onClick={() => router.push('/dashboard/parent/homework')}
                 >
                   View Homework
@@ -385,6 +389,8 @@ export default function ParentDashboard() {
                   <button
                     key={child.id}
                     className="btn btnSecondary"
+                    aria-label={`Switch to ${child.firstName}`}
+                    aria-pressed={child.id === activeChildId}
                     style={{
                       borderColor: child.id === activeChildId ? 'var(--primary)' : undefined,
                       color: child.id === activeChildId ? 'var(--primary)' : undefined,
@@ -427,6 +433,10 @@ export default function ParentDashboard() {
                 <div
                   key={child.id}
                   className="card card-interactive"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select ${child.firstName} ${child.lastName}`}
+                  aria-pressed={activeChildId === child.id}
                   style={{
                     border: activeChildId === child.id ? '2px solid var(--primary)' : '1px solid var(--border)',
                     minWidth: '280px',
@@ -434,6 +444,7 @@ export default function ParentDashboard() {
                     padding: '16px'
                   }}
                   onClick={() => setActiveChildId(child.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveChildId(child.id); } }}
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div className="avatar" style={{ width: 48, height: 48, fontSize: 20 }}>
