@@ -1,1 +1,19 @@
-{"name":"EduDash Pro","short_name":"EduDash Pro","start_url":"/","display":"standalone","theme_color":"#00f5ff","background_color":"#0a0a0f","icons":[{"src":"/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"/icon-512.png","sizes":"512x512","type":"image/png"}]}
+{
+  "name": "EduDash Pro - AI-Powered Educational Platform",
+  "short_name": "EduDash Pro",
+  "description": "Revolutionary AI-powered educational platform for preschools.",
+  "lang": "en-ZA",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#00f5ff",
+  "background_color": "#0a0a0f",
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"]
+}
