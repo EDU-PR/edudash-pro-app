@@ -17,8 +17,12 @@ debug/
 temp/
 archive/
 artifacts/
-tools/
+/tools/
 backups/
+
+# Keep runtime Dash AI tools (the pattern above only excludes top-level /tools)
+!services/dash-ai/tools/
+!services/dash-ai/tools/**
 
 # Documentation (not needed for build)
 docs/
