@@ -351,16 +351,25 @@ export default function PrincipalApprovalDashboard() {
             {pendingPOPs.length === 0 ? (
               <Text style={{ color: theme.textSecondary }}>No pending POPs.</Text>
             ) : (
-              pendingPOPs.map((pop) => (
-                <TouchableOpacity key={pop.id} style={styles.listItem} onPress={() => setSelectedPOP(pop)}>
-                  <View style={styles.listIcon}><Ionicons name="document-attach" size={18} color={theme.primary} /></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: theme.text, fontWeight: '600' }}>{pop.student_name || 'Student'}</Text>
-                    <Text style={{ color: theme.textSecondary }}>R{pop.payment_amount.toFixed(2)} • {new Date(pop.payment_date).toLocaleDateString()}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-                </TouchableOpacity>
-              ))
+              pendingPOPs.map((pop) => {
+                const paidDateLabel = pop.payment_date ? new Date(pop.payment_date).toLocaleDateString('en-ZA') : 'Unknown date';
+                const billingMonthLabel = pop.payment_for_month
+                  ? new Date(pop.payment_for_month).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })
+                  : null;
+                return (
+                  <TouchableOpacity key={pop.id} style={styles.listItem} onPress={() => setSelectedPOP(pop)}>
+                    <View style={styles.listIcon}><Ionicons name="document-attach" size={18} color={theme.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.text, fontWeight: '600' }}>{pop.student_name || 'Student'}</Text>
+                      <Text style={{ color: theme.textSecondary }}>
+                        R{pop.payment_amount.toFixed(2)} • Paid {paidDateLabel}
+                        {billingMonthLabel ? ` • For ${billingMonthLabel}` : ''}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                );
+              })
             )}
           </View>
         )}

@@ -37,6 +37,16 @@ export function resolvePendingLikeStatus(
 
 export function getSupabaseErrorMessage(error: any, fallback: string): string {
   if (!error) return fallback;
+  const normalizedMessage = String(error?.message || '').toLowerCase();
+  if (normalizedMessage.includes('fee_corrections_audit is append-only')) {
+    return 'Audit-log schema conflict blocked this action. Apply the latest finance migration and retry.';
+  }
+  if (normalizedMessage.includes('missing_organization_id')) {
+    return 'Organization context is missing for this user. Refresh the screen and try again.';
+  }
+  if (normalizedMessage.includes('audit_log_failed')) {
+    return 'Audit logging failed, so the change was blocked for safety.';
+  }
   const message = [error.message, error.details, error.hint]
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .join(' | ');

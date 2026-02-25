@@ -39,6 +39,10 @@ function POPUploadContent() {
 
   const defaultDescription = useMemo(() => searchParams.get('feeDescription') || undefined, [searchParams]);
   const defaultFeeId = useMemo(() => searchParams.get('feeId') || undefined, [searchParams]);
+  const defaultPaymentForMonth = useMemo(
+    () => searchParams.get('billingMonth') || searchParams.get('paymentForMonth') || searchParams.get('feeDueDate') || undefined,
+    [searchParams]
+  );
 
   useEffect(() => {
     (async () => {
@@ -122,6 +126,7 @@ function POPUploadContent() {
                   <li>Accepted formats: PDF, JPG, PNG</li>
                   <li>Maximum file size: 10MB</li>
                   <li>Include the payment reference number if available</li>
+                  <li>Select the correct billing month for accurate fee matching</li>
                   <li>The school will review and confirm within 24-48 hours</li>
                 </ul>
               </div>
@@ -151,6 +156,7 @@ function POPUploadContent() {
                 defaultAmount={defaultAmount}
                 defaultDescription={defaultDescription}
                 defaultFeeId={defaultFeeId}
+                defaultPaymentForMonth={defaultPaymentForMonth}
                 onSuccess={() => router.push('/dashboard/parent/payments/pop-history')}
                 onCancel={() => router.push('/dashboard/parent/payments')}
               />

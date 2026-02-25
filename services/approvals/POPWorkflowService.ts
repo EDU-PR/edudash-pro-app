@@ -65,6 +65,7 @@ export class POPWorkflowService {
       parent_phone?: string;
       payment_amount: number;
       payment_date: string;
+      payment_for_month?: string;
       payment_method: string;
       payment_reference?: string;
       bank_name?: string;
@@ -87,6 +88,7 @@ export class POPWorkflowService {
           title: popData.payment_purpose,
           payment_amount: popData.payment_amount,
           payment_date: popData.payment_date,
+          payment_for_month: popData.payment_for_month || popData.payment_date,
           payment_method: popData.payment_method,
           payment_reference: popData.payment_reference,
           file_path: popData.receipt_image_path || '',
@@ -133,6 +135,7 @@ export class POPWorkflowService {
         parent_name: popData.parent_name,
         payment_amount: data.payment_amount || 0,
         payment_date: data.payment_date || new Date().toISOString(),
+        payment_for_month: data.payment_for_month || data.payment_date || new Date().toISOString(),
         payment_method: (popData.payment_method || 'bank_transfer') as any,
         payment_purpose: data.title || 'School Fees',
         status: 'submitted',
@@ -199,6 +202,7 @@ export class POPWorkflowService {
         parent_email: uploader?.email || undefined,
         payment_amount: pop.payment_amount || 0,
         payment_date: pop.payment_date || pop.created_at,
+        payment_for_month: pop.payment_for_month || pop.payment_date || pop.created_at,
         payment_method: (pop.payment_method || 'bank_transfer') as any,
         payment_reference: pop.payment_reference,
         payment_purpose: pop.title || 'School Fees',
@@ -286,6 +290,7 @@ export class POPWorkflowService {
         parent_email: uploader?.email || undefined,
         payment_amount: pop.payment_amount || 0,
         payment_date: pop.payment_date || pop.created_at,
+        payment_for_month: pop.payment_for_month || pop.payment_date || pop.created_at,
         payment_method: (pop.payment_method || 'bank_transfer') as any,
         payment_reference: pop.payment_reference,
         payment_purpose: pop.title || 'School Fees',
@@ -394,6 +399,7 @@ export class POPWorkflowService {
         parent_name: parentName,
         payment_amount: data.payment_amount || 0,
         payment_date: data.payment_date || new Date().toISOString(),
+        payment_for_month: data.payment_for_month || data.payment_date || new Date().toISOString(),
         payment_method: (data.payment_method || 'bank_transfer') as any,
         payment_purpose: data.title || 'School Fees',
         fee_type: isUniform ? 'uniform' : undefined,
@@ -474,6 +480,7 @@ export class POPWorkflowService {
         parent_name: parentName,
         payment_amount: data.payment_amount || 0,
         payment_date: data.payment_date || new Date().toISOString(),
+        payment_for_month: data.payment_for_month || data.payment_date || new Date().toISOString(),
         payment_method: (data.payment_method || 'bank_transfer') as any,
         payment_purpose: data.title || 'School Fees',
         fee_type: isUniform ? 'uniform' : undefined,

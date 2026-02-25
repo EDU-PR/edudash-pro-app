@@ -70,8 +70,10 @@ export function PaymentUploadModal({
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [uploading, setUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [paymentDate, setPaymentDate] = useState(new Date());
   const [paymentForMonth, setPaymentForMonth] = useState<Date | null>(null);
   const [categoryCode, setCategoryCode] = useState<FeeCategoryCode>('tuition');
+  const [showPaymentDatePicker, setShowPaymentDatePicker] = useState(false);
   const [showPaymentForPicker, setShowPaymentForPicker] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -84,7 +86,7 @@ export function PaymentUploadModal({
 
   const styles = createStyles(theme, insets);
   const today = new Date();
-  const paymentDateValue = today.toISOString().split('T')[0];
+  const paymentDateLabel = paymentDate.toLocaleDateString('en-ZA');
   const lowerPurpose = (paymentPurpose || '').toLowerCase();
   const isUniformPayment = (feeId || '').startsWith('uniform:') || lowerPurpose.includes('uniform');
   const autoCategoryCode = React.useMemo<FeeCategoryCode>(() => {
@@ -100,7 +102,7 @@ export function PaymentUploadModal({
   const paymentForLabel = paymentForMonth
     ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
     : null;
-  const isPaymentForLocked = Boolean(paymentForDate) || isUniformPayment;
+  const isPaymentForLocked = Boolean(paymentForDate);
   const showPaymentForField = !isUniformPayment;
   const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment) && Boolean(categoryCode);
 
@@ -112,8 +114,9 @@ export function PaymentUploadModal({
       // Modal just opened — reset fields to initial values
       setPaymentReference(initialReference);
       setPaymentAmount(initialAmount);
+      setPaymentDate(new Date());
       const resolvedMonth = resolveMonthStart(paymentForDate);
-      setPaymentForMonth(resolvedMonth ?? autoPaymentForMonth);
+      setPaymentForMonth(resolvedMonth ?? null);
       setCategoryCode(autoCategoryCode);
     }
     prevVisibleRef.current = visible;
@@ -213,10 +216,9 @@ export function PaymentUploadModal({
       alert.showError('Error', 'Please select a file first');
       return;
     }
-    const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
-    if (isUniformPayment && !paymentForMonth && effectivePaymentForMonth) {
-      setPaymentForMonth(effectivePaymentForMonth);
-    }
+    const resolvedPaymentDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+    const derivedPaymentForMonth = new Date(resolvedPaymentDate.getFullYear(), resolvedPaymentDate.getMonth(), 1);
+    const effectivePaymentForMonth = isUniformPayment ? derivedPaymentForMonth : paymentForMonth;
     if (!effectivePaymentForMonth) {
       alert.showWarning('Select Month', 'Please choose the month you are paying for.');
       return;
@@ -290,9 +292,13 @@ export function PaymentUploadModal({
 
     try {
       const supabase = assertSupabase();
-      const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
-      if (isUniformPayment && !paymentForMonth && effectivePaymentForMonth) {
-        setPaymentForMonth(effectivePaymentForMonth);
+      const resolvedPaymentDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), paymentDate.getDate());
+      const paymentDateValue = resolvedPaymentDate.toISOString().split('T')[0];
+      const effectivePaymentForMonth = isUniformPayment
+        ? new Date(resolvedPaymentDate.getFullYear(), resolvedPaymentDate.getMonth(), 1)
+        : paymentForMonth;
+      if (!effectivePaymentForMonth) {
+        throw new Error('Select month');
       }
 
       const uploadResult = await uploadPOPFile(
@@ -324,7 +330,7 @@ export function PaymentUploadModal({
         ? new Date(effectivePaymentForMonth.getFullYear(), effectivePaymentForMonth.getMonth(), 1)
             .toISOString()
             .split('T')[0]
-        : paymentDateValue;
+        : new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString().split('T')[0];
 
       // Use student_code (which maps from student_id in database) for payment reference
       const studentCode = selectedChild?.student_code || `STU-${selectedChildId.slice(0, 8).toUpperCase()}`;
@@ -370,6 +376,7 @@ export function PaymentUploadModal({
             parent_name: parentName,
             payment_amount: paymentAmountNum,
             payment_date: paymentDateValue,
+            payment_for_month: paymentForMonthValue,
             payment_method: 'bank_transfer',
             payment_purpose: normalizedPurpose,
             status: 'submitted',
@@ -412,6 +419,10 @@ export function PaymentUploadModal({
     setSelectedFile(null);
     setPaymentReference(initialReference);
     setPaymentAmount(initialAmount);
+    setPaymentDate(new Date());
+    setPaymentForMonth(resolveMonthStart(paymentForDate));
+    setShowPaymentDatePicker(false);
+    setShowPaymentForPicker(false);
   };
 
   const handleClose = () => {
@@ -482,6 +493,16 @@ export function PaymentUploadModal({
           <Text style={styles.referenceHint}>
             Always include this reference when making bank payments
           </Text>
+
+          <Text style={styles.modalLabel}>Payment Date *</Text>
+          <TouchableOpacity
+            style={styles.datePickerButton}
+            onPress={() => setShowPaymentDatePicker(true)}
+          >
+            <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+            <Text style={styles.datePickerText}>{paymentDateLabel}</Text>
+            <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+          </TouchableOpacity>
 
           {showPaymentForField ? (
             <>
@@ -578,6 +599,30 @@ export function PaymentUploadModal({
                 );
               }
               if (Platform.OS === 'ios') setShowPaymentForPicker(false);
+            }}
+          />
+        )}
+        {showPaymentDatePicker && (
+          <DateTimePicker
+            value={paymentDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            maximumDate={new Date()}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS !== 'ios') setShowPaymentDatePicker(false);
+              if (event.type === 'dismissed') return;
+              if (selectedDate) {
+                const normalizedDate = new Date(
+                  selectedDate.getFullYear(),
+                  selectedDate.getMonth(),
+                  selectedDate.getDate(),
+                );
+                setPaymentDate(normalizedDate);
+                if (isUniformPayment) {
+                  setPaymentForMonth(new Date(normalizedDate.getFullYear(), normalizedDate.getMonth(), 1));
+                }
+              }
+              if (Platform.OS === 'ios') setShowPaymentDatePicker(false);
             }}
           />
         )}

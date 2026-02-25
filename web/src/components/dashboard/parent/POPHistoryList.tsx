@@ -78,6 +78,13 @@ export function POPHistoryList({ userId, studentId, limit }: POPHistoryListProps
     });
   };
 
+  const formatMonth = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-ZA', {
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-ZA', {
       style: 'currency',
@@ -231,6 +238,12 @@ export function POPHistoryList({ userId, studentId, limit }: POPHistoryListProps
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <DollarSign size={14} />
                       {formatCurrency(upload.payment_amount)}
+                    </span>
+                  )}
+
+                  {upload.payment_for_month && (
+                    <span>
+                      For: {formatMonth(upload.payment_for_month)}
                     </span>
                   )}
                   
