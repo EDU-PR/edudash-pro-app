@@ -8,7 +8,7 @@ import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { 
   Sparkles, Calendar, BookOpen, Users, MapPin, ChevronDown, ChevronUp,
-  Loader2, CheckCircle, AlertCircle, Download, Save, RefreshCw, Play
+  Loader2, CheckCircle, AlertCircle, Save, RefreshCw, Play
 } from 'lucide-react';
 
 interface YearPlanConfig {
@@ -70,6 +70,32 @@ interface GeneratedYearPlan {
     category: string;
     estimated_cost: number;
   }[];
+  monthly_entries?: YearPlanMonthlyEntry[];
+  operational_highlights?: YearPlanOperationalHighlight[];
+}
+
+type YearPlanMonthlyBucket =
+  | 'holidays_closures'
+  | 'meetings_admin'
+  | 'excursions_extras'
+  | 'donations_fundraisers';
+
+interface YearPlanMonthlyEntry {
+  month_index: number;
+  bucket: YearPlanMonthlyBucket;
+  subtype?: string | null;
+  title: string;
+  details?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  source?: 'ai' | 'manual' | 'synced';
+  is_published?: boolean;
+  published_to_calendar?: boolean;
+}
+
+interface YearPlanOperationalHighlight {
+  title: string;
+  description: string;
 }
 
 const AGE_GROUPS = [
@@ -92,8 +118,346 @@ const FOCUS_AREAS = [
   { value: 'life_skills', label: 'Life Skills' },
 ];
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 const MOCK_FALLBACK_ENABLED =
   process.env.NEXT_PUBLIC_AI_YEAR_PLANNER_MOCK_FALLBACK === 'true' && process.env.NODE_ENV !== 'production';
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function monthIndexFromDateString(value: string, fallback: number): number {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  const candidate = raw.includes('T') ? raw.split('T')[0] : raw;
+  const month = Number(candidate.split('-')[1]);
+  if (Number.isFinite(month) && month >= 1 && month <= 12) return month;
+  return fallback;
+}
+
+function normalizeMonthlyBucket(value: unknown): YearPlanMonthlyBucket {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'holidays_closures' || raw.includes('holiday') || raw.includes('closure')) return 'holidays_closures';
+  if (raw === 'meetings_admin' || raw.includes('meeting') || raw.includes('admin')) return 'meetings_admin';
+  if (raw === 'excursions_extras' || raw.includes('excursion') || raw.includes('extra')) return 'excursions_extras';
+  if (raw === 'donations_fundraisers' || raw.includes('donation') || raw.includes('fundraiser')) return 'donations_fundraisers';
+  return 'holidays_closures';
+}
+
+function inferSubtype(bucket: YearPlanMonthlyBucket, text: string): string {
+  const value = String(text || '').toLowerCase();
+  if (bucket === 'holidays_closures') {
+    if (value.includes('holiday')) return 'holiday';
+    if (value.includes('close') || value.includes('break')) return 'closure';
+    return 'other';
+  }
+  if (bucket === 'meetings_admin') {
+    if (value.includes('staff')) return 'staff_meeting';
+    if (value.includes('parent')) return 'parent_meeting';
+    if (value.includes('training')) return 'training';
+    return 'other';
+  }
+  if (bucket === 'excursions_extras') {
+    if (value.includes('excursion') || value.includes('trip') || value.includes('visit')) return 'excursion';
+    return 'extra_mural';
+  }
+  if (value.includes('donation') || value.includes('drive')) return 'donation_drive';
+  return 'fundraiser';
+}
+
+function calculateMonthDate(termStart: string, weekNumber: number): string {
+  const date = new Date(`${termStart}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return termStart;
+  date.setUTCDate(date.getUTCDate() + Math.max(0, weekNumber - 1) * 7);
+  return date.toISOString().split('T')[0];
+}
+
+function deriveMonthlyEntries(plan: GeneratedYearPlan): YearPlanMonthlyEntry[] {
+  const entries: YearPlanMonthlyEntry[] = [];
+
+  (plan.key_dates || []).forEach((item, idx) => {
+    const monthIndex = monthIndexFromDateString(item.date, (idx % 12) + 1);
+    entries.push({
+      month_index: monthIndex,
+      bucket: 'holidays_closures',
+      subtype: inferSubtype('holidays_closures', item.event),
+      title: item.event,
+      details: null,
+      start_date: item.date || null,
+      end_date: item.date || null,
+      source: 'ai',
+      is_published: false,
+      published_to_calendar: false,
+    });
+  });
+
+  (plan.terms || []).forEach((term) => {
+    const termStartMonth = monthIndexFromDateString(term.start_date, 1);
+    entries.push({
+      month_index: termStartMonth,
+      bucket: 'holidays_closures',
+      subtype: 'closure',
+      title: `${term.name} starts`,
+      details: `${term.start_date} to ${term.end_date}`,
+      start_date: term.start_date,
+      end_date: term.end_date,
+      source: 'ai',
+      is_published: false,
+      published_to_calendar: false,
+    });
+
+    (term.meetings || []).forEach((meeting) => {
+      const date = calculateMonthDate(term.start_date, meeting.week || 1);
+      entries.push({
+        month_index: monthIndexFromDateString(date, termStartMonth),
+        bucket: 'meetings_admin',
+        subtype: inferSubtype('meetings_admin', `${meeting.type} ${meeting.title}`),
+        title: meeting.title,
+        details: meeting.purpose || null,
+        start_date: date,
+        end_date: date,
+        source: 'ai',
+        is_published: false,
+        published_to_calendar: false,
+      });
+    });
+
+    (term.excursions || []).forEach((excursion) => {
+      const date = calculateMonthDate(term.start_date, excursion.week || 1);
+      entries.push({
+        month_index: monthIndexFromDateString(date, termStartMonth),
+        bucket: 'excursions_extras',
+        subtype: inferSubtype('excursions_extras', excursion.title),
+        title: excursion.title,
+        details: excursion.destination || null,
+        start_date: date,
+        end_date: date,
+        source: 'ai',
+        is_published: false,
+        published_to_calendar: false,
+      });
+    });
+  });
+
+  const unique = new Map<string, YearPlanMonthlyEntry>();
+  entries.forEach((entry) => {
+    const key = `${entry.month_index}:${entry.bucket}:${entry.title.toLowerCase()}`;
+    if (!unique.has(key)) unique.set(key, entry);
+  });
+
+  return Array.from(unique.values()).sort(
+    (a, b) => a.month_index - b.month_index || a.bucket.localeCompare(b.bucket),
+  );
+}
+
+function monthlyBucketLabel(bucket: YearPlanMonthlyBucket): string {
+  if (bucket === 'holidays_closures') return 'Holidays & Closures';
+  if (bucket === 'meetings_admin') return 'Meetings & Admin';
+  if (bucket === 'excursions_extras') return 'Excursions & Extras';
+  return 'Donations & Fundraisers';
+}
+
+function groupMonthlyEntries(entries: YearPlanMonthlyEntry[]): Map<number, YearPlanMonthlyEntry[]> {
+  const grouped = new Map<number, YearPlanMonthlyEntry[]>();
+  for (const entry of entries) {
+    const list = grouped.get(entry.month_index) || [];
+    list.push(entry);
+    grouped.set(entry.month_index, list);
+  }
+  for (const [monthIndex, list] of grouped.entries()) {
+    grouped.set(
+      monthIndex,
+      [...list].sort((a, b) => a.bucket.localeCompare(b.bucket) || a.title.localeCompare(b.title)),
+    );
+  }
+  return grouped;
+}
+
+function normalizeGeneratedPlan(plan: GeneratedYearPlan, schoolName: string): GeneratedYearPlan {
+  const monthlyInput = Array.isArray((plan as any).monthly_entries)
+    ? ((plan as any).monthly_entries as any[])
+    : Array.isArray((plan as any).monthlyEntries)
+      ? ((plan as any).monthlyEntries as any[])
+      : [];
+
+  const monthlyEntries: YearPlanMonthlyEntry[] = monthlyInput
+    .map((entry, index) => {
+      const month_index = Number(entry?.month_index ?? entry?.monthIndex ?? entry?.month ?? monthIndexFromDateString(entry?.start_date || '', (index % 12) + 1));
+      if (!Number.isFinite(month_index) || month_index < 1 || month_index > 12) return null;
+      const title = String(entry?.title || entry?.name || '').trim();
+      if (!title) return null;
+      const bucket = normalizeMonthlyBucket(entry?.bucket ?? entry?.category ?? entry?.column);
+      const subtype = String(entry?.subtype || inferSubtype(bucket, title)).trim() || 'other';
+      return {
+        month_index,
+        bucket,
+        subtype,
+        title,
+        details: entry?.details ? String(entry.details) : (entry?.description ? String(entry.description) : null),
+        start_date: entry?.start_date ? String(entry.start_date) : null,
+        end_date: entry?.end_date ? String(entry.end_date) : null,
+        source: 'ai',
+        is_published: Boolean(entry?.is_published),
+        published_to_calendar: Boolean(entry?.published_to_calendar),
+      } as YearPlanMonthlyEntry;
+    })
+    .filter((entry: YearPlanMonthlyEntry | null): entry is YearPlanMonthlyEntry => Boolean(entry));
+
+  const fallbackMonthly = monthlyEntries.length > 0 ? monthlyEntries : deriveMonthlyEntries(plan);
+
+  const highlightsInput = Array.isArray((plan as any).operational_highlights)
+    ? ((plan as any).operational_highlights as any[])
+    : Array.isArray((plan as any).operationalHighlights)
+      ? ((plan as any).operationalHighlights as any[])
+      : [];
+
+  const operationalHighlights: YearPlanOperationalHighlight[] = highlightsInput
+    .map((item) => {
+      if (typeof item === 'string') {
+        const description = item.trim();
+        if (!description) return null;
+        return { title: 'Highlight', description };
+      }
+      const title = String(item?.title || 'Highlight').trim();
+      const description = String(item?.description || item?.details || '').trim();
+      if (!description) return null;
+      return { title, description };
+    })
+    .filter((item: YearPlanOperationalHighlight | null): item is YearPlanOperationalHighlight => Boolean(item));
+
+  return {
+    ...plan,
+    school_name: plan.school_name || schoolName,
+    monthly_entries: fallbackMonthly,
+    operational_highlights:
+      operationalHighlights.length > 0
+        ? operationalHighlights
+        : [
+            {
+              title: 'Operational Rhythm',
+              description: 'Balanced monthly cadence across closures, meetings, excursions, and family engagement events.',
+            },
+          ],
+  };
+}
+
+async function persistMonthlyEntriesFallback(params: {
+  supabase: ReturnType<typeof createClient>;
+  preschoolId: string;
+  userId: string;
+  academicYear: number;
+  monthlyEntries: YearPlanMonthlyEntry[];
+  syncCalendar: boolean;
+}): Promise<{ monthlySaved: number; syncedEntries: number }> {
+  const { supabase, preschoolId, userId, academicYear, monthlyEntries, syncCalendar } = params;
+  if (monthlyEntries.length === 0) {
+    return { monthlySaved: 0, syncedEntries: 0 };
+  }
+
+  const normalized = monthlyEntries.map((entry) => ({
+    preschool_id: preschoolId,
+    created_by: userId,
+    academic_year: academicYear,
+    month_index: entry.month_index,
+    bucket: entry.bucket,
+    subtype: entry.subtype || inferSubtype(entry.bucket, entry.title),
+    title: entry.title,
+    details: entry.details || null,
+    start_date: entry.start_date || null,
+    end_date: entry.end_date || null,
+    source: 'ai' as const,
+    is_published: syncCalendar ? true : Boolean(entry.is_published),
+    published_to_calendar: false,
+  }));
+
+  const deleteExisting = await supabase
+    .from('year_plan_monthly_entries')
+    .delete()
+    .eq('preschool_id', preschoolId)
+    .eq('academic_year', academicYear)
+    .eq('created_by', userId)
+    .in('source', ['ai', 'synced']);
+  if (deleteExisting.error) throw deleteExisting.error;
+
+  const inserted = await supabase
+    .from('year_plan_monthly_entries')
+    .insert(normalized)
+    .select('id, academic_year, month_index, bucket, subtype, title, details, start_date, end_date');
+  if (inserted.error) throw inserted.error;
+
+  if (!syncCalendar) {
+    return { monthlySaved: normalized.length, syncedEntries: 0 };
+  }
+
+  let syncedEntries = 0;
+  for (const entry of inserted.data || []) {
+    const startDate = entry.start_date || `${entry.academic_year}-${pad2(Number(entry.month_index))}-01`;
+    const endDate = entry.end_date || startDate;
+
+    if (entry.bucket === 'meetings_admin') {
+      const meeting = await supabase.from('school_meetings').insert({
+        preschool_id: preschoolId,
+        created_by: userId,
+        title: entry.title,
+        description: entry.details || '',
+        meeting_type: entry.subtype || 'other',
+        meeting_date: startDate,
+        start_time: '09:00',
+        end_time: '10:00',
+        agenda_items: [],
+        invited_roles: ['teacher', 'parent'],
+        status: 'draft',
+      });
+      if (meeting.error) throw meeting.error;
+    } else if (entry.bucket === 'excursions_extras') {
+      const excursion = await supabase.from('school_excursions').insert({
+        preschool_id: preschoolId,
+        created_by: userId,
+        title: entry.title,
+        description: entry.details || '',
+        destination: entry.details || 'Local venue',
+        excursion_date: startDate,
+        learning_objectives: [],
+        status: 'draft',
+        estimated_cost_per_child: 0,
+      });
+      if (excursion.error) throw excursion.error;
+    } else {
+      const eventType =
+        entry.bucket === 'donations_fundraisers'
+          ? String(entry.subtype || '').toLowerCase().includes('donation')
+            ? 'donation_drive'
+            : 'fundraiser'
+          : 'holiday';
+      const schoolEvent = await supabase.from('school_events').insert({
+        preschool_id: preschoolId,
+        created_by: userId,
+        title: entry.title,
+        description: entry.details || '',
+        event_type: eventType,
+        start_date: startDate,
+        end_date: endDate,
+        all_day: true,
+        is_recurring: false,
+        target_audience: ['parent', 'teacher'],
+        rsvp_enabled: false,
+        send_notifications: true,
+        status: 'scheduled',
+      });
+      if (schoolEvent.error) throw schoolEvent.error;
+    }
+
+    const updateRow = await supabase
+      .from('year_plan_monthly_entries')
+      .update({ published_to_calendar: true, is_published: true, source: 'synced' })
+      .eq('id', entry.id);
+    if (updateRow.error) throw updateRow.error;
+    syncedEntries += 1;
+  }
+
+  return { monthlySaved: normalized.length, syncedEntries };
+}
 
 export default function AIYearPlannerPage() {
   const router = useRouter();
@@ -103,6 +467,7 @@ export default function AIYearPlannerPage() {
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedYearPlan | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [expandedTerms, setExpandedTerms] = useState<number[]>([]);
 
@@ -230,44 +595,77 @@ Always respond with valid JSON that matches the requested structure. Output only
         }
       }
 
-      setGeneratedPlan(planData);
+      const normalizedPlan = normalizeGeneratedPlan(planData, preschoolName);
+      setGeneratedPlan(normalizedPlan);
       setExpandedTerms([1]); // Expand first term by default
     } catch (err: any) {
       console.error('Error generating year plan:', err);
       setError(err.message || 'Failed to generate year plan. Please try again.');
       if (MOCK_FALLBACK_ENABLED) {
-        setGeneratedPlan(generateMockPlan(config, preschoolName));
+        setGeneratedPlan(normalizeGeneratedPlan(generateMockPlan(config, preschoolName), preschoolName));
       } else {
         setGeneratedPlan(null);
       }
     } finally {
       setGenerating(false);
     }
-  }, [preschoolId, preschoolName, config, supabase]);
+  }, [preschoolId, preschoolName, config]);
 
-  const saveYearPlan = async () => {
+  const saveYearPlan = async (syncCalendar = false) => {
     if (!generatedPlan || !preschoolId || !userId) return;
 
     setSaving(true);
     setError(null);
 
     try {
+      const normalizedPlan = normalizeGeneratedPlan(generatedPlan, preschoolName);
       const planPayload = {
-        ...generatedPlan,
+        ...normalizedPlan,
         config: {
           age_groups: config.age_groups,
         },
       };
 
-      const { data, error: rpcError } = await supabase.rpc('save_ai_year_plan', {
+      let fallbackStats: { monthlySaved: number; syncedEntries: number } | null = null;
+
+      const { data: v2Data, error: v2Error } = await supabase.rpc('save_ai_year_plan_v2', {
         p_preschool_id: preschoolId,
         p_created_by: userId,
         p_plan: planPayload,
+        p_sync_calendar: syncCalendar,
       });
 
-      if (rpcError) throw rpcError;
-      if (data && data.success === false) {
-        throw new Error('Save failed.');
+      if (!v2Error && (!v2Data || (v2Data as any).success !== false)) {
+        setSaveMessage(syncCalendar ? 'Year plan saved and published to calendar.' : 'Year plan draft saved successfully.');
+      } else {
+        console.warn('[AI Year Planner] save_ai_year_plan_v2 unavailable, using legacy fallback.', v2Error);
+
+        const { data: legacyData, error: legacyError } = await supabase.rpc('save_ai_year_plan', {
+          p_preschool_id: preschoolId,
+          p_created_by: userId,
+          p_plan: planPayload,
+        });
+        if (legacyError) throw legacyError;
+        if (legacyData && (legacyData as any).success === false) {
+          throw new Error((legacyData as any)?.message || 'Save failed.');
+        }
+
+        fallbackStats = await persistMonthlyEntriesFallback({
+          supabase,
+          preschoolId,
+          userId,
+          academicYear: normalizedPlan.academic_year,
+          monthlyEntries: normalizedPlan.monthly_entries || [],
+          syncCalendar,
+        });
+
+        if (syncCalendar) {
+          setSaveMessage(
+            `Saved using legacy fallback and published ${fallbackStats.syncedEntries}/${fallbackStats.monthlySaved} monthly entries to calendar.`,
+          );
+        } else {
+          setSaveMessage(`Saved using legacy fallback with ${fallbackStats.monthlySaved} monthly entries.`);
+        }
       }
 
       setSaveSuccess(true);
@@ -323,7 +721,7 @@ Always respond with valid JSON that matches the requested structure. Output only
           <div className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a' }}>
               <CheckCircle size={20} />
-              <span>Year plan saved successfully! Check your Year Planner and Curriculum Themes.</span>
+              <span>{saveMessage || 'Year plan saved successfully! Check your Year Planner and Curriculum Themes.'}</span>
             </div>
           </div>
         )}
@@ -513,13 +911,22 @@ Always respond with valid JSON that matches the requested structure. Output only
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
               <button
-                onClick={saveYearPlan}
+                onClick={() => saveYearPlan(false)}
                 disabled={saving}
                 className="btn btnPrimary"
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
                 {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                Save to Database
+                Save Draft
+              </button>
+              <button
+                onClick={() => saveYearPlan(true)}
+                disabled={saving}
+                className="btn btnSecondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                {saving ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+                Publish to Calendar
               </button>
               <button
                 onClick={() => setGeneratedPlan(null)}
@@ -714,6 +1121,29 @@ Always respond with valid JSON that matches the requested structure. Output only
             ))}
 
             {/* Budget Summary */}
+            {generatedPlan.monthly_entries && generatedPlan.monthly_entries.length > 0 && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <h3 style={{ fontWeight: 600, marginBottom: 16 }}>📅 Monthly Matrix Preview</h3>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {Array.from(groupMonthlyEntries(generatedPlan.monthly_entries).entries())
+                    .sort(([a], [b]) => a - b)
+                    .map(([month, entries]) => (
+                      <div key={month} style={{ background: 'var(--background)', borderRadius: 12, padding: 14 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 8 }}>{MONTH_LABELS[month - 1] || `Month ${month}`}</div>
+                        <div style={{ display: 'grid', gap: 6 }}>
+                          {entries.map((entry, index) => (
+                            <div key={`${entry.bucket}-${entry.title}-${index}`} style={{ fontSize: 13, color: 'var(--muted)' }}>
+                              <strong style={{ color: 'var(--text)' }}>{monthlyBucketLabel(entry.bucket)}:</strong> {entry.title}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Budget Summary */}
             {generatedPlan.budget_summary && generatedPlan.budget_summary.length > 0 && (
               <div className="card">
                 <h3 style={{ fontWeight: 600, marginBottom: 16 }}>💰 Estimated Budget Summary</h3>
@@ -810,6 +1240,49 @@ Please generate a JSON response with this exact structure:
         }
       ]
     }
+  ],
+  "monthly_entries": [
+    {
+      "month_index": 1,
+      "bucket": "holidays_closures",
+      "subtype": "holiday",
+      "title": "Term 1 Starts",
+      "details": "School opening week",
+      "start_date": "${config.academic_year}-01-15",
+      "end_date": "${config.academic_year}-01-15"
+    },
+    {
+      "month_index": 2,
+      "bucket": "meetings_admin",
+      "subtype": "parent_meeting",
+      "title": "Parent Orientation",
+      "details": "Families orientation and policy walkthrough",
+      "start_date": "${config.academic_year}-02-10",
+      "end_date": "${config.academic_year}-02-10"
+    },
+    {
+      "month_index": 3,
+      "bucket": "excursions_extras",
+      "subtype": "excursion",
+      "title": "Local Community Excursion",
+      "details": "Age-appropriate local visit",
+      "start_date": "${config.academic_year}-03-12",
+      "end_date": "${config.academic_year}-03-12"
+    },
+    {
+      "month_index": 4,
+      "bucket": "donations_fundraisers",
+      "subtype": "fundraiser",
+      "title": "Family Fundraiser",
+      "details": "Term fundraiser event",
+      "start_date": "${config.academic_year}-04-20",
+      "end_date": "${config.academic_year}-04-20"
+    }
+  ],
+  "operational_highlights": [
+    { "title": "Fundraising Strategy", "description": "Describe quick wins and signature events." },
+    { "title": "Family Engagement", "description": "Describe meetings and communication rhythm." },
+    { "title": "Learning Through Excursions", "description": "Describe excursion progression and outcomes." }
   ],
   "key_dates": [{"date": "2025-01-15", "event": "School opens"}],
   "budget_summary": [

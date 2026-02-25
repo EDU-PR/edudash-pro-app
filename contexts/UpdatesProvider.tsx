@@ -155,13 +155,11 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Send system notification instead of showing banner
         await sendUpdateNotification();
         
-        // Set app badge to show update available (use BadgeCoordinator to avoid wiping other categories)
-        if (Platform.OS !== 'web') {
-          try {
-            await BadgeCoordinator.setCategory('updates', 1);
-          } catch (badgeError) {
-            logger.warn('[Updates] Failed to set badge count:', badgeError);
-          }
+        // checkForUpdates already returns early on web, so we can set this directly.
+        try {
+          await BadgeCoordinator.setCategory('updates', 1);
+        } catch (badgeError) {
+          logger.warn('[Updates] Failed to set badge count:', badgeError);
         }
         
         return true;
@@ -400,13 +398,11 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Send system notification for background update
         await sendUpdateNotification();
         
-        // Set app badge to show update available
-        if (Platform.OS !== 'web') {
-          try {
-            await BadgeCoordinator.setCategory('updates', 1);
-          } catch (badgeError) {
-            logger.warn('[Updates] Failed to set badge count:', badgeError);
-          }
+        // backgroundCheck already returns early on web, so we can set this directly.
+        try {
+          await BadgeCoordinator.setCategory('updates', 1);
+        } catch (badgeError) {
+          logger.warn('[Updates] Failed to set badge count:', badgeError);
         }
       } else {
         logger.info('[Updates] No background update available');
