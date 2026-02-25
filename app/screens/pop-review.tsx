@@ -20,6 +20,7 @@ import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 import { inferFeeCategoryCode, normalizeFeeCategoryCode } from '@/lib/utils/feeUtils';
+import { getMonthStartISO } from '@/lib/utils/dateUtils';
 import type { FeeCategoryCode } from '@/types/finance';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -490,13 +491,30 @@ export default function POPReviewScreen() {
     });
   }, [getResolvedCategoryCode, showAlert]);
 
+  const resolvePaymentMonth = useCallback((upload: POPUpload, explicitMonth?: string) => {
+    const rawMonth =
+      explicitMonth ??
+      monthOverrides[upload.id] ??
+      upload.payment_for_month ??
+      upload.payment_date ??
+      new Date().toISOString().split('T')[0];
+
+    return getMonthStartISO(rawMonth, {
+      recoverUtcMonthBoundary: Boolean(upload.payment_for_month || upload.payment_date),
+    });
+  }, [monthOverrides]);
+
   const openMonthPicker = useCallback((upload: POPUpload, onMonthSelected?: (value: string) => void) => {
-    const resolvedMonth = monthOverrides[upload.id] || upload.payment_for_month || upload.payment_date || new Date().toISOString().split('T')[0];
-    const base = new Date(resolvedMonth);
+    const resolvedMonth = resolvePaymentMonth(upload);
+    const [baseYear, baseMonth] = resolvedMonth.split('-').map((part) => Number(part));
+    const anchorYear = Number.isFinite(baseYear) ? baseYear : new Date().getFullYear();
+    const anchorMonth = Number.isFinite(baseMonth) && baseMonth >= 1 && baseMonth <= 12
+      ? baseMonth
+      : new Date().getMonth() + 1;
     const options: { label: string; value: string }[] = [];
     for (let i = -6; i <= 6; i++) {
-      const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
-      const value = d.toISOString().split('T')[0];
+      const d = new Date(anchorYear, anchorMonth - 1 + i, 1);
+      const value = getMonthStartISO(d);
       const label = d.toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' });
       options.push({ label, value });
     }
@@ -506,7 +524,7 @@ export default function POPReviewScreen() {
       type: 'warning',
       buttons: [
         ...options.map((opt) => ({
-          text: `${opt.label}${resolvedMonth.startsWith(opt.value.slice(0, 7)) ? ' ✓' : ''}`,
+          text: `${opt.label}${resolvedMonth.slice(0, 7) === opt.value.slice(0, 7) ? ' ✓' : ''}`,
           onPress: () => {
             setMonthOverrides((prev) => ({ ...prev, [upload.id]: opt.value }));
             onMonthSelected?.(opt.value);
@@ -515,7 +533,7 @@ export default function POPReviewScreen() {
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
-  }, [monthOverrides, showAlert]);
+  }, [resolvePaymentMonth, showAlert]);
 
   const showApprovalDialog = useCallback((upload: POPUpload, monthOverride?: string) => {
     const originalCategory = upload.category_code
@@ -534,7 +552,7 @@ export default function POPReviewScreen() {
     const reviewNotes = categoryWasCorrected
       ? `Payment verified and approved. Category corrected from ${CATEGORY_META[originalCategory].label} to ${CATEGORY_META[selectedCategory].label}.`
       : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
-    const displayMonth = monthOverride ?? monthOverrides[upload.id] ?? upload.payment_for_month ?? upload.payment_date ?? new Date().toISOString().split('T')[0];
+    const displayMonth = resolvePaymentMonth(upload, monthOverride);
     const monthLabel = formatMonth(displayMonth);
     showAlert({
       title: 'Approve Payment',
@@ -548,14 +566,14 @@ export default function POPReviewScreen() {
           text: 'Approve',
           style: 'default',
           onPress: async () => {
-            const selectedMonth = monthOverride ?? monthOverrides[upload.id] ?? upload.payment_for_month ?? upload.payment_date ?? new Date().toISOString().split('T')[0];
+            const selectedMonth = resolvePaymentMonth(upload, monthOverride);
             setProcessing(upload.id);
             try {
               await updatePOPStatus.mutateAsync({
                 uploadId: upload.id,
                 status: 'approved',
                 reviewNotes,
-                billingMonth: selectedMonth.split('T')[0],
+                billingMonth: selectedMonth,
                 categoryCode: selectedCategory,
               });
               setCategoryOverrides((prev) => {
@@ -585,7 +603,7 @@ export default function POPReviewScreen() {
         },
       ],
     });
-  }, [monthOverrides, getResolvedCategoryCode, openCategoryPicker, openMonthPicker, updatePOPStatus, openReceiptModal, fetchUploads, showAlert]);
+  }, [resolvePaymentMonth, getResolvedCategoryCode, openCategoryPicker, openMonthPicker, updatePOPStatus, openReceiptModal, fetchUploads, showAlert]);
 
   const handleApprove = useCallback((upload: POPUpload) => {
     showApprovalDialog(upload);
@@ -712,7 +730,7 @@ export default function POPReviewScreen() {
       const name = `${fn} ${ln}`.trim();
       return name || (item.uploader as { email?: string }).email || 'School admin';
     })();
-    const paymentForMonth = monthOverrides[item.id] || item.payment_for_month || item.payment_date;
+    const paymentForMonth = resolvePaymentMonth(item);
     const categoryMeta = getCategoryMeta(item);
 
     return (
