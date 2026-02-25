@@ -41,6 +41,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ParentJoinService } from '@/lib/services/parentJoinService';
 import { useTeacherStudents } from '@/hooks/useTeacherStudents';
 import { CollapsibleSection, StudentSummaryCard } from '@/components/dashboard/shared';
+import { TeachTodaySuggestion } from '@/components/dashboard/teacher/TeachTodaySuggestion';
 import { scheduleTeacherRoutineReminders } from '@/lib/dashboard/teacherRoutineReminders';
 import { router } from 'expo-router';
 
@@ -574,6 +575,21 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
             <Text style={styles.routineStatusText}>{routineReminderStatus}</Text>
           ) : null}
         </View>
+
+        {/* What to Teach Today — AI suggestion card */}
+        <TeachTodaySuggestion
+          todayRoutine={dashboardData?.todayRoutine ? {
+            title: dashboardData.todayRoutine.title ?? undefined,
+            nextBlockTitle: dashboardData.todayRoutine.nextBlockTitle ?? undefined,
+            weekStartDate: dashboardData.todayRoutine.weekStartDate,
+            termId: dashboardData.todayRoutine.termId ?? undefined,
+            themeId: dashboardData.todayRoutine.themeId ?? undefined,
+            themeName: dashboardData.todayRoutine.title ?? undefined,
+          } : null}
+          classNames={(dashboardData?.myClasses || []).map((c: { name: string }) => c.name)}
+          onOpenTutor={openTutorMode}
+          onOpenPlanner={openDailyProgramPlanner}
+        />
 
         {/* Metrics Grid */}
         <CollapsibleSection
