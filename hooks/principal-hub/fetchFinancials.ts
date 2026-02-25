@@ -36,6 +36,16 @@ async function settle<T>(promise: Promise<T>): Promise<SettledResult<T>> {
   }
 }
 
+function reasonToMessage(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === 'string') return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
+
 /**
  * Fetch current- and previous-month collected totals (allocated to billing month)
  * from `get_finance_month_snapshot`.
@@ -64,8 +74,8 @@ export async function fetchFinancials(
     const monthlyExpenses = Number(currentSnapshot?.expenses_this_month || 0);
 
     const errorMessages = [
-      currentResult.status === 'rejected' ? currentResult.reason?.message || String(currentResult.reason) : null,
-      previousResult.status === 'rejected' ? previousResult.reason?.message || String(previousResult.reason) : null,
+      currentResult.status === 'rejected' ? reasonToMessage(currentResult.reason) : null,
+      previousResult.status === 'rejected' ? reasonToMessage(previousResult.reason) : null,
     ].filter(Boolean);
 
     const hasError = !currentSnapshot || errorMessages.length > 0;
