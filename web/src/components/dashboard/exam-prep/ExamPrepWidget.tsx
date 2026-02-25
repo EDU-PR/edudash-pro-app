@@ -46,6 +46,8 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
 
   const [customPrompt, setCustomPrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   // Fetch user info for UpgradeModal
   useEffect(() => {
@@ -101,6 +103,10 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const handleGenerate = async () => {
     if (!onAskDashAI) return;
 
+    setGenerating(true);
+    setGenerateError(null);
+
+    try {
     // ✅ CHECK QUOTA BEFORE GENERATING EXAM (for logged-in users)
     if (userId && !guestMode) {
       const quotaResult = await checkQuota('exam_generation');
@@ -645,6 +651,12 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         console.error('[ExamPrep] Failed to increment usage:', err);
       });
     }
+    } catch (err) {
+      setGenerateError('Failed to prepare exam generation. Please try again.');
+      console.error('[ExamPrep] Generation error:', err);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleConfirmGenerate = () => {
@@ -916,6 +928,7 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         <select
           value={selectedGrade}
           onChange={(e) => setSelectedGrade(e.target.value)}
+          aria-label="Select grade"
           style={{
             width: '100%',
             padding: 'var(--space-3)',
@@ -943,6 +956,7 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         <select
           value={selectedLanguage}
           onChange={(e) => setSelectedLanguage(e.target.value as SouthAfricanLanguage)}
+          aria-label="Select language"
           style={{
             width: '100%',
             padding: 'var(--space-3)',
@@ -973,6 +987,7 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         {/* Search Input */}
         <input
           type="text"
+          aria-label="Search subjects"
           placeholder="🔍 Search subjects... (Math, Physics, English, etc.)"
           value={subjectSearch}
           onChange={(e) => {
@@ -1001,6 +1016,7 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         <select
           value={selectedSubject}
           onChange={(e) => setSelectedSubject(e.target.value)}
+          aria-label="Select subject"
           style={{
             width: '100%',
             padding: 'var(--space-3)',
@@ -1045,6 +1061,8 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
                 key={type.id}
                 onClick={() => setSelectedExamType(type.id)}
                 className="card"
+                aria-label={`${type.label}: ${type.description}`}
+                aria-pressed={isSelected}
                 style={{
                   padding: 'var(--space-3)',
                   cursor: 'pointer',
@@ -1074,14 +1092,47 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
         </div>
       </div>
 
+      {/* Generation Error */}
+      {generateError && (
+        <div role="alert" style={{
+          padding: 'var(--space-3)',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: 'var(--radius-2)',
+          marginBottom: 'var(--space-3)',
+          fontSize: 13,
+          color: 'var(--danger, #ef4444)',
+        }}>
+          {generateError}
+        </div>
+      )}
+
       {/* Generate Button */}
       <button
         className="btn btnPrimary"
         onClick={handleGenerate}
-        style={{ width: '100%', fontSize: 14, padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}
+        disabled={generating}
+        aria-label={generating ? 'Generating exam content…' : `Generate ${examType?.label} with Dash AI`}
+        style={{
+          width: '100%',
+          fontSize: 14,
+          padding: 'var(--space-3)',
+          marginBottom: 'var(--space-3)',
+          opacity: generating ? 0.7 : 1,
+          cursor: generating ? 'not-allowed' : 'pointer',
+        }}
       >
-        <Sparkles className="icon16" />
-        Generate {examType?.label} with Dash AI
+        {generating ? (
+          <>
+            <span className="spinner" style={{ width: 16, height: 16 }} aria-hidden="true" />
+            Preparing…
+          </>
+        ) : (
+          <>
+            <Sparkles className="icon16" />
+            Generate {examType?.label} with Dash AI
+          </>
+        )}
       </button>
 
       <p className="muted" style={{ fontSize: 11, marginBottom: 'var(--space-4)', textAlign: 'center' }}>
