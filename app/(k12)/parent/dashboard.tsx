@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Pressable, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -226,9 +226,23 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
       {/* Fixed Header */}
       <View style={[styles.fixedHeader, { backgroundColor: quickWinsEnabled ? 'rgba(15,18,30,0.82)' : theme.background, borderBottomColor: quickWinsEnabled ? 'rgba(255,255,255,0.08)' : theme.border }]}>
         <View style={styles.headerLeftSection}>
-          <TouchableOpacity style={styles.hamburgerButton} onPress={() => setIsDrawerOpen(true)} accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}>
-            <CosmicOrb size={30} isProcessing={false} isSpeaking={false} />
-          </TouchableOpacity>
+          <Pressable
+            style={({ pressed }) => [
+              styles.hamburgerButton,
+              Platform.OS === 'web' && { cursor: 'pointer' },
+              pressed && { opacity: 0.7 },
+            ]}
+            onPress={() => setIsDrawerOpen(true)}
+            accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}
+            accessibilityRole="button"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            {Platform.OS === 'web' ? (
+              <Ionicons name="menu" size={28} color={theme.text} />
+            ) : (
+              <CosmicOrb size={30} isProcessing={false} isSpeaking={false} />
+            )}
+          </Pressable>
           <View style={styles.headerTitleWrapper}>
             <Text style={[styles.headerTitle, { color: theme.text }]}>EduDashPro</Text>
           </View>
