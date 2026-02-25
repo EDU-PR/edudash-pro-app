@@ -15,5 +15,14 @@
       "destination": "/data-deletion",
       "permanent": true
     }
+  ],
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
