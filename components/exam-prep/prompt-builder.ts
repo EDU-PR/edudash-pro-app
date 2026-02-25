@@ -48,6 +48,9 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
   let systemPrompt = '';
   let displayTitle = '';
 
+  const termLabel = config.term ? `Term ${config.term}` : '';
+  const titleTermSuffix = termLabel ? ` - ${termLabel}` : '';
+
   switch (config.examType) {
     case 'practice_test':
       systemPrompt = buildPracticeTestPrompt(
@@ -59,7 +62,7 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
         isAdditionalLanguage,
         isFoundationPhase
       );
-      displayTitle = `Practice Test: ${gradeInfo?.label} ${config.subject} (${languageName})`;
+      displayTitle = `Practice Test: ${gradeInfo?.label} ${config.subject}${titleTermSuffix} (${languageName})`;
       break;
 
     case 'revision_notes':
@@ -69,7 +72,7 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
         languageName,
         complexity
       );
-      displayTitle = `Revision Notes: ${gradeInfo?.label} ${config.subject} (${languageName})`;
+      displayTitle = `Revision Notes: ${gradeInfo?.label} ${config.subject}${titleTermSuffix} (${languageName})`;
       break;
 
     case 'study_guide':
@@ -79,7 +82,7 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
         languageName,
         complexity
       );
-      displayTitle = `Study Guide: ${gradeInfo?.label} ${config.subject} - 7-Day Plan (${languageName})`;
+      displayTitle = `Study Guide: ${gradeInfo?.label} ${config.subject}${titleTermSuffix} - 7-Day Plan (${languageName})`;
       break;
 
     case 'flashcards':
@@ -89,7 +92,7 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
         languageName,
         complexity
       );
-      displayTitle = `Flashcards: ${gradeInfo?.label} ${config.subject} (${languageName})`;
+      displayTitle = `Flashcards: ${gradeInfo?.label} ${config.subject}${titleTermSuffix} (${languageName})`;
       break;
 
     default:
@@ -102,7 +105,17 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
         isAdditionalLanguage,
         isFoundationPhase
       );
-      displayTitle = `Exam Prep: ${gradeInfo?.label} ${config.subject}`;
+      displayTitle = `Exam Prep: ${gradeInfo?.label} ${config.subject}${titleTermSuffix}`;
+  }
+
+  // Append term scoping if provided
+  if (config.term) {
+    systemPrompt += `\n\n**Term Scoping:**\nScope all content strictly to CAPS Term ${config.term} for ${gradeInfo?.label} ${config.subject}. Only include topics, outcomes, and assessment standards prescribed for Term ${config.term}.`;
+  }
+
+  // Append topic scoping if provided
+  if (config.topics && config.topics.length > 0) {
+    systemPrompt += `\n\n**Topic Focus:**\nFocus specifically on the following topics: ${config.topics.join(', ')}. Ensure all questions, examples, and content relate directly to these topics.`;
   }
 
   // Append custom prompt if provided
