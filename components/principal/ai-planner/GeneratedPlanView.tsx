@@ -2,14 +2,17 @@
 // Displays the AI-generated year plan overview with inline editing
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GeneratedYearPlan, GeneratedTerm, YearPlanMonthlyBucket } from './types';
 import { TermCard } from './TermCard';
+import { PlanInsightsPanel } from './PlanInsightsPanel';
+import { createStyles, MONTH_COLORS } from './GeneratedPlanView.styles';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
 interface GeneratedPlanViewProps {
   plan: GeneratedYearPlan;
   expandedTerm: number | null;
@@ -18,9 +21,12 @@ interface GeneratedPlanViewProps {
   onSave: () => void;
   onRegenerate: () => void;
   onUpdatePlan: (updater: (plan: GeneratedYearPlan) => GeneratedYearPlan) => void;
+  onShareTeachers?: () => void;
+  onShareParents?: () => void;
+  onExportPdf?: () => void;
 }
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const BUCKET_ORDER: YearPlanMonthlyBucket[] = [
   'holidays_closures',
   'meetings_admin',
@@ -34,6 +40,18 @@ const BUCKET_LABELS: Record<YearPlanMonthlyBucket, string> = {
   donations_fundraisers: 'Donations & Fundraisers',
 };
 
+type ViewTab = 'monthly' | 'terms' | 'insights';
+
+function isHolidayEntry(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes('holiday') || lower.includes('public') || lower.includes('day off');
+}
+
+function isFundraiserEntry(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes('fundrais') || lower.includes('raffle') || lower.includes('sale') || lower.includes('market');
+}
+
 export function GeneratedPlanView({
   plan,
   expandedTerm,
@@ -42,12 +60,28 @@ export function GeneratedPlanView({
   onSave,
   onRegenerate,
   onUpdatePlan,
+  onShareTeachers,
+  onShareParents,
+  onExportPdf,
 }: GeneratedPlanViewProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = createStyles(theme, insets.bottom);
-  const [mode, setMode] = useState<'terms' | 'monthly'>('monthly');
+  const [activeTab, setActiveTab] = useState<ViewTab>('monthly');
   const [isEditing, setIsEditing] = useState(false);
+
+  const totalWeeks = useMemo(
+    () => plan.terms.reduce((acc, t) => acc + t.weeklyThemes.length, 0),
+    [plan.terms]
+  );
+  const totalExcursions = useMemo(
+    () => plan.terms.reduce((acc, t) => acc + t.excursions.length, 0),
+    [plan.terms]
+  );
+  const totalMeetings = useMemo(
+    () => plan.terms.reduce((acc, t) => acc + t.meetings.length, 0),
+    [plan.terms]
+  );
 
   const monthlyByMonth = useMemo(() => {
     const map = new Map<number, Record<YearPlanMonthlyBucket, string[]>>();
@@ -59,7 +93,6 @@ export function GeneratedPlanView({
         donations_fundraisers: [],
       });
     }
-
     (plan.monthlyEntries || []).forEach((entry) => {
       const month = Math.min(12, Math.max(1, Number(entry.monthIndex) || 1));
       const target = map.get(month);
@@ -67,7 +100,6 @@ export function GeneratedPlanView({
       const label = entry.details ? `${entry.title}: ${entry.details}` : entry.title;
       target[entry.bucket].push(label);
     });
-
     return map;
   }, [plan.monthlyEntries]);
 
@@ -80,7 +112,50 @@ export function GeneratedPlanView({
 
   return (
     <ScrollView style={styles.planContainer} contentContainerStyle={styles.planContent}>
-      {/* Plan Overview */}
+      {/* Action Buttons Row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.actionRow}
+        contentContainerStyle={styles.actionRowContent}
+      >
+        <TouchableOpacity
+          style={[styles.actionChip, styles.actionChipPrimary]}
+          onPress={onSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <EduDashSpinner size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="save-outline" size={16} color="#fff" />
+              <Text style={[styles.actionChipText, styles.actionChipTextPrimary]}>Save to Database</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {onExportPdf && (
+          <TouchableOpacity style={styles.actionChip} onPress={onExportPdf}>
+            <Text style={styles.actionChipText}>📄 Export PDF</Text>
+          </TouchableOpacity>
+        )}
+        {onShareTeachers && (
+          <TouchableOpacity style={styles.actionChip} onPress={onShareTeachers}>
+            <Text style={styles.actionChipText}>📤 Share with Teachers</Text>
+          </TouchableOpacity>
+        )}
+        {onShareParents && (
+          <TouchableOpacity style={styles.actionChip} onPress={onShareParents}>
+            <Text style={styles.actionChipText}>👨‍👩‍👧 Share with Parents</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={styles.actionChip} onPress={onRegenerate}>
+          <Ionicons name="refresh" size={16} color={theme.text} />
+          <Text style={styles.actionChipText}>Regenerate</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Plan Overview Header Card */}
       <View style={styles.overviewCard}>
         <View style={styles.overviewTitleRow}>
           <Text style={styles.overviewTitle}>Academic Year {plan.academicYear}</Text>
@@ -95,6 +170,7 @@ export function GeneratedPlanView({
           </TouchableOpacity>
         </View>
 
+        {/* Vision Quote Box */}
         {isEditing ? (
           <TextInput
             style={styles.visionInput}
@@ -105,28 +181,28 @@ export function GeneratedPlanView({
             multiline
           />
         ) : (
-          <Text style={styles.overviewVision}>{plan.schoolVision}</Text>
+          <View style={styles.visionQuoteBox}>
+            <Text style={styles.visionQuoteText}>"{plan.schoolVision}"</Text>
+          </View>
         )}
 
-        <View style={styles.overviewStats}>
-          <View style={styles.overviewStat}>
-            <Text style={styles.statValue}>{plan.terms.length}</Text>
-            <Text style={styles.statLabel}>Terms</Text>
+        {/* Year at a Glance pills */}
+        <View style={styles.glanceRow}>
+          <View style={styles.glancePill}>
+            <Text style={styles.glancePillText}>{plan.terms.length} Terms</Text>
           </View>
-          <View style={styles.overviewStat}>
-            <Text style={styles.statValue}>
-              {plan.terms.reduce((acc, t) => acc + t.weeklyThemes.length, 0)}
-            </Text>
-            <Text style={styles.statLabel}>Themes</Text>
+          <View style={styles.glancePill}>
+            <Text style={styles.glancePillText}>{totalWeeks} Weeks</Text>
           </View>
-          <View style={styles.overviewStat}>
-            <Text style={styles.statValue}>
-              {plan.terms.reduce((acc, t) => acc + t.excursions.length, 0)}
-            </Text>
-            <Text style={styles.statLabel}>Excursions</Text>
+          <View style={styles.glancePill}>
+            <Text style={styles.glancePillText}>{totalExcursions} Excursions</Text>
+          </View>
+          <View style={styles.glancePill}>
+            <Text style={styles.glancePillText}>{totalMeetings} Meetings</Text>
           </View>
         </View>
 
+        {/* Budget row */}
         <View style={styles.budgetRow}>
           <Ionicons name="wallet-outline" size={18} color={theme.textSecondary} />
           {isEditing ? (
@@ -143,21 +219,21 @@ export function GeneratedPlanView({
         </View>
       </View>
 
-      <View style={styles.modeRow}>
-        <TouchableOpacity
-          style={[styles.modeBtn, mode === 'monthly' && styles.modeBtnActive]}
-          onPress={() => setMode('monthly')}
-        >
-          <Text style={[styles.modeBtnText, mode === 'monthly' && styles.modeBtnTextActive]}>Month Matrix</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modeBtn, mode === 'terms' && styles.modeBtnActive]}
-          onPress={() => setMode('terms')}
-        >
-          <Text style={[styles.modeBtnText, mode === 'terms' && styles.modeBtnTextActive]}>Term Details</Text>
-        </TouchableOpacity>
+      {/* Tab Selector */}
+      <View style={styles.tabRow}>
+        {(['monthly', 'terms', 'insights'] as ViewTab[]).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.tabBtnText, activeTab === tab && styles.tabBtnTextActive]}>
+              {tab === 'monthly' ? 'Monthly View' : tab === 'terms' ? 'Term View' : 'Insights'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      
+
       {/* Annual Goals */}
       <View style={styles.goalsCard}>
         <View style={styles.goalsTitleRow}>
@@ -174,7 +250,9 @@ export function GeneratedPlanView({
         </View>
         {plan.annualGoals.map((goal, idx) => (
           <View key={idx} style={styles.goalItem}>
-            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+            <View style={styles.goalNumberBadge}>
+              <Text style={styles.goalNumberText}>{idx + 1}</Text>
+            </View>
             {isEditing ? (
               <>
                 <TextInput
@@ -209,29 +287,57 @@ export function GeneratedPlanView({
         ))}
       </View>
 
-      {mode === 'monthly' ? (
+      {/* Tab Content */}
+      {activeTab === 'monthly' && (
         <>
-          <Text style={styles.termsHeader}>{plan.academicYear} Month Matrix Preview</Text>
+          <Text style={styles.termsHeader}>{plan.academicYear} Monthly Calendar</Text>
           <View style={styles.monthlyGrid}>
             {Array.from({ length: 12 }, (_, idx) => {
               const month = idx + 1;
               const grouped = monthlyByMonth.get(month)!;
               return (
                 <View key={month} style={styles.monthCard}>
-                  <Text style={styles.monthTitle}>{MONTH_NAMES[idx]}</Text>
-                  {BUCKET_ORDER.map((bucket) => (
-                    <View key={bucket} style={styles.monthBucket}>
-                      <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
-                      {(grouped[bucket].length > 0 ? grouped[bucket] : ['—']).slice(0, 2).map((item, itemIndex) => (
-                        <Text key={`${bucket}-${itemIndex}`} style={styles.monthItem}>• {item}</Text>
-                      ))}
-                    </View>
-                  ))}
+                  <View style={[styles.monthCardHeader, { backgroundColor: MONTH_COLORS[idx] }]}>
+                    <Text style={styles.monthTitle}>{MONTH_NAMES[idx]}</Text>
+                  </View>
+                  <View style={styles.monthCardBody}>
+                    {BUCKET_ORDER.map((bucket, bIdx) => {
+                      const items = grouped[bucket];
+                      return (
+                        <View
+                          key={bucket}
+                          style={[
+                            styles.monthBucket,
+                            styles.monthBucketRow,
+                            bIdx % 2 === 1 && styles.monthBucketRowAlt,
+                          ]}
+                        >
+                          <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
+                          {items.length > 0 ? (
+                            items.slice(0, 3).map((item, itemIndex) => {
+                              const holiday = bucket === 'holidays_closures' && isHolidayEntry(item);
+                              const fundraiser = bucket === 'donations_fundraisers' && isFundraiserEntry(item);
+                              return (
+                                <View key={`${bucket}-${itemIndex}`} style={styles.monthItemRow}>
+                                  <Text style={holiday ? styles.monthItemHoliday : fundraiser ? styles.monthItemFundraiser : styles.monthItem}>
+                                    {holiday ? '🇿🇦 ' : fundraiser ? '💡 ' : '• '}{item}
+                                  </Text>
+                                </View>
+                              );
+                            })
+                          ) : (
+                            <Text style={styles.monthItemEmpty}>—</Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               );
             })}
           </View>
 
+          {/* Operational Highlights */}
           <View style={styles.goalsCard}>
             <Text style={styles.goalsTitle}>Operational Highlights</Text>
             {(plan.operationalHighlights || []).slice(0, 6).map((highlight, idx) => (
@@ -245,7 +351,9 @@ export function GeneratedPlanView({
             ))}
           </View>
         </>
-      ) : (
+      )}
+
+      {activeTab === 'terms' && (
         <>
           <Text style={styles.termsHeader}>Term Details</Text>
           {plan.terms.map((term) => (
@@ -254,291 +362,16 @@ export function GeneratedPlanView({
               term={term}
               isExpanded={expandedTerm === term.termNumber}
               isEditing={isEditing}
-              onToggleExpand={() => onToggleExpandTerm(
-                expandedTerm === term.termNumber ? null : term.termNumber
-              )}
+              onToggleExpand={() =>
+                onToggleExpandTerm(expandedTerm === term.termNumber ? null : term.termNumber)
+              }
               onUpdateTerm={(updater) => updateTerm(term.termNumber, updater)}
             />
           ))}
         </>
       )}
-      
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-          onPress={onSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <EduDashSpinner size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="save-outline" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Save to Database</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]}
-          onPress={onRegenerate}
-        >
-          <Ionicons name="refresh" size={20} color={theme.text} />
-          <Text style={[styles.actionButtonText, { color: theme.text }]}>Regenerate</Text>
-        </TouchableOpacity>
-      </View>
+
+      {activeTab === 'insights' && <PlanInsightsPanel plan={plan} />}
     </ScrollView>
   );
 }
-
-const createStyles = (theme: any, insetBottom: number) =>
-  StyleSheet.create({
-    planContainer: {
-      flex: 1,
-    },
-    planContent: {
-      padding: 16,
-      paddingBottom: insetBottom + 24,
-    },
-    overviewCard: {
-      backgroundColor: theme.card,
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    overviewTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    overviewTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: theme.text,
-    },
-    editToggleBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.primary,
-    },
-    editToggleBtnActive: {
-      backgroundColor: theme.primary,
-    },
-    editToggleText: {
-      fontSize: 13,
-      color: theme.primary,
-      fontWeight: '600',
-    },
-    editToggleTextActive: {
-      color: '#fff',
-    },
-    visionInput: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      padding: 10,
-      fontSize: 14,
-      color: theme.text,
-      backgroundColor: theme.background,
-      marginBottom: 12,
-      minHeight: 60,
-    },
-    budgetInput: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      fontSize: 14,
-      color: theme.text,
-      backgroundColor: theme.background,
-      marginLeft: 8,
-    },
-    goalsTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    addBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.primary,
-    },
-    addBtnText: {
-      fontSize: 13,
-      color: theme.primary,
-      fontWeight: '600',
-    },
-    goalInput: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      fontSize: 14,
-      color: theme.text,
-      backgroundColor: theme.background,
-    },
-    overviewVision: {
-      fontSize: 15,
-      color: theme.textSecondary,
-      fontStyle: 'italic',
-      lineHeight: 22,
-      marginBottom: 16,
-      marginTop: 8,
-    },
-    overviewStats: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      paddingVertical: 16,
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderColor: theme.border,
-      marginBottom: 16,
-    },
-    overviewStat: {
-      alignItems: 'center',
-    },
-    statValue: {
-      fontSize: 28,
-      fontWeight: 'bold',
-      color: theme.primary,
-    },
-    statLabel: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    budgetRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    budgetText: {
-      fontSize: 14,
-      color: theme.textSecondary,
-    },
-    modeRow: {
-      flexDirection: 'row',
-      gap: 10,
-      marginBottom: 12,
-    },
-    modeBtn: {
-      flex: 1,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingVertical: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.card,
-    },
-    modeBtnActive: {
-      borderColor: theme.primary,
-      backgroundColor: `${theme.primary}22`,
-    },
-    modeBtnText: {
-      color: theme.textSecondary,
-      fontWeight: '600',
-      fontSize: 13,
-    },
-    modeBtnTextActive: {
-      color: theme.primary,
-    },
-    goalsCard: {
-      backgroundColor: theme.card,
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    goalsTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    goalItem: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-      marginBottom: 10,
-    },
-    goalText: {
-      flex: 1,
-      fontSize: 15,
-      color: theme.text,
-      lineHeight: 20,
-    },
-    termsHeader: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 12,
-      marginTop: 8,
-    },
-    monthlyGrid: {
-      gap: 10,
-      marginBottom: 14,
-    },
-    monthCard: {
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.card,
-      padding: 12,
-      gap: 8,
-    },
-    monthTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    monthBucket: {
-      gap: 2,
-    },
-    monthBucketLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    monthItem: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      lineHeight: 18,
-    },
-    actionButtons: {
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 16,
-    },
-    actionButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: 12,
-    },
-    actionButtonText: {
-      color: '#fff',
-      fontSize: 15,
-      fontWeight: '600',
-    },
-  });

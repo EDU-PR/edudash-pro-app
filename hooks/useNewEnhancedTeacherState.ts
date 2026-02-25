@@ -25,6 +25,17 @@ import {
   resolveRouteColor 
 } from '@/lib/constants/teacherRoutes';
 
+export interface TeacherQuickAction {
+  title: string;
+  icon: string;
+  color: string;
+  path: string;
+  onPress: () => void;
+  disabled: boolean;
+  category: string;
+  id: string;
+}
+
 export const useNewEnhancedTeacherState = () => {
   const { user, profile } = useAuth();
   const { t } = useTranslation();
@@ -196,7 +207,7 @@ export const useNewEnhancedTeacherState = () => {
       return true;
     });
 
-    return actionKeys.map(actionKey => {
+    return actionKeys.map((actionKey): TeacherQuickAction | null => {
       const route = TEACHER_ROUTES[actionKey];
       if (!route) return null;
       const resolvedPath = getTeacherRouteForSchoolType(actionKey, resolvedSchoolType);
@@ -205,13 +216,13 @@ export const useNewEnhancedTeacherState = () => {
         title: t(route.titleKey, { defaultValue: route.title }),
         icon: route.icon,
         color: resolveRouteColor(route.color, theme),
-        path: resolvedPath,
+        path: resolvedPath as string,
         onPress: () => handleQuickAction(actionKey),
-        disabled: route.requiresPremium && tier === 'free',
+        disabled: !!(route.requiresPremium && tier === 'free'),
         category: route.category,
         id: actionKey,
       };
-    }).filter(Boolean);
+    }).filter((a): a is TeacherQuickAction => a !== null);
   };
 
   return {

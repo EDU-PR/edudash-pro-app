@@ -54,6 +54,12 @@ const STEP_DEFINITIONS: Record<AuthFlowStep, AuthProgressStep> = {
     description: 'Create a strong password',
     required: true
   },
+  child_registration: {
+    key: 'child_registration',
+    title: 'Register Child',
+    description: 'Add your child to track their progress',
+    required: false
+  },
   email_verification: {
     key: 'email_verification',
     title: 'Email Verification',
