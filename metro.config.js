@@ -109,12 +109,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
 
     // 2. Block native-only modules
-    const nativeOnlyModules = [
-      '@picovoice/porcupine-react-native',
-      'expo-local-authentication',
-      'react-native-biometrics',
-    ];
-    if (nativeOnlyModules.includes(moduleName)) {
+    if (moduleName === 'expo-local-authentication') {
+      return {
+        filePath: require.resolve('./lib/stubs/expo-local-authentication-stub.js'),
+        type: 'sourceFile',
+      };
+    }
+    const otherNativeModules = ['@picovoice/porcupine-react-native', 'react-native-biometrics'];
+    if (otherNativeModules.includes(moduleName)) {
       return {
         filePath: require.resolve('./lib/stubs/native-module-stub.js'),
         type: 'sourceFile',
@@ -149,6 +151,8 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       '/EventEmitter/': './lib/stubs/NativeEventEmitter-stub.js',
       'HMRClient': './lib/stubs/HMRClient-stub.js',
       '/HMRClient': './lib/stubs/HMRClient-stub.js',
+      'MetroHMRClient': './lib/stubs/HMRClient-stub.js',
+      '/MetroHMRClient': './lib/stubs/HMRClient-stub.js',
     };
 
     for (const [pattern, stubPath] of Object.entries(stubMappings)) {

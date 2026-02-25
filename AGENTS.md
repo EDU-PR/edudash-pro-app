@@ -8,7 +8,7 @@ This is a monorepo with three products:
 
 | Directory | Product | Port | Dev Command |
 |-----------|---------|------|-------------|
-| `/` (root) | React Native/Expo mobile app | 8081 | `npm start` |
+| `/` (root) | React Native/Expo mobile app | 8081 (native) / 8082 (web mode) | `npm start` (native) or `npm run web:dev` (web mode) |
 | `/web/` | Next.js 16 web dashboard (PWA) | 3000 | `cd web && npm run dev` |
 | `/soa-web/` | Soil of Africa portal (Next.js 14) | 3001 | `cd soa-web && npm run dev` |
 
@@ -19,7 +19,8 @@ Node.js 20 is required (`.nvmrc` and `package.json` engines field). The VM has n
 ### Running Services
 
 - **Web dashboard** is the primary testable service in the cloud VM: `cd web && npm run dev`
-- **Mobile app** requires a physical device with an Expo dev client build; Metro bundler can start with `npm start` but cannot render UI in the VM.
+- **Mobile app in web mode** can be tested in the cloud VM via `WEB_PORT=8082 npx expo start --web --port 8082` (runs on port 8082). First bundle takes ~30s for 5200+ modules. This renders the React Native app in the browser using `react-native-web`.
+- **Mobile app on device** requires a physical device with an Expo dev client build (`npm start` runs Metro on port 8081).
 - **Backend** is cloud-hosted Supabase (project ID: `lvvvjywrmpcqrpvuptdi`). No local database to manage.
 - Supabase credentials (URL + anon key) are already in `eas.json` and used by `.env`/`.env.local` files.
 
@@ -47,3 +48,5 @@ These are gitignored. The Supabase anon key and URL are committed in `eas.json` 
 - The `postinstall` script runs `patch-package` which applies patches from `/patches/`. If `npm install` fails, check that patches still apply cleanly.
 - Three separate `npm install` are needed: root, `web/`, and `soa-web/` each have independent `node_modules`.
 - The web app uses `--webpack` flag in its dev command (not Turbopack) due to compatibility needs.
+- The Expo web build uses custom stubs in `lib/stubs/` for native-only modules (ads, biometrics, RevenueCat, etc.). If you see module resolution errors when running Expo web, check `metro.config.js` for the stub mappings.
+- Auth session is stored in localStorage under key `edudash-auth-session`. For automated browser testing, you can authenticate via the Supabase API and inject the session JSON into localStorage.
