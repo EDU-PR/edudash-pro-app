@@ -667,6 +667,177 @@ export const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.84)',
     fontSize: 13,
   },
+
+  /* ── Child Switcher ── */
+  childSwitcherRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  childPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  childPillActive: {
+    backgroundColor: 'rgba(90,64,157,0.4)',
+    borderColor: '#5A409D',
+  },
+  childPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  childPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  /* ── Urgent Banner ── */
+  urgentBannerContainer: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  urgentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  urgentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  urgentTextWrap: {
+    flex: 1,
+  },
+  urgentTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  urgentSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  /* ── Activity Feed Timeline ── */
+  activityTimelineContainer: {
+    gap: 8,
+  },
+  activityTimelineItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SOFT,
+    backgroundColor: GLASS_BG_SOFT,
+  },
+  activityTimelineIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  activityTimelineInfo: {
+    flex: 1,
+  },
+  activityTimelineChild: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  activityTimelineMessage: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activityTimelineTime: {
+    fontSize: 12,
+  },
+
+  /* ── Learning Hub ── */
+  learningHubCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    elevation: 9,
+  },
+  learningHubGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    gap: 14,
+  },
+  learningHubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  learningHubMascotWrap: {
+    width: 74,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -14,
+  },
+  learningHubMascot: {
+    width: 70,
+    height: 70,
+    resizeMode: 'contain',
+  },
+  learningHubTextWrap: {
+    flex: 1,
+  },
+  learningHubTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  learningHubSubtitle: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  learningHubActions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  learningHubActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: 'rgba(15,18,30,0.34)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  learningHubActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
   dashAICard: {
     borderRadius: 16,
     overflow: 'hidden',
