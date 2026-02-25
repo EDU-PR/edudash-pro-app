@@ -79,18 +79,16 @@ export function SubPageHeader({
   const txtColor = textColor || theme.text;
 
   return (
-    <View 
+    <View
       style={[
-        styles.container, 
-        { 
+        styles.container,
+        {
           paddingTop: insets.top + 8,
           backgroundColor: bgColor,
           borderBottomColor: theme.border,
         }
       ]}
-    >
-      {/* Back Button */}
-      {showBackButton ? (
+    >{showBackButton ? (
         <TouchableOpacity
           style={styles.backButton}
           onPress={handleBack}
@@ -98,19 +96,16 @@ export function SubPageHeader({
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Ionicons 
-            name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} 
-            size={24} 
-            color={txtColor} 
+          <Ionicons
+            name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'}
+            size={24}
+            color={txtColor}
           />
         </TouchableOpacity>
       ) : (
         <View style={styles.backButton} />
-      )}
-
-      {/* Title Section */}
-      <View style={styles.titleContainer}>
-        <Text 
+      )}<View style={styles.titleContainer}>
+        <Text
           style={[styles.title, { color: txtColor }]}
           numberOfLines={1}
           accessibilityRole="header"
@@ -118,17 +113,14 @@ export function SubPageHeader({
           {title}
         </Text>
         {subtitle && (
-          <Text 
+          <Text
             style={[styles.subtitle, { color: theme.textSecondary }]}
             numberOfLines={1}
           >
             {subtitle}
           </Text>
         )}
-      </View>
-
-      {/* Right Section */}
-      <View style={styles.rightSection}>
+      </View><View style={styles.rightSection}>
         {rightElement}
         {rightAction && (
           <TouchableOpacity
@@ -138,10 +130,10 @@ export function SubPageHeader({
             accessibilityRole="button"
             accessibilityLabel={rightAction.label || 'Action'}
           >
-            <Ionicons 
-              name={rightAction.icon} 
-              size={24} 
-              color={txtColor} 
+            <Ionicons
+              name={rightAction.icon}
+              size={24}
+              color={txtColor}
             />
           </TouchableOpacity>
         )}

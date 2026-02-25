@@ -328,6 +328,15 @@ export type ValidationType =
   | 'pattern' 
   | 'custom';
 
+// Child registration data collected during parent sign-up (Step 4)
+export interface ChildRegistrationData {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string; // ISO date
+  grade: string;
+  classId?: string;
+}
+
 // Authentication Flow Steps
 export type AuthFlowStep = 
   | 'role_selection'
@@ -335,6 +344,7 @@ export type AuthFlowStep =
   | 'organization_setup'
   | 'organization_selection' // For parents to select their school
   | 'security_setup'
+  | 'child_registration' // Optional Step 4 for parents
   | 'email_verification'
   | 'profile_completion'
   | 'onboarding';

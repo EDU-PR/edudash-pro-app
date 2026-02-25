@@ -47,12 +47,16 @@ export function useYouthReports(period: PeriodType = 'month') {
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId);
 
-      // Active members (status = active)
-      const { count: activeMembers } = await supabase
+      // Active members (membership_status = active)
+      const { count: activeMembers, error: activeMembersErr } = await supabase
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
-        .eq('status', 'active');
+        .eq('membership_status', 'active');
+
+      if (activeMembersErr) {
+        console.warn('[useYouthReports] organization_members query error:', activeMembersErr.message);
+      }
 
       // New this month
       const { count: newThisMonth } = await supabase

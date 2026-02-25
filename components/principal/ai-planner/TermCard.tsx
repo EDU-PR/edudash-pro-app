@@ -1,18 +1,12 @@
 // Term Card Component for AI Year Planner
-// Displays individual term with collapsible details and inline editing
+// Displays individual term with collapsible details, date ranges, and inline editing
 
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-} from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { GeneratedTerm, WeeklyTheme, PlannedExcursion, PlannedMeeting } from './types';
+import { createStyles, MEETING_TYPE_COLORS } from './TermCard.styles';
 
 interface TermCardProps {
   term: GeneratedTerm;
@@ -24,18 +18,42 @@ interface TermCardProps {
 
 const MEETING_TYPES = ['staff', 'parent', 'curriculum', 'safety', 'budget', 'training', 'other'];
 
+function addDaysToDate(dateStr: string, days: number): Date {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function formatShortDate(date: Date): string {
+  const day = date.getUTCDate();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${day} ${months[date.getUTCMonth()]}`;
+}
+
+function computeWeekDateRange(termStartDate: string, weekNumber: number): string {
+  const weekStart = addDaysToDate(termStartDate, (weekNumber - 1) * 7);
+  const weekEnd = addDaysToDate(termStartDate, (weekNumber - 1) * 7 + 4);
+  return `${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)}`;
+}
+
 export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdateTerm }: TermCardProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const [showAllThemes, setShowAllThemes] = useState(false);
   const visibleThemes = showAllThemes ? term.weeklyThemes : term.weeklyThemes.slice(0, 5);
 
+  const weekDateRanges = useMemo(() => {
+    const map = new Map<number, string>();
+    term.weeklyThemes.forEach((wt) => {
+      map.set(wt.week, computeWeekDateRange(term.startDate, wt.week));
+    });
+    return map;
+  }, [term.startDate, term.weeklyThemes]);
+
   const updateTheme = (week: number, patch: Partial<WeeklyTheme>) => {
     onUpdateTerm((t) => ({
       ...t,
-      weeklyThemes: t.weeklyThemes.map((wt) =>
-        wt.week === week ? { ...wt, ...patch } : wt
-      ),
+      weeklyThemes: t.weeklyThemes.map((wt) => (wt.week === week ? { ...wt, ...patch } : wt)),
     }));
   };
 
@@ -45,7 +63,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
       weeklyThemes: [
         ...t.weeklyThemes,
         {
-          week: (t.weeklyThemes.length > 0 ? Math.max(...t.weeklyThemes.map((w) => w.week)) + 1 : 1),
+          week: t.weeklyThemes.length > 0 ? Math.max(...t.weeklyThemes.map((w) => w.week)) + 1 : 1,
           theme: 'New Theme',
           description: '',
           activities: [],
@@ -57,9 +75,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
   const removeTheme = (week: number) => {
     onUpdateTerm((t) => ({
       ...t,
-      weeklyThemes: t.weeklyThemes
-        .filter((wt) => wt.week !== week)
-        .map((wt, i) => ({ ...wt, week: i + 1 })),
+      weeklyThemes: t.weeklyThemes.filter((wt) => wt.week !== week).map((wt, i) => ({ ...wt, week: i + 1 })),
     }));
   };
 
@@ -94,10 +110,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
   const addMeeting = () => {
     onUpdateTerm((t) => ({
       ...t,
-      meetings: [
-        ...t.meetings,
-        { title: 'New Meeting', type: 'staff', suggestedDate: t.startDate, agenda: [] },
-      ],
+      meetings: [...t.meetings, { title: 'New Meeting', type: 'staff', suggestedDate: t.startDate, agenda: [] }],
     }));
   };
 
@@ -135,7 +148,6 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                 onChangeText={(v) => onUpdateTerm((t) => ({ ...t, name: v }))}
                 placeholder="Term name"
                 placeholderTextColor={theme.textSecondary}
-                onPress={(e) => e.stopPropagation?.()}
               />
             ) : (
               <Text style={styles.termName}>{term.name}</Text>
@@ -167,11 +179,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
             )}
           </View>
         </View>
-        <Ionicons
-          name={isExpanded ? 'chevron-up' : 'chevron-down'}
-          size={24}
-          color={theme.textSecondary}
-        />
+        <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={24} color={theme.textSecondary} />
       </TouchableOpacity>
 
       {isExpanded && (
@@ -189,12 +197,15 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                 </TouchableOpacity>
               )}
             </View>
-            {visibleThemes.map((week) => (
-              <View key={week.week} style={styles.weekItem}>
+            {visibleThemes.map((week, idx) => (
+              <View key={week.week} style={[styles.weekItem, idx % 2 === 1 && styles.weekItemAlt]}>
                 <View style={styles.weekNumber}>
                   <Text style={styles.weekNumberText}>W{week.week}</Text>
                 </View>
                 <View style={styles.weekContent}>
+                  <Text style={styles.weekDateRange}>
+                    {weekDateRanges.get(week.week) || ''}
+                  </Text>
                   {isEditing ? (
                     <>
                       <TextInput
@@ -272,7 +283,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
             {term.excursions.map((exc, idx) => (
               <View key={idx} style={styles.excursionItem}>
                 {isEditing ? (
-                  <>
+                  <View style={styles.excursionContent}>
                     <View style={styles.editRowWithDelete}>
                       <TextInput
                         style={[styles.inlineInput, { flex: 1 }]}
@@ -292,7 +303,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                       placeholder="Destination"
                       placeholderTextColor={theme.textSecondary}
                     />
-                    <View style={styles.dateRow}>
+                    <View style={[styles.dateRow, { marginTop: 4 }]}>
                       <TextInput
                         style={[styles.inlineInput, { flex: 1 }]}
                         value={exc.suggestedDate}
@@ -309,15 +320,26 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                         placeholderTextColor={theme.textSecondary}
                       />
                     </View>
-                  </>
+                  </View>
                 ) : (
                   <>
-                    <Text style={styles.excursionTitle}>{exc.title}</Text>
-                    <Text style={styles.excursionDetail}>{exc.destination}</Text>
-                    {exc.suggestedDate && (
-                      <Text style={styles.excursionDetail}>{exc.suggestedDate}</Text>
-                    )}
-                    <Text style={styles.excursionCost}>{exc.estimatedCost}</Text>
+                    <View style={styles.excursionIconContainer}>
+                      <Ionicons name="location-outline" size={18} color="#10B981" />
+                    </View>
+                    <View style={styles.excursionContent}>
+                      <Text style={styles.excursionTitle}>{exc.title}</Text>
+                      <Text style={styles.excursionDetail}>{exc.destination}</Text>
+                      <View style={styles.excursionMeta}>
+                        {exc.suggestedDate ? (
+                          <View style={styles.dateBadge}>
+                            <Text style={styles.dateBadgeText}>{exc.suggestedDate}</Text>
+                          </View>
+                        ) : null}
+                        <View style={styles.costTag}>
+                          <Text style={styles.costTagText}>{exc.estimatedCost}</Text>
+                        </View>
+                      </View>
+                    </View>
                   </>
                 )}
               </View>
@@ -380,10 +402,19 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                   </>
                 ) : (
                   <>
-                    <Text style={styles.meetingTitle}>{meeting.title}</Text>
-                    <Text style={styles.meetingType}>{meeting.type}</Text>
+                    <View style={styles.meetingHeader}>
+                      <Text style={styles.meetingTitle}>{meeting.title}</Text>
+                      <View
+                        style={[
+                          styles.meetingTypeBadge,
+                          { backgroundColor: MEETING_TYPE_COLORS[meeting.type] || MEETING_TYPE_COLORS.other },
+                        ]}
+                      >
+                        <Text style={styles.meetingTypeBadgeText}>{meeting.type}</Text>
+                      </View>
+                    </View>
                     {meeting.suggestedDate && (
-                      <Text style={styles.meetingType}>{meeting.suggestedDate}</Text>
+                      <Text style={styles.meetingDate}>{meeting.suggestedDate}</Text>
                     )}
                   </>
                 )}
@@ -407,7 +438,7 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
             {term.specialEvents.length === 0 && !isEditing && (
               <Text style={styles.emptyHint}>No special events planned.</Text>
             )}
-            {term.specialEvents.map((event, idx) => (
+            {term.specialEvents.map((event, idx) =>
               isEditing ? (
                 <View key={idx} style={styles.editRowWithDelete}>
                   <TextInput
@@ -422,229 +453,15 @@ export function TermCard({ term, isExpanded, isEditing, onToggleExpand, onUpdate
                   </TouchableOpacity>
                 </View>
               ) : (
-                <Text key={idx} style={styles.eventItem}>• {event}</Text>
+                <View key={idx} style={styles.eventItem}>
+                  <Ionicons name="star" size={16} color="#F59E0B" />
+                  <Text style={styles.eventText}>{event}</Text>
+                </View>
               )
-            ))}
+            )}
           </View>
         </View>
       )}
     </View>
   );
 }
-
-const createStyles = (theme: any) =>
-  StyleSheet.create({
-    termCard: {
-      backgroundColor: theme.card,
-      borderRadius: 16,
-      marginBottom: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      overflow: 'hidden',
-    },
-    termHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: 16,
-    },
-    termHeaderLeft: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 12,
-      flex: 1,
-    },
-    termBadge: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
-    termBadgeText: {
-      color: '#fff',
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    termName: {
-      fontSize: 17,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    termDates: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    dateRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      marginTop: 4,
-    },
-    inlineInput: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      fontSize: 14,
-      color: theme.text,
-      backgroundColor: theme.background,
-    },
-    termContent: {
-      padding: 16,
-      paddingTop: 0,
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
-    },
-    termSection: {
-      marginTop: 16,
-    },
-    sectionHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
-    },
-    sectionTitle: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    addBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.primary,
-    },
-    addBtnText: {
-      fontSize: 13,
-      color: theme.primary,
-      fontWeight: '600',
-    },
-    editRowWithDelete: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    weekItem: {
-      flexDirection: 'row',
-      marginBottom: 10,
-      alignItems: 'flex-start',
-    },
-    weekNumber: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
-      backgroundColor: theme.background,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-      flexShrink: 0,
-    },
-    weekNumberText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    weekContent: {
-      flex: 1,
-    },
-    weekTheme: {
-      fontSize: 15,
-      fontWeight: '500',
-      color: theme.text,
-    },
-    weekDescription: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    weekActivities: {
-      fontSize: 12,
-      color: theme.primary,
-      marginTop: 2,
-    },
-    moreItems: {
-      fontSize: 13,
-      color: theme.primary,
-      fontStyle: 'italic',
-      marginTop: 4,
-    },
-    emptyHint: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      fontStyle: 'italic',
-    },
-    excursionItem: {
-      backgroundColor: theme.background,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
-    },
-    excursionTitle: {
-      fontSize: 15,
-      fontWeight: '500',
-      color: theme.text,
-    },
-    excursionDetail: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      marginTop: 2,
-    },
-    excursionCost: {
-      fontSize: 13,
-      color: '#10B981',
-      fontWeight: '500',
-      marginTop: 4,
-    },
-    meetingItem: {
-      backgroundColor: theme.background,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
-    },
-    meetingTitle: {
-      fontSize: 15,
-      fontWeight: '500',
-      color: theme.text,
-    },
-    meetingType: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      marginTop: 2,
-      textTransform: 'capitalize',
-    },
-    typeChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.border,
-      marginRight: 6,
-      marginBottom: 4,
-    },
-    typeChipActive: {
-      borderColor: theme.primary,
-      backgroundColor: `${theme.primary}22`,
-    },
-    typeChipText: {
-      fontSize: 12,
-      color: theme.textSecondary,
-    },
-    typeChipTextActive: {
-      color: theme.primary,
-      fontWeight: '600',
-    },
-    eventItem: {
-      fontSize: 14,
-      color: theme.text,
-      marginBottom: 6,
-    },
-  });

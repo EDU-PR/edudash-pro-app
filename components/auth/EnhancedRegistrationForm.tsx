@@ -17,6 +17,7 @@ import {
   OrganizationSelectionStep, 
   SecuritySetupStep 
 } from './RegistrationSteps';
+import { ChildRegistrationStep } from './ChildRegistrationStep';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface EnhancedRegistrationFormProps {
@@ -64,6 +65,10 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
     handleNextStep,
     handlePreviousStep,
     handleStepChange,
+    handleSkipChildRegistration,
+    addChild,
+    removeChild,
+    updateChild,
   } = useEnhancedRegistration({
     role,
     invitationToken,
@@ -89,8 +94,14 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
       security_setup: {
         title: 'Step 3: Secure account',
         description: 'Create a strong password and accept terms to finish parent account setup.',
-        nextAction: 'After account setup, you can register or link your child profile.',
+        nextAction: 'Next you can register your child.',
         ctaLabel: 'Create Parent Account',
+      },
+      child_registration: {
+        title: 'Step 4: Register your child',
+        description: 'Add your child so you can track their progress from day one. You can always add more children later.',
+        nextAction: 'Your dashboard is ready!',
+        ctaLabel: 'Complete Setup',
       },
     }),
     []
@@ -165,6 +176,20 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
             onTogglePassword={() => setShowPassword(!showPassword)}
             onToggleConfirmPassword={() => setShowConfirmPassword(!showConfirmPassword)}
             onPasswordValidationChange={setPasswordValidation}
+          />
+        );
+
+      case 'child_registration':
+        return (
+          <ChildRegistrationStep
+            theme={theme}
+            addedChildren={formState.registrationChildren}
+            loading={loading}
+            onAddChild={addChild}
+            onRemoveChild={removeChild}
+            onUpdateChild={updateChild}
+            onSkip={handleSkipChildRegistration}
+            onContinue={handleNextStep}
           />
         );
         

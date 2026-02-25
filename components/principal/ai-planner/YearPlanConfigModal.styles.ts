@@ -1,8 +1,9 @@
 // Styles for Year Plan Config Modal - Extracted for WARP.md compliance
 
 import { StyleSheet } from 'react-native';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
-export const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
+export const createStyles = (theme: ThemeColors, insetTop: number, insetBottom: number) =>
   StyleSheet.create({
     modalContainer: {
       flex: 1,

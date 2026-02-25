@@ -4,6 +4,7 @@
 export { PersonalInfoStep } from './PersonalInfoStep';
 export { OrganizationSelectionStep } from './OrganizationSelectionStep';
 export { SecuritySetupStep } from './SecuritySetupStep';
+export { ChildRegistrationStep } from '../ChildRegistrationStep';
 
 // Re-export shared constants
 export { GRADE_LEVELS, SUBJECTS } from './constants';
