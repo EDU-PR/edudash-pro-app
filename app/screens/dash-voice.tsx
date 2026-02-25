@@ -56,6 +56,7 @@ import {
   cleanRawJSON,
   createStreamingRequest,
   shouldEnableVoiceTurnTools,
+  getStreamingPlaceholder,
 } from '@/lib/dash-voice-utils';
 
 import { shouldUsePhonicsMode, detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
@@ -103,26 +104,6 @@ const buildPdfTitleFromPrompt = (prompt: string): string => {
   const base = compact.slice(0, 64).trim();
   return base.charAt(0).toUpperCase() + base.slice(1);
 };
-
-function getStreamingPlaceholder(userMessage: string): string {
-  const lower = userMessage.toLowerCase().trim();
-  if (/^(hi|hello|hey|howzit|good\s*(morning|afternoon|evening)|sup)\b/.test(lower)) {
-    return 'Hey there! 👋';
-  }
-  if (lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('why') || lower.startsWith('can you') || lower.endsWith('?')) {
-    return 'Let me think about that...';
-  }
-  if (lower.includes('worksheet') || lower.includes('homework') || lower.includes('generate') || lower.includes('create')) {
-    return 'Creating that for you...';
-  }
-  if (lower.includes('quiz') || lower.includes('test me') || lower.includes('practice')) {
-    return 'Setting up your practice...';
-  }
-  if (lower.includes('math') || lower.includes('calculate') || lower.includes('solve')) {
-    return 'Working on the math...';
-  }
-  return 'Thinking...';
-}
 
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
@@ -211,6 +192,7 @@ export default function DashVoiceScreen() {
   const voiceDictationProbeRef = useRef<DashVoiceDictationProbe | null>(null);
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
+  const speechMutexRef = useRef(false);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
   const DASH_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
 
@@ -313,11 +295,18 @@ export default function DashVoiceScreen() {
   }, [preferredLanguage, orgType]);
 
   const processSpeechQueue = useCallback(async () => {
-    if (isSpeakingRef.current) return;
-    const next = speechQueueRef.current.shift();
-    if (!next) return;
-    await speakResponse(next);
-    if (speechQueueRef.current.length > 0) processSpeechQueue();
+    if (speechMutexRef.current) return;
+    speechMutexRef.current = true;
+    try {
+      const next = speechQueueRef.current.shift();
+      if (!next) return;
+      await speakResponse(next);
+      if (speechQueueRef.current.length > 0) {
+        setTimeout(() => processSpeechQueue(), 50);
+      }
+    } finally {
+      speechMutexRef.current = false;
+    }
   }, [speakResponse]);
 
   const enqueueSpeech = useCallback((text: string) => {

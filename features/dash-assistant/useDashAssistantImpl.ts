@@ -65,6 +65,7 @@ import {
   stopDashVoiceRecording,
   type SpeechChunkProgress,
 } from '@/hooks/dash-assistant/voiceHandlers';
+import { getStreamingPlaceholder } from '@/lib/dash-voice-utils';
 import {
   resolveAutoSpeakPreference,
   shouldAutoSpeak,
@@ -260,26 +261,6 @@ const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
 const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 const GENERIC_ACK_PATTERN = /^(ok(?:ay)?|sure|got it|let me|working on|one moment|please wait)\b/i;
-
-function getStreamingPlaceholder(userMessage: string): string {
-  const lower = userMessage.toLowerCase().trim();
-  if (/^(hi|hello|hey|howzit|good\s*(morning|afternoon|evening)|sup)\b/.test(lower)) {
-    return 'Hey there! 👋';
-  }
-  if (lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('why') || lower.startsWith('can you') || lower.endsWith('?')) {
-    return 'Let me think about that...';
-  }
-  if (lower.includes('worksheet') || lower.includes('homework') || lower.includes('generate') || lower.includes('create')) {
-    return 'Creating that for you...';
-  }
-  if (lower.includes('quiz') || lower.includes('test me') || lower.includes('practice')) {
-    return 'Setting up your practice...';
-  }
-  if (lower.includes('math') || lower.includes('calculate') || lower.includes('solve')) {
-    return 'Working on the math...';
-  }
-  return 'Thinking...';
-}
 
 type ResponseLifecycleState = 'idle' | 'draft_streaming' | 'committed' | 'finalized';
 
@@ -724,7 +705,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             user_role: 'parent',
             subscription_tier: tier || null,
             capability_tier: capabilityTier,
-          }).catch(() => {});
+          }).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
           return;
         }
 
@@ -767,7 +748,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           student_name: learnerName,
           subscription_tier: tier || null,
           capability_tier: capabilityTier,
-        }).catch(() => {});
+        }).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
 
         await setDefaultAgeBand(ageBand);
         return;
@@ -803,7 +784,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           preferred_language: targetLocale,
           subscription_tier: tier || null,
           capability_tier: capabilityTier,
-        }).catch(() => {});
+        }).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
 
         await setDefaultAgeBand(ageBand);
         return;
@@ -827,7 +808,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         user_role: role || null,
         subscription_tier: tier || null,
         capability_tier: capabilityTier,
-      }).catch(() => {});
+      }).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
     };
 
     applyLearnerContext();
@@ -1240,7 +1221,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         if (!isCurrentRequest()) return;
         if (createdConversation) {
           setConversation(createdConversation);
-          persistConversationSnapshot(createdConversation).catch(() => {});
+          persistConversationSnapshot(createdConversation).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
         }
       }
 
@@ -2131,7 +2112,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         if (isNearBottomRef.current) {
           scrollToBottom({ animated: true, delay: 150 });
         }
-        persistConversationSnapshot(updatedConv).catch(() => {});
+        persistConversationSnapshot(updatedConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
 
         // Server-side conversation trim to prevent unbounded DB row growth
         if (
@@ -2144,7 +2125,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               user.id,
               String(profile.organization_id || profile.preschool_id),
             );
-            svc.trimConversation(updatedConv.id, LOCAL_SNAPSHOT_MAX).catch(() => {});
+            svc.trimConversation(updatedConv.id, LOCAL_SNAPSHOT_MAX).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
           } catch {}
         }
       }
@@ -2615,7 +2596,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const newConv = await dashInstance.getConversation(newConvId);
       if (newConv) {
         setConversation(newConv);
-        persistConversationSnapshot(newConv).catch(() => {});
+        persistConversationSnapshot(newConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
         setMessages([]);
         setInputText('');
         dashAttachments.setSelectedAttachments([]);
@@ -2761,7 +2742,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             setConversation(existingConv);
             setMessages(normalizeConversationMessages(existingConv.messages || []));
             dash.setCurrentConversationId(conversationId);
-            persistConversationSnapshot(existingConv).catch(() => {});
+            persistConversationSnapshot(existingConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
           } else if (hasSnapshot) {
             dash.setCurrentConversationId(conversationId);
           }
@@ -2785,7 +2766,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               setConversation(existingConv);
               setMessages(normalizeConversationMessages(existingConv.messages || []));
               dash.setCurrentConversationId(newConvId);
-              persistConversationSnapshot(existingConv).catch(() => {});
+              persistConversationSnapshot(existingConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
             } else if (!hasSnapshot) {
               newConvId = null;
             } else {
@@ -2802,13 +2783,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
                 setConversation(latest);
                 setMessages(normalizeConversationMessages(latest.messages || []));
                 dash.setCurrentConversationId(latest.id);
-                persistConversationSnapshot(latest).catch(() => {});
+                persistConversationSnapshot(latest).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
               } else {
                 const createdId = await dash.startNewConversation('Chat with Dash');
                 const newConv = await dash.getConversation(createdId);
                 if (newConv) {
                   setConversation(newConv);
-                  persistConversationSnapshot(newConv).catch(() => {});
+                  persistConversationSnapshot(newConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
                 }
               }
             } catch {
@@ -2816,7 +2797,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               const newConv = await dash.getConversation(createdId);
               if (newConv) {
                 setConversation(newConv);
-                persistConversationSnapshot(newConv).catch(() => {});
+                persistConversationSnapshot(newConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
               }
             }
           }
@@ -2903,7 +2884,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
                     };
                     setConversation(synthesizedConversation);
                     setMessages(normalizeConversationMessages(orbMessages));
-                    persistConversationSnapshot(synthesizedConversation).catch(() => {});
+                    persistConversationSnapshot(synthesizedConversation).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
                     hasExistingMessages = orbMessages.length > 0;
                     seededViaSyntheticConversation = true;
                   }
@@ -2913,7 +2894,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
                     if (handoffConversation) {
                       setConversation(handoffConversation);
                       setMessages(normalizeConversationMessages(handoffConversation.messages || []));
-                      persistConversationSnapshot(handoffConversation).catch(() => {});
+                      persistConversationSnapshot(handoffConversation).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
                       hasExistingMessages = (handoffConversation.messages?.length || 0) > 0;
                     } else {
                       setMessages(orbMessages);
@@ -3023,14 +3004,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           if (updatedConv && updatedConv.messages.length !== currentLength) {
             setMessages(normalizeConversationMessages(updatedConv.messages));
             setConversation(updatedConv);
-            persistConversationSnapshot(updatedConv).catch(() => {});
+            persistConversationSnapshot(updatedConv).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
           }
-        }).catch(() => {});
+        }).catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
       }
 
       return () => {
         active = false;
-        stopAllActivity().catch(() => {});
+        stopAllActivity().catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
       };
     }, [
       dashInstance,
@@ -3062,12 +3043,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
       // Stop active voice recording to release microphone
       if (voiceSessionRef.current) {
-        voiceSessionRef.current.stop().catch(() => {});
+        voiceSessionRef.current.stop().catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
         voiceSessionRef.current = null;
       }
       voiceProviderRef.current = null;
       if (dashInstance) {
-        stopSpeaking().catch(() => {});
+        stopSpeaking().catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
         dashInstance.cleanup();
       }
     };
@@ -3077,7 +3058,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (dashInstance && isSpeaking) {
-        stopSpeaking().catch(() => {});
+        stopSpeaking().catch((e: unknown) => { if (__DEV__) console.warn('[DashAssistant] Suppressed:', (e as Error)?.message); });
       }
     };
 

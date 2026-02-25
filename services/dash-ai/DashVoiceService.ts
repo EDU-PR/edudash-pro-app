@@ -608,6 +608,21 @@ export class DashVoiceService {
     return Date.now() - checkedAt < ttlMs;
   }
 
+  /**
+   * Synchronous cache-only check for TTS access.
+   * Returns `true`/`false` if the cache is fresh, or `null` if the cache is stale/missing.
+   * Callers can use this to skip the expensive async `canCurrentUserUseTTS()` round-trip.
+   */
+  public isTTSAllowedCached(): boolean | null {
+    if (
+      this.ttsAccessCache &&
+      this.isCacheFresh(this.ttsAccessCache.checkedAt, DashVoiceService.TTS_ACCESS_CACHE_TTL_MS)
+    ) {
+      return this.ttsAccessCache.allowed;
+    }
+    return null;
+  }
+
   private async canCurrentUserUseTTS(): Promise<boolean> {
     const supabase = this.config.supabaseClient;
     if (!supabase) return true;
@@ -820,6 +835,10 @@ export class DashVoiceService {
             pitch,
             phonics_mode: phonicsMode,
           });
+
+          if (!resp?.audio_url) {
+            throw new Error((resp as any)?.error || 'TTS returned no audio');
+          }
 
           // Play via audio manager
           const { audioManager } = await import('@/lib/voice/audio');
