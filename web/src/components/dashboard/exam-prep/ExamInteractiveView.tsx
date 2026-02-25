@@ -9,6 +9,8 @@ import { useTTS } from '@/hooks/useTTS';
 import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import { createClient } from '@/lib/supabase/client';
 import { exportExamToPDF } from '@/lib/utils/pdf-export';
+import { downloadExamPdf } from '@/lib/exam-prep/pdfExport';
+import { saveExam } from '@/lib/exam-prep/examStorage';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ExamDiagram } from './ExamDiagram';
@@ -80,6 +82,13 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [userName, setUserName] = useState<string>('');
   const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [savingExam, setSavingExam] = useState(false);
+  
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
   
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
@@ -915,30 +924,45 @@ Every question you attempt is helping you learn and grow. Keep up the great work
               className="btn btnPrimary"
               onClick={() => {
                 try {
-                  // Export to PDF with proper formatting
-                  const examData = {
+                  // Build a markdown-like string from parsed exam for the new PDF exporter
+                  const markdownLines: string[] = [];
+                  markdownLines.push(`# ${exam.title || 'Practice Exam'}`);
+                  if (exam.instructions?.length) {
+                    markdownLines.push('', '**INSTRUCTIONS:**');
+                    exam.instructions.forEach((inst, idx) => markdownLines.push(`${idx + 1}. ${inst}`));
+                  }
+                  exam.sections?.forEach((section, sIdx) => {
+                    markdownLines.push('', `## ${section.title || `SECTION ${String.fromCharCode(65 + sIdx)}`}`);
+                    section.questions?.forEach((q, qIdx) => {
+                      const markTag = q.marks ? ` (${q.marks} marks)` : '';
+                      markdownLines.push(`${qIdx + 1}. ${q.text}${markTag}`);
+                      if (q.options?.length) {
+                        q.options.forEach((opt, oIdx) => markdownLines.push(`${String.fromCharCode(65 + oIdx)}) ${opt}`));
+                      }
+                    });
+                  });
+                  const mdContent = markdownLines.join('\n');
+
+                  downloadExamPdf(mdContent, {
                     title: exam.title || 'Practice Exam',
                     grade: exam.grade || 'N/A',
                     subject: exam.subject || 'N/A',
                     duration: exam.duration || 'N/A',
                     totalMarks: exam.totalMarks || 0,
-                    instructions: exam.instructions || [],
-                    sections: exam.sections || []
-                  };
-                  exportExamToPDF(examData);
+                  });
+                  showToast('PDF downloaded successfully!');
                   
                   // Track download
                   if (generationId) {
-                    const supabase = createClient();
-                    supabase
-                      .from('exam_generations')
+                    const sb = createClient();
+                    sb.from('exam_generations')
                       .update({ downloaded_at: new Date().toISOString() })
                       .eq('id', generationId)
                       .then(() => console.log('Download tracked'));
                   }
                 } catch (e) {
                   console.error('PDF export failed', e);
-                  alert('Failed to generate PDF. Please try again.');
+                  showToast('Failed to generate PDF. Please try again.', 'error');
                 }
               }}
               style={{
@@ -951,17 +975,45 @@ Every question you attempt is helping you learn and grow. Keep up the great work
             </button>
             <button
               className="btn btnSecondary"
+              disabled={savingExam}
               onClick={async () => {
+                if (!userId) {
+                  showToast('You must be logged in to save exams.', 'error');
+                  return;
+                }
+                setSavingExam(true);
                 try {
-                  const supabase = createClient();
-                  if (!generationId) return;
-                  await supabase
-                    .from('exam_generations')
-                    .update({ downloaded_at: new Date().toISOString() })
-                    .eq('id', generationId);
-                  alert('Saved to your exam history.');
+                  // Rebuild content string from parsed exam
+                  const contentLines: string[] = [];
+                  contentLines.push(`# ${exam.title || 'Practice Exam'}`);
+                  if (exam.instructions?.length) {
+                    contentLines.push('', '**INSTRUCTIONS:**');
+                    exam.instructions.forEach((inst, idx) => contentLines.push(`${idx + 1}. ${inst}`));
+                  }
+                  exam.sections?.forEach((section, sIdx) => {
+                    contentLines.push('', `## ${section.title || `SECTION ${String.fromCharCode(65 + sIdx)}`}`);
+                    section.questions?.forEach((q, qIdx) => {
+                      const markTag = q.marks ? ` (${q.marks} marks)` : '';
+                      contentLines.push(`${qIdx + 1}. ${q.text}${markTag}`);
+                      if (q.options?.length) {
+                        q.options.forEach((opt, oIdx) => contentLines.push(`${String.fromCharCode(65 + oIdx)}) ${opt}`));
+                      }
+                    });
+                  });
+
+                  await saveExam({
+                    userId,
+                    grade: exam.grade,
+                    subject: exam.subject,
+                    content: contentLines.join('\n'),
+                    title: exam.title || 'Practice Exam',
+                  });
+                  showToast('Exam saved to your history!');
                 } catch (e) {
                   console.error('Save failed', e);
+                  showToast('Failed to save exam. Please try again.', 'error');
+                } finally {
+                  setSavingExam(false);
                 }
               }}
               style={{
@@ -970,7 +1022,7 @@ Every question you attempt is helping you learn and grow. Keep up the great work
               }}
             >
               <SaveIcon className="icon16" />
-              {isMobile ? 'Save Exam' : 'Save Exam'}
+              {savingExam ? 'Saving...' : isMobile ? 'Save Exam' : 'Save Exam'}
             </button>
           </div>
 
@@ -1176,6 +1228,35 @@ Every question you attempt is helping you learn and grow. Keep up the great work
         currentUsage={upgradeModalData?.currentUsage}
         currentLimit={upgradeModalData?.currentLimit}
       />
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: submitted ? 24 : 90,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 24px',
+            borderRadius: 'var(--radius-2)',
+            background: toastMessage.type === 'success'
+              ? 'linear-gradient(135deg, #34c759, #30b350)'
+              : 'linear-gradient(135deg, #ff3b30, #d63027)',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 600,
+            zIndex: 9999,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            animation: 'fadeIn 0.25s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            maxWidth: '90vw',
+          }}
+        >
+          {toastMessage.type === 'success' ? '✓' : '✗'} {toastMessage.text}
+        </div>
+      )}
     </div>
   );
 }
