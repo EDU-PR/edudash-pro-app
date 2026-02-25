@@ -1228,53 +1228,43 @@ export default function FinanceControlCenterScreen() {
     </View>
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <SimpleHeader title="Finance Control Center" />
-      <View style={styles.monthBar}>
-        <TouchableOpacity style={styles.monthButton} onPress={() => setShowMonthPicker(true)}>
-          <Ionicons name="calendar-outline" size={18} color={theme.primary} />
-          <Text style={styles.monthButtonText}>{monthLabel}</Text>
-        </TouchableOpacity>
-        <View style={styles.monthBarActions}>
-          <TouchableOpacity
-            style={[styles.monthBarActionButton, { borderColor: theme.border }]}
-            onPress={handleExportBankReconciliation}
-            disabled={exportingReconciliation}
-          >
-            {exportingReconciliation ? (
-              <EduDashSpinner size="small" color={theme.primary} />
-            ) : (
-              <Ionicons name="download-outline" size={18} color={theme.primary} />
-            )}
-            <Text style={[styles.monthBarActionText, { color: theme.primary }]}>Export</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.monthBarActionButton,
-              { borderColor: theme.border },
-              snapshot?.month_locked && { opacity: 0.6 },
-            ]}
-            onPress={closeMonth}
-            disabled={Boolean(snapshot?.month_locked)}
-          >
-            <Ionicons
-              name={snapshot?.month_locked ? 'lock-closed' : 'lock-open-outline'}
-              size={18}
-              color={snapshot?.month_locked ? theme.textSecondary : theme.primary}
-            />
-            <Text
-              style={[
-                styles.monthBarActionText,
-                { color: snapshot?.month_locked ? theme.textSecondary : theme.primary },
-              ]}
-            >
-              {snapshot?.month_locked ? 'Locked' : 'Lock'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+  const headerRight = (
+    <View style={styles.headerActionsRow}>
+      <TouchableOpacity
+        style={[styles.headerActionBtn, { borderColor: theme.primary + '40', backgroundColor: theme.primary + '15' }]}
+        onPress={() => setShowMonthPicker(true)}
+      >
+        <Ionicons name="calendar-outline" size={14} color={theme.primary} />
+        <Text style={[styles.headerActionText, { color: theme.primary }]}>{monthLabel}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.headerActionBtn, { borderColor: theme.border }]}
+        onPress={handleExportBankReconciliation}
+        disabled={exportingReconciliation}
+      >
+        {exportingReconciliation ? (
+          <EduDashSpinner size="small" color={theme.primary} />
+        ) : (
+          <Ionicons name="download-outline" size={14} color={theme.primary} />
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.headerActionBtn, { borderColor: theme.border }, snapshot?.month_locked && { opacity: 0.6 }]}
+        onPress={closeMonth}
+        disabled={Boolean(snapshot?.month_locked)}
+      >
+        <Ionicons
+          name={snapshot?.month_locked ? 'lock-closed' : 'lock-open-outline'}
+          size={14}
+          color={snapshot?.month_locked ? theme.textSecondary : theme.primary}
+        />
+      </TouchableOpacity>
+    </View>
+  );
 
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <SimpleHeader title="Finance Control Center" compact rightAction={headerRight} />
       <View style={styles.tabRow}>
         {TAB_ITEMS.map((tab) => {
           const active = tab.id === activeTab;
@@ -1307,7 +1297,7 @@ export default function FinanceControlCenterScreen() {
           {activeTab === 'queue' && renderQueue()}
           {activeTab === 'payroll' && renderPayroll()}
           {activeTab === 'rules' && renderRules()}
-          <View style={{ height: 36 }} />
+          <View style={{ height: 8 }} />
         </ScrollView>
       )}
 
@@ -1525,63 +1515,38 @@ const createStyles = (theme: any) =>
       flex: 1,
       backgroundColor: theme.background,
     },
-    monthBar: {
+    headerActionsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 4,
-      gap: 12,
+      gap: 4,
     },
-    monthBarActions: {
+    headerActionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-    },
-    monthBarActionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
+      gap: 3,
       borderWidth: 1,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      borderRadius: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 4,
     },
-    monthBarActionText: {
-      fontSize: 12,
+    headerActionText: {
+      fontSize: 11,
       fontWeight: '600',
-    },
-    monthButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      alignSelf: 'flex-start',
-      borderWidth: 1,
-      borderColor: theme.primary + '40',
-      backgroundColor: theme.primary + '15',
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    monthButtonText: {
-      color: theme.primary,
-      fontWeight: '700',
-      fontSize: 13,
     },
     tabRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      paddingHorizontal: 16,
-      paddingBottom: 10,
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingTop: 6,
+      paddingBottom: 6,
     },
     tabButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
       borderRadius: 999,
       backgroundColor: theme.surface,
       borderWidth: 1,

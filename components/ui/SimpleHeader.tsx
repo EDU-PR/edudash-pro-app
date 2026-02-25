@@ -20,16 +20,21 @@ interface SimpleHeaderProps {
   onBackPress?: () => void;
   rightAction?: React.ReactNode;
   showBackButton?: boolean;
+  /** When true, uses tighter padding for a more compact header */
+  compact?: boolean;
 }
 
-export function SimpleHeader({ 
-  title, 
-  onBackPress, 
+export function SimpleHeader({
+  title,
+  onBackPress,
   rightAction,
-  showBackButton = true 
+  showBackButton = true,
+  compact = false,
 }: SimpleHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const topPad = compact ? insets.top + 4 : insets.top + 8;
+  const contentPad = compact ? 6 : 10;
 
   const handleBackPress = () => {
     if (onBackPress) {
@@ -43,12 +48,12 @@ export function SimpleHeader({
     <View style={[
       styles.container,
       { 
-        paddingTop: insets.top + 8,
+        paddingTop: topPad,
         backgroundColor: theme.surface,
         borderBottomColor: theme.divider,
       }
     ]}>
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingBottom: contentPad, minHeight: compact ? 38 : 44 }]}>
         {/* Left - Back button */}
         <View style={styles.leftSection}>
           {showBackButton && (
@@ -115,7 +120,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   rightSection: {
-    width: 44,
+    minWidth: 44,
+    flexShrink: 0,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },

@@ -558,23 +558,13 @@ export default function POPReviewScreen() {
     });
   }, [queueMonthSelections, resolveQueueDisplayMonth, selectedControlMonth, showAlert]);
 
-  const handleApprove = async (upload: POPUpload) => {
+  const handleApprove = useCallback((upload: POPUpload) => {
     const originalCategory = upload.category_code
       ? normalizeFeeCategoryCode(upload.category_code)
       : inferFeeCategoryCode(upload.description || upload.title || 'tuition');
     const selectedCategory = getResolvedCategoryCode(upload);
     const categoryLabel = CATEGORY_META[selectedCategory].label;
     const categoryWasCorrected = selectedCategory !== originalCategory;
-    const uploaderDisplay = (() => {
-      if (!upload.uploader) return 'the parent';
-      const fn = upload.uploader.first_name ?? '';
-      const ln = upload.uploader.last_name ?? '';
-      const n = `${fn} ${ln}`.trim();
-      return n || (upload.uploader as { email?: string }).email || 'the parent';
-    })();
-    const reviewNotes = categoryWasCorrected
-      ? `Payment verified and approved. Category corrected from ${CATEGORY_META[originalCategory].label} to ${CATEGORY_META[selectedCategory].label}.`
-      : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
     const selectedMonth = queueMonthSelections[upload.id];
     if (!selectedMonth) {
       console.info('finance.queue.month_required_block', { uploadId: upload.id, studentId: upload.student_id });
@@ -585,19 +575,37 @@ export default function POPReviewScreen() {
       });
       return;
     }
+
+    const uploaderDisplay = (() => {
+      if (!upload.uploader) return 'the parent';
+      const fn = upload.uploader.first_name ?? '';
+      const ln = upload.uploader.last_name ?? '';
+      const n = `${fn} ${ln}`.trim();
+      return n || (upload.uploader as { email?: string }).email || 'the parent';
+    })();
+
+    const reviewNotes = categoryWasCorrected
+      ? `Payment verified and approved. Category corrected from ${CATEGORY_META[originalCategory].label} to ${CATEGORY_META[selectedCategory].label}.`
+      : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
+    const paymentForLabel = formatMonth(resolveQueueDisplayMonth(upload));
+    const selectedMonthLabel = formatMonth(selectedMonth);
+
     showAlert({
       title: 'Approve Payment',
-      message: `Approve this payment proof from ${uploaderDisplay}?\n\nCategory: ${categoryLabel}${categoryWasCorrected ? ' (corrected)' : ''}\nPayment For: ${monthLabel}`,
+      message:
+        `Approve this payment proof from ${uploaderDisplay}?\n\n` +
+        `Category: ${categoryLabel}${categoryWasCorrected ? ' (corrected)' : ''}\n` +
+        `Payment For: ${paymentForLabel}\n` +
+        `Accounting Month: ${selectedMonthLabel}`,
       type: 'warning',
       buttons: [
         { text: 'Change Category', onPress: () => openCategoryPicker(upload) },
-        { text: 'Change Month', onPress: () => openMonthPicker(upload, (value) => showApprovalDialog(upload, value)) },
+        { text: 'Change Month', onPress: () => openQueueMonthPicker(upload) },
         { text: 'Cancel', style: 'cancel' as const },
         {
           text: 'Approve',
           style: 'default',
           onPress: async () => {
-            const selectedMonth = resolvePaymentMonth(upload, monthOverride);
             setProcessing(upload.id);
             try {
               console.info('finance.pop.approve.month_selected', {
@@ -624,8 +632,6 @@ export default function POPReviewScreen() {
                 return next;
               });
               openReceiptModal(upload);
-              
-              // Refresh the list
               fetchUploads();
             } catch (err: any) {
               showAlert({
@@ -640,11 +646,7 @@ export default function POPReviewScreen() {
         },
       ],
     });
-  }, [resolvePaymentMonth, getResolvedCategoryCode, openCategoryPicker, openMonthPicker, updatePOPStatus, openReceiptModal, fetchUploads, showAlert]);
-
-  const handleApprove = useCallback((upload: POPUpload) => {
-    showApprovalDialog(upload);
-  }, [showApprovalDialog]);
+  }, [fetchUploads, getResolvedCategoryCode, openCategoryPicker, openQueueMonthPicker, queueMonthSelections, resolveQueueDisplayMonth, showAlert, updatePOPStatus]);
 
   const handleReject = (upload: POPUpload) => {
     setSelectedUpload(upload);
@@ -767,9 +769,9 @@ export default function POPReviewScreen() {
       const name = `${fn} ${ln}`.trim();
       return name || (item.uploader as { email?: string }).email || 'School admin';
     })();
-    const paymentForMonth = resolvePaymentMonth(item);
-    const categoryMeta = getCategoryMeta(item);
     const selectedMonth = queueMonthSelections[item.id];
+    const paymentForMonth = selectedMonth || resolveQueueDisplayMonth(item);
+    const categoryMeta = getCategoryMeta(item);
 
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -823,7 +825,7 @@ export default function POPReviewScreen() {
               {item.status === 'pending' && (
                 <TouchableOpacity
                   style={[styles.categoryEditButton, { borderColor: theme.border }]}
-                  onPress={() => openMonthPicker(item)}
+                  onPress={() => openQueueMonthPicker(item)}
                 >
                   <Ionicons name="create-outline" size={12} color={theme.textSecondary} />
                   <Text style={[styles.categoryEditText, { color: theme.textSecondary }]}>
