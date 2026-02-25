@@ -58,18 +58,23 @@ export function useOrgAnnouncements(options: UseOrgAnnouncementsOptions = {}): U
       if (!user?.id) return;
       
       try {
-        const { data: member } = await assertSupabase()
+        const { data: member, error: memberErr } = await assertSupabase()
           .from('organization_members')
           .select('organization_id')
           .eq('user_id', user.id)
-          .eq('status', 'active')
+          .eq('membership_status', 'active')
           .maybeSingle();
+
+        if (memberErr) {
+          console.warn('[useOrgAnnouncements] organization_members query returned error, continuing without org membership:', memberErr.message);
+          return;
+        }
         
         if (member?.organization_id) {
           setOrganizationId(member.organization_id);
         }
       } catch (err) {
-        console.error('[useOrgAnnouncements] Error fetching org ID:', err);
+        console.warn('[useOrgAnnouncements] Error fetching org ID, continuing without org membership:', err);
       }
     };
 

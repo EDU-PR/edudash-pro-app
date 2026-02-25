@@ -123,13 +123,15 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
             setReady(true);
           }
         } else {
-          debug('[AdsProvider] Skipping AdMob initialization', { 
-            shouldEnableAds, 
-            subscriptionReady, 
-            tier, 
-            platform: Platform.OS 
-          });
-          
+          if (!isWeb || __DEV__) {
+            debug('[AdsProvider] Skipping AdMob initialization', {
+              shouldEnableAds,
+              subscriptionReady,
+              tier,
+              platform: Platform.OS
+            });
+          }
+
           if (mounted) {
             setReady(true);
           }
@@ -277,7 +279,9 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!allowed) {
-        debug(`[AdsProvider] Interstitial blocked: ${reason}`, { tag });
+        if (!isWeb || __DEV__ || reason !== 'ads_disabled') {
+          debug(`[AdsProvider] Interstitial blocked: ${reason}`, { tag });
+        }
         return false;
       }
 
@@ -326,7 +330,9 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       const { allowed, reason } = await canShowRewarded();
       
       if (!allowed) {
-        debug(`[AdsProvider] Rewarded ad blocked: ${reason}`, { tag });
+        if (!isWeb || __DEV__ || reason !== 'ads_disabled') {
+          debug(`[AdsProvider] Rewarded ad blocked: ${reason}`, { tag });
+        }
         track('ads.rewarded_blocked', {
           tag,
           reason_blocked: reason,
@@ -401,7 +407,9 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!allowed) {
-        debug('[AdsProvider] App-open interstitial blocked', { reason, pathname });
+        if (!isWeb || __DEV__ || reason !== 'ads_disabled') {
+          debug('[AdsProvider] App-open interstitial blocked', { reason, pathname });
+        }
         return;
       }
 
