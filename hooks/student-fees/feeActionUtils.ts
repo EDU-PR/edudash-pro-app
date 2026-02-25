@@ -37,7 +37,16 @@ export function resolvePendingLikeStatus(
 
 export function getSupabaseErrorMessage(error: any, fallback: string): string {
   if (!error) return fallback;
+  const code = error?.code || error?.pgCode;
   const normalizedMessage = String(error?.message || '').toLowerCase();
+
+  // 409 Conflict: unique_violation (23505) or foreign_key_violation (23503)
+  if (code === '23505' || normalizedMessage.includes('unique') || normalizedMessage.includes('duplicate key')) {
+    return 'A duplicate record would be created. Another fee or payment may already exist for this period. Refresh and retry.';
+  }
+  if (code === '23503' || normalizedMessage.includes('foreign key') || normalizedMessage.includes('violates foreign key')) {
+    return 'A related record is missing or invalid. Refresh the page and try again.';
+  }
   if (normalizedMessage.includes('fee_corrections_audit is append-only')) {
     return 'Audit-log schema conflict blocked this action. Apply the latest finance migration and retry.';
   }
@@ -47,6 +56,7 @@ export function getSupabaseErrorMessage(error: any, fallback: string): string {
   if (normalizedMessage.includes('audit_log_failed')) {
     return 'Audit logging failed, so the change was blocked for safety.';
   }
+
   const message = [error.message, error.details, error.hint]
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .join(' | ');
