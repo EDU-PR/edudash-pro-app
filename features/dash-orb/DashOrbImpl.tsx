@@ -186,7 +186,7 @@ export default function DashOrb({
   const [, setLiveTranscript] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(!learnerContext);
   const [pendingTutorIntent, setPendingTutorIntent] = useState<{ prompt: string; label?: string } | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<DashAttachment[]>([]);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -1263,6 +1263,7 @@ export default function DashOrb({
   }, [handleSend]);
 
   const quickIntents = useMemo(() => {
+    if (learnerContext) return [];
     const actions = Array.isArray(dashPolicy.quickActions) ? dashPolicy.quickActions : [];
     if (actions.length > 0) {
       return actions.map((a) => ({ id: a.id, label: a.label, prompt: a.prompt }));
@@ -1274,7 +1275,7 @@ export default function DashOrb({
       { id: 'practice', label: 'Practice', prompt: 'Give me one practice task and then evaluate my answer.' },
       { id: 'summarize', label: 'Summarize', prompt: 'Summarize this into key points and one next action.' },
     ];
-  }, [dashPolicy.quickActions]);
+  }, [dashPolicy.quickActions, learnerContext]);
 
   const handleQuickIntent = useCallback((intent: { id: string; label: string; prompt: string }) => {
     if (isProcessing) return;

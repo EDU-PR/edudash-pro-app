@@ -131,7 +131,9 @@ export function getModelsForTier(tier: SubscriptionTier): AIModelInfo[] {
  */
 export function getDefaultModelForTier(tier: SubscriptionTier): AIModelId {
   const costSafeDefaults: Record<SubscriptionTier, AIModelId> = {
-    free: 'claude-3-haiku-20240307',
+    // Even on the free tier we prefer a more capable model
+    // so Dash feels closer to a \"full\" assistant experience.
+    free: 'claude-3-5-haiku-20241022',
     starter: 'claude-3-5-haiku-20241022',
     premium: 'claude-3-5-haiku-20241022',
     enterprise: 'claude-3-7-sonnet-20250219',

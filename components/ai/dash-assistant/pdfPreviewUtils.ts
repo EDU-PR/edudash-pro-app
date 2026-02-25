@@ -39,7 +39,7 @@ export function resolvePdfPreviewTarget(params: {
 
   if (isPdfToolOperation) {
     return {
-      url: sanitizeGeneratedPdfUrl(toolDownloadUrl),
+      url: sanitizeGeneratedPdfUrl(toolDownloadUrl, { allowGeneratedPublic: true }),
       storagePath: String(toolStoragePath || '').trim() || null,
     };
   }

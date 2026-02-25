@@ -343,7 +343,11 @@ export async function pickImages(): Promise<DashAttachment[]> {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
+      // Single-select is more stable across OEM gallery apps and
+      // avoids a class of \"Failed to select images\" errors seen
+      // on some devices. Users can still attach multiple images
+      // by picking again.
+      allowsMultipleSelection: false,
       quality: 0.8,
       allowsEditing: false,
     });

@@ -71,6 +71,9 @@ export default function ExamGenerationScreen() {
   const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const [completionSummary, setCompletionSummary] = useState<string | null>(null);
+  // Parents mainly care about the actual exam; keep the
+  // audit + study coach collapsed by default on small screens.
+  const [showAudit, setShowAudit] = useState(false);
   const hasGenerationWarning = useMemo(() => Boolean(persistenceWarning && persistenceWarning.trim().length > 0), [persistenceWarning]);
 
   const generationLabel = useMemo(() => {
@@ -212,7 +215,31 @@ export default function ExamGenerationScreen() {
               </TouchableOpacity>
             </View>
           ) : null}
-          {(contextSummary || teacherAlignment || blueprintAudit) ? (
+          {/* Compact toggle so meta info doesn't crowd the exam view */}
+          {(contextSummary || teacherAlignment || blueprintAudit || studyCoachPack) && (
+            <View style={[styles.auditToggleRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              <TouchableOpacity
+                style={styles.auditToggleButton}
+                onPress={() => setShowAudit(prev => !prev)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.auditToggleLeft}>
+                  <Ionicons
+                    name={showAudit ? 'chevron-down' : 'information-circle-outline'}
+                    size={16}
+                    color={theme.primary}
+                  />
+                  <Text style={[styles.auditToggleLabel, { color: theme.text }]}>
+                    {showAudit ? 'Hide exam summary' : 'Show exam summary & study coach'}
+                  </Text>
+                </View>
+                <Text style={[styles.auditToggleHint, { color: theme.muted }]}>
+                  {grade && subject ? `${grade.replace('grade_', 'Grade ')} • ${subject}` : 'Generation details'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {showAudit && (contextSummary || teacherAlignment || blueprintAudit) ? (
             <View style={[styles.metaCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[styles.metaTitle, { color: theme.text }]}>Exam generation audit</Text>
               {contextSummary ? (
@@ -232,7 +259,7 @@ export default function ExamGenerationScreen() {
               ) : null}
             </View>
           ) : null}
-          {studyCoachPack ? (
+          {showAudit && studyCoachPack ? (
             <View style={[styles.studyCoachCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[styles.metaTitle, { color: theme.text }]}>{studyCoachPack.planTitle || '4-day study coach + test day'}</Text>
               {studyCoachPack.days?.slice(0, 2).map((day) => (
@@ -471,6 +498,34 @@ const styles = StyleSheet.create({
   studyCoachHint: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  auditToggleRow: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  auditToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  auditToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  auditToggleLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  auditToggleHint: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   examViewWrap: {
     flex: 1,
