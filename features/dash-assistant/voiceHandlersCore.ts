@@ -9,7 +9,7 @@ import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import type { VoiceProbeMetrics } from '@/lib/voice/benchmark/types';
 import { track } from '@/lib/analytics';
-import { buildVoicePlaybackText, cleanForTTS, splitForTTS, TTS_CHUNK_MAX_LEN } from '@/lib/dash-voice-utils';
+import { buildVoicePlaybackText, cleanForTTS, splitForTTS, TTS_CHUNK_MAX_LEN, getStreamingPlaceholder } from '@/lib/dash-voice-utils';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 type VoiceRefs = {
@@ -91,7 +91,9 @@ function normalizeUrlHeavyMarkdownForSpeech(input: string): string {
 function shouldUseDetectedLocaleForSpeech(text: string, locale: string, source: string): boolean {
   const normalizedLocale = String(locale || '').toLowerCase();
   if (!normalizedLocale || normalizedLocale === 'en-za') return true;
-  if (source !== 'explicit_override') return false;
+  // Accept explicit user choice, auto-detected language, and user preference
+  const validSources = new Set(['explicit_override', 'auto_detect', 'user_preference']);
+  if (!validSources.has(source)) return false;
 
   const value = String(text || '').toLowerCase();
   const englishMarkers = countMatches(
@@ -108,10 +110,10 @@ function shouldUseDetectedLocaleForSpeech(text: string, locale: string, source: 
   );
 
   if (normalizedLocale === 'af-za') {
-    return afMarkers >= 3 && afMarkers >= englishMarkers / 2;
+    return afMarkers >= 2 && afMarkers >= englishMarkers / 2;
   }
   if (normalizedLocale === 'zu-za') {
-    return zuMarkers >= 3 && zuMarkers >= englishMarkers / 2;
+    return zuMarkers >= 2 && zuMarkers >= englishMarkers / 2;
   }
   return false;
 }
@@ -261,23 +263,16 @@ export async function speakDashResponse(params: {
   }
 
   if (!hasTTSAccess()) {
+    setVoiceEnabled(false);
     showAlert({
-      title: isFreeTier ? 'Daily Voice Limit Reached' : 'Voice Playback - Premium',
+      title: '',
       message: isFreeTier
-        ? "You've used today's 10 minutes of voice. Upgrade for unlimited voice and voice input."
-        : 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
+        ? "Daily voice limit reached. Text responses still work! 💬"
+        : 'Voice is a premium feature. Text responses still work perfectly! 💬',
       type: 'info',
-      icon: 'volume-high-outline',
-      buttons: [
-        { text: 'Maybe Later', style: 'cancel' },
-        {
-          text: 'Upgrade Now',
-          onPress: () => {
-            hideAlert();
-            router.push('/screens/subscription-setup' as any);
-          },
-        },
-      ],
+      icon: 'chatbubble-ellipses-outline',
+      autoDismissMs: 4000,
+      bannerMode: true,
     });
     return;
   }
@@ -304,6 +299,13 @@ export async function speakDashResponse(params: {
       });
     }
     const rawSpeechInput = stripToolDumpForSpeech(message.content || '');
+    // Skip speaking if the content is a streaming placeholder, not an actual response.
+    // getStreamingPlaceholder returns a known set of placeholder strings — if the entire
+    // message content matches one, it is not a real AI response and should not be spoken.
+    const trimmedRaw = rawSpeechInput.trim();
+    if (trimmedRaw && trimmedRaw === getStreamingPlaceholder(trimmedRaw)) {
+      return;
+    }
     const speechInput = preferFastStart
       ? buildVoicePlaybackText(rawSpeechInput, {
           maxChars: TTS_FAST_START_SUMMARY_MAX_CHARS,
@@ -499,6 +501,17 @@ export async function speakDashResponse(params: {
         chunkFailed = true;
         throwSpeechError(error);
       });
+      // Abort if session was invalidated while the chunk was playing (e.g. user pressed stop)
+      if (voiceRefs.ttsSessionIdRef && voiceRefs.ttsSessionIdRef.current !== sessionId) {
+        onSpeechChunkProgress?.({
+          messageId: message.id,
+          chunkIndex: idx,
+          chunkCount: chunks.length,
+          isPlaying: false,
+          isComplete: false,
+        });
+        break;
+      }
       if (__DEV__ && !chunkFailed) {
         console.log('[DashVoice] TTS chunk playback completed', {
           index: idx + 1,

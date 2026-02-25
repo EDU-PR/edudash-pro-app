@@ -211,6 +211,7 @@ export default function DashVoiceScreen() {
   const voiceDictationProbeRef = useRef<DashVoiceDictationProbe | null>(null);
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
+  const speechMutexRef = useRef(false);
   const activeRequestRef = useRef<{ abort: () => void } | null>(null);
   const DASH_TRACE_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DASH_VOICE_TRACE === 'true';
 
@@ -313,11 +314,18 @@ export default function DashVoiceScreen() {
   }, [preferredLanguage, orgType]);
 
   const processSpeechQueue = useCallback(async () => {
-    if (isSpeakingRef.current) return;
-    const next = speechQueueRef.current.shift();
-    if (!next) return;
-    await speakResponse(next);
-    if (speechQueueRef.current.length > 0) processSpeechQueue();
+    if (speechMutexRef.current) return;
+    speechMutexRef.current = true;
+    try {
+      const next = speechQueueRef.current.shift();
+      if (!next) return;
+      await speakResponse(next);
+      if (speechQueueRef.current.length > 0) {
+        setTimeout(() => processSpeechQueue(), 50);
+      }
+    } finally {
+      speechMutexRef.current = false;
+    }
   }, [speakResponse]);
 
   const enqueueSpeech = useCallback((text: string) => {
