@@ -657,6 +657,12 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
 
   const handleConfirmGenerate = () => {
     if (!customPrompt) return;
+
+    if (userId && !guestMode) {
+      incrementUsage('exam_generation', 'success').catch(err => {
+        console.error('[ExamPrep] Failed to increment usage:', err);
+      });
+    }
     
     // For practice tests, navigate to dedicated exam generation page
     const isInteractive = selectedExamType === 'practice_test';

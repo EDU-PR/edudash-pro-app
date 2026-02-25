@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sparkles, GraduationCap, BookOpen, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getGradeNumber } from '@/lib/utils/gradeUtils';
+import { SUBJECTS_BY_PHASE, GRADES, getPhaseFromGrade } from '@/lib/exam-prep/types';
 
 interface TutorModePanelProps {
   onStart: (prompt: string) => void;
@@ -16,39 +17,7 @@ interface TutorModePanelProps {
   } | null;
 }
 
-const K12_GRADES = [
-  'Grade R', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
-  'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'
-];
-
-const K12_SUBJECTS = [
-  'Mathematics',
-  'English Home Language',
-  'English First Additional Language',
-  'Afrikaans Home Language',
-  'Afrikaans First Additional Language',
-  'isiZulu Home Language',
-  'isiZulu First Additional Language',
-  'Life Sciences',
-  'Physical Sciences',
-  'Natural Sciences',
-  'Social Sciences',
-  'Technology',
-  'Geography',
-  'History',
-  'Accounting',
-  'Business Studies',
-  'Life Orientation',
-];
-
-const EARLY_SUBJECTS = [
-  'Literacy',
-  'Numeracy',
-  'Life Skills',
-  'Creative Arts',
-  'Early Learning',
-  'Phonics & Sounds',
-];
+const K12_GRADE_LABELS = GRADES.map(g => g.label);
 
 const PRESCHOOL_GRADES = [
   'Preschool (3-4)',
@@ -111,7 +80,7 @@ export function TutorModePanel({ onStart, learnerContext }: TutorModePanelProps)
       ? PRESCHOOL_GRADES
       : isFoundationPhase
         ? FOUNDATION_GRADES
-        : K12_GRADES;
+        : K12_GRADE_LABELS;
     const childLabel = formatGradeLabel(learnerContext?.grade);
     if (childLabel && !base.includes(childLabel)) {
       return [childLabel, ...base];
@@ -119,7 +88,18 @@ export function TutorModePanel({ onStart, learnerContext }: TutorModePanelProps)
     return base;
   }, [isPreschoolContext, isFoundationPhase, learnerContext?.grade]);
 
-  const subjectOptions = useMemo(() => (isEarlyLearner ? EARLY_SUBJECTS : K12_SUBJECTS), [isEarlyLearner]);
+  const subjectOptions = useMemo(() => {
+    if (isPreschoolContext || isFoundationPhase) {
+      return SUBJECTS_BY_PHASE.foundation;
+    }
+    if (grade) {
+      const gradeEntry = GRADES.find(g => g.label === grade);
+      const gradeValue = gradeEntry?.value || grade.toLowerCase().replace(/\s+/g, '_');
+      const phase = getPhaseFromGrade(gradeValue);
+      return SUBJECTS_BY_PHASE[phase];
+    }
+    return SUBJECTS_BY_PHASE.fet;
+  }, [isPreschoolContext, isFoundationPhase, grade]);
 
   useEffect(() => {
     const childLabel = formatGradeLabel(learnerContext?.grade);

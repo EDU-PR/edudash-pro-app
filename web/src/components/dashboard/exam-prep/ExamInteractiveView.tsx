@@ -116,15 +116,15 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [savingExam, setSavingExam] = useState(false);
   const [a11y, setA11y] = useState<AccessibilitySettings>(DEFAULT_ACCESSIBILITY_SETTINGS);
   const [simplifiedTexts, setSimplifiedTexts] = useState<Record<string, string>>({});
-  const [loadingSimplify, setLoadingSimplify] = useState<Record<string, boolean>>({});
   const [translatedTexts, setTranslatedTexts] = useState<Record<string, string>>({});
+  const [loadingSimplify, setLoadingSimplify] = useState<Record<string, boolean>>({});
   const [loadingTranslate, setLoadingTranslate] = useState<Record<string, boolean>>({});
-  
+  const autoReadRef = useRef<boolean>(false);
+  autoReadRef.current = a11y.autoReadQuestions;
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
   };
-  
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
   const { speak, pause, resume, stop, isSpeaking, isPaused, isSupported: ttsSupported, error: ttsError, quota: ttsQuota, userTier: ttsUserTier, voicePreference, setVoice, checkQuota: checkTTSQuota } = useTTS(userId);

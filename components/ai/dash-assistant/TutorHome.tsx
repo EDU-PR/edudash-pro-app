@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,7 +21,126 @@ interface TutorHomeProps {
   } | null;
 }
 
+interface LearningStats {
+  streak: number;
+  sessionsToday: number;
+  sessionsGoal: number;
+  weekSessions: number;
+  weekQuestions: number;
+  weekAccuracy: number;
+  xp: number;
+  level: number;
+  weekDays: boolean[];
+  lastTopic?: string | null;
+  lastSubject?: string | null;
+}
+
 const TUTOR_HOME_COLLAPSE_KEY = '@dash_ai_tutor_home_collapsed';
+const LEARNING_STATS_KEY = '@dash_learning_stats';
+
+const DEFAULT_STATS: LearningStats = {
+  streak: 0,
+  sessionsToday: 0,
+  sessionsGoal: 3,
+  weekSessions: 0,
+  weekQuestions: 0,
+  weekAccuracy: 0,
+  xp: 0,
+  level: 1,
+  weekDays: [false, false, false, false, false, false, false],
+  lastTopic: null,
+  lastSubject: null,
+};
+
+type GradePhase = 'foundation' | 'intermediate' | 'senior' | 'fet';
+
+interface SubjectCard {
+  emoji: string;
+  label: string;
+  prompt: string;
+}
+
+function getGradePhase(grade: string | null | undefined): GradePhase {
+  if (!grade) return 'intermediate';
+  const num = parseInt(grade.replace(/[^0-9]/g, ''), 10);
+  if (isNaN(num) || num <= 3) return 'foundation';
+  if (num <= 6) return 'intermediate';
+  if (num <= 9) return 'senior';
+  return 'fet';
+}
+
+function getPhaseLabel(phase: GradePhase): string {
+  switch (phase) {
+    case 'foundation': return 'Foundation Phase';
+    case 'intermediate': return 'Intermediate Phase';
+    case 'senior': return 'Senior Phase';
+    case 'fet': return 'FET Phase';
+  }
+}
+
+function getSubjectsForPhase(phase: GradePhase): SubjectCard[] {
+  const socratic = (subject: string) =>
+    `Let's work on ${subject}. First, let me ask you a quick question to see where you are...`;
+
+  switch (phase) {
+    case 'foundation':
+      return [
+        { emoji: '🔢', label: 'Counting', prompt: socratic('Counting') },
+        { emoji: '📖', label: 'Reading', prompt: socratic('Reading') },
+        { emoji: '🎨', label: 'Life Skills', prompt: socratic('Life Skills') },
+        { emoji: '🔤', label: 'Phonics', prompt: socratic('Phonics') },
+      ];
+    case 'intermediate':
+      return [
+        { emoji: '📐', label: 'Fractions', prompt: socratic('Fractions') },
+        { emoji: '📝', label: 'Grammar', prompt: socratic('Grammar') },
+        { emoji: '🔬', label: 'Science', prompt: socratic('Natural Sciences') },
+        { emoji: '📊', label: 'Data Handling', prompt: socratic('Data Handling') },
+        { emoji: '🗺️', label: 'History', prompt: socratic('Social Sciences - History') },
+      ];
+    case 'senior':
+      return [
+        { emoji: '📐', label: 'Algebra', prompt: socratic('Algebra') },
+        { emoji: '📝', label: 'Essay Writing', prompt: socratic('Essay Writing') },
+        { emoji: '⚗️', label: 'Science', prompt: socratic('Natural Sciences') },
+        { emoji: '💰', label: 'EMS', prompt: socratic('Economic and Management Sciences') },
+        { emoji: '📐', label: 'Geometry', prompt: socratic('Geometry') },
+      ];
+    case 'fet':
+      return [
+        { emoji: '📈', label: 'Calculus', prompt: socratic('Calculus') },
+        { emoji: '⚗️', label: 'Chemistry', prompt: socratic('Physical Sciences - Chemistry') },
+        { emoji: '🧬', label: 'Biology', prompt: socratic('Life Sciences') },
+        { emoji: '💼', label: 'Accounting', prompt: socratic('Accounting') },
+        { emoji: '📊', label: 'Business', prompt: socratic('Business Studies') },
+      ];
+  }
+}
+
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+const CTA_GRADIENTS: [string, string][] = [
+  ['#6366f1', '#818cf8'],
+  ['#f59e0b', '#fbbf24'],
+  ['#10b981', '#34d399'],
+  ['#ef4444', '#f87171'],
+];
+
+const SUBJECT_GRADIENTS: [string, string][] = [
+  ['#1e1b4b', '#312e81'],
+  ['#1a2e05', '#365314'],
+  ['#1c1917', '#44403c'],
+  ['#0c4a6e', '#075985'],
+  ['#3b0764', '#581c87'],
+  ['#7c2d12', '#9a3412'],
+];
+
+const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export const TutorHome: React.FC<TutorHomeProps> = ({
   styles,
@@ -34,6 +153,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const [ageBandLoaded, setAgeBandLoaded] = useState(false);
   const [lastConversationId, setLastConversationId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(Dimensions.get('window').width < 420);
+  const [learningStats, setLearningStats] = useState<LearningStats>(DEFAULT_STATS);
 
   const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
   const orgType = normalizeSchoolType(normalizedSchool || 'preschool');
@@ -42,7 +162,10 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const isStaff = ['teacher', 'principal', 'admin', 'manager', 'staff'].includes(roleValue);
   const lockAgeBand = !!learnerContext?.ageBand && (learnerContext?.role === 'student' || learnerContext?.role === 'learner');
 
-  // Dynamic age chips based on org type
+  const gradePhase = useMemo(() => getGradePhase(learnerContext?.grade), [learnerContext?.grade]);
+  const phaseLabel = useMemo(() => getPhaseLabel(gradePhase), [gradePhase]);
+  const subjectCards = useMemo(() => getSubjectsForPhase(gradePhase), [gradePhase]);
+
   const visibleAgeChips = useMemo(() => getAgeBandsForOrgType(orgType), [orgType]);
 
   useEffect(() => {
@@ -77,6 +200,25 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
       }
     };
     loadCollapsePref();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadStats = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LEARNING_STATS_KEY);
+        if (raw && mounted) {
+          const parsed = JSON.parse(raw);
+          setLearningStats({ ...DEFAULT_STATS, ...parsed });
+        }
+      } catch {
+        // keep defaults
+      }
+    };
+    loadStats();
     return () => {
       mounted = false;
     };
@@ -191,6 +333,12 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         icon: 'hand-left-outline',
         prompt: `Design a hands-on interactive activity that aligns with today's class lesson. Include materials, steps, and assessment. ${base}`,
       },
+      {
+        id: 'class-performance',
+        label: 'Class Performance',
+        icon: 'stats-chart-outline',
+        prompt: `Give me a summary of class performance metrics. Show trends, highlight struggling students, and suggest interventions. ${base}`,
+      },
     ];
   }, [isStaff, isPreschool]);
 
@@ -198,6 +346,12 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     if (!isStaff) return null;
     return isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator';
   }, [isStaff, isPreschool]);
+
+  const learnerName = learnerContext?.learnerName || 'Learner';
+  const greeting = getTimeGreeting();
+  const progressFraction = learningStats.sessionsGoal > 0
+    ? Math.min(learningStats.sessionsToday / learningStats.sessionsGoal, 1)
+    : 0;
 
   if (collapsed) {
     return (
@@ -268,8 +422,11 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
       contentContainerStyle={styles.emptyStateContainer}
       showsVerticalScrollIndicator={false}
     >
+      {/* ============================================================ */}
+      {/* HERO SECTION — Personalized greeting + streak + progress     */}
+      {/* ============================================================ */}
       <LinearGradient
-        colors={['#0b1220', '#101b2d', '#0b1220']}
+        colors={['#0b1220', '#131d33', '#0e1628']}
         style={[styles.emptyStateHero, { borderColor: theme.border }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -280,14 +437,23 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
               <Ionicons name="sparkles" size={28} color="#fff" />
             </View>
             <View style={styles.emptyStateHeroText}>
-              <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-                {isPreschool ? 'Your play‑based tutor' : 'Your personal tutor'}
+              <Text style={[styles.emptyStateTitle, { color: theme.text, marginBottom: 2 }]}>
+                {greeting}, {learnerName}! 🌟
               </Text>
-              <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-                {isPreschool
-                  ? 'Tell me what your child is learning. I’ll use stories and simple questions.'
-                  : 'Tell me what you’re stuck on. I’ll diagnose, teach, and practice with you.'}
-              </Text>
+              {!isPreschool && learnerContext?.grade && (
+                <View style={localStyles.gradeBadgeRow}>
+                  <View style={[localStyles.gradeBadge, { backgroundColor: theme.primary + '22', borderColor: theme.primary + '44' }]}>
+                    <Text style={[localStyles.gradeBadgeText, { color: theme.primary }]}>
+                      Grade {learnerContext.grade} · {phaseLabel}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {isPreschool && (
+                <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
+                  Tell me what your child is learning. I'll use stories and simple questions.
+                </Text>
+              )}
             </View>
           </View>
           <TouchableOpacity
@@ -305,41 +471,113 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.primaryCtasRow}>
+        {/* Streak + Daily Progress Row */}
+        <View style={localStyles.streakProgressRow}>
+          <View style={localStyles.streakBadge}>
+            <Text style={localStyles.streakText}>
+              🔥 {learningStats.streak}-day streak
+            </Text>
+          </View>
+          <View style={localStyles.dailyProgressWrap}>
+            <Text style={[localStyles.dailyProgressLabel, { color: theme.textSecondary }]}>
+              {learningStats.sessionsToday}/{learningStats.sessionsGoal} sessions today
+            </Text>
+            <View style={[localStyles.progressBarBg, { backgroundColor: theme.border }]}>
+              <View
+                style={[
+                  localStyles.progressBarFill,
+                  { width: `${progressFraction * 100}%`, backgroundColor: theme.primary },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* ============================================================ */}
+        {/* PRIMARY CTAs — 2x2 grid                                      */}
+        {/* ============================================================ */}
+        <View style={localStyles.ctaGrid}>
           <TouchableOpacity
-            style={[styles.primaryCta, { backgroundColor: theme.primary }]}
+            style={localStyles.ctaCard}
+            activeOpacity={0.8}
+            onPress={() => router.push('/screens/dash-voice')}
+          >
+            <LinearGradient
+              colors={CTA_GRADIENTS[0]}
+              style={localStyles.ctaCardGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={localStyles.ctaEmoji}>📸</Text>
+              <Text style={localStyles.ctaLabel}>Scan Homework</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={localStyles.ctaCard}
+            activeOpacity={0.8}
             onPress={() => sendTutorIntent(
-              defaultQuickStart
+              isPreschool
+                ? 'Use a short story and ask one simple question to get started.'
+                : 'Ask me one short diagnostic question first, then explain step-by-step in simple language.'
             )}
           >
-            <Ionicons name="bulb-outline" size={18} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Explain it</Text>
+            <LinearGradient
+              colors={CTA_GRADIENTS[1]}
+              style={localStyles.ctaCardGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={localStyles.ctaEmoji}>💡</Text>
+              <Text style={localStyles.ctaLabel}>Explain a Topic</Text>
+            </LinearGradient>
           </TouchableOpacity>
+
           <TouchableOpacity
-            style={[styles.primaryCta, { backgroundColor: theme.success || '#16a34a' }]}
+            style={localStyles.ctaCard}
+            activeOpacity={0.8}
             onPress={() => sendTutorIntent(
               isPreschool
                 ? 'Give one playful practice question. Wait for the answer before continuing.'
                 : 'Give me one practice question to diagnose my level. Wait for my answer before continuing.'
             )}
           >
-            <Ionicons name="pencil-outline" size={18} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Help me solve</Text>
+            <LinearGradient
+              colors={CTA_GRADIENTS[2]}
+              style={localStyles.ctaCardGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={localStyles.ctaEmoji}>✏️</Text>
+              <Text style={localStyles.ctaLabel}>Practice Questions</Text>
+            </LinearGradient>
           </TouchableOpacity>
+
           <TouchableOpacity
-            style={[styles.primaryCta, { backgroundColor: theme.warning || '#f59e0b' }]}
+            style={localStyles.ctaCard}
+            activeOpacity={0.8}
             onPress={() => sendTutorIntent(
               isPreschool
                 ? `Quiz with about ${quizChallengeTarget} very easy questions using colors, shapes, or counting.`
                 : `Quiz me with about ${quizChallengeTarget} questions, starting easy and getting harder.`
             )}
           >
-            <Ionicons name="school-outline" size={18} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Test me</Text>
+            <LinearGradient
+              colors={CTA_GRADIENTS[3]}
+              style={localStyles.ctaCardGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={localStyles.ctaEmoji}>🎯</Text>
+              <Text style={localStyles.ctaLabel}>Quiz Me</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </LinearGradient>
 
+      {/* ============================================================ */}
+      {/* AGE & GRADE SECTION                                          */}
+      {/* ============================================================ */}
       <View style={styles.sectionBlock}>
         <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Age & grade</Text>
         {learnerContext && (learnerContext.grade || learnerContext.learnerName || learnerContext.schoolType) && (
@@ -378,25 +616,80 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         </View>
       </View>
 
+      {/* ============================================================ */}
+      {/* GRADE-AWARE CAPS SUBJECT CARDS                               */}
+      {/* ============================================================ */}
+      {!isPreschool && (
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            {phaseLabel} subjects
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={localStyles.subjectScrollContent}
+          >
+            {subjectCards.map((card, idx) => (
+              <TouchableOpacity
+                key={card.label}
+                activeOpacity={0.8}
+                onPress={() => sendTutorIntent(card.prompt)}
+                style={localStyles.subjectCardWrap}
+              >
+                <LinearGradient
+                  colors={SUBJECT_GRADIENTS[idx % SUBJECT_GRADIENTS.length]}
+                  style={localStyles.subjectCard}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Text style={localStyles.subjectEmoji}>{card.emoji}</Text>
+                  <Text style={localStyles.subjectLabel}>{card.label}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ============================================================ */}
+      {/* PROGRESS CARD — Weekly stats + heatmap + XP                  */}
+      {/* ============================================================ */}
       <View style={[styles.journeyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.journeyHeader}>
-          <Ionicons name="trail-sign-outline" size={18} color={theme.primary} />
-          <Text style={[styles.journeyTitle, { color: theme.text }]}>Your learning journey</Text>
-        </View>
-        <View style={styles.journeySteps}>
-          <View style={styles.journeyStep}>
-            <Text style={[styles.journeyStepLabel, { color: theme.text }]}>1. Diagnose</Text>
-            <Text style={[styles.journeyStepSub, { color: theme.textSecondary }]}>Find the exact gap</Text>
-          </View>
-          <View style={styles.journeyStep}>
-            <Text style={[styles.journeyStepLabel, { color: theme.text }]}>2. Teach</Text>
-            <Text style={[styles.journeyStepSub, { color: theme.textSecondary }]}>Explain with examples</Text>
-          </View>
-          <View style={styles.journeyStep}>
-            <Text style={[styles.journeyStepLabel, { color: theme.text }]}>3. Practice</Text>
-            <Text style={[styles.journeyStepSub, { color: theme.textSecondary }]}>Check understanding</Text>
+          <Ionicons name="stats-chart-outline" size={18} color={theme.primary} />
+          <Text style={[styles.journeyTitle, { color: theme.text }]}>This week</Text>
+          <View style={[localStyles.xpBadge, { backgroundColor: theme.primary + '22' }]}>
+            <Text style={[localStyles.xpBadgeText, { color: theme.primary }]}>
+              ⚡ {learningStats.xp} XP · Lv {learningStats.level}
+            </Text>
           </View>
         </View>
+
+        <Text style={[localStyles.weekStatsText, { color: theme.textSecondary }]}>
+          📊 {learningStats.weekSessions} sessions · {learningStats.weekQuestions} questions · {learningStats.weekAccuracy}% accuracy
+        </Text>
+
+        {/* 7-day heatmap */}
+        <View style={localStyles.heatmapRow}>
+          {DAY_LABELS.map((day, idx) => (
+            <View key={`${day}-${idx}`} style={localStyles.heatmapDayCol}>
+              <View
+                style={[
+                  localStyles.heatmapDot,
+                  {
+                    backgroundColor: learningStats.weekDays[idx]
+                      ? theme.primary
+                      : (theme.border || '#333'),
+                  },
+                ]}
+              />
+              <Text style={[localStyles.heatmapDayLabel, { color: theme.textSecondary }]}>
+                {day}
+              </Text>
+            </View>
+          ))}
+        </View>
+
         <TouchableOpacity
           style={[styles.journeyButton, { backgroundColor: theme.primary }]}
           onPress={() => sendTutorIntent('Start a 5-minute mini lesson. Ask me what topic to focus on.')}
@@ -406,17 +699,38 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         </TouchableOpacity>
       </View>
 
+      {/* ============================================================ */}
+      {/* RESUME CARD — Continue + Past Sessions                       */}
+      {/* ============================================================ */}
       {lastConversationId && (
-        <TouchableOpacity
-          style={[styles.resumeCard, { borderColor: theme.border, backgroundColor: theme.surface }]}
-          onPress={() => router.push({ pathname: '/screens/dash-assistant', params: { conversationId: lastConversationId } })}
-        >
-          <View style={styles.resumeLeft}>
-            <Ionicons name="time-outline" size={18} color={theme.primary} />
-            <Text style={[styles.resumeText, { color: theme.text }]}>Continue your last conversation</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-        </TouchableOpacity>
+        <View style={[styles.resumeCard, { borderColor: theme.border, backgroundColor: theme.surface, flexDirection: 'column', alignItems: 'stretch' }]}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            onPress={() => router.push({ pathname: '/screens/dash-assistant', params: { conversationId: lastConversationId } })}
+          >
+            <View style={styles.resumeLeft}>
+              <Ionicons name="time-outline" size={18} color={theme.primary} />
+              <View>
+                <Text style={[styles.resumeText, { color: theme.text }]}>Continue your last conversation</Text>
+                {(learningStats.lastTopic || learningStats.lastSubject) && (
+                  <Text style={[localStyles.resumeTopicLabel, { color: theme.textSecondary }]}>
+                    {learningStats.lastSubject ? `${learningStats.lastSubject}` : ''}{learningStats.lastSubject && learningStats.lastTopic ? ' · ' : ''}{learningStats.lastTopic || ''}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={localStyles.pastSessionsLink}
+            onPress={() => router.push('/screens/dash-assistant')}
+          >
+            <Ionicons name="library-outline" size={14} color={theme.primary} />
+            <Text style={[localStyles.pastSessionsText, { color: theme.primary }]}>
+              📚 Past Sessions
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Dedicated tutor mode link */}
@@ -439,47 +753,9 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         <Ionicons name="open-outline" size={16} color={theme.primary} />
       </TouchableOpacity>
 
-      <View style={styles.sectionBlock}>
-        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Quick starts</Text>
-        <View style={styles.quickActionsContainer}>
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => sendTutorIntent('Help me with a math problem. Ask one diagnostic question first.')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="calculator-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Math help</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => sendTutorIntent('Explain a concept in a simple way. Ask me which concept first.')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="book-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Explain a concept</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => sendTutorIntent('Give me study guidance and tips for this week.')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="compass-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Study guidance</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
+      {/* ============================================================ */}
+      {/* STAFF SECTION — Planning, brainstorm, + Class Performance    */}
+      {/* ============================================================ */}
       {isStaff && (
         <View style={styles.sectionBlock}>
           <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Planning & brainstorm</Text>
@@ -539,5 +815,165 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     </ScrollView>
   );
 };
+
+const localStyles = StyleSheet.create({
+  gradeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  gradeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  gradeBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  streakProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 14,
+    flexWrap: 'wrap',
+  },
+  streakBadge: {
+    backgroundColor: '#f59e0b22',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  streakText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fbbf24',
+  },
+  dailyProgressWrap: {
+    flex: 1,
+    minWidth: 120,
+    gap: 4,
+  },
+  dailyProgressLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  progressBarBg: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  ctaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
+  },
+  ctaCard: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minHeight: 72,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  ctaCardGradient: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  ctaEmoji: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  ctaLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.2,
+  },
+  subjectScrollContent: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  subjectCardWrap: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  subjectCard: {
+    width: 100,
+    height: 88,
+    borderRadius: 16,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subjectEmoji: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  subjectLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#e2e8f0',
+    textAlign: 'center',
+  },
+  xpBadge: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  xpBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  weekStatsText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  heatmapRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 4,
+  },
+  heatmapDayCol: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  heatmapDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  heatmapDayLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  resumeTopicLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pastSessionsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ffffff15',
+  },
+  pastSessionsText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});
 
 export default TutorHome;

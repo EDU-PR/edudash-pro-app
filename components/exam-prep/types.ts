@@ -371,6 +371,87 @@ export interface ExamPrepConfig {
   term?: 1 | 2 | 3 | 4;
   /** Specific topics to focus on within the subject */
   topics?: string[];
+  contextSummary?: ExamContextSummary | null;
+  useTeacherContext?: boolean;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
+  lookbackDays?: number;
+}
+
+export interface ExamContextSummary {
+  assignmentCount: number;
+  lessonCount: number;
+  focusTopics: string[];
+  weakTopics: string[];
+  sourceAssignmentIds?: string[];
+  sourceLessonIds?: string[];
+}
+
+export interface ExamTeacherAlignmentSummary {
+  assignmentCount: number;
+  lessonCount: number;
+  intentTaggedCount: number;
+  coverageScore: number;
+}
+
+export interface ExamBlueprintAudit {
+  minQuestions: number;
+  maxQuestions: number;
+  actualQuestions: number;
+  totalMarks: number;
+  objectiveMarks: number;
+  shortMarks: number;
+  extendedMarks: number;
+  objectiveRatio: number;
+  shortRatio: number;
+  extendedRatio: number;
+}
+
+export interface StudyCoachDayPlan {
+  day: string;
+  focus: string;
+  readingPiece: string;
+  paperWritingDrill: string;
+  memoryActivity: string;
+  parentTip: string;
+}
+
+export interface ExamStudyCoachPack {
+  mode: 'guided_first';
+  planTitle: string;
+  days: StudyCoachDayPlan[];
+  testDayChecklist: string[];
+}
+
+export interface ExamGenerationRequest {
+  grade: string;
+  subject: string;
+  examType: string;
+  customPrompt?: string;
+  language?: SouthAfricanLanguage;
+  studentId?: string;
+  classId?: string;
+  schoolId?: string;
+  useTeacherContext?: boolean;
+  lookbackDays?: number;
+  previewContext?: boolean;
+  examIntentMode?: 'teacher_weighted' | 'caps_only';
+  fullPaperMode?: boolean;
+  visualMode?: 'off' | 'hybrid';
+  guidedMode?: 'guided_first' | 'memo_first';
+}
+
+export interface ExamGenerationResponse {
+  success: boolean;
+  examId: string;
+  exam?: unknown;
+  contextSummary?: ExamContextSummary;
+  teacherAlignment?: ExamTeacherAlignmentSummary;
+  examBlueprintAudit?: ExamBlueprintAudit;
+  studyCoachPack?: ExamStudyCoachPack;
+  persistenceWarning?: string;
+  error?: string;
 }
 
 export interface GeneratedExam {
