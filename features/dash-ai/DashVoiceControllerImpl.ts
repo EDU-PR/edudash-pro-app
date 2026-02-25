@@ -15,7 +15,7 @@ import { voiceService } from '@/lib/voice/client';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
-import { DASH_VOICE_ID, getVoiceIdForLanguage } from '@/lib/voice/voiceMapping';
+import { getVoiceIdForLanguage } from '@/lib/voice/voiceMapping';
 
 // Azure TTS languages (short codes accepted by tts-proxy)
 const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso', 'st', 'fr', 'pt', 'es', 'de'];

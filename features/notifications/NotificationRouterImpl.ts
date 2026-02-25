@@ -66,7 +66,7 @@ async function getUserDisplayName(userId: string): Promise<string> {
       return `${data.first_name} ${data.last_name || ''}`.trim();
     }
     return data?.email || 'Another user';
-  } catch (error) {
+  } catch {
     return 'Another user';
   }
 }

@@ -46,10 +46,7 @@ interface NewEnhancedTeacherDashboardProps {
   preferences?: any;
 }
 
-export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardProps> = ({ 
-  refreshTrigger: _refreshTrigger, 
-  preferences: _preferences 
-}) => {
+export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardProps> = () => {
   const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -651,7 +648,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
                         rowIndex === allRows.length - 1 && styles.actionRowLast,
                       ]}
                     >
-                      {row.map((action: any, index: number) => (
+                      {row.map((action: any) => (
                         <TeacherQuickActionCard
                           key={action.id || action.title}
                           title={action.title}

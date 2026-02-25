@@ -4,7 +4,8 @@
 
 import { StyleSheet } from 'react-native';
 
-export const createStyles = (theme: any) =>
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const createStyles = (_theme: any) =>
   StyleSheet.create({
     container: {
       flex: 1,

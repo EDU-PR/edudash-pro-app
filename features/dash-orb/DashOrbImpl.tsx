@@ -43,7 +43,6 @@ import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import { useOrbStreaming } from '@/hooks/dash-orb/useOrbStreaming';
-import type { VisemeEvent } from '@/lib/voice/visemeEstimator';
 import { sanitizeInput, validateCommand, RateLimiter } from '@/lib/security/validators';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -188,7 +187,7 @@ export default function DashOrb({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [showUpgradeBubble, setShowUpgradeBubble] = useState(false);
   const [showToolsModal, setShowToolsModal] = useState(false);
-  const [simulatedVisemeId, setSimulatedVisemeId] = useState(0);
+  const [, setSimulatedVisemeId] = useState(0);
   const upgradeAnim = useRef(new Animated.Value(0)).current;
   const upgradeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -311,12 +310,6 @@ export default function DashOrb({
     if (isListeningForCommand || Boolean(voiceRecorderState?.isRecording)) return 'listening';
     return 'idle';
   }, [isSpeaking, isProcessing, isListeningForCommand, voiceRecorderState?.isRecording]);
-  const orbAudioLevel = useMemo(() => {
-    const value = Number(voiceRecorderState?.audioLevel || 0);
-    if (!Number.isFinite(value)) return 0;
-    return Math.max(0, Math.min(1, value));
-  }, [voiceRecorderState?.audioLevel]);
-
   useEffect(() => {
     if (!isSpeaking) {
       setSimulatedVisemeId(0);
@@ -1226,7 +1219,6 @@ export default function DashOrb({
         topicHint: trimmed,
         requireDetails: false,
       });
-      const label = pendingTutorIntent.label || 'Continue';
       setPendingTutorIntent(null);
       await processCommand(mergedPrompt, trimmed, { attachments: pendingAttachments });
       setPendingAttachments([]);
@@ -1527,7 +1519,7 @@ export default function DashOrb({
                   )
                 );
               },
-              onSentenceReady: (sentence, _idx) => {
+              onSentenceReady: (sentence) => {
                 // Queue sentence for TTS (starts speaking while AI continues)
                 if (voiceEnabled && Platform.OS !== 'web') {
                   ttsSentenceQueueRef.current.push(sentence);
@@ -2176,16 +2168,6 @@ export default function DashOrb({
 
     processCommand(enhancedCommand, `${action.label}${customHint ? ` · ${customHint}` : ''}`);
   };
-
-  const rotateInterpolate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const glowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.8],
-  });
 
   return (
     <>

@@ -18,12 +18,6 @@ import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  pickDocuments, 
-  pickImages,
-  takePhoto,
-  uploadAttachment,
-} from '@/services/AttachmentService';
 import { track } from '@/lib/analytics';
 import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTelemetry';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
@@ -112,9 +106,6 @@ import {
 import {
   loadVoiceBudget,
   trackVoiceUsage,
-  hasVoiceBudget,
-  formatTimeRemaining,
-  FREE_VOICE_BUDGET_MS,
 } from '@/lib/dash-ai/voiceBudget';
 
 interface UseDashAssistantOptions {
@@ -251,7 +242,7 @@ const buildTutorKickoffPrompt = (
 };
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
-  const { conversationId, initialMessage, handoffSource, onClose, externalTutorMode, tutorConfig } = options;
+  const { conversationId, initialMessage, handoffSource, externalTutorMode, tutorConfig } = options;
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
@@ -305,7 +296,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<'uploading' | 'analyzing' | 'thinking' | 'responding' | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [statusStartTime, setStatusStartTime] = useState<number>(0);
+  const [, setStatusStartTime] = useState<number>(0);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [conversation, setConversation] = useState<DashConversation | null>(null);
@@ -527,9 +518,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const applyLearnerContext = async () => {
       const profileAny = profile as any;
       const role = profile?.role || '';
-      
-      // Get school/organization info
-      const schoolId = profile?.organization_id || profile?.preschool_id;
       
       // Resolve canonical type so K-12 aliases (combined/primary/secondary/etc.) do not fall back to preschool.
       const schoolType = resolveSchoolTypeFromProfile(profileAny);

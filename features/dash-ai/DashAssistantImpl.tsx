@@ -145,8 +145,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     addAttachments,
     runTool,
     extractFollowUps,
-    tier,
-    subReady,
     cancelGeneration,
     selectedModel,
     availableModels,

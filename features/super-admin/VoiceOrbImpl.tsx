@@ -27,7 +27,6 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  withSpring,
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
@@ -48,7 +47,7 @@ import {
   generateRings,
 } from '@/components/super-admin/voice-orb/VoiceOrbAnimations';
 import { useVoiceRecorder } from '@/components/super-admin/voice-orb/useVoiceRecorder';
-import { useVoiceSTT, SUPPORTED_LANGUAGES, SupportedLanguage, TranscribeLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
+import { useVoiceSTT, SupportedLanguage, TranscribeLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { useVoiceTTS, type TTSOptions } from '@/components/super-admin/voice-orb/useVoiceTTS';
 import { canAutoRestartAfterInterrupt, INTERRUPT_RESTART_DELAY_MS } from '@/components/super-admin/voice-orb/interrupt';
 
@@ -120,12 +119,9 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   onStopListening,
   onPartialTranscript,
   onTranscript,
-  onSpeakStart,
-  onSpeakEnd,
   onTTSStart,
   onTTSEnd,
   onVoiceError,
-  onLanguageChange,
   language: externalLanguage,
   size = ORB_SIZE,
   autoStartListening = true,

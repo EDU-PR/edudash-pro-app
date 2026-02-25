@@ -8,12 +8,12 @@
  * DashAICore → Facades → Services
  */
 
-import { DashVoiceService, type VoiceRecordingConfig } from '@/services/dash-ai/DashVoiceService';
-import { DashMemoryService, type MemoryServiceConfig } from '@/services/dash-ai/DashMemoryService';
-import { DashConversationManager, type ConversationManagerConfig } from '@/services/dash-ai/DashConversationManager';
-import { DashTaskManager, type TaskManagerConfig } from '@/services/dash-ai/DashTaskManager';
-import { DashAINavigator, type NavigatorConfig } from '@/services/dash-ai/DashAINavigator';
-import { DashUserProfileManager, type UserProfileManagerConfig } from '@/services/dash-ai/DashUserProfileManager';
+import { DashVoiceService } from '@/services/dash-ai/DashVoiceService';
+import { DashMemoryService } from '@/services/dash-ai/DashMemoryService';
+import { DashConversationManager } from '@/services/dash-ai/DashConversationManager';
+import { DashTaskManager } from '@/services/dash-ai/DashTaskManager';
+import { DashAINavigator } from '@/services/dash-ai/DashAINavigator';
+import { DashUserProfileManager } from '@/services/dash-ai/DashUserProfileManager';
 import { DashAIClient } from '@/services/dash-ai/DashAIClient';
 import { DashPromptBuilder } from '@/services/dash-ai/DashPromptBuilder';
 import { fetchParentChildren } from '@/lib/parent-children';
@@ -487,7 +487,9 @@ export class DashAICore {
       if (!att || typeof att !== 'object') return att;
       const meta = (att as any).meta;
       if (!meta || typeof meta !== 'object') return att;
-      const { image_base64, image_media_type, ...rest } = meta as Record<string, unknown>;
+      const rest = { ...(meta as Record<string, unknown>) };
+      delete rest.image_base64;
+      delete rest.image_media_type;
       const cleanedMeta = Object.keys(rest).length > 0 ? rest : undefined;
       return { ...att, meta: cleanedMeta };
     });
