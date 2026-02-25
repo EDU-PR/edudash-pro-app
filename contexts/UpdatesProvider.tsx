@@ -84,6 +84,8 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Check for updates manually
   const checkForUpdates = async (): Promise<boolean> => {
+    if (Platform.OS === 'web') return false;
+    if (__DEV__) return false;
     if (await isUpdatesBlocked()) {
       logger.warn('[Updates] OTA checks blocked - skipping manual update check');
       return false;
@@ -320,6 +322,8 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Background update checking
   const backgroundCheck = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    if (__DEV__) return;
     // Skip if an update was already downloaded but not yet applied
     if (updateAlreadyDownloadedRef.current) {
       logger.info('[Updates] Update already downloaded - skipping background check');

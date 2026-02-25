@@ -500,6 +500,7 @@ export async function registerBackgroundNotificationTask(): Promise<void> {
  * Call this in CallProvider when app starts
  */
 export async function checkForIncomingCallOnLaunch(): Promise<IncomingCallNotificationData | null> {
+  if (Platform.OS === 'web') return null;
   try {
     // Check for notification that launched the app
     const response = await Notifications.getLastNotificationResponseAsync();

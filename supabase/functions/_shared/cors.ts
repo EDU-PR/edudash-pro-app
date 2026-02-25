@@ -16,8 +16,12 @@ const DEV_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:8081',
+  'http://localhost:8082',
+  'http://localhost:8083',
   'http://localhost:19006',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:8081',
+  'http://127.0.0.1:8082',
 ];
 
 export function getCorsHeaders(req?: Request): Record<string, string> {
@@ -39,8 +43,13 @@ export function getCorsHeaders(req?: Request): Record<string, string> {
     return buildHeaders('*');
   }
 
-  // In production, only allow known origins
+  // In production, allow known origins
   if (ALLOWED_ORIGINS.includes(origin)) {
+    return buildHeaders(origin);
+  }
+
+  // Always allow localhost for local dev against deployed functions
+  if (DEV_ORIGINS.includes(origin)) {
     return buildHeaders(origin);
   }
 

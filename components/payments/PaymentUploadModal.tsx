@@ -113,7 +113,7 @@ export function PaymentUploadModal({
       setPaymentReference(initialReference);
       setPaymentAmount(initialAmount);
       const resolvedMonth = resolveMonthStart(paymentForDate);
-      setPaymentForMonth(isUniformPayment ? (resolvedMonth ?? autoPaymentForMonth) : resolvedMonth);
+      setPaymentForMonth(resolvedMonth ?? autoPaymentForMonth);
       setCategoryCode(autoCategoryCode);
     }
     prevVisibleRef.current = visible;

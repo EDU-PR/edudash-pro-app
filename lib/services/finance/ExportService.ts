@@ -218,6 +218,53 @@ class ExportServiceImpl {
     }
   }
 
+  /**
+   * Export payments for a billing month as CSV for bank reconciliation.
+   * Columns: Date, Amount, Reference, Student, Category, Status
+   */
+  async exportPaymentsForBankReconciliation(
+    rows: Array<{
+      date: string;
+      amount: number;
+      reference: string;
+      student: string;
+      parent: string;
+      category: string;
+      status: string;
+    }>,
+    monthLabel: string,
+    filename?: string,
+  ): Promise<void> {
+    try {
+      const baseFilename = filename || `bank-reconciliation-${monthLabel.replace(/\s+/g, '-')}`;
+      const headers = 'Date,Amount (R),Reference,Student,Parent,Category,Status\n';
+      const csvRows = rows
+        .map((r) => {
+          const dateFormatted = this.formatDate(r.date);
+          const amountStr = this.formatCurrency(r.amount).replace('R', '').trim();
+          const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+          return [dateFormatted, amountStr, esc(r.reference), esc(r.student), esc(r.parent), esc(r.category), esc(r.status)].join(',');
+        })
+        .join('\n');
+      const csvContent = headers + csvRows;
+      const filePath = `${FileSystem.documentDirectory}${baseFilename}.csv`;
+
+      await FileSystem.writeAsStringAsync(filePath, csvContent);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(filePath, {
+          mimeType: 'text/csv',
+          dialogTitle: `Export ${baseFilename}.csv`,
+        });
+      } else {
+        Alert.alert('Success', `Bank reconciliation export saved.`);
+      }
+    } catch (error) {
+      console.error('Bank reconciliation export failed:', error);
+      Alert.alert('Export Error', 'Failed to export payments for bank reconciliation');
+    }
+  }
+
   // Main export method
   async exportFinancialData(
     transactions: TransactionRecord[],

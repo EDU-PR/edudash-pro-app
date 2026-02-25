@@ -1,0 +1,15 @@
+diff --git a/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js b/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
+index 3cb76b8..d47accc 100644
+--- a/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
++++ b/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
+@@ -232,7 +232,9 @@ function useRecyclerViewController(recyclerViewManager, ref, scrollViewRef, scro
+                                 _c.label = 2;
+                             case 2:
+                                 setTimeout(function () {
+-                                    scrollViewRef.current.scrollToEnd({ animated: animated });
++                                    if (scrollViewRef.current) {
++                                        scrollViewRef.current.scrollToEnd({ animated: animated });
++                                    }
+                                 }, 0);
+                                 return [2 /*return*/];
+                         }

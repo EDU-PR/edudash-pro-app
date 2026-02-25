@@ -27,6 +27,7 @@ import { getMonthStartISO } from '@/lib/utils/dateUtils';
 import { normalizePaymentMethodCode, PAYMENT_METHOD_LABELS } from '@/lib/utils/paymentMethod';
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { PayrollService } from '@/services/PayrollService';
+import { ExportService } from '@/lib/services/finance/ExportService';
 import { PayrollPaymentHistory } from '@/components/principal/PayrollPaymentHistory';
 import { PayrollAdvanceModal } from '@/components/principal/PayrollAdvanceModal';
 import type {
@@ -149,6 +150,7 @@ export default function FinanceControlCenterScreen() {
   const [historyRecipient, setHistoryRecipient] = React.useState<PayrollRosterItem | null>(null);
   const [showAdvanceModal, setShowAdvanceModal] = React.useState(false);
   const [advanceRecipient, setAdvanceRecipient] = React.useState<PayrollRosterItem | null>(null);
+  const [exportingReconciliation, setExportingReconciliation] = React.useState(false);
 
   const monthIso = React.useMemo(
     () => `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, '0')}-01`,
@@ -477,6 +479,11 @@ export default function FinanceControlCenterScreen() {
             try {
               await PayrollService.closeMonth(orgId, monthIso);
               await loadData(true);
+              showAlert({
+                title: 'Month Locked',
+                message: `${monthLabel} is now locked. You can export payments for bank reconciliation before starting fresh for next month.`,
+                type: 'success',
+              });
             } catch (error: any) {
               showAlert({ title: 'Month Lock Failed', message: error?.message || 'Could not lock month', type: 'error' });
             }
@@ -485,6 +492,23 @@ export default function FinanceControlCenterScreen() {
       ],
     });
   }, [orgId, monthIso, monthLabel, loadData, showAlert]);
+
+  const handleExportBankReconciliation = React.useCallback(async () => {
+    if (!orgId) return;
+    setExportingReconciliation(true);
+    try {
+      const rows = await FinancialDataService.getPaymentsForBankReconciliation(orgId, monthIso);
+      await ExportService.exportPaymentsForBankReconciliation(rows, monthLabel);
+    } catch (error: any) {
+      showAlert({
+        title: 'Export Failed',
+        message: error?.message || 'Could not export payments for bank reconciliation',
+        type: 'error',
+      });
+    } finally {
+      setExportingReconciliation(false);
+    }
+  }, [orgId, monthIso, monthLabel, showAlert]);
 
   const renderSectionError = (message: string | null) => {
     if (!message) return null;
@@ -911,6 +935,43 @@ export default function FinanceControlCenterScreen() {
           <Ionicons name="calendar-outline" size={18} color={theme.primary} />
           <Text style={styles.monthButtonText}>{monthLabel}</Text>
         </TouchableOpacity>
+        <View style={styles.monthBarActions}>
+          <TouchableOpacity
+            style={[styles.monthBarActionButton, { borderColor: theme.border }]}
+            onPress={handleExportBankReconciliation}
+            disabled={exportingReconciliation}
+          >
+            {exportingReconciliation ? (
+              <EduDashSpinner size="small" color={theme.primary} />
+            ) : (
+              <Ionicons name="download-outline" size={18} color={theme.primary} />
+            )}
+            <Text style={[styles.monthBarActionText, { color: theme.primary }]}>Export</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.monthBarActionButton,
+              { borderColor: theme.border },
+              snapshot?.month_locked && { opacity: 0.6 },
+            ]}
+            onPress={closeMonth}
+            disabled={Boolean(snapshot?.month_locked)}
+          >
+            <Ionicons
+              name={snapshot?.month_locked ? 'lock-closed' : 'lock-open-outline'}
+              size={18}
+              color={snapshot?.month_locked ? theme.textSecondary : theme.primary}
+            />
+            <Text
+              style={[
+                styles.monthBarActionText,
+                { color: snapshot?.month_locked ? theme.textSecondary : theme.primary },
+              ]}
+            >
+              {snapshot?.month_locked ? 'Locked' : 'Lock'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabRow}>
@@ -1151,9 +1212,31 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.background,
     },
     monthBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 4,
+      gap: 12,
+    },
+    monthBarActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    monthBarActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    monthBarActionText: {
+      fontSize: 12,
+      fontWeight: '600',
     },
     monthButton: {
       flexDirection: 'row',
