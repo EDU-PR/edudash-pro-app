@@ -140,19 +140,19 @@ begin
   v_limit := public.resolve_daily_media_limit(v_feature, p_tier);
 
   if v_feature = 'auto_scan' then
-    select used_count::bigint
+    select u.used_count::bigint
       into v_used
-      from public.daily_media_usage
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature;
+      from public.daily_media_usage u
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature;
   else
-    select used_ms
+    select u.used_ms
       into v_used
-      from public.daily_media_usage
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature;
+      from public.daily_media_usage u
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature;
   end if;
 
   v_used := coalesce(v_used, 0);
@@ -210,20 +210,20 @@ begin
   v_limit := public.resolve_daily_media_limit(v_feature, p_tier);
 
   if v_feature = 'auto_scan' then
-    select used_count::bigint
+    select u.used_count::bigint
       into v_used
-      from public.daily_media_usage
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature
+      from public.daily_media_usage u
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature
       for update;
   else
-    select used_ms
+    select u.used_ms
       into v_used
-      from public.daily_media_usage
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature
+      from public.daily_media_usage u
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature
       for update;
   end if;
 
@@ -242,21 +242,21 @@ begin
   end if;
 
   if v_feature = 'auto_scan' then
-    update public.daily_media_usage
-      set used_count = least(2147483647, used_count + v_amount::integer),
+    update public.daily_media_usage u
+      set used_count = least(2147483647, u.used_count + v_amount::integer),
           updated_at = timezone('utc', now())
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature
-      returning used_count::bigint into v_used;
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature
+      returning u.used_count::bigint into v_used;
   else
-    update public.daily_media_usage
-      set used_ms = greatest(0, used_ms + v_amount),
+    update public.daily_media_usage u
+      set used_ms = greatest(0, u.used_ms + v_amount),
           updated_at = timezone('utc', now())
-      where user_id = v_user_id
-        and usage_date = v_date
-        and feature = v_feature
-      returning used_ms into v_used;
+      where u.user_id = v_user_id
+        and u.usage_date = v_date
+        and u.feature = v_feature
+      returning u.used_ms into v_used;
   end if;
 
   return query
