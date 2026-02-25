@@ -720,9 +720,28 @@ function isLanguageSubject(subject: string): boolean {
   );
 }
 
+const LOCALE_TO_LANGUAGE_NAME: Record<string, string> = {
+  'en-ZA': 'English',
+  'af-ZA': 'Afrikaans',
+  'zu-ZA': 'isiZulu',
+  'xh-ZA': 'isiXhosa',
+  'nso-ZA': 'Sepedi',
+  'tn-ZA': 'Setswana',
+  'st-ZA': 'Sesotho',
+  'nr-ZA': 'isiNdebele',
+  'ss-ZA': 'Siswati',
+  've-ZA': 'Tshivenda',
+  'ts-ZA': 'Xitsonga',
+};
+
+function resolveLanguageName(language: string): string {
+  const raw = String(language || '').trim();
+  return LOCALE_TO_LANGUAGE_NAME[raw] || raw || 'the selected language';
+}
+
 function getLanguageReadingFallback(language: string): { passage: string; instruction: string } {
   const normalizedLanguage = normalizeText(language);
-  const safeLanguageLabel = String(language || '').trim() || 'the selected language';
+  const safeLanguageLabel = resolveLanguageName(language);
 
   if (normalizedLanguage.includes('afrikaans') || normalizedLanguage.startsWith('af')) {
     return {
@@ -840,7 +859,7 @@ function buildStudyCoachPack(
     {
       day: 'Day 1',
       focus: `Understand core concepts: ${focus[0] || subject}`,
-      readingPiece: `Read a short ${subject} passage and underline 5 key words. Summarize it in 5 sentences in ${language}.`,
+      readingPiece: `Read a short ${subject} passage and underline 5 key words. Summarize it in 5 sentences in ${resolveLanguageName(language)}.`,
       paperWritingDrill: 'Write definitions by hand, then explain one example in your own words.',
       memoryActivity: 'Use 10-minute active recall: close notes and write everything remembered.',
       parentTip: 'Ask the learner to teach you the concept in 2 minutes.',
