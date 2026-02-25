@@ -51,7 +51,12 @@ function SignInFormWithParams() {
     
     if (authError) {
       setLoading(false);
-      setError(authError.message);
+      const friendlyMessages: Record<string, string> = {
+        'Invalid login credentials': 'Incorrect email or password. Please check your credentials and try again.',
+        'Email not confirmed': 'Your email has not been verified. Please check your inbox for a verification link.',
+        'Too many requests': 'Too many sign-in attempts. Please wait a moment and try again.',
+      };
+      setError(friendlyMessages[authError.message] || authError.message);
       return;
     }
 
@@ -194,38 +199,45 @@ function SignInFormWithParams() {
         </div>
 
         {successMessage && (
-          <div style={{ padding: 12, background: "#065f46", border: "1px solid #059669", borderRadius: 8, marginBottom: 20 }}>
+          <div role="status" style={{ padding: 12, background: "#065f46", border: "1px solid #059669", borderRadius: 8, marginBottom: 20 }}>
             <p style={{ color: "#6ee7b7", fontSize: 14, margin: 0 }}>✓ {successMessage}</p>
           </div>
         )}
 
-        <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <form onSubmit={onSubmit} aria-label="Sign in form" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div>
-            <label style={{ display: "block", color: "#fff", fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Email</label>
+            <label htmlFor="sign-in-email" style={{ display: "block", color: "#fff", fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Email</label>
             <input
+              id="sign-in-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               placeholder="you@example.com"
+              aria-required="true"
               style={{ width: "100%", padding: "12px 14px", background: "#1a1a1f", border: "1px solid #2a2a2f", borderRadius: 8, color: "#fff", fontSize: 14 }}
             />
           </div>
 
           <div>
-            <label style={{ display: "block", color: "#fff", fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Password</label>
+            <label htmlFor="sign-in-password" style={{ display: "block", color: "#fff", fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Password</label>
             <div style={{ position: "relative" }}>
               <input
+                id="sign-in-password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 placeholder="••••••••"
+                aria-required="true"
                 style={{ width: "100%", padding: "12px 14px", background: "#1a1a1f", border: "1px solid #2a2a2f", borderRadius: 8, color: "#fff", fontSize: 14, paddingRight: 40 }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: 0, color: "#9CA3AF", cursor: "pointer", fontSize: 18 }}
               >
                 {showPassword ? "👁️" : "👁️‍🗨️"}
@@ -249,7 +261,7 @@ function SignInFormWithParams() {
           </div>
 
           {error && (
-            <div style={{ padding: 12, background: "#7f1d1d", border: "1px solid #991b1b", borderRadius: 8 }}>
+            <div role="alert" style={{ padding: 12, background: "#7f1d1d", border: "1px solid #991b1b", borderRadius: 8 }}>
               <p style={{ color: "#fca5a5", fontSize: 14, margin: 0 }}>{error}</p>
             </div>
           )}
@@ -257,6 +269,7 @@ function SignInFormWithParams() {
           <button
             type="submit"
             disabled={loading}
+            aria-label={loading ? "Signing in…" : "Sign in to your account"}
             style={{
               width: "100%",
               padding: "12px 16px",

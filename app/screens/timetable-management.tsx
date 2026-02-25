@@ -3,6 +3,8 @@
  *
  * Principals can view and manage weekly class timetables.
  * Shows a day-of-week tabbed view with time slots.
+ * Supports both preschool (ECD) and K-12 activity types with
+ * period numbering and color-coded slot display.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -40,10 +42,30 @@ interface TimetableSlot {
   notes: string | null;
   class_name?: string;
   teacher_name?: string;
+  period_number?: number | null;
+  is_break?: boolean;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEKDAYS = [1, 2, 3, 4, 5]; // Mon–Fri
+
+const ACTIVITY_TYPE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  lesson:      { bg: '#3B82F620', text: '#3B82F6', label: 'Lesson' },
+  break:       { bg: '#F59E0B20', text: '#F59E0B', label: 'Break' },
+  assembly:    { bg: '#8B5CF620', text: '#8B5CF6', label: 'Assembly' },
+  sports:      { bg: '#10B98120', text: '#10B981', label: 'Sports' },
+  study:       { bg: '#6366F120', text: '#6366F1', label: 'Study' },
+  free_period: { bg: '#94A3B820', text: '#94A3B8', label: 'Free Period' },
+  activity:    { bg: '#EC489920', text: '#EC4899', label: 'Activity' },
+  outdoor:     { bg: '#14B8A620', text: '#14B8A6', label: 'Outdoor' },
+  meal:        { bg: '#F9731620', text: '#F97316', label: 'Meal' },
+  nap:         { bg: '#A78BFA20', text: '#A78BFA', label: 'Nap' },
+  other:       { bg: '#71717A20', text: '#71717A', label: 'Other' },
+};
+
+function getActivityColor(activityType: string) {
+  return ACTIVITY_TYPE_COLORS[activityType] || ACTIVITY_TYPE_COLORS.other;
+}
 
 export default function TimetableManagementScreen() {
   const { theme } = useTheme();
@@ -196,23 +218,42 @@ th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#f5f5f5;f
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
             <Text style={styles.emptyText}>No classes scheduled for {DAYS[selectedDay]}</Text>
-            <Text style={styles.emptyHint}>Tap + to add a timetable slot</Text>
+            <Text style={styles.emptyHint}>Tap the + button to add your first timetable slot</Text>
+            <View style={styles.emptyGuidance}>
+              <Text style={styles.guidanceTitle}>Getting started:</Text>
+              <Text style={styles.guidanceItem}>• Add lessons, breaks, assemblies, and sports periods</Text>
+              <Text style={styles.guidanceItem}>• Assign subjects, rooms, and teachers to each slot</Text>
+              <Text style={styles.guidanceItem}>• K-12 schools can use period numbers for structured scheduling</Text>
+            </View>
           </View>
         ) : (
-          daySlots.map((slot) => (
-            <View key={slot.id} style={styles.slotCard}>
-              <View style={styles.slotTime}>
-                <Text style={styles.timeText}>{slot.start_time?.slice(0, 5)}</Text>
-                <Text style={styles.timeSeparator}>–</Text>
-                <Text style={styles.timeText}>{slot.end_time?.slice(0, 5)}</Text>
+          daySlots.map((slot) => {
+            const color = getActivityColor(slot.activity_type);
+            return (
+              <View key={slot.id} style={[styles.slotCard, { borderLeftColor: color.text, borderLeftWidth: 4 }]}>
+                {slot.period_number != null && (
+                  <View style={[styles.periodBadge, { backgroundColor: color.bg }]}>
+                    <Text style={[styles.periodBadgeText, { color: color.text }]}>P{slot.period_number}</Text>
+                  </View>
+                )}
+                <View style={styles.slotTime}>
+                  <Text style={styles.timeText}>{slot.start_time?.slice(0, 5)}</Text>
+                  <Text style={styles.timeSeparator}>–</Text>
+                  <Text style={styles.timeText}>{slot.end_time?.slice(0, 5)}</Text>
+                </View>
+                <View style={styles.slotInfo}>
+                  <View style={styles.slotHeader}>
+                    <Text style={styles.slotSubject}>{slot.subject || slot.activity_type}</Text>
+                    <View style={[styles.activityBadge, { backgroundColor: color.bg }]}>
+                      <Text style={[styles.activityBadgeText, { color: color.text }]}>{color.label}</Text>
+                    </View>
+                  </View>
+                  {slot.room && <Text style={styles.slotDetail}>📍 {slot.room}</Text>}
+                  {slot.teacher_name && <Text style={styles.slotDetail}>👩‍🏫 {slot.teacher_name}</Text>}
+                </View>
               </View>
-              <View style={styles.slotInfo}>
-                <Text style={styles.slotSubject}>{slot.subject || slot.activity_type}</Text>
-                {slot.room && <Text style={styles.slotDetail}>📍 {slot.room}</Text>}
-                {slot.teacher_name && <Text style={styles.slotDetail}>👩‍🏫 {slot.teacher_name}</Text>}
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
 
         <View style={{ height: 80 }} />
@@ -263,6 +304,14 @@ const createStyles = (theme: any) =>
     emptyState: { alignItems: 'center', paddingVertical: 48 },
     emptyText: { fontSize: 16, fontWeight: '600', color: theme.text, marginTop: 12 },
     emptyHint: { fontSize: 13, color: theme.textSecondary, marginTop: 4 },
+    emptyGuidance: {
+      marginTop: 20, paddingHorizontal: 24, paddingVertical: 16,
+      backgroundColor: theme.cardBackground || theme.surface,
+      borderRadius: 12, borderWidth: 1, borderColor: theme.border,
+      alignSelf: 'stretch', marginHorizontal: 16,
+    },
+    guidanceTitle: { fontSize: 14, fontWeight: '700', color: theme.text, marginBottom: 8 },
+    guidanceItem: { fontSize: 13, color: theme.textSecondary, marginBottom: 4, lineHeight: 20 },
     slotCard: {
       flexDirection: 'row', backgroundColor: theme.cardBackground || theme.surface,
       borderRadius: 12, padding: 14, marginBottom: 10,
@@ -272,8 +321,16 @@ const createStyles = (theme: any) =>
     timeText: { fontSize: 13, fontWeight: '700', color: theme.primary },
     timeSeparator: { fontSize: 11, color: theme.textSecondary },
     slotInfo: { flex: 1, marginLeft: 12 },
+    slotHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
     slotSubject: { fontSize: 15, fontWeight: '600', color: theme.text },
     slotDetail: { fontSize: 13, color: theme.textSecondary, marginTop: 2 },
+    activityBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    activityBadgeText: { fontSize: 11, fontWeight: '600' },
+    periodBadge: {
+      width: 36, height: 36, borderRadius: 18,
+      justifyContent: 'center', alignItems: 'center', marginRight: 4,
+    },
+    periodBadgeText: { fontSize: 12, fontWeight: '700' },
     fab: {
       position: 'absolute', right: 20, bottom: 28, width: 56, height: 56,
       borderRadius: 28, justifyContent: 'center', alignItems: 'center',

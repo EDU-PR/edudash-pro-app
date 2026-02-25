@@ -155,11 +155,13 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Send system notification instead of showing banner
         await sendUpdateNotification();
         
-        // checkForUpdates already returns early on web, so we can set this directly.
-        try {
-          await BadgeCoordinator.setCategory('updates', 1);
-        } catch (badgeError) {
-          logger.warn('[Updates] Failed to set badge count:', badgeError);
+        // Set app badge to show update available (use BadgeCoordinator to avoid wiping other categories)
+        if ((Platform.OS as string) !== 'web') {
+          try {
+            await BadgeCoordinator.setCategory('updates', 1);
+          } catch (badgeError) {
+            logger.warn('[Updates] Failed to set badge count:', badgeError);
+          }
         }
         
         return true;
@@ -308,7 +310,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     updateState({ isUpdateDownloaded: false });
     updateAlreadyDownloadedRef.current = false;
     // Clear badge when update is dismissed
-    if (Platform.OS !== 'web') {
+    if ((Platform.OS as string) !== 'web') {
       BadgeCoordinator.clearCategory('updates').catch(() => {});
     }
   };
@@ -398,11 +400,13 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Send system notification for background update
         await sendUpdateNotification();
         
-        // backgroundCheck already returns early on web, so we can set this directly.
-        try {
-          await BadgeCoordinator.setCategory('updates', 1);
-        } catch (badgeError) {
-          logger.warn('[Updates] Failed to set badge count:', badgeError);
+        // Set app badge to show update available
+        if ((Platform.OS as string) !== 'web') {
+          try {
+            await BadgeCoordinator.setCategory('updates', 1);
+          } catch (badgeError) {
+            logger.warn('[Updates] Failed to set badge count:', badgeError);
+          }
         }
       } else {
         logger.info('[Updates] No background update available');

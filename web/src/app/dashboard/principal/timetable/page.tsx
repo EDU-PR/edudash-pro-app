@@ -6,9 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { Calendar, Plus, Pencil, Trash2, X, Printer, FileDown } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { Calendar, Plus, Pencil, Trash2, X, BookOpen, Coffee, Users, Trophy, GraduationCap, Clock } from 'lucide-react';
 
 interface TimetableSlot {
   id: string;
@@ -19,14 +17,49 @@ interface TimetableSlot {
   activity_type: string;
   room: string | null;
   notes?: string | null;
+  period_number?: number | null;
+  is_break?: boolean;
+  teacher_name?: string | null;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const ACTIVITY_TYPE_OPTIONS = [
+  { value: 'lesson', label: 'Lesson', icon: BookOpen },
+  { value: 'break', label: 'Break', icon: Coffee },
+  { value: 'assembly', label: 'Assembly', icon: Users },
+  { value: 'sports', label: 'Sports', icon: Trophy },
+  { value: 'study', label: 'Study', icon: GraduationCap },
+  { value: 'free_period', label: 'Free Period', icon: Clock },
+  { value: 'activity', label: 'Activity', icon: Calendar },
+  { value: 'outdoor', label: 'Outdoor', icon: Calendar },
+  { value: 'meal', label: 'Meal', icon: Coffee },
+  { value: 'nap', label: 'Nap', icon: Clock },
+  { value: 'other', label: 'Other', icon: Calendar },
+];
+
+const ACTIVITY_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  lesson:      { bg: '#3B82F615', text: '#3B82F6', border: '#3B82F640' },
+  break:       { bg: '#F59E0B15', text: '#F59E0B', border: '#F59E0B40' },
+  assembly:    { bg: '#8B5CF615', text: '#8B5CF6', border: '#8B5CF640' },
+  sports:      { bg: '#10B98115', text: '#10B981', border: '#10B98140' },
+  study:       { bg: '#6366F115', text: '#6366F1', border: '#6366F140' },
+  free_period: { bg: '#94A3B815', text: '#94A3B8', border: '#94A3B840' },
+  activity:    { bg: '#EC489915', text: '#EC4899', border: '#EC489940' },
+  outdoor:     { bg: '#14B8A615', text: '#14B8A6', border: '#14B8A640' },
+  meal:        { bg: '#F9731615', text: '#F97316', border: '#F9731640' },
+  nap:         { bg: '#A78BFA15', text: '#A78BFA', border: '#A78BFA40' },
+  other:       { bg: '#71717A15', text: '#71717A', border: '#71717A40' },
+};
+
+function getSlotColor(activityType: string) {
+  return ACTIVITY_TYPE_COLORS[activityType] || ACTIVITY_TYPE_COLORS.other;
+}
 
 const normalizeTime = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  // PostgREST time expects HH:MM[:SS]
   return trimmed.length === 5 ? `${trimmed}:00` : trimmed;
 };
 
@@ -54,6 +87,8 @@ export default function TimetablePage() {
     activity_type: string;
     room: string;
     notes: string;
+    period_number: string;
+    teacher_name: string;
   }>({
     start_time: '08:00',
     end_time: '09:00',
@@ -61,6 +96,8 @@ export default function TimetablePage() {
     activity_type: 'lesson',
     room: '',
     notes: '',
+    period_number: '',
+    teacher_name: '',
   });
 
   const { profile } = useUserProfile(userId);
@@ -145,6 +182,7 @@ export default function TimetablePage() {
     const suggestedEndMinutes = timeToMinutes(suggestedStart) + 60;
     const endH = String(Math.floor(suggestedEndMinutes / 60)).padStart(2, '0');
     const endM = String(suggestedEndMinutes % 60).padStart(2, '0');
+    const nextPeriod = daySlots.filter((s) => s.period_number != null).length + 1;
     setForm({
       start_time: suggestedStart,
       end_time: `${endH}:${endM}`,
@@ -152,6 +190,8 @@ export default function TimetablePage() {
       activity_type: 'lesson',
       room: '',
       notes: '',
+      period_number: String(nextPeriod),
+      teacher_name: '',
     });
     setModalOpen(true);
   };
@@ -166,6 +206,8 @@ export default function TimetablePage() {
       activity_type: slot.activity_type || 'lesson',
       room: slot.room || '',
       notes: slot.notes || '',
+      period_number: slot.period_number != null ? String(slot.period_number) : '',
+      teacher_name: slot.teacher_name || '',
     });
     setModalOpen(true);
   };
@@ -195,7 +237,6 @@ export default function TimetablePage() {
       return;
     }
 
-    // Fast local overlap check (UI feedback)
     const overlapsLocal = daySlots
       .filter((s) => (editingSlot ? s.id !== editingSlot.id : true))
       .some((s) => {
@@ -210,7 +251,6 @@ export default function TimetablePage() {
 
     setSaving(true);
     try {
-      // Server-side overlap check (race-safe)
       let overlapQuery = supabase
         .from('timetable_slots')
         .select('id')
@@ -229,6 +269,9 @@ export default function TimetablePage() {
         return;
       }
 
+      const periodNum = form.period_number.trim() ? Number(form.period_number) : null;
+      const isBreak = ['break', 'meal', 'free_period'].includes(form.activity_type);
+
       const payload = {
         day_of_week: selectedDay,
         start_time: startRaw,
@@ -237,6 +280,9 @@ export default function TimetablePage() {
         activity_type: form.activity_type.trim() || 'lesson',
         room: form.room.trim() || null,
         notes: form.notes.trim() || null,
+        period_number: periodNum,
+        is_break: isBreak,
+        teacher_name: form.teacher_name.trim() || null,
       };
 
       if (editingSlot) {
@@ -270,9 +316,10 @@ export default function TimetablePage() {
 
       setModalOpen(false);
       setEditingSlot(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save slot.';
       console.error('[TimetablePage] Failed to save slot:', err);
-      setFormError(err?.message || 'Failed to save slot.');
+      setFormError(message);
     } finally {
       setSaving(false);
     }
@@ -284,9 +331,10 @@ export default function TimetablePage() {
       const { error } = await supabase.from('timetable_slots').delete().eq('id', slot.id);
       if (error) throw error;
       setSlots((prev) => prev.filter((s) => s.id !== slot.id));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete slot.';
       console.error('[TimetablePage] Failed to delete slot:', err);
-      alert(err?.message || 'Failed to delete slot.');
+      alert(message);
     }
   };
 
@@ -296,7 +344,7 @@ export default function TimetablePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h1 className="h1">Timetable Management</h1>
-            <p style={{ color: 'var(--muted)', fontSize: 14 }}>Manage weekly class schedules</p>
+            <p style={{ color: 'var(--muted)', fontSize: 14 }}>Manage weekly class schedules and teacher assignments</p>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="qa" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -343,33 +391,70 @@ export default function TimetablePage() {
         ) : daySlots.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: 48 }}>
             <Calendar size={40} color="var(--muted)" style={{ margin: '0 auto 12px' }} />
-            <p style={{ fontWeight: 600 }}>No classes scheduled for {DAYS[selectedDay]}</p>
-            <p style={{ color: 'var(--muted)', fontSize: 14 }}>Add a timetable slot to get started</p>
+            <p style={{ fontWeight: 600 }}>No classes scheduled for {FULL_DAYS[selectedDay]}</p>
+            <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 16 }}>Click &quot;Add Slot&quot; to build your timetable</p>
+            <div style={{ textAlign: 'left', maxWidth: 360, margin: '0 auto', padding: 16, background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Getting started:</p>
+              <ul style={{ fontSize: 13, color: 'var(--muted)', margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>
+                <li>Add lessons, breaks, assemblies, and sports periods</li>
+                <li>Assign subjects, rooms, and teachers to each slot</li>
+                <li>Use period numbers for structured K-12 scheduling</li>
+              </ul>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {daySlots.map((slot) => (
-              <div key={slot.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14 }}>
-                <div style={{ minWidth: 80, textAlign: 'center' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>{slot.start_time?.slice(0, 5)}</div>
-                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>–</div>
-                  <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>{slot.end_time?.slice(0, 5)}</div>
+            {daySlots.map((slot) => {
+              const color = getSlotColor(slot.activity_type);
+              const activityLabel = ACTIVITY_TYPE_OPTIONS.find(o => o.value === slot.activity_type)?.label || slot.activity_type;
+              return (
+                <div
+                  key={slot.id}
+                  className="card"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 16, padding: 14,
+                    borderLeft: `4px solid ${color.text}`,
+                  }}
+                >
+                  {slot.period_number != null && (
+                    <div style={{
+                      minWidth: 40, height: 40, borderRadius: 20,
+                      background: color.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700, fontSize: 13, color: color.text, flexShrink: 0,
+                    }}>
+                      P{slot.period_number}
+                    </div>
+                  )}
+                  <div style={{ minWidth: 80, textAlign: 'center' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>{slot.start_time?.slice(0, 5)}</div>
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>–</div>
+                    <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 14 }}>{slot.end_time?.slice(0, 5)}</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 600 }}>{slot.subject || slot.activity_type}</span>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                        background: color.bg, color: color.text, border: `1px solid ${color.border}`,
+                      }}>
+                        {activityLabel}
+                      </span>
+                    </div>
+                    {slot.room && <div style={{ fontSize: 13, color: 'var(--muted)' }}>📍 {slot.room}</div>}
+                    {slot.teacher_name && <div style={{ fontSize: 13, color: 'var(--muted)' }}>👩‍🏫 {slot.teacher_name}</div>}
+                    {slot.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{slot.notes}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="iconBtn" onClick={() => openEdit(slot)} title="Edit">
+                      <Pencil size={16} />
+                    </button>
+                    <button className="iconBtn" onClick={() => deleteSlot(slot)} title="Delete" style={{ color: '#ef4444' }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{slot.subject || slot.activity_type}</div>
-                  {slot.room && <div style={{ fontSize: 13, color: 'var(--muted)' }}>📍 {slot.room}</div>}
-                  {slot.notes && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{slot.notes}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="iconBtn" onClick={() => openEdit(slot)} title="Edit">
-                    <Pencil size={16} />
-                  </button>
-                  <button className="iconBtn" onClick={() => deleteSlot(slot)} title="Delete" style={{ color: '#ef4444' }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -386,12 +471,12 @@ export default function TimetablePage() {
               padding: 16,
             }}
           >
-            <div className="card" style={{ width: '100%', maxWidth: 560, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div className="card" style={{ width: '100%', maxWidth: 600, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 18 }}>{editingSlot ? 'Edit Slot' : 'Add Slot'}</h2>
-                  <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--muted)' }}>
-                    {DAYS[selectedDay]}
+                  <h2 style={{ margin: 0, fontSize: 18 }}>{editingSlot ? 'Edit Timetable Slot' : 'Add Timetable Slot'}</h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--muted)' }}>
+                    {FULL_DAYS[selectedDay]}
                   </p>
                 </div>
                 <button className="iconBtn" onClick={closeModal} aria-label="Close">
@@ -399,10 +484,11 @@ export default function TimetablePage() {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {/* Time row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                    Start time
+                    Start time *
                     <input
                       className="input"
                       type="time"
@@ -411,7 +497,7 @@ export default function TimetablePage() {
                     />
                   </label>
                   <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                    End time
+                    End time *
                     <input
                       className="input"
                       type="time"
@@ -419,50 +505,86 @@ export default function TimetablePage() {
                       onChange={(e) => setForm((prev) => ({ ...prev, end_time: e.target.value }))}
                     />
                   </label>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                    Period #
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={form.period_number}
+                      onChange={(e) => setForm((prev) => ({ ...prev, period_number: e.target.value }))}
+                      placeholder="e.g., 1"
+                    />
+                  </label>
+                </div>
+
+                {/* Activity type - visual picker */}
+                <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                  Activity type
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {ACTIVITY_TYPE_OPTIONS.map((opt) => {
+                      const isSelected = form.activity_type === opt.value;
+                      const color = getSlotColor(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, activity_type: opt.value }))}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            cursor: 'pointer', transition: 'all 0.15s',
+                            background: isSelected ? color.text : color.bg,
+                            color: isSelected ? '#fff' : color.text,
+                            border: `1px solid ${isSelected ? color.text : color.border}`,
+                          }}
+                        >
+                          <opt.icon size={12} />
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+
+                {/* Subject + Teacher row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                    Subject
+                    <input
+                      className="input"
+                      value={form.subject}
+                      onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
+                      placeholder="e.g., Mathematics, English"
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                    Teacher
+                    <input
+                      className="input"
+                      value={form.teacher_name}
+                      onChange={(e) => setForm((prev) => ({ ...prev, teacher_name: e.target.value }))}
+                      placeholder="e.g., Mrs. Smith"
+                    />
+                  </label>
                 </div>
 
                 <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                  Activity type
-                  <select
-                    className="input"
-                    value={form.activity_type}
-                    onChange={(e) => setForm((prev) => ({ ...prev, activity_type: e.target.value }))}
-                  >
-                    <option value="lesson">Lesson</option>
-                    <option value="break">Break</option>
-                    <option value="activity">Activity</option>
-                    <option value="outdoor">Outdoor</option>
-                    <option value="meal">Meal</option>
-                    <option value="nap">Nap</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-
-                <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                  Subject (optional)
-                  <input
-                    className="input"
-                    value={form.subject}
-                    onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
-                    placeholder="e.g., Literacy, Numeracy"
-                  />
-                </label>
-
-                <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                  Room (optional)
+                  Room
                   <input
                     className="input"
                     value={form.room}
                     onChange={(e) => setForm((prev) => ({ ...prev, room: e.target.value }))}
-                    placeholder="e.g., Room 2"
+                    placeholder="e.g., Room 2, Lab 1, Hall"
                   />
                 </label>
 
                 <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-                  Notes (optional)
+                  Notes
                   <textarea
                     className="input"
-                    rows={3}
+                    rows={2}
                     value={form.notes}
                     onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
                     placeholder="Any extra details..."

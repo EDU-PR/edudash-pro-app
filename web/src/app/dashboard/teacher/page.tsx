@@ -144,8 +144,11 @@ export default function TeacherDashboard() {
         schoolType={teacherSchoolType}
         unreadCount={unreadCount}
       >
-        <div className="flex items-center justify-center min-h-[400px]">
-          <p className="text-slate-400">Loading...</p>
+        <div className="flex items-center justify-center min-h-[400px]" role="status" aria-label="Loading teacher dashboard">
+          <div style={{ textAlign: 'center' }}>
+            <div className="spinner" style={{ margin: '0 auto 12px' }} aria-hidden="true"></div>
+            <p className="text-slate-400">Loading dashboard…</p>
+          </div>
         </div>
       </TeacherShell>
     );
@@ -176,9 +179,10 @@ export default function TeacherDashboard() {
       {/* Search Bar */}
       <div style={{ marginTop: 0, marginBottom: '20px' }}>
         <div style={{ position: 'relative' }}>
-          <Search className="searchIcon icon16" />
+          <Search className="searchIcon icon16" aria-hidden="true" />
           <input
             className="searchInput"
+            aria-label="Search students and classes"
             placeholder="Search students, classes..."
             onKeyDown={(e) => {
               const t = e.target as HTMLInputElement;
@@ -312,25 +316,45 @@ export default function TeacherDashboard() {
               <span>Quick Lesson (AI)</span>
             </button>
           )}
-          <button className="qa" onClick={() => router.push('/dashboard/teacher/reports')}>
+          <button className="qa" aria-label="View progress reports" onClick={() => router.push('/dashboard/teacher/reports')}>
             <FileText className="icon20" />
             <span>Progress Reports</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/teacher/lessons')}>
+          <button className="qa" aria-label="Create a lesson plan" onClick={() => router.push('/dashboard/teacher/lessons')}>
             <BookOpen className="icon20" />
             <span>Create Lesson Plan</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/teacher/assignments')}>
+          <button className="qa" aria-label="Grade assignments" onClick={() => router.push('/dashboard/teacher/assignments')}>
             <ClipboardCheck className="icon20" />
             <span>Grade Assignments</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/teacher/classes')}>
+          <button className="qa" aria-label="View your classes" onClick={() => router.push('/dashboard/teacher/classes')}>
             <Users className="icon20" />
             <span>View Classes</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/teacher/messages')}>
+          <button className="qa" aria-label={`Messaging hub${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`} onClick={() => router.push('/dashboard/teacher/messages')} style={{ position: 'relative' }}>
             <MessageCircle className="icon20" />
             <span>Messaging Hub</span>
+            {unreadCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: 6,
+                right: 6,
+                minWidth: 18,
+                height: 18,
+                borderRadius: 999,
+                background: 'var(--danger, #ef4444)',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 4px',
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
           <button
             className="qa"
@@ -448,16 +472,17 @@ export default function TeacherDashboard() {
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>Students</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#f59e0b' }}>{cls.pendingAssignments}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--warning, #f59e0b)' }}>{cls.pendingAssignments}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>Pending</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#10b981' }}>{cls.upcomingLessons}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--success, #10b981)' }}>{cls.upcomingLessons}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>Lessons</div>
                   </div>
                 </div>
                 <button 
                   className="btn btnPrimary" 
+                  aria-label={`View ${cls.name} class`}
                   style={{ width: '100%', marginTop: 12 }}
                   onClick={() => router.push(`/dashboard/teacher/classes/${cls.id}`)}
                 >
@@ -469,11 +494,20 @@ export default function TeacherDashboard() {
         </div>
       ) : (
         <div className="section">
-          <div className="card" style={{ textAlign: 'center' }}>
+          <div className="sectionTitle">My Classes</div>
+          <div className="card" role="status" style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <School className="icon20" style={{ margin: '0 auto 12px', color: 'var(--muted)' }} aria-hidden="true" />
             <h3 style={{ marginBottom: 8 }}>No classes assigned yet</h3>
-            <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
-              Contact your administrator to assign classes to your account.
+            <p style={{ color: 'var(--muted)', marginBottom: 16, maxWidth: 360, margin: '0 auto 16px' }}>
+              Classes are assigned by your school administrator. Once assigned, you&apos;ll see your students, lessons, and grading here.
             </p>
+            <button
+              className="btn btnPrimary"
+              aria-label="View available classes"
+              onClick={() => router.push('/dashboard/teacher/classes')}
+            >
+              View Classes
+            </button>
           </div>
         </div>
       )}

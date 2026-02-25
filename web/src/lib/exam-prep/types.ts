@@ -1,3 +1,4 @@
+// Canonical source: /components/exam-prep/types.ts - keep in sync
 /**
  * Exam Prep Types
  * Shared TypeScript definitions for the exam preparation system
