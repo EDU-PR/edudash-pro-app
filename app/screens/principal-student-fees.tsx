@@ -100,6 +100,11 @@ export default function StudentFeeManagementScreen() {
     });
   }, [data.activeMonthIso]);
   const visibleFees = data.source === 'receivables' && !showFullHistory ? data.displayFeesForMonth : data.displayFees;
+  const overdueFees = useMemo(() => visibleFees.filter(f => f.status === 'overdue'), [visibleFees]);
+  const pendingFees = useMemo(() => visibleFees.filter(f => f.status === 'pending' || f.status === 'partially_paid'), [visibleFees]);
+  const paidFees = useMemo(() => visibleFees.filter(f => f.status === 'paid' || f.status === 'waived'), [visibleFees]);
+  const isReceivablesView = data.source === 'receivables' && !showFullHistory;
+  const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
   const loadCorrectionTimeline = useCallback(async () => {
     if (!studentId) {
       setCorrectionTimeline([]);
@@ -148,6 +153,242 @@ export default function StudentFeeManagementScreen() {
       case 'waived': return theme.info || '#6B7280';
       default: return theme.textSecondary;
     }
+  };
+
+  const getFeeCardStyle = (status: string) => {
+    switch (status) {
+      case 'overdue': return styles.feeCardOverdue;
+      case 'pending':
+      case 'partially_paid': return styles.feeCardPending;
+      case 'paid': return styles.feeCardPaid;
+      default: return undefined;
+    }
+  };
+
+  const handleBatchMarkOverduePaid = useCallback(async () => {
+    if (!actions.canManageFees || batchMarkingPaid || overdueFees.length === 0) return;
+    setBatchMarkingPaid(true);
+    try {
+      for (const fee of overdueFees) {
+        await actions.handleMarkPaid(fee);
+      }
+    } finally {
+      setBatchMarkingPaid(false);
+    }
+  }, [actions, batchMarkingPaid, overdueFees]);
+
+  const renderFeeCard = (fee: StudentFee) => {
+    const isMarkPaidBusy =
+      actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_paid';
+    const isMarkUnpaidBusy =
+      actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_unpaid';
+    const isDueDateUpdateBusy =
+      actions.processingFeeId === fee.id && actions.processingFeeAction === 'update_due_date';
+    return (
+      <View key={fee.id} style={[styles.feeCard, getFeeCardStyle(fee.status)]}>
+        <View style={styles.feeHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.feeDescription}>{fee.description || fee.fee_type}</Text>
+            <Text style={styles.feeDueDate}>Due: {formatDate(fee.due_date)}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(fee.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(fee.status) }]}>
+              {fee.status.toUpperCase()}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.feeAmounts}>
+          <View style={styles.amountRow}>
+            <Text style={styles.amountLabel}>Original:</Text>
+            <Text style={styles.amountValue}>{formatCurrency(fee.amount)}</Text>
+          </View>
+          {fee.waived_amount != null && fee.waived_amount > 0 && (
+            <View style={styles.amountRow}>
+              <Text style={styles.amountLabel}>Waived:</Text>
+              <Text style={[styles.amountValue, { color: '#6B7280' }]}>-{formatCurrency(fee.waived_amount)}</Text>
+            </View>
+          )}
+          <View style={styles.amountRow}>
+            <Text style={styles.amountLabel}>Final:</Text>
+            <Text style={[styles.amountValue, styles.finalAmount]}>{formatCurrency(fee.final_amount)}</Text>
+          </View>
+        </View>
+
+        {fee.waived_reason && (
+          <View style={styles.waiverNote}>
+            <Ionicons name="information-circle" size={14} color={theme.textSecondary} />
+            <Text style={styles.waiverNoteText}>Waiver: {fee.waived_reason}</Text>
+          </View>
+        )}
+
+        {(fee.status === 'pending' || fee.status === 'overdue' || fee.status === 'partially_paid') && (
+          <>
+            <View style={styles.feeActions}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.paidButton,
+                  (!actions.canManageFees || actions.saving || isMarkPaidBusy) && { opacity: 0.7 },
+                ]}
+                onPress={() => actions.handleMarkPaid(fee)}
+                disabled={!actions.canManageFees || actions.saving || isMarkPaidBusy}
+              >
+                {isMarkPaidBusy ? (
+                  <EduDashSpinner size="small" color={theme.success} />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+                )}
+                <Text style={styles.paidButtonText}>{isMarkPaidBusy ? 'Marking Paid...' : 'Mark Paid'}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.feeActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.waiveButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
+                disabled={!actions.canManageFees || actions.saving}
+                onPress={() => {
+                  actions.setSelectedFee(fee);
+                  actions.setWaiveType('full');
+                  actions.setWaiveAmount('');
+                  actions.setWaiveReason('');
+                  actions.setModalType('waive');
+                }}
+              >
+                <Ionicons name="checkmark-done" size={16} color="#6B7280" />
+                <Text style={styles.waiveButtonText}>Waive</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.adjustButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
+                disabled={!actions.canManageFees || actions.saving}
+                onPress={() => {
+                  actions.setSelectedFee(fee);
+                  actions.setAdjustAmount(fee.final_amount.toString());
+                  actions.setAdjustReason('');
+                  actions.setModalType('adjust');
+                }}
+              >
+                <Ionicons name="create" size={16} color={theme.primary} />
+                <Text style={styles.adjustButtonText}>Adjust</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.rescheduleButton,
+                  (!actions.canManageFees || actions.saving || isDueDateUpdateBusy) && { opacity: 0.7 },
+                ]}
+                disabled={!actions.canManageFees || actions.saving || isDueDateUpdateBusy}
+                onPress={() => openDueDatePicker(fee)}
+              >
+                {isDueDateUpdateBusy ? (
+                  <EduDashSpinner size="small" color={theme.info || theme.primary} />
+                ) : (
+                  <Ionicons name="calendar-outline" size={16} color={theme.info || theme.primary} />
+                )}
+                <Text style={styles.rescheduleButtonText}>
+                  {isDueDateUpdateBusy ? 'Updating...' : 'Reschedule'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {actions.canDeleteFees && (
+              <View style={styles.feeActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.deleteButton,
+                    (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
+                  ]}
+                  onPress={() => showAlert(
+                    'Delete Fee Row',
+                    'This will permanently remove the fee row and any linked allocations. Continue?',
+                    'warning',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
+                    ],
+                  )}
+                  disabled={actions.saving || actions.processingFeeId === fee.id}
+                >
+                  {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
+                    <EduDashSpinner size="small" color={theme.error} />
+                  ) : (
+                    <Ionicons name="trash-outline" size={16} color={theme.error} />
+                  )}
+                  <Text style={styles.deleteButtonText}>
+                    {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
+                      ? 'Deleting...'
+                      : 'Delete Fee'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+
+        {fee.status === 'paid' && (
+          <View style={styles.feeActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.receiptButton, actions.saving && { opacity: 0.7 }]}
+              disabled={actions.saving}
+              onPress={() => actions.handleReceiptAction(fee)}
+            >
+              <Ionicons name="receipt-outline" size={16} color={theme.primary} />
+              <Text style={styles.receiptButtonText}>Receipt</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.unpaidButton,
+                !actions.canManageFees && styles.controlDisabled,
+                (actions.saving || isMarkUnpaidBusy) && { opacity: 0.7 },
+              ]}
+              onPress={() => actions.handleMarkUnpaid(fee)}
+              disabled={!actions.canManageFees || actions.saving || isMarkUnpaidBusy}
+            >
+              {isMarkUnpaidBusy ? (
+                <EduDashSpinner size="small" color={theme.warning} />
+              ) : (
+                <Ionicons name="refresh" size={16} color={theme.warning} />
+              )}
+              <Text style={styles.unpaidButtonText}>
+                {isMarkUnpaidBusy ? 'Marking Unpaid...' : 'Mark Unpaid'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {fee.status === 'paid' && actions.canDeleteFees && (
+          <View style={styles.feeActions}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.deleteButton,
+                (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
+              ]}
+              onPress={() => showAlert(
+                'Delete Paid Fee',
+                'This is destructive and should only be used for incorrect duplicates. Continue?',
+                'warning',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
+                ],
+              )}
+              disabled={actions.saving || actions.processingFeeId === fee.id}
+            >
+              {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
+                <EduDashSpinner size="small" color={theme.error} />
+              ) : (
+                <Ionicons name="trash-outline" size={16} color={theme.error} />
+              )}
+              <Text style={styles.deleteButtonText}>
+                {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
+                  ? 'Deleting...'
+                  : 'Delete Fee'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
   };
 
   if (financeAccess.needsPassword) {
@@ -482,25 +723,27 @@ export default function StudentFeeManagementScreen() {
         {/* Fees List */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {data.source === 'receivables' && receivablesMonthLabel
-              ? `Receivables (${receivablesMonthLabel})`
+            {data.source === 'receivables'
+              ? showFullHistory
+                ? 'Full Fee History'
+                : 'Outstanding Receivables'
               : 'Fee History'}
           </Text>
 
-          {data.source === 'receivables' && receivablesMonthLabel && (
+          {data.source === 'receivables' && (
             <View style={styles.contextBanner}>
               <Ionicons name="calendar-outline" size={14} color={theme.primary} />
               <Text style={styles.contextBannerText}>
                 {showFullHistory
-                  ? `Showing full fee history. Month scope (${receivablesMonthLabel}) can be restored anytime.`
-                  : `Showing unpaid fee rows scoped to ${receivablesMonthLabel}. Billing month is used first, with due date fallback.`}
+                  ? 'Showing full fee history. Switch back to see only outstanding receivables.'
+                  : 'Showing all unpaid and overdue fees for this student.'}
               </Text>
               <TouchableOpacity
                 onPress={() => setShowFullHistory((prev) => !prev)}
                 style={styles.contextBannerAction}
               >
                 <Text style={styles.contextBannerActionText}>
-                  {showFullHistory ? 'Back to month scope' : 'Show full history'}
+                  {showFullHistory ? 'Show receivables only' : 'Show full history'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -510,8 +753,8 @@ export default function StudentFeeManagementScreen() {
             <View style={styles.emptyFees}>
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
               <Text style={styles.emptyFeesText}>
-                {data.source === 'receivables' && receivablesMonthLabel && !showFullHistory
-                  ? `No receivables for ${receivablesMonthLabel}`
+                {data.source === 'receivables' && !showFullHistory
+                  ? 'No outstanding receivables'
                   : 'No fees recorded'}
               </Text>
               {data.feeSetupStatus === 'missing' && (
@@ -535,219 +778,58 @@ export default function StudentFeeManagementScreen() {
               )}
             </View>
           ) : (
-            visibleFees.map(fee => {
-              const isMarkPaidBusy =
-                actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_paid';
-              const isMarkUnpaidBusy =
-                actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_unpaid';
-              const isDueDateUpdateBusy =
-                actions.processingFeeId === fee.id && actions.processingFeeAction === 'update_due_date';
-              return (
-                <View key={fee.id} style={styles.feeCard}>
-                  <View style={styles.feeHeader}>
-                    <View>
-                      <Text style={styles.feeDescription}>{fee.description || fee.fee_type}</Text>
-                      <Text style={styles.feeDueDate}>Due: {formatDate(fee.due_date)}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(fee.status) + '20' }]}>
-                      <Text style={[styles.statusText, { color: getStatusColor(fee.status) }]}>
-                        {fee.status.toUpperCase()}
-                      </Text>
+            <>
+              {isReceivablesView && overdueFees.length > 0 && (
+                <>
+                  <View style={styles.overdueSectionHeader}>
+                    <Ionicons name="alert-circle" size={18} color={theme.error} />
+                    <Text style={styles.overdueSectionHeaderText}>Overdue Fees</Text>
+                    <View style={styles.overdueSectionBadge}>
+                      <Text style={styles.overdueSectionBadgeText}>{overdueFees.length}</Text>
                     </View>
                   </View>
-
-                  <View style={styles.feeAmounts}>
-                    <View style={styles.amountRow}>
-                      <Text style={styles.amountLabel}>Original:</Text>
-                      <Text style={styles.amountValue}>{formatCurrency(fee.amount)}</Text>
-                    </View>
-                    {fee.waived_amount != null && fee.waived_amount > 0 && (
-                      <View style={styles.amountRow}>
-                        <Text style={styles.amountLabel}>Waived:</Text>
-                        <Text style={[styles.amountValue, { color: '#6B7280' }]}>-{formatCurrency(fee.waived_amount)}</Text>
-                      </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.batchActionButton,
+                      (!actions.canManageFees || batchMarkingPaid || actions.saving) && { opacity: 0.6 },
+                    ]}
+                    onPress={() => showAlert(
+                      'Mark All Overdue as Paid',
+                      `This will mark ${overdueFees.length} overdue fee(s) totalling ${formatCurrency(overdueFees.reduce((s, f) => s + f.final_amount, 0))} as paid. Continue?`,
+                      'warning',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Mark All Paid', onPress: () => void handleBatchMarkOverduePaid() },
+                      ],
                     )}
-                    <View style={styles.amountRow}>
-                      <Text style={styles.amountLabel}>Final:</Text>
-                      <Text style={[styles.amountValue, styles.finalAmount]}>{formatCurrency(fee.final_amount)}</Text>
-                    </View>
+                    disabled={!actions.canManageFees || batchMarkingPaid || actions.saving}
+                  >
+                    {batchMarkingPaid ? (
+                      <EduDashSpinner size="small" color={theme.error} />
+                    ) : (
+                      <Ionicons name="checkmark-done-circle" size={18} color={theme.error} />
+                    )}
+                    <Text style={styles.batchActionButtonText}>
+                      {batchMarkingPaid ? 'Processing...' : `Mark All Overdue as Paid (${overdueFees.length})`}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {isReceivablesView && overdueFees.length > 0 && pendingFees.length > 0 ? (
+                <>
+                  {overdueFees.map(fee => renderFeeCard(fee))}
+                  <View style={styles.pendingSectionHeader}>
+                    <Ionicons name="time-outline" size={18} color={theme.warning} />
+                    <Text style={styles.pendingSectionHeaderText}>Pending Fees</Text>
                   </View>
-
-                  {fee.waived_reason && (
-                    <View style={styles.waiverNote}>
-                      <Ionicons name="information-circle" size={14} color={theme.textSecondary} />
-                      <Text style={styles.waiverNoteText}>Waiver: {fee.waived_reason}</Text>
-                    </View>
-                  )}
-
-                  {(fee.status === 'pending' || fee.status === 'overdue' || fee.status === 'partially_paid') && (
-                    <>
-                      <View style={styles.feeActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.actionButton,
-                            styles.paidButton,
-                            (!actions.canManageFees || actions.saving || isMarkPaidBusy) && { opacity: 0.7 },
-                          ]}
-                          onPress={() => actions.handleMarkPaid(fee)}
-                          disabled={!actions.canManageFees || actions.saving || isMarkPaidBusy}
-                        >
-                          {isMarkPaidBusy ? (
-                            <EduDashSpinner size="small" color={theme.success} />
-                          ) : (
-                            <Ionicons name="checkmark-circle" size={16} color={theme.success} />
-                          )}
-                          <Text style={styles.paidButtonText}>{isMarkPaidBusy ? 'Marking Paid...' : 'Mark Paid'}</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.feeActions}>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.waiveButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
-                          disabled={!actions.canManageFees || actions.saving}
-                          onPress={() => {
-                            actions.setSelectedFee(fee);
-                            actions.setWaiveType('full');
-                            actions.setWaiveAmount('');
-                            actions.setWaiveReason('');
-                            actions.setModalType('waive');
-                          }}
-                        >
-                          <Ionicons name="checkmark-done" size={16} color="#6B7280" />
-                          <Text style={styles.waiveButtonText}>Waive</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.adjustButton, (!actions.canManageFees || actions.saving) && { opacity: 0.7 }]}
-                          disabled={!actions.canManageFees || actions.saving}
-                          onPress={() => {
-                            actions.setSelectedFee(fee);
-                            actions.setAdjustAmount(fee.final_amount.toString());
-                            actions.setAdjustReason('');
-                            actions.setModalType('adjust');
-                          }}
-                        >
-                          <Ionicons name="create" size={16} color={theme.primary} />
-                          <Text style={styles.adjustButtonText}>Adjust</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.actionButton,
-                            styles.rescheduleButton,
-                            (!actions.canManageFees || actions.saving || isDueDateUpdateBusy) && { opacity: 0.7 },
-                          ]}
-                          disabled={!actions.canManageFees || actions.saving || isDueDateUpdateBusy}
-                          onPress={() => openDueDatePicker(fee)}
-                        >
-                          {isDueDateUpdateBusy ? (
-                            <EduDashSpinner size="small" color={theme.info || theme.primary} />
-                          ) : (
-                            <Ionicons name="calendar-outline" size={16} color={theme.info || theme.primary} />
-                          )}
-                          <Text style={styles.rescheduleButtonText}>
-                            {isDueDateUpdateBusy ? 'Updating...' : 'Reschedule'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                      {actions.canDeleteFees && (
-                        <View style={styles.feeActions}>
-                          <TouchableOpacity
-                            style={[
-                              styles.actionButton,
-                              styles.deleteButton,
-                              (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
-                            ]}
-                            onPress={() => showAlert(
-                              'Delete Fee Row',
-                              'This will permanently remove the fee row and any linked allocations. Continue?',
-                              'warning',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
-                              ],
-                            )}
-                            disabled={actions.saving || actions.processingFeeId === fee.id}
-                          >
-                            {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
-                              <EduDashSpinner size="small" color={theme.error} />
-                            ) : (
-                              <Ionicons name="trash-outline" size={16} color={theme.error} />
-                            )}
-                            <Text style={styles.deleteButtonText}>
-                              {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
-                                ? 'Deleting...'
-                                : 'Delete Fee'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </>
-                  )}
-
-                  {fee.status === 'paid' && (
-                    <View style={styles.feeActions}>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.receiptButton, actions.saving && { opacity: 0.7 }]}
-                        disabled={actions.saving}
-                        onPress={() => actions.handleReceiptAction(fee)}
-                      >
-                        <Ionicons name="receipt-outline" size={16} color={theme.primary} />
-                        <Text style={styles.receiptButtonText}>Receipt</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionButton,
-                          styles.unpaidButton,
-                          !actions.canManageFees && styles.controlDisabled,
-                          (actions.saving || isMarkUnpaidBusy) && { opacity: 0.7 },
-                        ]}
-                        onPress={() => actions.handleMarkUnpaid(fee)}
-                        disabled={!actions.canManageFees || actions.saving || isMarkUnpaidBusy}
-                      >
-                        {isMarkUnpaidBusy ? (
-                          <EduDashSpinner size="small" color={theme.warning} />
-                        ) : (
-                          <Ionicons name="refresh" size={16} color={theme.warning} />
-                        )}
-                        <Text style={styles.unpaidButtonText}>
-                          {isMarkUnpaidBusy ? 'Marking Unpaid...' : 'Mark Unpaid'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  {fee.status === 'paid' && actions.canDeleteFees && (
-                    <View style={styles.feeActions}>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionButton,
-                          styles.deleteButton,
-                          (actions.saving || actions.processingFeeId === fee.id) && { opacity: 0.7 },
-                        ]}
-                        onPress={() => showAlert(
-                          'Delete Paid Fee',
-                          'This is destructive and should only be used for incorrect duplicates. Continue?',
-                          'warning',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => void actions.handleDeleteFee(fee) },
-                          ],
-                        )}
-                        disabled={actions.saving || actions.processingFeeId === fee.id}
-                      >
-                        {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete' ? (
-                          <EduDashSpinner size="small" color={theme.error} />
-                        ) : (
-                          <Ionicons name="trash-outline" size={16} color={theme.error} />
-                        )}
-                        <Text style={styles.deleteButtonText}>
-                          {actions.processingFeeId === fee.id && actions.processingFeeAction === 'delete'
-                            ? 'Deleting...'
-                            : 'Delete Fee'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            })
+                  {pendingFees.map(fee => renderFeeCard(fee))}
+                  {paidFees.map(fee => renderFeeCard(fee))}
+                </>
+              ) : (
+                visibleFees.map(fee => renderFeeCard(fee))
+              )}
+            </>
           )}
         </View>
 

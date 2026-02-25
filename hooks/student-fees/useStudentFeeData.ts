@@ -199,6 +199,33 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
     }
   }, [student, loadFees, organizationId, profile?.id]);
 
+  const displayFees = useMemo(() => {
+    const enrollmentStart = getEnrollmentMonthStart(student?.enrollment_date);
+    if (!enrollmentStart) return fees;
+    return fees.filter(f => {
+      if (!f.due_date) return true;
+      const due = new Date(f.due_date);
+      return Number.isNaN(due.getTime()) || due >= enrollmentStart;
+    });
+  }, [fees, student?.enrollment_date]);
+
+  const displayFeesForMonth = useMemo(() => {
+    if (source !== 'receivables') return displayFees;
+    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+    const statusPriority: Record<string, number> = { overdue: 0, partially_paid: 1, pending: 2 };
+    const filtered = displayFees.filter((fee) =>
+      unpaidStatuses.has(String(fee.status || '').toLowerCase()),
+    );
+    return filtered.sort((a, b) => {
+      const pa = statusPriority[a.status] ?? 3;
+      const pb = statusPriority[b.status] ?? 3;
+      if (pa !== pb) return pa - pb;
+      const da = a.due_date ? new Date(a.due_date).getTime() : 0;
+      const db = b.due_date ? new Date(b.due_date).getTime() : 0;
+      return da - db;
+    });
+  }, [displayFees, source]);
+
   const totals = useMemo(() => {
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -211,6 +238,28 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
     };
 
     const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+
+    if (source === 'receivables') {
+      const receivableFees = displayFeesForMonth;
+      const paid = fees.filter(f => f.status === 'paid');
+      const waived = fees.filter(f => f.status === 'waived' || (f.discount_amount || f.waived_amount));
+
+      return {
+        outstanding: receivableFees.reduce((sum, f) => {
+          const amountOutstanding = Number(f.amount_outstanding);
+          if (Number.isFinite(amountOutstanding)) return sum + amountOutstanding;
+          const amountPaid = Number(f.amount_paid || 0);
+          return sum + Math.max(0, f.final_amount - amountPaid);
+        }, 0),
+        paid: paid.reduce((sum, f) => {
+          const amountPaid = Number(f.amount_paid);
+          if (Number.isFinite(amountPaid) && amountPaid > 0) return sum + amountPaid;
+          return sum + f.final_amount;
+        }, 0),
+        waived: waived.reduce((sum, f) => sum + Number(f.discount_amount || f.waived_amount || 0), 0),
+      };
+    }
+
     const pending = fees.filter(f => {
       if (isPreEnrollment(f)) return false;
       if (!unpaidStatuses.has(f.status)) return false;
@@ -235,31 +284,7 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
       }, 0),
       waived: waived.reduce((sum, f) => sum + Number(f.discount_amount || f.waived_amount || 0), 0),
     };
-  }, [fees, student?.enrollment_date]);
-
-  const displayFees = useMemo(() => {
-    const enrollmentStart = getEnrollmentMonthStart(student?.enrollment_date);
-    if (!enrollmentStart) return fees;
-    return fees.filter(f => {
-      if (!f.due_date) return true;
-      const due = new Date(f.due_date);
-      return Number.isNaN(due.getTime()) || due >= enrollmentStart;
-    });
-  }, [fees, student?.enrollment_date]);
-
-  const displayFeesForMonth = useMemo(() => {
-    if (!activeMonthIso || source !== 'receivables') return displayFees;
-    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
-    return displayFees.filter((fee) => {
-      const month = fee.billing_month
-        ? getMonthStartISO(fee.billing_month, { recoverUtcMonthBoundary: true })
-        : fee.due_date
-          ? getMonthStartISO(fee.due_date, { recoverUtcMonthBoundary: true })
-          : null;
-      if (month !== activeMonthIso) return false;
-      return unpaidStatuses.has(String(fee.status || '').toLowerCase());
-    });
-  }, [activeMonthIso, displayFees, source]);
+  }, [fees, student?.enrollment_date, source, displayFeesForMonth]);
 
   const hasParent = Boolean(student?.parent_id || student?.parent_name);
 
