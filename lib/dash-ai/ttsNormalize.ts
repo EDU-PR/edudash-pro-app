@@ -226,6 +226,19 @@ function normalizeAcronymsForNaturalSpeech(text: string, phonicsMode: boolean): 
     .replace(/\bU(?:\s*\.?\s*)R(?:\s*\.?\s*)L\b\.?/gi, 'link');
 }
 
+/** Replace long generated filenames (e.g. please-generate-an-alphabet-tracing-worksheet_2024...) with friendly speech. */
+function replaceLongFilenamesWithFriendlySpeech(text: string): string {
+  return text.replace(
+    /[a-z0-9]+(?:-[a-z0-9]+)*_[a-z0-9]{8,}(?:\.[a-z]+)?/gi,
+    (match) => {
+      if (match.length > 30) {
+        return /worksheet|tracing|alphabet|activity/i.test(match) ? 'Your worksheet' : 'Your PDF';
+      }
+      return match;
+    }
+  );
+}
+
 function stripMarkdownAndMeta(text: string, preservePhonicsMarkers: boolean): string {
   let next = text;
 
@@ -298,6 +311,7 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
   }
 
   text = stripMarkdownAndMeta(text, preservePhonicsMarkers);
+  text = replaceLongFilenamesWithFriendlySpeech(text);
   text = stripEmojiAndSymbols(text);
   text = normalizeChoiceLabels(text);
   text = normalizeEduDashBrandForms(text);

@@ -5,8 +5,8 @@
  * Extracted from DashAssistant for better maintainability.
  */
 
-import React from 'react';
-import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image, Animated, Easing } from 'react-native';
+import React, { useState } from 'react';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image, Animated, Easing, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { inputStyles as styles } from '@/components/ai/dash-assistant/styles/input.styles';
@@ -15,6 +15,7 @@ import type { DashAttachment } from '@/services/dash-ai/types';
 import type { AttachmentProgress } from '@/hooks/useDashAttachments';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+import { ImageViewer } from '@/components/messaging/ImageViewer';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -147,6 +148,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 }) => {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
   const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
   const orbRingSize = orbSize + 14;
 
@@ -185,14 +187,22 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                   }
                 ]}
               >
-              {/* Image preview (ChatGPT style) */}
+              {/* Image preview (ChatGPT style) - tap to full-screen */}
               {isImage && imageUri ? (
                 <View style={styles.attachmentImageWrapper}>
-                  <Image 
-                    source={{ uri: imageUri }}
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setPreviewImageUri(imageUri);
+                    }}
                     style={styles.attachmentImagePreview}
-                    resizeMode="cover"
-                  />
+                  >
+                    <Image
+                      source={{ uri: imageUri }}
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
                   {/* Overlay for status */}
                   {status === 'uploading' && (
                     <View style={[styles.attachmentImageOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
@@ -354,6 +364,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   ];
 
   return (
+    <>
     <View
       style={[
         styles.inputContainer,
@@ -639,5 +650,14 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         )}
       </View>
     </View>
+
+    {previewImageUri ? (
+      <ImageViewer
+        visible={!!previewImageUri}
+        imageUrl={previewImageUri}
+        onClose={() => setPreviewImageUri(null)}
+      />
+    ) : null}
+  </>
   );
 };

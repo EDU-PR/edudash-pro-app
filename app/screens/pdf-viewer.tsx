@@ -23,6 +23,7 @@ const TAG = 'PDFViewer';
 const GENERATED_PDF_BUCKET = 'generated-pdfs';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { PDFViewer as PDFViewerWebView } from '@/components/pdf/PDFViewer';
 // Conditional import for react-native-pdf (requires native module)
 let Pdf: any = null;
 try {
@@ -50,6 +51,7 @@ export default function PDFViewerScreen() {
   const [totalPages, setTotalPages] = useState(0);
   const [scale, setScale] = useState(1.0);
   const [localUri, setLocalUri] = useState<string | null>(null);
+  const [remotePdfUrl, setRemotePdfUrl] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   
   const pdfRef = useRef<any>(null);
@@ -203,6 +205,7 @@ export default function PDFViewerScreen() {
       const resolved = await resolveDownloadTarget();
       const targetUrl = resolved.downloadUrl;
       const resolvedStoragePath = resolved.resolvedStoragePath;
+      setRemotePdfUrl(targetUrl);
 
       // First check cache
       const cached = await checkLocalCache(targetUrl, resolvedStoragePath);
@@ -327,27 +330,75 @@ export default function PDFViewerScreen() {
     }
   };
 
-  // If react-native-pdf is not available, show fallback
+  // If react-native-pdf is not available, use WebView fallback when we have a URL
   if (!Pdf) {
+    const fallbackUri = remotePdfUrl;
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: title || 'PDF Viewer' }} />
-        <View style={styles.fallbackContainer}>
-          <Ionicons name="document-text-outline" size={64} color={theme.muted} />
-          <Text style={[styles.fallbackTitle, { color: theme.text }]}>
-            PDF Viewer Unavailable
-          </Text>
-          <Text style={[styles.fallbackText, { color: theme.muted }]}>
-            PDF viewing requires a development build.{'\n'}
-            Please rebuild the app with native modules.
-          </Text>
-          <TouchableOpacity
-            style={[styles.fallbackButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.fallbackButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
+        <Stack.Screen
+          options={{
+            title: title || 'PDF Viewer',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <EduDashSpinner size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.muted }]}>
+              {downloadProgress > 0 && downloadProgress < 100
+                ? `Downloading... ${downloadProgress}%`
+                : 'Loading PDF...'}
+            </Text>
+          </View>
+        )}
+        {error && !loading && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={48} color="#ef4444" />
+            <Text style={[styles.errorText, { color: theme.text }]}>{error}</Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.primary }]}
+              onPress={downloadPdf}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: theme.surfaceVariant, marginTop: 8 }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.retryButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!loading && !error && fallbackUri ? (
+          <View style={{ flex: 1 }}>
+            <PDFViewerWebView
+              uri={fallbackUri}
+              filename={getFilenameFromSource(fallbackUri, storagePath || undefined)}
+              onClose={() => router.back()}
+            />
+          </View>
+        ) : null}
+        {!loading && !error && !fallbackUri && (
+          <View style={styles.fallbackContainer}>
+            <Ionicons name="document-text-outline" size={64} color={theme.muted} />
+            <Text style={[styles.fallbackTitle, { color: theme.text }]}>
+              PDF Viewer Unavailable
+            </Text>
+            <Text style={[styles.fallbackText, { color: theme.muted }]}>
+              PDF viewing requires a development build or a valid PDF URL.
+            </Text>
+            <TouchableOpacity
+              style={[styles.fallbackButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.fallbackButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   }

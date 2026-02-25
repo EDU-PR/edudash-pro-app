@@ -74,6 +74,8 @@ export const layoutStyles = StyleSheet.create({
   bottomThinkingText: {
     fontSize: 12,
     fontWeight: '600',
+    marginLeft: 2,
+    flexShrink: 1,
   },
   topDeck: {
     paddingHorizontal: 14,

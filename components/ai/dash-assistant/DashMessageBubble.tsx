@@ -301,8 +301,12 @@ const normalizeInteractiveJsonFences = (content: string): string => {
 
 /** Strips raw interactive JSON blocks from prose so they are not shown as text. */
 const stripRawInteractiveJsonFromProse = (content: string): string => {
-  const source = String(content || '');
-  return source.replace(/\{\s*"type"\s*:\s*"(spelling_practice|column_addition|quiz_question)"[\s\S]*?\}\s*/g, '');
+  let source = String(content || '');
+  source = source.replace(/\{\s*"type"\s*:\s*"(spelling_practice|column_addition|quiz_question)"[\s\S]*?\}\s*/g, '');
+  // Strip worksheet/activity metadata JSON that AI sometimes outputs (title, type, age_group, content)
+  source = source.replace(/\{\s*"title"\s*:\s*"[^"]*"\s*,\s*"type"\s*:\s*"(?:activity|worksheet|math|reading|general)"[\s\S]*?"content"\s*:\s*"[^"]*"\s*\}\s*/g, '');
+  source = source.replace(/(?:^|\n)\s*"title"\s*:\s*"[^"]*"\s*,\s*"type"\s*:\s*"[^"]*"\s*,\s*"age_group"\s*:\s*"[^"]*"\s*,\s*"content"\s*:\s*"[^"]*"\s*/gm, '');
+  return source;
 };
 
 const parseNumberToken = (token: string): number => {

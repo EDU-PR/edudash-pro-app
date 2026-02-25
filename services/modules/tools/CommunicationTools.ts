@@ -453,8 +453,45 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         const supabase = (await import('@/lib/supabase')).assertSupabase();
 
         const generator = getDashPDFGenerator();
+
+        // Normalize worksheet content. In many real chats the model may
+        // return metadata or an empty content field; for early learners
+        // that leads to blank PDFs. Fall back to a sensible default.
+        const rawContent = String(args.content || '').trim();
+        let worksheetMarkdown = rawContent;
+
+        // If the \"content\" looks empty or like a bare JSON object,
+        // generate a simple alphabet tracing template for the common
+        // \"alphabet tracing\" use case so parents always get something usable.
+        const looksLikeEmptyJson =
+          !rawContent ||
+          rawContent === '{}' ||
+          (/^\{[\s\S]*\}$/.test(rawContent) && rawContent.length < 40);
+
+        if (looksLikeEmptyJson && /alphabet/i.test(String(args.title || '')) ) {
+          worksheetMarkdown = [
+            'Trace each letter of the alphabet. Say the letter sound as you trace.',
+            '',
+            'A a    B b    C c',
+            'D d    E e    F f',
+            'G g    H h    I i',
+            'J j    K k    L l',
+            'M m    N n    O o',
+            'P p    Q q    R r',
+            'S s    T t    U u',
+            'V v    W w    X x',
+            'Y y    Z z',
+            '',
+            'Use one line to trace over each letter, then one line to write it on your own.',
+          ].join('\\n');
+        }
+
         const sections = [
-          { id: 'main', title: String(args.title || 'Worksheet'), markdown: String(args.content || '') },
+          {
+            id: 'main',
+            title: String(args.title || 'Worksheet'),
+            markdown: worksheetMarkdown,
+          },
         ];
         if (args.include_answer_key !== false) {
           sections.push({ id: 'answers', title: 'Answer Key', markdown: '_Answer key is provided on this page._' });

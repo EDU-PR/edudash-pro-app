@@ -243,6 +243,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const isK12ParentDashEntry = handoffSource === 'k12_parent_tab';
   const useMinimalNextGenLayout = isK12ParentDashEntry;
+  const isParentRole =
+    normalizedRole === 'parent' ||
+    normalizedRole.includes('parent');
   const isTutorUiActive = uiMode === 'tutor' || !!externalTutorMode || !!tutorSession;
   const activeTutorMode = tutorSession?.mode || externalTutorMode;
   const tutorModeLabel = activeTutorMode
@@ -981,7 +984,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onQuickAction={(text) => sendMessage(text)}
               onCancel={cancelGeneration}
               bottomInset={0}
-              hideQuickChips={useMinimalNextGenLayout}
+              // Quick chips are currently confusing more than they help.
+              // Disable them globally in Dash until we have tighter suggestions.
+              hideQuickChips={true}
               onInputFocus={handleComposerFocus}
               onPasteImage={handlePasteImage}
             />
