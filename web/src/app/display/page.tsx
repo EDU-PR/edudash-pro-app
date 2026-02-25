@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -16,6 +16,14 @@ import {
   CalendarDays,
   Sparkles,
 } from 'lucide-react';
+
+function EmptySectionNotice({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
+      <p className="text-lg" style={{ color: 'var(--muted, #888)' }}>{message}</p>
+    </div>
+  );
+}
 
 const SECTION_ROTATION_SEC = 45;
 const DISPLAY_DATA_REFRESH_MS = 10 * 60 * 1000;

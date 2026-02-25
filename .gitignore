@@ -63,6 +63,9 @@ edudashpro-dev/
 !CODEBASE_REVIEW_SUMMARY.md
 !supabase/README.md
 !PAYMENT_INTEGRATIONS_CHECKLIST.md
+!AGENTS.md
+!CONTRIBUTING.md
+!CHANGELOG.md
 !reports/prod-ready/PROD_READINESS_REPORT.md
 !docs/
 docs/*

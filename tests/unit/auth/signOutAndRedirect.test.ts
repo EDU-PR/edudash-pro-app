@@ -79,12 +79,21 @@ import { signOut } from '@/lib/sessionManager';
 
 // ──────────────────────────────────────────────────────
 
+afterAll(() => {
+  resetSignOutState();
+  jest.restoreAllMocks();
+});
+
 describe('signOutAndRedirect', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetSignOutState();
     mockRouter.replace.mockClear();
     mockRouter.dismissAll.mockClear();
+  });
+
+  afterEach(() => {
+    resetSignOutState();
   });
 
   it('calls signOut with local scope by default', async () => {
