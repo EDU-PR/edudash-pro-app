@@ -6,7 +6,6 @@ import type {
   YearPlanConfig,
   GeneratedYearPlan,
   GeneratedTerm,
-  YearPlanMonthlyBucket,
 } from '@/components/principal/ai-planner/types';
 import {
   addDays,
