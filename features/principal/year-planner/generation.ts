@@ -155,6 +155,18 @@ export function extractJsonObject(content: string): Record<string, unknown> | nu
       }
       return repaired;
     }
+
+    // Last resort: try to find any JSON-like content with "terms" key
+    const termsMatch = text.match(/\{[\s\S]*"terms"\s*:\s*\[[\s\S]*\]/);
+    if (termsMatch) {
+      try {
+        return JSON.parse(termsMatch[0]) as Record<string, unknown>;
+      } catch {
+        const repairedTerms = tryRepairTruncatedYearPlanJson(termsMatch[0]);
+        if (repairedTerms) return repairedTerms;
+      }
+    }
+
     return null;
   }
 }
@@ -241,6 +253,10 @@ export async function generateYearPlanViaAI(params: {
       : typeof data?.response === 'string'
         ? data.response
         : JSON.stringify(data || {});
+
+  if (__DEV__) {
+    console.log('[AI Year Planner] Response preview:', content.slice(0, 500));
+  }
 
   const parsed = extractJsonObject(content);
   if (!parsed) {

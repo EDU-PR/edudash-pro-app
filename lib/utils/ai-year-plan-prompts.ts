@@ -81,7 +81,9 @@ Respond with valid JSON matching this structure:
       "description": "string"
     }
   ]
-}`;
+}
+
+RESPOND WITH ONLY A JSON OBJECT. NO explanatory text before or after the JSON. Start your response with { and end with }.`;
 
 function buildAgeBandRules(config: YearPlanConfig): string[] {
   const lines: string[] = [];
