@@ -1418,14 +1418,42 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
 
     case 'new_message':
       if (request.thread_id) {
+        // First get direct thread participants (legacy parent_id / teacher_id fields)
         const { data: thread } = await supabase
           .from('message_threads')
-          .select('parent_id, teacher_id')
+          .select('parent_id, teacher_id, is_group')
           .eq('id', request.thread_id)
           .single();
         if (thread) {
           if (thread.parent_id) userIds.push(thread.parent_id);
           if (thread.teacher_id) userIds.push(thread.teacher_id);
+        }
+
+        // Also include group participants from message_participants table.
+        // Respect per-thread notification_mode:
+        //   'all' → notify normally
+        //   'mentions' → only notify if the message content contains @mention
+        //   'muted' → skip push notification entirely
+        const { data: participants } = await supabase
+          .from('message_participants')
+          .select('user_id, notification_mode')
+          .eq('thread_id', request.thread_id);
+
+        if (participants && participants.length > 0) {
+          const messageContent = (request as any).message_content || '';
+          for (const p of participants) {
+            const mode = p.notification_mode || 'all';
+            if (mode === 'muted') continue;
+            if (mode === 'mentions') {
+              // Only include if message contains an @mention reference
+              if (!messageContent.includes('@') && !messageContent.includes(p.user_id)) {
+                continue;
+              }
+            }
+            if (!userIds.includes(p.user_id)) {
+              userIds.push(p.user_id);
+            }
+          }
         }
       }
       break;
