@@ -1,39 +1,86 @@
 /**
  * MobileNavDrawer Styles
- * Extracted for WARP.md compliance
+ * Responsive: Desktop (>1024) = fixed sidebar, Tablet (768-1024) = overlay drawer,
+ * Mobile (<768) = near-full-width overlay drawer.
  */
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Dimensions, Platform } from 'react-native';
 import { EdgeInsets } from 'react-native-safe-area-context';
 
-export const DRAWER_WIDTH = 280;
+export type DrawerMode = 'desktop' | 'tablet' | 'mobile';
 
-export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInsets) =>
-  StyleSheet.create({
+const DESKTOP_WIDTH = 280;
+const TABLET_WIDTH = 320;
+const MOBILE_MARGIN = 56;
+
+export function getDrawerMode(): DrawerMode {
+  const { width } = Dimensions.get('window');
+  if (width > 1024) return 'desktop';
+  if (width >= 768) return 'tablet';
+  return 'mobile';
+}
+
+export function getDrawerWidth(mode: DrawerMode): number {
+  const { width } = Dimensions.get('window');
+  switch (mode) {
+    case 'desktop':
+      return DESKTOP_WIDTH;
+    case 'tablet':
+      return TABLET_WIDTH;
+    case 'mobile':
+      return width - MOBILE_MARGIN;
+  }
+}
+
+export { DESKTOP_WIDTH as DRAWER_WIDTH };
+
+const webCursor = Platform.OS === 'web' ? { cursor: 'pointer' as const } : {};
+
+export const getNavDrawerStyles = (
+  theme: any,
+  isDark: boolean,
+  insets: EdgeInsets,
+  mode: DrawerMode = getDrawerMode(),
+) => {
+  const drawerWidth = getDrawerWidth(mode);
+  const isDesktop = mode === 'desktop';
+
+  return StyleSheet.create({
     container: {
       ...StyleSheet.absoluteFillObject,
-      zIndex: 9999,
+      zIndex: 99999,
+      ...(isDesktop
+        ? { position: 'relative', width: drawerWidth, height: '100%' }
+        : {}),
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: isDark ? 'rgba(0, 0, 0, 0.88)' : 'rgba(0, 0, 0, 0.7)',
+      ...(isDesktop ? { display: 'none' } : {}),
     },
     overlayPressable: {
       flex: 1,
     },
     drawer: {
-      position: 'absolute',
+      position: isDesktop ? 'relative' : 'absolute',
       top: 0,
       left: 0,
       bottom: 0,
-      width: DRAWER_WIDTH,
+      width: drawerWidth,
       backgroundColor: theme.surface,
       opacity: 1,
-      paddingTop: insets.top,
-      shadowColor: '#000',
-      shadowOffset: { width: 2, height: 0 },
-      shadowOpacity: 0.25,
-      shadowRadius: 10,
-      elevation: 20,
+      paddingTop: isDesktop ? 0 : insets.top,
+      ...(isDesktop
+        ? { borderRightWidth: 1, borderRightColor: theme.border }
+        : {
+            shadowColor: '#000',
+            shadowOffset: { width: 2, height: 0 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            elevation: 20,
+          }),
+      ...(Platform.OS === 'web'
+        ? { willChange: 'transform' as any }
+        : {}),
     },
     drawerHeader: {
       paddingHorizontal: 16,
@@ -76,6 +123,8 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
     },
     closeButton: {
       padding: 4,
+      ...webCursor,
+      ...(isDesktop ? { display: 'none' } : {}),
     },
     navList: {
       flex: 1,
@@ -88,6 +137,7 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       paddingVertical: 12,
       marginHorizontal: 8,
       borderRadius: 8,
+      ...webCursor,
     },
     navItemActive: {
       backgroundColor: theme.primary + '12',
@@ -140,6 +190,7 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       borderWidth: 1,
       borderColor: theme.error + '30',
       width: '100%',
+      ...webCursor,
     },
     signOutText: {
       marginLeft: 10,
@@ -161,3 +212,4 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       opacity: 0.6,
     },
   });
+};

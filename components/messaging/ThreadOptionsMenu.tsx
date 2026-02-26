@@ -1,6 +1,6 @@
 /**
  * ThreadOptionsMenu Component
- * Dropdown menu from top with thread/chat options
+ * Dropdown menu from top-right with thread/chat options
  * - View contact
  * - Search in conversation
  * - Mute notifications
@@ -15,7 +15,7 @@ import {
   Text,
   Modal,
   TouchableOpacity,
-  TouchableWithoutFeedback,
+  Pressable,
   StyleSheet,
   Animated,
   Platform,
@@ -70,49 +70,49 @@ const OptionItem: React.FC<OptionItemProps> = ({
   destructive = false,
   disabled = false,
   theme,
-}) => {
-  const styles = StyleSheet.create({
-    optionItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      opacity: disabled ? 0.5 : 1,
-    },
-    optionIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: destructive ? theme.error + '15' : theme.primary + '15',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 14,
-    },
-    optionLabel: {
-      fontSize: 16,
-      color: destructive ? theme.error : theme.text,
-      flex: 1,
-    },
-  });
+}) => (
+  <TouchableOpacity
+    style={[optionStyles.item, disabled && optionStyles.disabled]}
+    onPress={onPress}
+    disabled={disabled}
+    activeOpacity={0.7}
+  >
+    <View style={[optionStyles.icon, { backgroundColor: destructive ? theme.error + '15' : theme.primary + '15' }]}>
+      <Ionicons 
+        name={icon} 
+        size={20} 
+        color={destructive ? theme.error : theme.primary} 
+      />
+    </View>
+    <Text style={[optionStyles.label, { color: destructive ? theme.error : theme.text }]}>{label}</Text>
+  </TouchableOpacity>
+);
 
-  return (
-    <TouchableOpacity
-      style={styles.optionItem}
-      onPress={onPress}
-      disabled={disabled}
-      activeOpacity={0.7}
-    >
-      <View style={styles.optionIcon}>
-        <Ionicons 
-          name={icon} 
-          size={22} 
-          color={destructive ? theme.error : theme.primary} 
-        />
-      </View>
-      <Text style={styles.optionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-};
+const optionStyles = StyleSheet.create({
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  label: {
+    fontSize: 15,
+    flex: 1,
+  },
+});
+
+const MENU_WIDTH = 260;
 
 export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
   visible,
@@ -143,103 +143,51 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const slideAnim = useRef(new Animated.Value(500)).current;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 100,
+          friction: 12,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } else {
-      slideAnim.setValue(500);
+      scaleAnim.setValue(0);
+      opacityAnim.setValue(0);
     }
-  }, [visible, slideAnim]);
+  }, [visible, scaleAnim, opacityAnim]);
 
   const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: 500,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => onClose());
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onClose());
   };
 
   const handleOptionPress = (callback: () => void) => {
     handleClose();
-    // Small delay to let the menu close animation start
     setTimeout(callback, 100);
   };
 
-  const styles = StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
-    container: {
-      backgroundColor: theme.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingBottom: insets.bottom + 16,
-      paddingTop: 8,
-      maxHeight: Dimensions.get('window').height * 0.8,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.15,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 8,
-        },
-      }),
-    },
-    handle: {
-      width: 36,
-      height: 4,
-      backgroundColor: theme.border,
-      borderRadius: 2,
-      alignSelf: 'center',
-      marginTop: 8,
-      marginBottom: 12,
-    },
-    header: {
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-      paddingTop: 12,
-    },
-    headerTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.text,
-      textAlign: 'center',
-    },
-    headerSubtitle: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      marginTop: 2,
-    },
-    optionsContainer: {
-      paddingTop: 8,
-      paddingBottom: 8,
-    },
-    scrollContainer: {
-      flexGrow: 1,
-      maxHeight: Dimensions.get('window').height * 0.5,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: theme.border,
-      marginVertical: 8,
-      marginHorizontal: 20,
-    },
-  });
+  const { height: screenHeight } = Dimensions.get('window');
 
   if (!visible) return null;
 
@@ -247,198 +195,265 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={handleClose}
     >
-      <TouchableWithoutFeedback onPress={handleClose}>
-        <View style={styles.overlay}>
-          <TouchableWithoutFeedback>
-            <Animated.View 
-              style={[
-                styles.container,
-                { transform: [{ translateY: slideAnim }] }
-              ]}
-            >
-              <View style={styles.handle} />
-              
-              {(contactName || isGroup) && (
-                <View style={styles.header}>
-                  <Text style={styles.headerTitle}>{isGroup ? 'Group Options' : 'Chat Options'}</Text>
-                  <Text style={styles.headerSubtitle}>
-                    {isGroup && participantCount != null
-                      ? `${contactName || 'Group'} • ${participantCount} participant${participantCount !== 1 ? 's' : ''}`
-                      : contactName}
-                  </Text>
-                </View>
+      <Pressable style={styles.overlay} onPress={handleClose}>
+        <Animated.View
+          style={[
+            styles.menuContainer,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              top: insets.top + 8,
+              maxHeight: screenHeight * 0.7,
+              opacity: opacityAnim,
+              transform: [
+                { scale: scaleAnim },
+                {
+                  translateX: scaleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [MENU_WIDTH / 2, 0],
+                  }),
+                },
+                {
+                  translateY: scaleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {(contactName || isGroup) && (
+            <View style={[styles.header, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>
+                {isGroup ? 'Group Options' : 'Chat Options'}
+              </Text>
+              {(contactName || (isGroup && participantCount != null)) && (
+                <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                  {isGroup && participantCount != null
+                    ? `${contactName || 'Group'} · ${participantCount} participant${participantCount !== 1 ? 's' : ''}`
+                    : contactName}
+                </Text>
               )}
-              
-              <ScrollView 
-                style={styles.scrollContainer}
-                showsVerticalScrollIndicator={true}
-                bounces={false}
-              >
-                <View style={styles.optionsContainer}>
-                {isGroup && (onGroupInfo || participantCount != null) && (
-                  <OptionItem
-                    icon="people-outline"
-                    label={participantCount != null ? `Group info (${participantCount} participants)` : 'Group info'}
-                    onPress={() => handleOptionPress(onGroupInfo ?? (() => {}))}
-                    theme={theme}
-                  />
-                )}
-                {onViewContact && !isGroup && (
-                  <OptionItem
-                    icon="person-outline"
-                    label="View Contact"
-                    onPress={() => handleOptionPress(onViewContact)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onMediaLinksAndDocs && (
-                  <OptionItem
-                    icon="images-outline"
-                    label="Media, Links, and Docs"
-                    onPress={() => handleOptionPress(onMediaLinksAndDocs)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onSearchInChat && (
-                  <OptionItem
-                    icon="search-outline"
-                    label="Search in Conversation"
-                    onPress={() => handleOptionPress(onSearchInChat)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onMuteNotifications && (
-                  <OptionItem
-                    icon={isMuted ? "notifications-outline" : "notifications-off-outline"}
-                    label={isMuted ? "Unmute Notifications" : "Mute Notifications"}
-                    onPress={() => handleOptionPress(onMuteNotifications)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onDisappearingMessages && (
-                  <OptionItem
-                    icon="timer-outline"
-                    label={disappearingLabel ? `Disappearing Messages (${disappearingLabel})` : 'Disappearing Messages'}
-                    onPress={() => handleOptionPress(onDisappearingMessages)}
-                    theme={theme}
-                  />
-                )}
-                
+            </View>
+          )}
+          
+          <ScrollView
+            style={styles.scrollContainer}
+            showsVerticalScrollIndicator={true}
+            bounces={false}
+          >
+            {isGroup && (onGroupInfo || participantCount != null) && (
+              <OptionItem
+                icon="people-outline"
+                label={participantCount != null ? `Group info (${participantCount})` : 'Group info'}
+                onPress={() => handleOptionPress(onGroupInfo ?? (() => {}))}
+                theme={theme}
+              />
+            )}
+            {onViewContact && !isGroup && (
+              <OptionItem
+                icon="person-outline"
+                label="View Contact"
+                onPress={() => handleOptionPress(onViewContact)}
+                theme={theme}
+              />
+            )}
+            
+            {onMediaLinksAndDocs && (
+              <OptionItem
+                icon="images-outline"
+                label="Media, Links, and Docs"
+                onPress={() => handleOptionPress(onMediaLinksAndDocs)}
+                theme={theme}
+              />
+            )}
+            
+            {onSearchInChat && (
+              <OptionItem
+                icon="search-outline"
+                label="Search in Conversation"
+                onPress={() => handleOptionPress(onSearchInChat)}
+                theme={theme}
+              />
+            )}
+            
+            {onMuteNotifications && (
+              <OptionItem
+                icon={isMuted ? "notifications-outline" : "notifications-off-outline"}
+                label={isMuted ? "Unmute Notifications" : "Mute Notifications"}
+                onPress={() => handleOptionPress(onMuteNotifications)}
+                theme={theme}
+              />
+            )}
+            
+            {onDisappearingMessages && (
+              <OptionItem
+                icon="timer-outline"
+                label={disappearingLabel ? `Disappearing (${disappearingLabel})` : 'Disappearing Messages'}
+                onPress={() => handleOptionPress(onDisappearingMessages)}
+                theme={theme}
+              />
+            )}
+            
+            <OptionItem
+              icon="image-outline"
+              label="Change Wallpaper"
+              onPress={() => handleOptionPress(onChangeWallpaper)}
+              theme={theme}
+            />
+            
+            {onStarredMessages && (
+              <OptionItem
+                icon="star-outline"
+                label="Starred Messages"
+                onPress={() => handleOptionPress(onStarredMessages)}
+                theme={theme}
+              />
+            )}
+            
+            {onExportChat && (
+              <OptionItem
+                icon="download-outline"
+                label="Export Chat"
+                onPress={() => handleOptionPress(onExportChat)}
+                theme={theme}
+              />
+            )}
+            
+            {onAddShortcut && (
+              <OptionItem
+                icon="add-circle-outline"
+                label="Add Shortcut"
+                onPress={() => handleOptionPress(onAddShortcut)}
+                theme={theme}
+              />
+            )}
+
+            {onTogglePin && (
+              <OptionItem
+                icon={isPinned ? 'pin' : 'pin-outline'}
+                label={isPinned ? 'Unpin Conversation' : 'Pin Conversation'}
+                onPress={() => handleOptionPress(onTogglePin)}
+                theme={theme}
+              />
+            )}
+
+            {onSetNotificationMode && (
+              <>
                 <OptionItem
-                  icon="image-outline"
-                  label="Change Wallpaper"
-                  onPress={() => handleOptionPress(onChangeWallpaper)}
+                  icon={notificationMode === 'all' ? 'notifications' : 'notifications-outline'}
+                  label="All Notifications"
+                  onPress={() => handleOptionPress(() => onSetNotificationMode('all'))}
+                  disabled={notificationMode === 'all'}
                   theme={theme}
                 />
-                
-                {onStarredMessages && (
-                  <OptionItem
-                    icon="star-outline"
-                    label="Starred Messages"
-                    onPress={() => handleOptionPress(onStarredMessages)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onExportChat && (
-                  <OptionItem
-                    icon="download-outline"
-                    label="Export Chat"
-                    onPress={() => handleOptionPress(onExportChat)}
-                    theme={theme}
-                  />
-                )}
-                
-                {onAddShortcut && (
-                  <OptionItem
-                    icon="add-circle-outline"
-                    label="Add Shortcut"
-                    onPress={() => handleOptionPress(onAddShortcut)}
-                    theme={theme}
-                  />
-                )}
-
-                {onTogglePin && (
-                  <OptionItem
-                    icon={isPinned ? 'pin' : 'pin-outline'}
-                    label={isPinned ? 'Unpin Conversation' : 'Pin Conversation'}
-                    onPress={() => handleOptionPress(onTogglePin)}
-                    theme={theme}
-                  />
-                )}
-
-                {onSetNotificationMode && (
-                  <>
-                    <OptionItem
-                      icon={notificationMode === 'all' ? 'notifications' : 'notifications-outline'}
-                      label="All Notifications"
-                      onPress={() => handleOptionPress(() => onSetNotificationMode('all'))}
-                      disabled={notificationMode === 'all'}
-                      theme={theme}
-                    />
-                    <OptionItem
-                      icon="at-outline"
-                      label="Mentions Only"
-                      onPress={() => handleOptionPress(() => onSetNotificationMode('mentions'))}
-                      disabled={notificationMode === 'mentions'}
-                      theme={theme}
-                    />
-                    <OptionItem
-                      icon="notifications-off-outline"
-                      label="Mute Conversation"
-                      onPress={() => handleOptionPress(() => onSetNotificationMode('muted'))}
-                      disabled={notificationMode === 'muted'}
-                      theme={theme}
-                    />
-                  </>
-                )}
-                
-                <View style={styles.divider} />
-                
-                {onReport && (
-                  <OptionItem
-                    icon="flag-outline"
-                    label="Report User"
-                    onPress={() => handleOptionPress(onReport)}
-                    destructive
-                    theme={theme}
-                  />
-                )}
-                
-                {onClearChat && (
-                  <OptionItem
-                    icon="trash-outline"
-                    label="Clear Chat"
-                    onPress={() => handleOptionPress(onClearChat)}
-                    destructive
-                    theme={theme}
-                  />
-                )}
-                
-                {onBlockUser && (
-                  <OptionItem
-                    icon={isBlocked ? 'lock-open-outline' : 'ban-outline'}
-                    label={isBlocked ? 'Unblock User' : 'Block User'}
-                    onPress={() => handleOptionPress(onBlockUser)}
-                    destructive={!isBlocked}
-                    theme={theme}
-                  />
-                )}
-              </View>
-              </ScrollView>
-            </Animated.View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
+                <OptionItem
+                  icon="at-outline"
+                  label="Mentions Only"
+                  onPress={() => handleOptionPress(() => onSetNotificationMode('mentions'))}
+                  disabled={notificationMode === 'mentions'}
+                  theme={theme}
+                />
+                <OptionItem
+                  icon="notifications-off-outline"
+                  label="Mute Conversation"
+                  onPress={() => handleOptionPress(() => onSetNotificationMode('muted'))}
+                  disabled={notificationMode === 'muted'}
+                  theme={theme}
+                />
+              </>
+            )}
+            
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            
+            {onReport && (
+              <OptionItem
+                icon="flag-outline"
+                label="Report User"
+                onPress={() => handleOptionPress(onReport)}
+                destructive
+                theme={theme}
+              />
+            )}
+            
+            {onClearChat && (
+              <OptionItem
+                icon="trash-outline"
+                label="Clear Chat"
+                onPress={() => handleOptionPress(onClearChat)}
+                destructive
+                theme={theme}
+              />
+            )}
+            
+            {onBlockUser && (
+              <OptionItem
+                icon={isBlocked ? 'lock-open-outline' : 'ban-outline'}
+                label={isBlocked ? 'Unblock User' : 'Block User'}
+                onPress={() => handleOptionPress(onBlockUser)}
+                destructive={!isBlocked}
+                theme={theme}
+              />
+            )}
+          </ScrollView>
+        </Animated.View>
+      </Pressable>
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  menuContainer: {
+    position: 'absolute',
+    right: 12,
+    width: MENU_WIDTH,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 12,
+      },
+      web: {
+        boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+      },
+    }),
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 6,
+    marginHorizontal: 16,
+  },
+});
 
 export default ThreadOptionsMenu;

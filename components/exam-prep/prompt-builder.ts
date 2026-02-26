@@ -123,6 +123,20 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
     systemPrompt += `\n\n**Additional User Requirements:**\n${config.customPrompt}`;
   }
 
+  const MATH_SUBJECTS = ['Mathematics', 'Mathematical Literacy', 'Physical Sciences', 'Accounting'];
+  const gradeNumber = parseInt(config.grade.replace('grade_', ''), 10);
+  const isMathSubject = MATH_SUBJECTS.some(s => config.subject.includes(s));
+  if (isMathSubject && gradeNumber >= 4) {
+    systemPrompt += `\n\n**MATH FORMATTING:** Use LaTeX notation for mathematical expressions:
+- Fractions: $\\\\frac{3}{4}$
+- Exponents: $x^2$
+- Square roots: $\\\\sqrt{16}$
+- Multiplication: $3 \\\\times 4$
+- Division: $12 \\\\div 3$
+- Equations: $2x + 3 = 15$
+Wrap display equations in $$...$$ and inline math in $...$`;
+  }
+
   if (config.useTeacherContext !== false && config.contextSummary) {
     const focusTopics = config.contextSummary.focusTopics?.slice(0, 8) || [];
     const weakTopics = config.contextSummary.weakTopics?.slice(0, 8) || [];
