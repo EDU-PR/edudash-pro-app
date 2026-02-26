@@ -1,6 +1,15 @@
 /**
  * DashOrb - Floating AI Assistant for Super Admin Dashboard
- * 
+ *
+ * TODO(refactor): This file is ~2600 lines — well over the 500-line guideline.
+ * Candidate sub-modules to extract:
+ *   - DashOrbStyles.ts             (StyleSheet.create block)
+ *   - useDashOrbState.ts           (core state + animation refs)
+ *   - DashOrbToolPanel.tsx          (tool result / action-card sub-component)
+ *   - DashOrbMessageList.tsx        (message list rendering)
+ *   - useDashOrbTools.ts           (tool execution, build triggers, analytics queries)
+ * Keep the public component (`DashOrbImpl`) intact as a façade.
+ *
  * A powerful floating orb that provides real AI-powered operations:
  * - Query platform analytics and metrics
  * - Manage users, schools, subscriptions

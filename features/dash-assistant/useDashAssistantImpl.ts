@@ -4,6 +4,16 @@
  * Custom hook that extracts business logic from DashAssistant component.
  * Handles message state, conversation management, attachments, and AI interactions.
  * Voice input enabled for paid tiers and a limited free daily budget.
+ *
+ * TODO(refactor): This file is ~3200 lines — well over the 500-line guideline.
+ * Candidate sub-modules to extract:
+ *   - useMessageState.ts           (message list, pagination, optimistic updates)
+ *   - useConversationManager.ts    (thread CRUD, title generation, switching)
+ *   - useAttachments.ts            (image/doc picker, upload, preview)
+ *   - useAIStream.ts               (SSE streaming, tool-call handling, retry logic)
+ *   - useVoiceInput.ts             (STT recording, budget tracking)
+ *   - dashAssistantPrompts.ts      (system-prompt builders)
+ * Keep the public hook signature (`useDashAssistant`) intact as a façade.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -2712,9 +2722,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   );
 
   // Initialize Dash AI
+  const INIT_TIMEOUT_MS = 10_000; // Prevent permanent hang if init/hydrate stalls
   useEffect(() => {
     const initializeDash = async () => {
-      try {
+      const initBody = async () => {
         const module = await import('@/services/dash-ai/DashAICompat');
         const DashClass = (module as any).DashAIAssistant || (module as any).default;
         const dash: IDashAIAssistant | null = DashClass?.getInstance?.() || null;
@@ -2939,9 +2950,29 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
         // Mark initialized AFTER all data is loaded — prevents flash of empty state
         setIsInitialized(true);
+      };
+
+      try {
+        await Promise.race([
+          initBody(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Dash initialization timed out')), INIT_TIMEOUT_MS)
+          ),
+        ]);
       } catch (error) {
         console.error('Failed to initialize Dash:', error);
-        showAlert({ title: 'Error', message: 'Failed to initialize AI Assistant.', type: 'error' });
+        // CRITICAL: Always mark initialized to prevent permanent hang
+        setIsInitialized(true);
+        // Show a greeting message even on error
+        setMessages([
+          {
+            id: `error_greeting_${Date.now()}`,
+            type: 'assistant',
+            content:
+              "Hi! I'm having trouble connecting right now. Try sending a message and I'll do my best to help.",
+            timestamp: Date.now(),
+          },
+        ]);
       }
     };
 

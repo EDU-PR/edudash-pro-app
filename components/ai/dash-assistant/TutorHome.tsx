@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 import { getAgeBandsForOrgType, normalizeSchoolType } from '@/lib/tenant/compat';
 import { getTutorChallengePlan } from '@/features/dash-assistant/tutorChallengePolicy';
 
@@ -347,7 +348,9 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     return isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator';
   }, [isStaff, isPreschool]);
 
-  const learnerName = learnerContext?.learnerName || 'Learner';
+  const { profile } = useAuth();
+  const displayName =
+    learnerContext?.learnerName || profile?.full_name || profile?.first_name || 'there';
   const greeting = getTimeGreeting();
   const progressFraction = learningStats.sessionsGoal > 0
     ? Math.min(learningStats.sessionsToday / learningStats.sessionsGoal, 1)
@@ -438,7 +441,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
             </View>
             <View style={styles.emptyStateHeroText}>
               <Text style={[styles.emptyStateTitle, { color: theme.text, marginBottom: 2 }]}>
-                {greeting}, {learnerName}! 🌟
+                {greeting}, {displayName}! 🌟
               </Text>
               {!isPreschool && learnerContext?.grade && (
                 <View style={localStyles.gradeBadgeRow}>

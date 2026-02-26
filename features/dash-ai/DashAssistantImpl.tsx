@@ -131,6 +131,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [speechControlsExpanded, setSpeechControlsExpanded] = useState(false);
   const wasSpeakingRef = useRef(false);
   const [remainingScans, setRemainingScans] = useState<number | null>(null);
+  const [initTimedOut, setInitTimedOut] = useState(false);
   const [retakeContext, setRetakeContext] = useState<{
     assistantMessageId: string;
     prompt: string;
@@ -163,6 +164,12 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       setKeyboardHeight(0);
     });
     return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  // Timeout fallback: if init hangs >12s, show chat interface anyway
+  useEffect(() => {
+    const timer = setTimeout(() => setInitTimedOut(true), 12000);
+    return () => clearTimeout(timer);
   }, []);
 
   // All business logic via hook
@@ -569,8 +576,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     />
   ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, handleRetakeForClarity]);
 
-  // Loading state
-  if (!isInitialized) {
+  // Loading state — show spinner until initialized or timeout (12s)
+  if (!isInitialized && !initTimedOut) {
     return (
       <View style={[layoutStyles.loadingContainer, { backgroundColor: theme.background }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -617,6 +624,24 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
         <View style={layoutStyles.contentLayer}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
+
+          {initTimedOut && !isInitialized && (
+            <View
+              style={{
+                padding: 12,
+                marginHorizontal: 16,
+                marginTop: 8,
+                backgroundColor: theme.surfaceVariant + 'CC',
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}
+            >
+              <Text style={{ color: theme.textSecondary, fontSize: 14 }}>
+                Having trouble connecting. Try sending a message and I&apos;ll do my best to help.
+              </Text>
+            </View>
+          )}
 
           <View style={[headerStyles.header, { backgroundColor: 'transparent' }]}>
             <View

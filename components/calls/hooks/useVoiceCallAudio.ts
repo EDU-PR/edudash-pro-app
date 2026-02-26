@@ -83,6 +83,11 @@ export function useVoiceCallAudio({
   const ringbackRetryCountRef = useRef(0);
   const ringbackRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const speakerAppliedOnConnectRef = useRef(false);
+  const isSpeakerEnabledRef = useRef(isSpeakerEnabled);
+
+  useEffect(() => {
+    isSpeakerEnabledRef.current = isSpeakerEnabled;
+  }, [isSpeakerEnabled]);
 
   /**
    * Play ringback tone for the caller while waiting for callee to answer.
@@ -385,17 +390,20 @@ export function useVoiceCallAudio({
           // Give haptic feedback to indicate call connected
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           
-          // One final enforcement after Daily.co stabilizes audio (no loop)
-          if (!isSpeakerEnabled && InCallManager) {
-            setTimeout(() => {
-              try {
-                InCallManager.setForceSpeakerphoneOn(false);
-                InCallManager.setKeepScreenOn(false);
-                console.log('[VoiceCallAudio] Post-connect earpiece set');
-              } catch (e) {
-                // Silent
-              }
-            }, 500);
+          // Staggered earpiece enforcement — Daily.co overrides audio routing
+          // after WebRTC track negotiation, so we need to re-enforce multiple times
+          if (!isSpeakerEnabledRef.current && InCallManager) {
+            const delays = [200, 500, 1000, 2000, 3500];
+            delays.forEach((delay) => {
+              setTimeout(() => {
+                try {
+                  if (!isSpeakerEnabledRef.current) {
+                    InCallManager.setForceSpeakerphoneOn(false);
+                    InCallManager.setKeepScreenOn(false);
+                  }
+                } catch {}
+              }, delay);
+            });
           }
         }
       } catch (error) {

@@ -1,6 +1,14 @@
 /**
  * Dash Voice — Full-Screen ORB Experience
  *
+ * TODO(refactor): This file is ~1500 lines — over the 500-line guideline.
+ * Candidate sub-modules to extract:
+ *   - hooks/useDashVoice.ts         (core state, STT/TTS, language switching)
+ *   - components/DashVoiceOrb.tsx   (animated orb visual + pulse ring)
+ *   - components/DashVoiceChat.tsx  (message list & answer buttons)
+ *   - dashVoiceStyles.ts           (StyleSheet.create block)
+ * Keep the public screen export intact as a thin composition layer.
+ *
  * The primary voice-first interface launched from the FAB.
  * - Voice STT/TTS with dynamic language switching (EN/AF/ZU)
  * - True SSE streaming for realtime text delivery
