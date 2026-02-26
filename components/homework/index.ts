@@ -5,3 +5,5 @@
  */
 
 export { StudentHomeworkSubmit } from './StudentHomeworkSubmit';
+export { SubmissionUploadPanel } from './SubmissionUploadPanel';
+export { HomeworkAttachments } from './HomeworkAttachments';
