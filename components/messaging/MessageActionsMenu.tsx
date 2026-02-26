@@ -53,6 +53,8 @@ interface MessageActionsMenuProps {
   onForward: () => void;
   onDelete: () => void;
   onEdit?: () => void;
+  onTranslate?: (language: 'en' | 'af' | 'zu') => void;
+  isTranslating?: boolean;
 }
 
 export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
@@ -67,20 +69,23 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
   onForward,
   onDelete,
   onEdit,
+  onTranslate,
+  isTranslating = false,
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const [showFullEmojiPicker, setShowFullEmojiPicker] = useState(false);
+  const [showTranslateOptions, setShowTranslateOptions] = useState(false);
   
   // Safe message content with fallback to prevent crashes
   const safeMessageContent = messageContent || '';
   
-  // Reset emoji picker state when menu closes
   useEffect(() => {
     if (!visible) {
       setShowFullEmojiPicker(false);
+      setShowTranslateOptions(false);
     }
   }, [visible]);
   
@@ -147,6 +152,7 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
     { id: 'forward', label: 'Forward', icon: 'arrow-redo' },
     { id: 'copy', label: 'Copy', icon: 'copy-outline' },
     ...(isOwnMessage && onEdit ? [{ id: 'edit', label: 'Edit', icon: 'pencil-outline' as keyof typeof Ionicons.glyphMap }] : []),
+    ...(onTranslate ? [{ id: 'translate', label: 'Translate', icon: 'language-outline' as keyof typeof Ionicons.glyphMap }] : []),
     { id: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true, color: '#ef4444' },
   ];
   
@@ -270,6 +276,40 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
     destructiveLabel: {
       color: '#ef4444',
     },
+    translateContainer: {
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      paddingBottom: 8,
+    },
+    translateHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    translateTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    translateOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    translateFlag: {
+      fontSize: 22,
+    },
+    translateLabel: {
+      fontSize: 15,
+      fontWeight: '500',
+      flex: 1,
+    },
+    translateLoading: {
+      fontSize: 13,
+    },
   });
 
   if (!visible) return null;
@@ -351,8 +391,42 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
             </View>
           )}
           
-          {/* Action Buttons (hidden when emoji picker is shown) */}
-          {!showFullEmojiPicker && (
+          {/* Translation language picker */}
+          {showTranslateOptions && onTranslate && (
+            <View style={styles.translateContainer}>
+              <View style={styles.translateHeader}>
+                <Text style={[styles.translateTitle, { color: theme.text }]}>Translate to</Text>
+                <TouchableOpacity onPress={() => setShowTranslateOptions(false)}>
+                  <Ionicons name="close" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              {([
+                { code: 'en' as const, label: 'English', flag: '🇬🇧' },
+                { code: 'af' as const, label: 'Afrikaans', flag: '🇿🇦' },
+                { code: 'zu' as const, label: 'isiZulu', flag: '🇿🇦' },
+              ]).map((lang) => (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={styles.translateOption}
+                  onPress={() => {
+                    onTranslate(lang.code);
+                    onClose();
+                  }}
+                  disabled={isTranslating}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.translateFlag}>{lang.flag}</Text>
+                  <Text style={[styles.translateLabel, { color: theme.text }]}>{lang.label}</Text>
+                  {isTranslating && (
+                    <Text style={[styles.translateLoading, { color: theme.textSecondary }]}>...</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Action Buttons (hidden when emoji picker or translate picker is shown) */}
+          {!showFullEmojiPicker && !showTranslateOptions && (
             <View style={styles.actionsGrid}>
               {actions.map((action) => (
                 <TouchableOpacity
@@ -371,6 +445,9 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
                         break;
                       case 'edit':
                         if (onEdit) handleAction(onEdit);
+                        break;
+                      case 'translate':
+                        setShowTranslateOptions(true);
                         break;
                       case 'delete':
                         handleAction(onDelete);

@@ -50,6 +50,10 @@ interface MessageComposerProps {
   onCancelEdit?: () => void;
   /** Optional modal alert API (used by parent flows to avoid native alerts) */
   showAlert?: ParentAlertApi;
+  /** Number of failed messages in the retry queue (for badge display) */
+  failedMessageCount?: number;
+  /** Called when send fails so the caller can enqueue into the retry system */
+  onSendError?: (content: string, error: string) => void;
 }
 
 const COMPOSER_IMAGE_ASPECT: [number, number] = [4, 3];
@@ -111,6 +115,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   editingMessage,
   onCancelEdit,
   showAlert,
+  failedMessageCount = 0,
+  onSendError,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -179,7 +185,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       onCancelReply?.();
     }
     callCtx?.recordActivity();
-    await onSend(content);
+    try {
+      await onSend(content);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      onSendError?.(content, errMsg);
+    }
   };
 
   const handleVoiceComplete = async (uri: string, duration: number) => {
@@ -351,6 +362,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       )}
       
       <View style={styles.composerRow}>
+        {/* Failed message badge */}
+        {failedMessageCount > 0 && !isRecording && (
+          <View style={styles.failedBadge}>
+            <Ionicons name="alert-circle" size={14} color="#fff" />
+            <Text style={styles.failedBadgeText}>{failedMessageCount} failed</Text>
+          </View>
+        )}
+
         {/* Input wrapper - hide when recording */}
         {!isRecording && (
           <>
@@ -592,5 +611,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9ca3af',
     marginTop: 1,
+  },
+  failedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4,
+    marginBottom: 4,
+  },
+  failedBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

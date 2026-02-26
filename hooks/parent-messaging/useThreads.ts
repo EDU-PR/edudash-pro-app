@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { useThreadPinning } from '@/hooks/messaging/useThreadPinning';
 import type { MessageThread } from '@/lib/messaging/types';
 
 /**
@@ -78,7 +79,7 @@ export const useParentThreads = () => {
           if (row?.thread_id) summaryMap.set(row.thread_id, row);
         });
 
-        return (threads || []).map((thread: any) => {
+        const mapped = (threads || []).map((thread: any) => {
           const summary = summaryMap.get(thread.id);
           const lastMessage =
             summary?.last_message_id && summary?.last_message_content
@@ -89,11 +90,23 @@ export const useParentThreads = () => {
                 }
               : undefined;
 
+          const participant = (thread.participants || []).find(
+            (p: { user_id: string }) => p.user_id === user!.id,
+          );
+
           return {
             ...thread,
             last_message: lastMessage,
             unread_count: typeof summary?.unread_count === 'number' ? summary.unread_count : 0,
+            is_pinned: !!participant?.is_pinned,
+            pinned_at: participant?.pinned_at ?? null,
           };
+        });
+
+        return mapped.sort((a: MessageThread & { is_pinned: boolean }, b: MessageThread & { is_pinned: boolean }) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return 0;
         });
       } catch (err: any) {
         logger.error('useParentThreads', `Error fetching threads: ${err?.message || err}`, {
