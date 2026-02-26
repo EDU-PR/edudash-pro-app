@@ -397,6 +397,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [parentChildren, setParentChildren] = useState<any[]>([]);
   const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
   const externalTutorKickoffSentRef = useRef(false);
+  const initialMessageSentRef = useRef<string | null>(null);
   
   // Alert state for premium modals (replaces native Alert.alert)
   const [alertState, setAlertState] = useState<AlertState>({
@@ -2933,8 +2934,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
 
         // Send initial message or add greeting
-        if (initialMessage && initialMessage.trim()) {
-          sendMessage(initialMessage.trim());
+        const trimmedInitialMessage = String(initialMessage || '').trim();
+        if (trimmedInitialMessage) {
+          if (initialMessageSentRef.current !== trimmedInitialMessage) {
+            initialMessageSentRef.current = trimmedInitialMessage;
+            sendMessage(trimmedInitialMessage);
+          }
         } else if (!hasExistingMessages && !orbMessagesLoaded && externalTutorMode && !externalTutorKickoffSentRef.current) {
           externalTutorKickoffSentRef.current = true;
           sendMessage(buildTutorKickoffPrompt(externalTutorMode, tutorConfig));

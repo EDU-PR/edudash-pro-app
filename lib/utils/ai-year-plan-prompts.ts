@@ -135,10 +135,12 @@ export function buildYearPlanUserPrompt(config: YearPlanConfig): string {
   const excursionNote = config.includeExcursions
     ? 'Excursions are MANDATORY for preschool. Include at least 2 excursions per term.'
     : 'Include excursions if requested.';
+  const weeklyThemesPerTerm = Math.ceil(52 / config.numberOfTerms);
   const frameworkNote =
     config.planningFramework === 'grade_rr_52_week'
       ? [
           'Planning framework: Grade RR 52-week structure (strictly based on /docs/52 week Planning - Grade RR (1).pdf).',
+          `Generate exactly ${weeklyThemesPerTerm} weekly themes per term (52 weeks total for the year).`,
           `Weekly structure requirements: ${GRADE_RR_WEEKLY_STRUCTURE.join('; ')}.`,
           config.strictTemplateMode
             ? 'Strict template mode is ON: keep this structure every week without omission.'
@@ -179,7 +181,7 @@ ${frameworkNote}
 
 ${optionalRulesBlock.length > 0 ? optionalRulesBlock.map((line) => `- ${line}`).join('\n') : ''}
 
-Generate approximately 10 weekly themes per term with relevant activities.
+Generate approximately ${Math.ceil(52 / config.numberOfTerms)} weekly themes per term (target 52 weeks for the full academic year) with relevant activities.
 ${excursionNote}
 For meetings, include staff meetings, parent meetings, and curriculum planning sessions.
 Ensure monthlyEntries includes ALL public holidays from the calendar above.`;

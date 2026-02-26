@@ -138,6 +138,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: '#0EA5E9',
     category: 'classroom',
   },
+  school_calendar: {
+    path: '/screens/teacher-school-calendar' as Href,
+    title: 'School Calendar',
+    titleKey: 'teacher.school_calendar',
+    icon: 'calendar-outline',
+    color: '#10B981',
+    category: 'classroom',
+  },
   activity_samples: {
     path: '/screens/activity-sample-library' as Href,
     title: 'Activity Samples',

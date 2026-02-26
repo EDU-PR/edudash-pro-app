@@ -199,9 +199,7 @@ function extractLineBasedCriteriaHeadings(text: string): CriteriaHeading[] {
 
 function extractInlineCriteriaHeadings(text: string): CriteriaHeading[] {
   const source = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!source) return [];
-
-  const headings: CriteriaHeading[] = [];
+  if (!source) return [];  const headings: CriteriaHeading[] = [];
   const labelRegex = /\b([a-z]|[1-9][0-9]?)\)\s*/gi;
   const matches: Array<{ label: string; index: number; start: number }> = [];
   let match: RegExpExecArray | null = null;

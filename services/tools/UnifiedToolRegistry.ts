@@ -96,6 +96,14 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   batch_grade_submissions: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
 };
 
+const DISABLED_TOOL_NAMES = new Set<string>([
+  // Dash PDF generation is intentionally disabled in assistant/orb flows.
+  'export_pdf',
+  'generate_pdf_from_prompt',
+  'generate_worksheet',
+  'generate_chart',
+]);
+
 const MODULE_CATEGORY_MAP: Record<string, string> = {
   get_member_list: 'data',
   get_member_progress: 'data',
@@ -258,6 +266,10 @@ function isRetryableErrorMessage(message?: string): boolean {
   );
 }
 
+function isToolDisabled(toolName?: string | null): boolean {
+  return DISABLED_TOOL_NAMES.has(String(toolName || '').trim());
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -294,6 +306,7 @@ export class UnifiedToolRegistry {
     }
 
     return Array.from(this.legacyTools.values()).filter((tool) => {
+      if (isToolDisabled(tool.id)) return false;
       const fallbackRule = TOOL_ACCESS_RULES[tool.id];
       const allowedRoles = fallbackRule?.roles || tool.allowedRoles.map((r) => parseToolRole(r).role);
       const minTier = fallbackRule?.minTier || (tool.requiredTier as ToolTier | undefined);
@@ -313,6 +326,7 @@ export class UnifiedToolRegistry {
     const combined = new Map<string, UnifiedToolDefinition>();
 
     for (const moduleTool of ModuleToolRegistry.getAllTools()) {
+      if (isToolDisabled(moduleTool.name)) continue;
       const rule = TOOL_ACCESS_RULES[moduleTool.name];
       const allowedRoles = rule?.roles;
       const requiredTier = rule?.minTier;
@@ -354,6 +368,10 @@ export class UnifiedToolRegistry {
   }
 
   getTool(name: string): UnifiedToolDefinition | undefined {
+    if (isToolDisabled(name)) {
+      return undefined;
+    }
+
     const moduleTool = ModuleToolRegistry.getTool(name);
     if (moduleTool) {
       const rule = TOOL_ACCESS_RULES[moduleTool.name];
@@ -388,6 +406,7 @@ export class UnifiedToolRegistry {
   }
 
   hasTool(name: string, role?: string, tier?: string): boolean {
+    if (isToolDisabled(name)) return false;
     return this.list(role, tier).some((tool) => tool.name === name);
   }
 
@@ -536,6 +555,19 @@ export class UnifiedToolRegistry {
           tool_name: toolName,
           role,
           tier: context.tier,
+        },
+      };
+    }
+
+    if (isToolDisabled(toolName)) {
+      return {
+        success: false,
+        error: `Tool ${toolName} is disabled.`,
+        trace_id: traceId,
+        metadata: {
+          trace_id: traceId,
+          tool_name: toolName,
+          disabled: true,
         },
       };
     }

@@ -52,6 +52,39 @@ function isFundraiserEntry(text: string): boolean {
   return lower.includes('fundrais') || lower.includes('raffle') || lower.includes('sale') || lower.includes('market');
 }
 
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function getWeeklyThemesForMonth(
+  plan: GeneratedYearPlan,
+  monthIndex: number,
+): Array<{ termNumber: number; week: number; theme: string }> {
+  const result: Array<{ termNumber: number; week: number; theme: string }> = [];
+  const year = plan.academicYear;
+  const monthStart = `${year}-${String(monthIndex).padStart(2, '0')}-01`;
+  const monthEnd = new Date(year, monthIndex, 0);
+  const monthEndStr = monthEnd.toISOString().slice(0, 10);
+
+  plan.terms.forEach((term) => {
+    const termStart = term.startDate;
+    term.weeklyThemes.forEach((wt) => {
+      const weekStart = addDays(termStart, (wt.week - 1) * 7);
+      if (weekStart >= monthStart && weekStart <= monthEndStr) {
+        result.push({ termNumber: term.termNumber, week: wt.week, theme: wt.theme });
+      }
+    });
+  });
+
+  return result.sort(
+    (a, b) =>
+      (a.termNumber - b.termNumber) * 100 + (a.week - b.week),
+  );
+}
+
 export function GeneratedPlanView({
   plan,
   expandedTerm,
@@ -384,23 +417,40 @@ export function GeneratedPlanView({
                           return (
                             <View key={bucket} style={styles.monthBucket}>
                               <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
-                              {items.slice(0, 4).map((item, itemIndex) => {
+                              {items.map((item, itemIndex) => {
                                 const holiday = bucket === 'holidays_closures' && isHolidayEntry(item);
                                 const fundraiser = bucket === 'donations_fundraisers' && isFundraiserEntry(item);
                                 return (
                                   <Text
                                     key={`${bucket}-${itemIndex}`}
                                     style={holiday ? styles.monthItemHoliday : fundraiser ? styles.monthItemFundraiser : styles.monthItem}
-                                    numberOfLines={2}
+                                    numberOfLines={3}
                                   >
                                     {holiday ? '🇿🇦 ' : fundraiser ? '💡 ' : '• '}{item}
                                   </Text>
                                 );
                               })}
-                              {items.length > 4 && <Text style={styles.monthItem}>+{items.length - 4} more</Text>}
                             </View>
                           );
                         })}
+                        {(() => {
+                          const weeklyThemes = getWeeklyThemesForMonth(plan, month);
+                          if (weeklyThemes.length === 0) return null;
+                          return (
+                            <View key="weekly-themes" style={styles.monthBucket}>
+                              <Text style={styles.monthBucketLabel}>Weekly themes</Text>
+                              {weeklyThemes.map((wt, idx) => (
+                                <Text
+                                  key={`wt-${idx}`}
+                                  style={styles.monthItem}
+                                  numberOfLines={2}
+                                >
+                                  T{wt.termNumber} W{wt.week}: {wt.theme}
+                                </Text>
+                              ))}
+                            </View>
+                          );
+                        })()}
                       </View>
                     )}
                     {!isExpanded && (

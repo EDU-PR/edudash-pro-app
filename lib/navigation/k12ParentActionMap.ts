@@ -30,6 +30,7 @@ export type K12ParentActionId =
   | 'settings'
   | 'see_all_activity'
   | 'see_all_events'
+  | 'annual_calendar'
   | 'event_detail'
   | 'school_communication'
   | 'child_detail';
@@ -138,6 +139,10 @@ export const K12_PARENT_ACTIONS: Record<K12ParentActionId, K12ParentActionConfig
     route: '/screens/calendar',
     params: { source: 'k12_parent', tab: 'events' },
     label: 'See All Events',
+  },
+  annual_calendar: {
+    route: '/screens/parent-annual-calendar',
+    label: 'Annual Calendar',
   },
   event_detail: {
     route: '/screens/calendar',

@@ -18,7 +18,7 @@ const KEYWORD_HINTS = [
   // Curriculum & education
   'caps', 'curriculum', 'syllabus', 'lesson', 'subject', 'grade',
   // Assignments & homework
-  'assignment', 'assignments', 'homework', 'worksheet', 'activity',
+  'assignment', 'assignments', 'homework', 'activity',
   // Schedule & events
   'schedule', 'timetable', 'event', 'events', 'due', 'calendar',
   // Students & classes
@@ -26,7 +26,7 @@ const KEYWORD_HINTS = [
   // Analytics & reports
   'stats', 'statistics', 'report', 'analytics', 'performance',
   // Documents & export
-  'export', 'pdf', 'document', 'open', 'link',
+  'export', 'document', 'open', 'link',
   // Communication
   'message', 'email', 'compose', 'send', 'notify',
   // Support
@@ -35,8 +35,6 @@ const KEYWORD_HINTS = [
   'teacher', 'parent', 'member', 'list',
 ];
 
-const PDF_INTENT_PATTERN = /\b(pdf|worksheet|handout)\b/i;
-const PDF_ACTION_PATTERN = /\b(generate|create|make|export|build|produce|prepare)\b/i;
 const CAPS_SEARCH_PATTERN = /\b(caps|curriculum|south\s*afric(?:a|an)|dbe)\b/i;
 const SEARCH_ACTION_PATTERN = /\b(search|look\s*up|find|check|align|guideline|criteria)\b/i;
 const PLAN_MODE_PATTERN = /\b(please\s+implement\s+this\s+plan|implement\s+this\s+plan|implement\s+the\s+plan|execute\s+this\s+plan|execution\s+plan|implementation\s+plan|rollout\s+plan)\b/i;
@@ -46,25 +44,6 @@ const normalizeSpaces = (value: string): string =>
   String(value || '')
     .replace(/\s+/g, ' ')
     .trim();
-
-const toTitleCase = (value: string): string =>
-  value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-function buildPdfFallbackTitle(message: string): string {
-  const normalized = normalizeSpaces(message);
-  const afterFor = normalized.match(/\b(?:for|on|about)\s+(.{6,80})/i)?.[1] || '';
-  const cleaned = normalizeSpaces(
-    (afterFor || normalized)
-      .replace(/^[^a-z0-9]+/i, '')
-      .replace(/[?.!,;:]+$/g, '')
-  );
-  const shortTitle = cleaned.length > 70 ? `${cleaned.slice(0, 67)}...` : cleaned;
-  return toTitleCase(shortTitle || 'Requested Document');
-}
 
 function resolveDeterministicToolPlan(message: string, tools: ToolPlannerCandidate[]): ToolPlanResult | null {
   const normalized = normalizeSpaces(message);
@@ -94,21 +73,6 @@ function resolveDeterministicToolPlan(message: string, tools: ToolPlannerCandida
       .map((tool) => String(tool?.name || '').trim())
       .filter(Boolean)
   );
-
-  if (
-    PDF_INTENT_PATTERN.test(normalized) &&
-    PDF_ACTION_PATTERN.test(normalized) &&
-    availableTools.has('export_pdf')
-  ) {
-    return {
-      tool: 'export_pdf',
-      parameters: {
-        title: buildPdfFallbackTitle(normalized),
-        content: `User request:\n${normalized}`,
-      },
-      reason: 'deterministic_pdf_intent',
-    };
-  }
 
   if (
     CAPS_SEARCH_PATTERN.test(normalized) &&

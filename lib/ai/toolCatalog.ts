@@ -74,14 +74,6 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     params: { subject: '', body: '', recipient: 'parent' },
   },
   {
-    name: 'export_pdf',
-    label: 'Export PDF',
-    description: 'Generate a PDF from the provided content.',
-    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
-    category: 'communication',
-    params: { title: 'Notes', content: '' },
-  },
-  {
     name: 'open_document',
     label: 'Open Link',
     description: 'Open a URL, document ID, or screen route.',

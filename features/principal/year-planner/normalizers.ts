@@ -35,7 +35,15 @@ export const MONTHLY_BUCKETS: YearPlanMonthlyBucket[] = [
   'donations_fundraisers',
 ];
 
-const DEFAULT_WEEKLY_THEMES_PER_TERM = 10;
+const TARGET_WEEKS_PER_YEAR = 52;
+
+/**
+ * Target number of weekly themes per term to reach ~52 weeks for the year.
+ */
+export function getWeeklyThemesPerTerm(numberOfTerms: number): number {
+  if (numberOfTerms < 1) return 13;
+  return Math.ceil(TARGET_WEEKS_PER_YEAR / numberOfTerms);
+}
 
 // ── Primitive helpers ──────────────────────────────────────────────────────
 
@@ -408,8 +416,9 @@ export function normalizeOperationalHighlights(
 
 // ── Fallback weekly themes ─────────────────────────────────────────────────
 
-function buildFallbackWeeklyThemes(): WeeklyTheme[] {
-  return Array.from({ length: DEFAULT_WEEKLY_THEMES_PER_TERM }, (_, index) => ({
+function buildFallbackWeeklyThemes(themesPerTerm: number): WeeklyTheme[] {
+  const count = Math.min(52, Math.max(1, themesPerTerm));
+  return Array.from({ length: count }, (_, index) => ({
     week: index + 1,
     theme: `Week ${index + 1} Focus`,
     description: 'Theme and activities to be finalized with your team.',
@@ -446,11 +455,14 @@ export function normalizeGeneratedPlan(
     const startDate = isValidDate(startDateCandidate) ? startDateCandidate : fallbackRange.startDate;
     const endDate = isValidDate(endDateCandidate) ? endDateCandidate : fallbackRange.endDate;
 
+    const themesPerTerm = getWeeklyThemesPerTerm(config.numberOfTerms);
     const weeklyThemesRaw = Array.isArray(rawTerm.weeklyThemes) ? rawTerm.weeklyThemes : [];
     const weeklyThemes =
       weeklyThemesRaw.length > 0
-        ? weeklyThemesRaw.map((theme: unknown, index: number) => normalizeWeeklyTheme(theme, index))
-        : buildFallbackWeeklyThemes();
+        ? weeklyThemesRaw
+            .map((theme: unknown, index: number) => normalizeWeeklyTheme(theme, index))
+            .slice(0, themesPerTerm)
+        : buildFallbackWeeklyThemes(themesPerTerm);
 
     const excursionsRaw = Array.isArray(rawTerm.excursions) ? rawTerm.excursions : [];
     const meetingsRaw = Array.isArray(rawTerm.meetings) ? rawTerm.meetings : [];

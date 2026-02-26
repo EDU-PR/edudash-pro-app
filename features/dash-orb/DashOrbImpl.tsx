@@ -1690,15 +1690,7 @@ export default function DashOrb({
     if (/\b(image|picture|poster|illustration|draw|visual)\b/.test(lowerCommand)) {
       tools.push({ name: 'generate_image', status: 'pending' });
     }
-    if (/\b(worksheet|practice sheet|exercise|homework sheet)\b/.test(lowerCommand)) {
-      tools.push({ name: 'generate_worksheet', status: 'pending' });
-    }
-    if (/\b(chart|graph|pie|bar chart|line chart|data visual)\b/.test(lowerCommand)) {
-      tools.push({ name: 'generate_chart', status: 'pending' });
-    }
-    if (/\b(pdf|document|export|certificate|newsletter|letter|invoice)\b/.test(lowerCommand)) {
-      tools.push({ name: 'export_pdf', status: 'pending' });
-    }
+    // PDF-generating tools are intentionally disabled.
     
     return tools.length > 0 ? tools : [{ name: 'ai_analysis', status: 'pending' }];
   };

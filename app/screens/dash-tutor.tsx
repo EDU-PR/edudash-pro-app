@@ -103,6 +103,14 @@ export default function DashTutorScreen() {
   }, [params?.initialMessage, params?.mode, params?.subject, params?.grade, isPreschool]);
 
   const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
+  const stableTutorConfig = useMemo(
+    () => ({
+      subject: params?.subject,
+      grade: params?.grade,
+      slowLearner: slowLearnerMode,
+    }),
+    [params?.subject, params?.grade, slowLearnerMode]
+  );
 
   const handleClose = useCallback(() => {
     if (router.canGoBack()) {
@@ -247,13 +255,12 @@ export default function DashTutorScreen() {
           initialMessage={initialMessage}
           conversationId={conversationId}
           handoffSource="tutor"
+          uiMode="tutor"
+          disableTts
+          disableQuickChips
           onClose={handleClose}
           tutorMode={(params?.mode as TutorMode) || null}
-          tutorConfig={{
-            subject: params?.subject,
-            grade: params?.grade,
-            slowLearner: slowLearnerMode,
-          }}
+          tutorConfig={stableTutorConfig}
         />
       </View>
     </SafeAreaView>

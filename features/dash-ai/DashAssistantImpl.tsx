@@ -89,6 +89,10 @@ interface DashAssistantProps {
   initialMessage?: string;
   handoffSource?: string;
   uiMode?: 'advisor' | 'tutor' | 'orb' | 'exam' | null;
+  /** Disable all text-to-speech controls for this assistant instance. */
+  disableTts?: boolean;
+  /** Disable follow-up/quick chips for this assistant instance. */
+  disableQuickChips?: boolean;
   /** Pre-configured tutor mode — kept for routing compat but UI stays general */
   tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
   tutorConfig?: {
@@ -106,6 +110,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   initialMessage,
   handoffSource,
   uiMode,
+  disableTts = false,
+  disableQuickChips = false,
   tutorMode: externalTutorMode,
   tutorConfig,
 }: DashAssistantProps) => {
@@ -254,6 +260,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     normalizedRole === 'parent' ||
     normalizedRole.includes('parent');
   const isTutorUiActive = uiMode === 'tutor' || !!externalTutorMode || !!tutorSession;
+  const effectiveVoiceEnabled = !disableTts && voiceEnabled;
+  const effectiveShowFollowUps = !disableQuickChips && autoSuggestQuestions;
   const activeTutorMode = tutorSession?.mode || externalTutorMode;
   const tutorModeLabel = activeTutorMode
     ? `${String(activeTutorMode).charAt(0).toUpperCase()}${String(activeTutorMode).slice(1)}`
@@ -565,8 +573,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       totalMessages={messages.length}
       speakingMessageId={speakingMessageId}
       isLoading={isLoading}
-      voiceEnabled={voiceEnabled}
-      showFollowUps={autoSuggestQuestions}
+      voiceEnabled={effectiveVoiceEnabled}
+      showFollowUps={effectiveShowFollowUps}
       onSpeak={speakResponse}
       onRetry={(content) => sendMessage(content)}
       onSendFollowUp={(text) => sendMessage(text)}
@@ -574,7 +582,18 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       assistantLabel={roleCopy.assistantLabel}
       onRetakeForClarity={handleRetakeForClarity}
     />
-  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel, handleRetakeForClarity]);
+  ), [
+    messages.length,
+    speakingMessageId,
+    isLoading,
+    effectiveVoiceEnabled,
+    effectiveShowFollowUps,
+    speakResponse,
+    sendMessage,
+    extractFollowUps,
+    roleCopy.assistantLabel,
+    handleRetakeForClarity,
+  ]);
 
   // Loading state — show spinner until initialized or timeout (12s)
   if (!isInitialized && !initTimedOut) {
@@ -764,7 +783,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </View>
                 </View>
               )}
-              {showMiniSpeechControls && (
+              {effectiveVoiceEnabled && showMiniSpeechControls && (
                 <View
                   style={{
                     marginTop: 8,
@@ -807,7 +826,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </TouchableOpacity>
                 </View>
               )}
-              {showFullSpeechControls && (
+              {effectiveVoiceEnabled && showFullSpeechControls && (
                 <View
                   style={{
                     marginTop: 8,
@@ -1011,7 +1030,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               bottomInset={0}
               // Quick chips are currently confusing more than they help.
               // Disable them globally in Dash until we have tighter suggestions.
-              hideQuickChips={true}
+              hideQuickChips={disableQuickChips || true}
               onInputFocus={handleComposerFocus}
               onPasteImage={handlePasteImage}
             />

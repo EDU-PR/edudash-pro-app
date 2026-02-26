@@ -221,6 +221,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: Megaphone },
         { href: '/dashboard/parent/daily-program', label: t('dashboard.parent.nav.daily_program', { defaultValue: 'Daily Program' }), icon: CalendarDays },
+        { href: '/dashboard/parent/calendar', label: t('dashboard.parent.nav.annual_calendar', { defaultValue: 'Annual Calendar' }), icon: CalendarDays },
         { href: '/dashboard/parent/menu', label: t('dashboard.parent.nav.menu_plan', { defaultValue: 'Menu' }), icon: ChefHat },
         { href: '/dashboard/parent/activities', label: t('dashboard.parent.nav.activities', { defaultValue: 'Activity Feed' }), icon: Newspaper },
         { href: '/dashboard/parent/messages', label: t('dashboard.parent.nav.messages', { defaultValue: 'Messages' }), icon: MessageCircle, badge: unreadCount },

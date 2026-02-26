@@ -37,8 +37,24 @@ export const termFormDataFromTerm = (term: AcademicTerm): TermFormData => ({
   is_published: term.is_published,
 });
 
+/** Row from year_plan_monthly_entries for native Year Planner monthly view */
+export interface YearPlanMonthlyEntryRow {
+  id: string;
+  preschool_id: string;
+  academic_year: number;
+  month_index: number;
+  bucket: string;
+  subtype: string | null;
+  title: string;
+  details: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  is_published: boolean;
+}
+
 export interface YearPlannerState {
   terms: AcademicTerm[];
+  monthlyEntries: YearPlanMonthlyEntryRow[];
   loading: boolean;
   refreshing: boolean;
 }

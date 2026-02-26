@@ -4,7 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import type { AcademicTerm } from '@/types/ecd-planning';
-import type { TermFormData, YearPlannerState, YearPlannerActions } from '@/components/principal/year-planner/types';
+import type {
+  TermFormData,
+  YearPlannerState,
+  YearPlannerActions,
+  YearPlanMonthlyEntryRow,
+} from '@/components/principal/year-planner/types';
 
 interface UseYearPlannerProps {
   orgId: string | null;
@@ -15,6 +20,7 @@ interface UseYearPlannerReturn extends YearPlannerState, YearPlannerActions {}
 
 export function useYearPlanner({ orgId, userId }: UseYearPlannerProps): UseYearPlannerReturn {
   const [terms, setTerms] = useState<AcademicTerm[]>([]);
+  const [monthlyEntries, setMonthlyEntries] = useState<YearPlanMonthlyEntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -23,18 +29,29 @@ export function useYearPlanner({ orgId, userId }: UseYearPlannerProps): UseYearP
 
     try {
       const supabase = assertSupabase();
-      const { data, error } = await supabase
-        .from('academic_terms')
-        .select('*')
-        .eq('preschool_id', orgId)
-        .order('academic_year', { ascending: false })
-        .order('term_number', { ascending: true });
+      const [termsRes, entriesRes] = await Promise.all([
+        supabase
+          .from('academic_terms')
+          .select('*')
+          .eq('preschool_id', orgId)
+          .order('academic_year', { ascending: false })
+          .order('term_number', { ascending: true }),
+        supabase
+          .from('year_plan_monthly_entries')
+          .select('id, preschool_id, academic_year, month_index, bucket, subtype, title, details, start_date, end_date, is_published')
+          .eq('preschool_id', orgId)
+          .order('academic_year', { ascending: false })
+          .order('month_index', { ascending: true }),
+      ]);
 
-      if (error) throw error;
-      setTerms(data || []);
-    } catch (error: any) {
-      console.error('Error fetching terms:', error);
-      Alert.alert('Error', 'Failed to load terms');
+      if (termsRes.error) throw termsRes.error;
+      setTerms(termsRes.data || []);
+
+      if (entriesRes.error) throw entriesRes.error;
+      setMonthlyEntries((entriesRes.data as YearPlanMonthlyEntryRow[]) || []);
+    } catch (error: unknown) {
+      console.error('Error fetching year planner:', error);
+      Alert.alert('Error', 'Failed to load year planner');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -144,6 +161,7 @@ export function useYearPlanner({ orgId, userId }: UseYearPlannerProps): UseYearP
 
   return {
     terms,
+    monthlyEntries,
     loading,
     refreshing,
     fetchTerms,

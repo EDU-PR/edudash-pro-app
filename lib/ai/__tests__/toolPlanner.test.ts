@@ -1,7 +1,7 @@
 import { planToolCall } from '../toolPlanner';
 
 describe('toolPlanner deterministic overrides', () => {
-  it('routes explicit PDF intent to export_pdf without planner round-trip', async () => {
+  it('does not route PDF intent deterministically', async () => {
     const invoke = jest.fn().mockResolvedValue({ data: null, error: null });
     const supabaseClient = { functions: { invoke } };
 
@@ -15,11 +15,8 @@ describe('toolPlanner deterministic overrides', () => {
       ],
     });
 
-    expect(result?.tool).toBe('export_pdf');
-    expect(result?.reason).toBe('deterministic_pdf_intent');
-    expect(result?.parameters?.title).toEqual(expect.any(String));
-    expect(String(result?.parameters?.content || '')).toContain('Grade 4 multiplication practice');
-    expect(invoke).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('routes CAPS search intent to search_caps_curriculum without planner round-trip', async () => {

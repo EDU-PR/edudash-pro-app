@@ -59,6 +59,8 @@ interface NotificationContext {
   meeting_url?: string;
   // School calendar events
   event_id?: string;
+  meeting_id?: string;
+  excursion_id?: string;
   event_title?: string;
   event_date?: string;
   event_type?: string;
@@ -155,6 +157,8 @@ interface NotificationRequest {
   rejection_reason?: string;
   // School calendar events
   event_id?: string;
+  meeting_id?: string;
+  excursion_id?: string;
   target_audience?: string[];
   // Attendance
   attendance_date?: string;
@@ -656,6 +660,40 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
         type: 'school_event_reminder',
         event_id: context.event_id,
         event_type: context.event_type,
+        reminder_offset_days: context.reminder_offset_days,
+        reminder_label: context.reminder_label,
+        screen: 'calendar'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'calendar'
+    },
+    school_meeting_reminder: {
+      title: '📅 Meeting Reminder',
+      body: context.event_title 
+        ? `Reminder (${context.reminder_label || 'upcoming'}): ${context.event_title}${context.event_date ? ` is ${context.event_date}` : ' is coming up'}`
+        : 'You have an upcoming school meeting',
+      data: {
+        type: 'school_meeting_reminder',
+        meeting_id: context.meeting_id,
+        reminder_offset_days: context.reminder_offset_days,
+        reminder_label: context.reminder_label,
+        screen: 'calendar'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'calendar'
+    },
+    school_excursion_reminder: {
+      title: '🚌 Excursion Reminder',
+      body: context.event_title 
+        ? `Reminder (${context.reminder_label || 'upcoming'}): ${context.event_title}${context.event_date ? ` is ${context.event_date}` : ' is coming up'}`
+        : 'You have an upcoming school excursion',
+      data: {
+        type: 'school_excursion_reminder',
+        excursion_id: context.excursion_id,
         reminder_offset_days: context.reminder_offset_days,
         reminder_label: context.reminder_label,
         screen: 'calendar'
@@ -1740,6 +1778,8 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
     case 'school_event_updated':
     case 'school_event_cancelled':
     case 'school_event_reminder':
+    case 'school_meeting_reminder':
+    case 'school_excursion_reminder':
       if (request.preschool_id) {
         // Get the event to determine target audience
         let targetAudience = request.target_audience || ['all'];
@@ -1758,10 +1798,13 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         // Build role filter based on target audience
         const targetRoles: string[] = [];
         if (targetAudience.includes('all')) {
-          targetRoles.push('parent', 'teacher', 'student');
+          targetRoles.push('parent', 'teacher', 'student', 'principal', 'principal_admin');
         } else {
           if (targetAudience.includes('parents')) targetRoles.push('parent');
           if (targetAudience.includes('teachers')) targetRoles.push('teacher');
+          if (targetAudience.includes('principals')) {
+            targetRoles.push('principal', 'principal_admin');
+          }
           if (targetAudience.includes('students')) targetRoles.push('student');
         }
 
@@ -2336,6 +2379,8 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
       case 'school_event_updated':
       case 'school_event_cancelled':
       case 'school_event_reminder':
+      case 'school_meeting_reminder':
+      case 'school_excursion_reminder':
         if (request.context?.reminder_offset_days) {
           context.reminder_offset_days = Number(request.context.reminder_offset_days) || undefined;
         }
@@ -2345,50 +2390,59 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         if (request.context?.target_role) {
           context.target_role = String(request.context.target_role);
         }
+        const formatEventDate = (startDate: string) => {
+          if (!startDate) return undefined;
+          const date = new Date(startDate);
+          const now = new Date();
+          const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) return 'today';
+          if (diffDays === 1) return 'tomorrow';
+          if (diffDays > 0 && diffDays <= 7) return date.toLocaleDateString('en-US', { weekday: 'long' });
+          return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+          });
+        };
         if (request.event_id) {
           const { data: eventData } = await supabase
             .from('school_events')
-            .select(`
-              id,
-              title,
-              start_date,
-              event_type,
-              location,
-              preschool:preschools(name)
-            `)
+            .select('id, title, start_date, event_type, location, preschool:preschools(name)')
             .eq('id', request.event_id)
             .single();
-
           if (eventData) {
             context.event_id = eventData.id;
             context.event_title = eventData.title;
             context.event_type = eventData.event_type;
             context.event_location = eventData.location;
-            
-            // Format the event date nicely
-            if (eventData.start_date) {
-              const date = new Date(eventData.start_date);
-              const now = new Date();
-              const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              
-              if (diffDays === 0) {
-                context.event_date = 'today';
-              } else if (diffDays === 1) {
-                context.event_date = 'tomorrow';
-              } else if (diffDays > 0 && diffDays <= 7) {
-                context.event_date = date.toLocaleDateString('en-US', { weekday: 'long' });
-              } else {
-                context.event_date = date.toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric',
-                  year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-                });
-              }
-            }
-            
-            if (eventData.preschool) {
-              context.school_name = eventData.preschool.name;
-            }
+            context.event_date = formatEventDate(eventData.start_date);
+            if (eventData.preschool) context.school_name = eventData.preschool.name;
+          }
+        }
+        if (request.meeting_id) {
+          const { data: meetingData } = await supabase
+            .from('school_meetings')
+            .select('id, title, meeting_date, preschool:preschools(name)')
+            .eq('id', request.meeting_id)
+            .single();
+          if (meetingData) {
+            context.meeting_id = meetingData.id;
+            context.event_title = meetingData.title;
+            context.event_date = formatEventDate(meetingData.meeting_date);
+            if (meetingData.preschool) context.school_name = meetingData.preschool.name;
+          }
+        }
+        if (request.excursion_id) {
+          const { data: excData } = await supabase
+            .from('school_excursions')
+            .select('id, title, excursion_date, preschool:preschools(name)')
+            .eq('id', request.excursion_id)
+            .single();
+          if (excData) {
+            context.excursion_id = excData.id;
+            context.event_title = excData.title;
+            context.event_date = formatEventDate(excData.excursion_date);
+            if (excData.preschool) context.school_name = excData.preschool.name;
           }
         }
         break;

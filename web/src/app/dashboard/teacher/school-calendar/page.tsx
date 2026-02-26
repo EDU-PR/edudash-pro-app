@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ParentShell } from "@/components/dashboard/parent/ParentShell";
+import { TeacherShell } from "@/components/dashboard/teacher/TeacherShell";
 import { Calendar, Users, Bus, RefreshCw } from "lucide-react";
 
 type Item = { type: string; id: string; title: string; date: string; time?: string; destination?: string };
@@ -12,7 +12,7 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function ParentCalendarPage() {
+export default function TeacherSchoolCalendarPage() {
   const router = useRouter();
   const supabase = createClient();
   const [items, setItems] = useState<Item[]>([]);
@@ -24,7 +24,7 @@ export default function ParentCalendarPage() {
     setError(null);
     const { data: user } = await supabase.auth.getUser();
     if (!user?.user) { router.push("/sign-in"); return; }
-    const { data, error: e } = await supabase.rpc("get_school_calendar_for_parent");
+    const { data, error: e } = await supabase.rpc("get_school_calendar_for_teacher");
     if (e) { setError(e.message); setItems([]); setLoading(false); return; }
     const p = data || {};
     const list: Item[] = [];
@@ -42,10 +42,10 @@ export default function ParentCalendarPage() {
   const color = (t: string) => t === "event" ? "#10B981" : t === "meeting" ? "#8B5CF6" : "#F59E0B";
 
   return (
-    <ParentShell>
+    <TeacherShell>
       <div className="p-6 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Annual Calendar</h1>
-        <p className="text-muted-foreground mb-6">Events, parent meetings and excursions</p>
+        <h1 className="text-2xl font-semibold mb-2">School Calendar</h1>
+        <p className="text-muted-foreground mb-6">Events, meetings and excursions</p>
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16">
             <RefreshCw className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -78,6 +78,6 @@ export default function ParentCalendarPage() {
           </div>
         )}
       </div>
-    </ParentShell>
+    </TeacherShell>
   );
 }

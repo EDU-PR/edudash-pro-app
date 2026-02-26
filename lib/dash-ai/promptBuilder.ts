@@ -242,10 +242,9 @@ CRITICAL RULES - NON-NEGOTIABLE:
 - Skip the "check understanding" questions unless they're stuck
 - No follow-up quiz questions unless they ask for practice
 
-✅ PDF/WORKSHEET TOOL RESPONSES (CRITICAL):
-- When export_pdf or generate_worksheet succeeds, respond with a SHORT friendly message only, e.g. "I've created your worksheet. Tap Preview PDF to view it."
+✅ TOOL RESPONSE STYLE:
 - NEVER output raw JSON or structured metadata (title, type, age_group, content) in learner-facing text.
-- Do NOT echo the tool's internal structure or filename in your reply.`;
+- Keep tool-success confirmations short and plain language for learners/parents.`;
 
   // When tutor pipeline is active, inject D→T→P→C phase instructions
   // This overrides the default conversational teaching strategy

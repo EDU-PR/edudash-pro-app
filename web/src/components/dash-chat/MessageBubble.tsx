@@ -53,6 +53,16 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
     exportTextToPDF(message.content, title);
   };
 
+  const normalizeMermaidDefinition = (raw: string): string => {
+    const cleaned = String(raw || '').trim();
+    if (!cleaned) return 'flowchart TD\n  A[No diagram]';
+    if (/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph)\b/m.test(cleaned)) {
+      return cleaned;
+    }
+    // If model returned only edges/nodes, coerce into a valid flowchart header.
+    return `flowchart TD\n${cleaned}`;
+  };
+
   // Detect mermaid blocks and render them client-side using dynamic import
   useEffect(() => {
     let cancelled = false;
@@ -64,21 +74,41 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
       return;
     }
 
-    const mermaidCode = mermaidMatch[1];
+    const mermaidCode = normalizeMermaidDefinition(mermaidMatch[1]);
 
     // Dynamically import mermaid to avoid SSR issues and bundle size for unrelated pages
     (async () => {
       try {
         const mermaid = await import('mermaid');
-        // initialize with short security settings
-        mermaid.default.initialize({ startOnLoad: false });
+        mermaid.default.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          theme: 'base',
+          flowchart: { curve: 'basis' },
+          themeVariables: {
+            primaryColor: '#7c3aed',
+            primaryBorderColor: '#8b5cf6',
+            lineColor: '#6366f1',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            fontSize: '14px',
+            textColor: '#0f172a',
+            secondaryColor: '#eef2ff',
+            tertiaryColor: '#f8fafc',
+          },
+        });
         const renderId = `mmd-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-  const rendered = await mermaid.default.render(renderId, mermaidCode);
-  // mermaid.render returns an SVG string (or a Promise that resolves to SVG)
-  if (!cancelled) setMermaidSvg(String(rendered));
+        const rendered = await mermaid.default.render(renderId, mermaidCode);
+        const svg = typeof rendered === 'string' ? rendered : rendered.svg;
+        if (!cancelled) {
+          setMermaidSvg(String(svg || ''));
+          setMermaidError(null);
+        }
       } catch (err: any) {
         console.error('Mermaid render failed:', err);
-        if (!cancelled) setMermaidError(String(err?.message || err));
+        if (!cancelled) {
+          setMermaidSvg(null);
+          setMermaidError('Diagram could not be rendered. Dash will continue with text explanation.');
+        }
       }
     })();
 
@@ -257,7 +287,19 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           />
         )}
         {mermaidError && (
-          <pre style={{ background: 'rgba(0,0,0,0.05)', padding: 8, borderRadius: 8, fontSize: 13 }}>{mermaidError}</pre>
+          <div
+            style={{
+              borderRadius: 10,
+              border: '1px solid rgba(239,68,68,0.35)',
+              background: 'rgba(239,68,68,0.08)',
+              color: 'var(--text)',
+              padding: '10px 12px',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {mermaidError}
+          </div>
         )}
 
         {/* Metadata Section with Avatar for AI Messages */}
