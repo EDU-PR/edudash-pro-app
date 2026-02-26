@@ -1,6 +1,13 @@
 /**
  * Per-Thread Notification Preferences Hook (M10)
  * Manages notification mode per thread for the current user.
+ *
+ * Server-side enforcement: The notifications-dispatcher edge function
+ * queries message_participants.notification_mode when resolving
+ * new_message push recipients.
+ *   - 'all'      → notify normally
+ *   - 'mentions' → only notify when the message contains an @mention
+ *   - 'muted'    → no push notification sent
  */
 
 import { useCallback } from 'react';

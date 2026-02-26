@@ -310,42 +310,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     }
   }, [showComposerAlert, onImageAttach]);
 
-  const handleGifPick = useCallback(async () => {
-    if (!onImageAttach) {
-      toast.info('Image attachments not supported in this chat', 'GIF');
-      return;
-    }
-    try {
-      const hasPermissionResult = await ensureImageLibraryPermission();
-      if (!hasPermissionResult) {
-        showComposerAlert(
-          'Permission Required',
-          'Please grant gallery access to pick GIFs.',
-          'warning',
-        );
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1,
-        allowsEditing: false,
-      });
-      if (!result.canceled && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const mimeType = asset.mimeType || 'image/gif';
-        setSendingImage(true);
-        try {
-          await onImageAttach(asset.uri, mimeType);
-        } finally {
-          setSendingImage(false);
-        }
-      }
-    } catch (error) {
-      console.error('[MessageComposer] GIF pick error:', error);
-      toast.error('Failed to pick GIF. Please try again.', 'GIF');
-    }
-  }, [showComposerAlert, onImageAttach]);
-
   const handleConfirmImage = useCallback(async (uri: string) => {
     if (!onImageAttach || !pendingImage) return;
     try {
@@ -382,11 +346,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         onClose={() => setShowAssistBar(false)}
       />
 
-      {/* Emoji Picker */}
+      {/* Emoji Picker (includes GIF tab) */}
       {EmojiPicker && (
         <EmojiPicker 
           visible={showEmojiPicker}
-          onEmojiSelect={handleEmojiSelect} 
+          onEmojiSelect={handleEmojiSelect}
+          onGifSelect={onImageAttach ? (url: string) => {
+            setShowEmojiPicker(false);
+            setSendingImage(true);
+            onImageAttach(url, 'image/gif').finally(() => setSendingImage(false));
+          } : undefined}
           onClose={() => setShowEmojiPicker(false)} 
         />
       )}
@@ -472,17 +441,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   </TouchableOpacity>
                 )}
                 
-                {/* GIF button (hide when typing) */}
-                {!text.trim() && (
-                  <TouchableOpacity
-                    style={styles.inlineBtn}
-                    onPress={handleGifPick}
-                    accessibilityLabel="Pick a GIF"
-                  >
-                    <Text style={styles.gifLabel}>GIF</Text>
-                  </TouchableOpacity>
-                )}
-
                 {/* Attachment button */}
                 <TouchableOpacity 
                   style={styles.inlineBtn}
@@ -618,17 +576,6 @@ const styles = StyleSheet.create({
   },
   inlineBtn: {
     padding: 8,
-  },
-  gifLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    overflow: 'hidden',
   },
   actionButton: {
     width: 48,
