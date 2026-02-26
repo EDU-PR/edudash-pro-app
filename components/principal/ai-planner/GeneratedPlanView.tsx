@@ -69,6 +69,7 @@ export function GeneratedPlanView({
   const styles = createStyles(theme, insets.bottom);
   const [activeTab, setActiveTab] = useState<ViewTab>('monthly');
   const [isEditing, setIsEditing] = useState(false);
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(null);
 
   const totalWeeks = useMemo(
     () => plan.terms.reduce((acc, t) => acc + t.weeklyThemes.length, 0),
@@ -102,6 +103,41 @@ export function GeneratedPlanView({
     });
     return map;
   }, [plan.monthlyEntries]);
+
+  // Extract upcoming items for alerts: meetings, excursions, monthly entries with dates
+  const upcomingAlerts = useMemo(() => {
+    const alerts: { type: 'meeting' | 'excursion' | 'event'; title: string; date: string }[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const in30Days = new Date(today);
+    in30Days.setDate(in30Days.getDate() + 30);
+    plan.terms.forEach((t) => {
+      t.meetings.forEach((m) => {
+        if (m.suggestedDate) {
+          const d = new Date(m.suggestedDate);
+          if (d >= today && d <= in30Days) {
+            alerts.push({ type: 'meeting', title: m.title, date: m.suggestedDate });
+          }
+        }
+      });
+      t.excursions.forEach((e) => {
+        if (e.suggestedDate) {
+          const d = new Date(e.suggestedDate);
+          if (d >= today && d <= in30Days) {
+            alerts.push({ type: 'excursion', title: e.title, date: e.suggestedDate });
+          }
+        }
+      });
+    });
+    (plan.monthlyEntries || []).forEach((entry) => {
+      const dateStr = entry.startDate || `${plan.academicYear}-${String(entry.monthIndex).padStart(2, '0')}-01`;
+      const d = new Date(dateStr);
+      if (d >= today && d <= in30Days) {
+        alerts.push({ type: 'event', title: entry.title, date: dateStr });
+      }
+    });
+    return alerts.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 8);
+  }, [plan]);
 
   const updateTerm = (termNumber: number, updater: (term: GeneratedTerm) => GeneratedTerm) => {
     onUpdatePlan((p) => ({
@@ -290,48 +326,89 @@ export function GeneratedPlanView({
       {/* Tab Content */}
       {activeTab === 'monthly' && (
         <>
-          <Text style={styles.termsHeader}>{plan.academicYear} Monthly Calendar</Text>
-          <View style={styles.monthlyGrid}>
+          {/* Upcoming Alerts */}
+          {upcomingAlerts.length > 0 && (
+            <View style={styles.alertsCard}>
+              <Text style={styles.alertsTitle}>
+                <Ionicons name="notifications-outline" size={18} color="#F59E0B" /> Coming Up
+              </Text>
+              {upcomingAlerts.map((a, i) => {
+                const d = new Date(a.date);
+                const days = Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+                const icon = a.type === 'meeting' ? 'people' : a.type === 'excursion' ? 'bus' : 'calendar';
+                const isLast = i === upcomingAlerts.length - 1;
+                return (
+                  <View key={i} style={[styles.alertRow, isLast && { borderBottomWidth: 0 }]}>
+                    <View style={[styles.alertIcon, { backgroundColor: a.type === 'meeting' ? '#8B5CF620' : a.type === 'excursion' ? '#10B98120' : '#F59E0B20' }]}>
+                      <Ionicons name={icon as any} size={14} color={a.type === 'meeting' ? '#8B5CF6' : a.type === 'excursion' ? '#10B981' : '#F59E0B'} />
+                    </View>
+                    <View style={styles.alertContent}>
+                      <Text style={styles.alertTitle}>{a.title}</Text>
+                      <Text style={styles.alertMeta}>
+                        {a.date} · {days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : `in ${days} days`}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <Text style={styles.termsHeader}>{plan.academicYear} · Tap a month to expand</Text>
+          <View style={styles.monthlyGridCompact}>
             {Array.from({ length: 12 }, (_, idx) => {
               const month = idx + 1;
               const grouped = monthlyByMonth.get(month)!;
+              const itemCount = BUCKET_ORDER.reduce((s, b) => s + grouped[b].length, 0);
+              const isExpanded = expandedMonth === month;
               return (
-                <View key={month} style={styles.monthCard}>
-                  <View style={[styles.monthCardHeader, { backgroundColor: MONTH_COLORS[idx] }]}>
-                    <Text style={styles.monthTitle}>{MONTH_NAMES[idx]}</Text>
-                  </View>
-                  <View style={styles.monthCardBody}>
-                    {BUCKET_ORDER.map((bucket, bIdx) => {
-                      const items = grouped[bucket];
-                      return (
-                        <View
-                          key={bucket}
-                          style={[
-                            styles.monthBucket,
-                            styles.monthBucketRow,
-                            bIdx % 2 === 1 && styles.monthBucketRowAlt,
-                          ]}
-                        >
-                          <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
-                          {items.length > 0 ? (
-                            items.slice(0, 3).map((item, itemIndex) => {
-                              const holiday = bucket === 'holidays_closures' && isHolidayEntry(item);
-                              const fundraiser = bucket === 'donations_fundraisers' && isFundraiserEntry(item);
-                              return (
-                                <View key={`${bucket}-${itemIndex}`} style={styles.monthItemRow}>
-                                  <Text style={holiday ? styles.monthItemHoliday : fundraiser ? styles.monthItemFundraiser : styles.monthItem}>
+                <View key={month} style={styles.monthTileWrapper}>
+                  <TouchableOpacity
+                    style={[styles.monthTile, isExpanded && styles.monthTileExpanded]}
+                    onPress={() => setExpandedMonth(isExpanded ? null : month)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.monthTileHeader, { backgroundColor: MONTH_COLORS[idx] }]}>
+                      <Text style={styles.monthTileTitle}>{MONTH_NAMES[idx].slice(0, 3)}</Text>
+                      {itemCount > 0 && (
+                        <View style={styles.monthTileBadge}>
+                          <Text style={styles.monthTileBadgeText}>{itemCount}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {isExpanded && (
+                      <View style={styles.monthTileBody}>
+                        {BUCKET_ORDER.map((bucket, bIdx) => {
+                          const items = grouped[bucket];
+                          if (items.length === 0) return null;
+                          return (
+                            <View key={bucket} style={styles.monthBucket}>
+                              <Text style={styles.monthBucketLabel}>{BUCKET_LABELS[bucket]}</Text>
+                              {items.slice(0, 4).map((item, itemIndex) => {
+                                const holiday = bucket === 'holidays_closures' && isHolidayEntry(item);
+                                const fundraiser = bucket === 'donations_fundraisers' && isFundraiserEntry(item);
+                                return (
+                                  <Text
+                                    key={`${bucket}-${itemIndex}`}
+                                    style={holiday ? styles.monthItemHoliday : fundraiser ? styles.monthItemFundraiser : styles.monthItem}
+                                    numberOfLines={2}
+                                  >
                                     {holiday ? '🇿🇦 ' : fundraiser ? '💡 ' : '• '}{item}
                                   </Text>
-                                </View>
-                              );
-                            })
-                          ) : (
-                            <Text style={styles.monthItemEmpty}>—</Text>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </View>
+                                );
+                              })}
+                              {items.length > 4 && <Text style={styles.monthItem}>+{items.length - 4} more</Text>}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {!isExpanded && (
+                      <View style={styles.monthTileChevron}>
+                        <Ionicons name="chevron-down" size={14} color={theme.textSecondary} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 </View>
               );
             })}

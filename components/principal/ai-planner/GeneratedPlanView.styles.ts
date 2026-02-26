@@ -285,17 +285,113 @@ export const createStyles = (theme: ThemeColors, insetBottom: number) =>
       backgroundColor: theme.background,
     },
 
-    /* ── Monthly grid ──────────────────────────────────────────── */
-    termsHeader: {
-      fontSize: 20,
+    /* ── Upcoming Alerts ──────────────────────────────────────── */
+    alertsCard: {
+      backgroundColor: `${theme.primary}08`,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: `${theme.primary}22`,
+    },
+    alertsTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 10,
+    },
+    alertRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: `${theme.border}66`,
+    },
+    alertIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    alertContent: { flex: 1 },
+    alertTitle: {
+      fontSize: 14,
       fontWeight: '600',
       color: theme.text,
+    },
+    alertMeta: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+
+    /* ── Monthly grid (compact, expandable) ────────────────────── */
+    termsHeader: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.textSecondary,
       marginBottom: 12,
-      marginTop: 8,
+      marginTop: 4,
     },
     monthlyGrid: {
       gap: 10,
       marginBottom: 14,
+    },
+    monthlyGridCompact: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 14,
+    },
+    monthTileWrapper: {
+      width: '31%',
+      minWidth: 100,
+    },
+    monthTile: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      overflow: 'hidden',
+    },
+    monthTileExpanded: {
+      borderColor: theme.primary,
+      borderWidth: 2,
+    },
+    monthTileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    monthTileTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    monthTileBadge: {
+      backgroundColor: 'rgba(255,255,255,0.4)',
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    monthTileBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    monthTileBody: {
+      padding: 10,
+      gap: 8,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    monthTileChevron: {
+      alignItems: 'center',
+      paddingVertical: 4,
     },
     monthCard: {
       borderRadius: 14,

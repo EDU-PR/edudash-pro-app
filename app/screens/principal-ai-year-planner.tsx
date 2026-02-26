@@ -60,29 +60,23 @@ export default function PrincipalAIYearPlannerScreen() {
         }}
       />
       
-      {/* Header */}
+      {/* Compact header: icon + title inline, generate CTA only when needed */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.aiIconContainer}>
-            <Ionicons name="sparkles" size={32} color="#8B5CF6" />
+        <View style={styles.headerRow}>
+          <View style={styles.aiIconSmall}>
+            <Ionicons name="sparkles" size={18} color="#8B5CF6" />
           </View>
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>AI Year Planner</Text>
-            <Text style={styles.headerSubtitle}>
-              Let AI help you create a comprehensive academic year plan
-            </Text>
-          </View>
+          <Text style={styles.headerTitle}>AI Year Planner</Text>
+          {!generatedPlan && !isGenerating && (
+            <TouchableOpacity
+              style={styles.generateButtonCompact}
+              onPress={() => setShowConfigModal(true)}
+            >
+              <Ionicons name="add" size={16} color="#fff" />
+              <Text style={styles.generateButtonText}>Generate</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        
-        {!generatedPlan && !isGenerating && (
-          <TouchableOpacity
-            style={styles.generateButton}
-            onPress={() => setShowConfigModal(true)}
-          >
-            <Ionicons name="sparkles" size={20} color="#fff" />
-            <Text style={styles.generateButtonText}>Generate Year Plan</Text>
-          </TouchableOpacity>
-        )}
       </View>
       
       {/* Loading State */}
@@ -137,49 +131,42 @@ const createStyles = (theme: ThemeColors) =>
     },
     header: {
       backgroundColor: theme.card,
-      padding: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
-    headerContent: {
+    headerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 16,
+      gap: 10,
     },
-    aiIconContainer: {
-      width: 56,
-      height: 56,
-      borderRadius: 16,
+    aiIconSmall: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
       backgroundColor: '#8B5CF620',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 16,
-    },
-    headerText: {
-      flex: 1,
     },
     headerTitle: {
-      fontSize: 24,
-      fontWeight: 'bold',
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '700',
       color: theme.text,
     },
-    headerSubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      marginTop: 4,
-    },
-    generateButton: {
+    generateButtonCompact: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
+      gap: 6,
       backgroundColor: '#8B5CF6',
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
     },
     generateButtonText: {
       color: '#fff',
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '600',
     },
     loadingContainer: {
