@@ -26,6 +26,16 @@ export { useReadByList } from './useReadByList';
 export { useAnnouncementAnalytics } from './useAnnouncementAnalytics';
 export { useMessageTranslation } from './useMessageTranslation';
 
+// Global search (M2)
+export { useGlobalMessageSearch } from './useGlobalMessageSearch';
+export type { SearchResult, GlobalMessageSearchReturn } from './useGlobalMessageSearch';
+
+// AI messaging features (M11, M12, M14)
+export { useDashMessageAssistant } from './useDashMessageAssistant';
+export type { AssistAction } from './useDashMessageAssistant';
+export { useSmartReplies } from './useSmartReplies';
+export { useVoiceTranscription } from './useVoiceTranscription';
+
 // Re-export types
 export type { MessageThread, MessageParticipant, Message } from '@/lib/messaging/types';
 export type { NotificationMode } from './useThreadNotificationPrefs';

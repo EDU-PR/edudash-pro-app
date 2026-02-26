@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import * as Clipboard from 'expo-clipboard';
+import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy load EmojiPicker to avoid circular dependencies
 let EmojiPickerComponent: React.FC<any> | null = null;
@@ -127,6 +128,7 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
   
   const handleCopy = async () => {
     await Clipboard.setStringAsync(safeMessageContent);
+    toast.success('Copied to clipboard');
     onCopy();
     onClose();
   };
