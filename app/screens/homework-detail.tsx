@@ -9,6 +9,7 @@ import {
   Linking,
   Alert,
   TextInput,
+  Modal,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -163,6 +164,9 @@ export default function HomeworkDetailScreen() {
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionUploadFile[]>([]);
   const [submittingWork, setSubmittingWork] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { clips, activeClipId, playClip } = usePhonicsClips();
   const starterClips = useMemo(() => clips.slice(0, 6), [clips]);
@@ -346,37 +350,48 @@ export default function HomeworkDetailScreen() {
     }
   }, []);
 
+  const launchCamera = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.status !== 'granted') {
+      Alert.alert('Camera permission required', 'Please allow camera access to capture worksheet photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+    setPendingPreview(result.assets[0].uri);
+  }, []);
+
   const handleTakePhoto = useCallback(async () => {
     try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (permission.status !== 'granted') {
-        Alert.alert('Camera permission required', 'Please allow camera access to capture worksheet photos.');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsEditing: false,
-      });
-
-      if (result.canceled || !result.assets[0]) return;
-      const asset = result.assets[0];
-      const name = sanitizeFileName(asset.fileName || `worksheet_${Date.now()}.jpg`);
-      setSubmissionFiles((prev) => [
-        ...prev,
-        {
-          uri: asset.uri,
-          name,
-          mimeType: asset.mimeType || resolveMimeTypeFromName(name),
-          size: asset.fileSize || undefined,
-        },
-      ]);
-      setSubmitError(null);
+      await launchCamera();
     } catch {
       Alert.alert('Camera failed', 'Could not capture photo. Try again.');
     }
+  }, [launchCamera]);
+
+  const addFileToUpload = useCallback((uri: string) => {
+    const name = sanitizeFileName(`worksheet_${Date.now()}.jpg`);
+    setSubmissionFiles((prev) => [
+      ...prev,
+      { uri, name, mimeType: 'image/jpeg', size: undefined },
+    ]);
+    setSubmitError(null);
   }, []);
+
+  const handleRetake = useCallback(async () => {
+    setPendingPreview(null);
+    try {
+      await launchCamera();
+    } catch {
+      Alert.alert('Camera failed', 'Could not capture photo. Try again.');
+    }
+  }, [launchCamera]);
 
   const handlePickFromGallery = useCallback(async () => {
     try {
@@ -454,14 +469,20 @@ export default function HomeworkDetailScreen() {
 
     setSubmittingWork(true);
     setSubmitError(null);
+    setIsUploading(submissionFiles.length > 0);
+    setUploadProgress(0);
 
     try {
       const uploadedUrls: string[] = [];
       const uploadedNames: string[] = [];
+      const totalFiles = submissionFiles.length;
 
-      for (const file of submissionFiles) {
+      for (let i = 0; i < submissionFiles.length; i++) {
+        const file = submissionFiles[i];
         const safeName = sanitizeFileName(file.name || `worksheet_${Date.now()}`);
         const storagePath = `homework_submissions/${assignment.preschool_id || 'school'}/${assignment.id}/${activeChild.id}/${Date.now()}_${safeName}`;
+
+        setUploadProgress(totalFiles > 0 ? Math.round((i / totalFiles) * 100) : 0);
 
         const response = await fetch(file.uri);
         if (!response.ok) throw new Error(`Could not read ${safeName}`);
@@ -481,6 +502,8 @@ export default function HomeworkDetailScreen() {
           uploadedUrls.push(urlData.publicUrl);
           uploadedNames.push(safeName);
         }
+
+        setUploadProgress(totalFiles > 0 ? Math.round(((i + 1) / totalFiles) * 100) : 100);
       }
 
       const submittedBy = (profile as any)?.id || user?.id || null;
@@ -535,6 +558,8 @@ export default function HomeworkDetailScreen() {
       setSubmitError(submitWorkError?.message || 'Submission failed. Please try again.');
     } finally {
       setSubmittingWork(false);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   }, [activeChild, assignment, profile, submission, submissionFiles, submissionText, supabase, user?.id]);
 
@@ -786,6 +811,17 @@ export default function HomeworkDetailScreen() {
                 </View>
               )}
 
+              {isUploading && (
+                <View style={uploadStyles.progressContainer}>
+                  <View style={uploadStyles.progressTrack}>
+                    <View style={[uploadStyles.progressBar, { width: `${uploadProgress}%`, backgroundColor: theme.primary }]} />
+                  </View>
+                  <Text style={[uploadStyles.progressText, { color: theme.textSecondary }]}>
+                    {uploadProgress < 100 ? `${Math.round(uploadProgress)}% uploading...` : 'Finalising...'}
+                  </Text>
+                </View>
+              )}
+
               {submitError ? (
                 <Text style={[styles.submitErrorText, { color: theme.error }]}>{submitError}</Text>
               ) : null}
@@ -876,6 +912,34 @@ export default function HomeworkDetailScreen() {
           </>
         )}
       </ScrollView>
+
+      {pendingPreview && (
+        <Modal visible transparent animationType="fade">
+          <View style={previewStyles.container}>
+            <Image source={{ uri: pendingPreview }} style={previewStyles.image} resizeMode="contain" />
+            <View style={previewStyles.actions}>
+              <TouchableOpacity style={previewStyles.cancelButton} onPress={() => setPendingPreview(null)}>
+                <Ionicons name="close" size={20} color="#fff" />
+                <Text style={previewStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={previewStyles.retakeButton} onPress={handleRetake}>
+                <Ionicons name="camera" size={20} color="#fff" />
+                <Text style={previewStyles.buttonText}>Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={previewStyles.useButton}
+                onPress={() => {
+                  addFileToUpload(pendingPreview);
+                  setPendingPreview(null);
+                }}
+              >
+                <Ionicons name="checkmark" size={20} color="#fff" />
+                <Text style={previewStyles.buttonText}>Use Photo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1079,3 +1143,78 @@ const createStyles = (theme: any) =>
       fontWeight: '600',
     },
   });
+
+const previewStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  image: {
+    width: '100%',
+    height: '70%',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 24,
+    paddingHorizontal: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#555',
+  },
+  retakeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#e67e22',
+  },
+  useButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#27ae60',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
+
+const uploadStyles = StyleSheet.create({
+  progressContainer: {
+    gap: 6,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+});

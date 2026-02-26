@@ -120,7 +120,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.9,
-      allowsEditing: true,
+      allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
