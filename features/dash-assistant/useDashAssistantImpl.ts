@@ -2722,7 +2722,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   );
 
   // Initialize Dash AI
-  const INIT_TIMEOUT_MS = 10_000; // Prevent permanent hang if init/hydrate stalls
+  const INIT_TIMEOUT_MS = 25_000; // Prevent permanent hang if init/hydrate stalls (raised from 10s for slow networks/devices)
   useEffect(() => {
     const initializeDash = async () => {
       const initBody = async () => {

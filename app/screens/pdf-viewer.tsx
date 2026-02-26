@@ -17,7 +17,7 @@ import {
   extractGeneratedPdfStoragePathFromUrl,
   isGeneratedPdfPublicUrl,
   isSupportedPdfContentType,
-} from '@/app/screens/pdf-viewer.utils';
+} from '@/lib/pdf-viewer-utils';
 
 const TAG = 'PDFViewer';
 const GENERATED_PDF_BUCKET = 'generated-pdfs';

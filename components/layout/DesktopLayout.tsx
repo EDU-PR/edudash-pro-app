@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -33,6 +33,16 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid-outline', route: '/screens/principal-dashboard', roles: ['principal', 'principal_admin'] },
   { id: 'teacher-dash', label: 'Dashboard', icon: 'grid-outline', route: '/screens/teacher-dashboard', roles: ['teacher'] },
   { id: 'parent-dash', label: 'Dashboard', icon: 'grid-outline', route: '/screens/parent-dashboard', roles: ['parent'] },
+  { id: 'parent-progress', label: 'Learning Progress', icon: 'trending-up-outline', route: '/screens/parent-progress', roles: ['parent'] },
+  { id: 'parent-homework-history', label: 'Homework History', icon: 'time-outline', route: '/screens/parent-homework-history', roles: ['parent'] },
+  { id: 'parent-announcements', label: 'Announcements', icon: 'megaphone-outline', route: '/screens/parent-announcements', roles: ['parent'] },
+  { id: 'parent-menu', label: 'Weekly Menu', icon: 'restaurant-outline', route: '/screens/parent-menu', roles: ['parent'] },
+  { id: 'parent-documents', label: 'Documents', icon: 'document-text-outline', route: '/screens/parent-document-upload', roles: ['parent'] },
+  { id: 'parent-ai-help', label: 'AI Help Hub', icon: 'sparkles-outline', route: '/screens/parent-ai-help', roles: ['parent'] },
+  { id: 'parent-my-exams', label: 'My Exams', icon: 'school-outline', route: '/screens/parent-my-exams', roles: ['parent'] },
+  { id: 'parent-aftercare', label: 'Register Aftercare', icon: 'business-outline', route: '/screens/parent-aftercare-registration', roles: ['parent'] },
+  { id: 'parent-upgrade', label: 'Upgrade Plan', icon: 'arrow-up-circle-outline', route: '/screens/parent-upgrade', roles: ['parent'] },
+  { id: 'parent-calendar', label: 'Calendar', icon: 'calendar-outline', route: '/screens/calendar', roles: ['parent'] },
   { id: 'super-admin-dash', label: 'Dashboard', icon: 'shield-checkmark-outline', route: '/screens/super-admin-dashboard', roles: ['super_admin'] },
   
   // Principal/Teacher items
@@ -209,15 +219,19 @@ export function DesktopLayout({
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={mobileStyles.hamburgerButton}
-                onPress={() => {
-                  console.log('[DesktopLayout] Hamburger pressed, opening drawer');
-                  setMobileDrawerOpen(true);
-                }}
+              <Pressable
+                style={({ pressed }) => [
+                  mobileStyles.hamburgerButton,
+                  Platform.OS === 'web' && { cursor: 'pointer' },
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => setMobileDrawerOpen(true)}
+                accessibilityLabel="Open menu"
+                accessibilityRole="button"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <Ionicons name="menu" size={24} color={theme.text} />
-              </TouchableOpacity>
+              </Pressable>
             )}
             <Text style={mobileStyles.headerTitle}>{title || tenantSlug}</Text>
           </View>
@@ -305,7 +319,7 @@ export function DesktopLayout({
         </View>
 
         {/* Navigation Items */}
-        <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 12 }}>
           <View style={styles.navItems}>
             {filteredNavItems.map((item) => (
               <TouchableOpacity
@@ -397,6 +411,7 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       borderRightWidth: 1,
       borderRightColor: theme.border,
       flexDirection: 'column',
+      minHeight: 0,
       // Hide on mobile screens
       ['@media (max-width: 767px)' as any]: {
         display: 'none' as any,
@@ -428,6 +443,7 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
     },
     navScroll: {
       flex: 1,
+      minHeight: 0,
     },
     navItems: {
       padding: 12,

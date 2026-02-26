@@ -1518,6 +1518,7 @@
       },
       "nav": {
         "dashboard": "Dashboard",
+        "daily_routine": "Daily Routine",
         "announcements": "Announcements",
         "messages": "Messages",
         "homework": "Homework",

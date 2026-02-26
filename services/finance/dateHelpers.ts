@@ -17,7 +17,12 @@ export function monthStartIsoFromDate(
 
 export function monthStartIsoWithCutoff(
   value?: string | null,
-  options?: { recoverUtcMonthBoundary?: boolean; applyCutoff?: boolean },
+  options?: {
+    recoverUtcMonthBoundary?: boolean;
+    applyCutoff?: boolean;
+    /** Override global cutoff; used for per-school finance cutoff. */
+    cutoffDay?: number;
+  },
 ): string | null {
   if (!value) return null;
   const parsed = parseDateValue(value);
@@ -27,8 +32,11 @@ export function monthStartIsoWithCutoff(
   if (shouldRecover) {
     return monthStartIsoFromDate(parsed, { shiftToNextMonth: true });
   }
-  const shouldShiftByCutoff =
-    Boolean(options?.applyCutoff) && parsed.getDate() >= FINANCE_MONTH_CUTOFF_DAY;
+  const cutoff =
+    typeof options?.cutoffDay === 'number' && options.cutoffDay >= 1 && options.cutoffDay <= 28
+      ? options.cutoffDay
+      : FINANCE_MONTH_CUTOFF_DAY;
+  const shouldShiftByCutoff = Boolean(options?.applyCutoff) && parsed.getDate() >= cutoff;
   return monthStartIsoFromDate(parsed, { shiftToNextMonth: shouldShiftByCutoff });
 }
 

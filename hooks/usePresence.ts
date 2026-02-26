@@ -254,20 +254,18 @@ export function usePresence(
           console.log('[usePresence] App backgrounded - setting away (still available)');
           setMyStatus('away');
           
-          // CRITICAL: Send presence update IMMEDIATELY before app is fully suspended
+          // Fire-and-forget: send presence update before app may suspend.
+          // Non-blocking — we don't await; timeout/failure is expected when backgrounding.
           const supabase = assertSupabase();
-          try {
-            await Promise.race([
-              supabase.rpc('upsert_user_presence', {
-                p_user_id: userId,
-                p_status: 'away',
-              }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-            ]);
-            console.log('[usePresence] Background presence update sent successfully');
-          } catch (err) {
-            console.warn('[usePresence] Failed to send background presence:', err);
-          }
+          Promise.race([
+            supabase.rpc('upsert_user_presence', {
+              p_user_id: userId,
+              p_status: 'away',
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000)),
+          ])
+            .then(() => { if (__DEV__) console.log('[usePresence] Background presence sent'); })
+            .catch((err) => { if (__DEV__) console.warn('[usePresence] Background presence failed (non-blocking):', (err as Error)?.message); });
           
           lastActivityRef.current = Date.now();
         }, 500); // 500ms debounce to filter Android audio focus blips

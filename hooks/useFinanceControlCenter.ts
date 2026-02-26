@@ -19,6 +19,7 @@ import { FinancialDataService } from '@/services/FinancialDataService';
 import { PayrollService } from '@/services/PayrollService';
 import { ExportService } from '@/lib/services/finance/ExportService';
 import { useFinanceAccessGuard } from '@/hooks/useFinanceAccessGuard';
+import { useFinanceCutoff } from '@/hooks/useFinanceCutoff';
 import type {
   FeeCategoryCode,
   FinanceControlCenterBundle,
@@ -152,6 +153,7 @@ export function useFinanceControlCenter() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   const orgId = derivePreschoolId(profile);
+  const financeCutoffDay = useFinanceCutoff(orgId);
   const financeAccess = useFinanceAccessGuard();
   const [activeTab, setActiveTab] = React.useState<CenterTab>(() => getTabFromParam(params.tab));
   const [loading, setLoading] = React.useState(true);

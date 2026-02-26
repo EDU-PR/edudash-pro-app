@@ -2,7 +2,7 @@ import {
   extractGeneratedPdfStoragePathFromUrl,
   isGeneratedPdfPublicUrl,
   isSupportedPdfContentType,
-} from '@/app/screens/pdf-viewer.utils';
+} from '@/lib/pdf-viewer-utils';
 
 describe('pdf-viewer utils', () => {
   it('extracts storage path from legacy generated-pdfs URLs', () => {
