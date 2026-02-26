@@ -2,8 +2,10 @@
  * GifSearchPanel
  *
  * Inline GIF search panel rendered inside the EmojiPicker when the GIF tab
- * is active. Uses Tenor V2 API when an API key is configured, otherwise
+ * is active. Uses GIPHY v1 API when an API key is configured, otherwise
  * falls back to static category cards that open the device gallery.
+ *
+ * Rating is locked to "g" (general audiences) for school safety.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
@@ -23,17 +25,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { toast } from '@/components/ui/ToastProvider';
 
-const TENOR_API_KEY =
+const GIPHY_API_KEY =
   (typeof process !== 'undefined' &&
     (process.env as Record<string, string | undefined>)
-      .EXPO_PUBLIC_TENOR_API_KEY) ||
+      .EXPO_PUBLIC_GIPHY_API_KEY) ||
   '';
-const TENOR_BASE = 'https://tenor.googleapis.com/v2';
+const GIPHY_BASE = 'https://api.giphy.com/v1/gifs';
 const GIF_COLUMNS = 3;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CELL_SIZE = (SCREEN_WIDTH - 24) / GIF_COLUMNS;
 
-interface TenorGif {
+interface GiphyGif {
   id: string;
   url: string;
   preview: string;
@@ -63,41 +65,34 @@ const FALLBACK_CATEGORIES = [
 export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
   ({ onSelectGif, theme }) => {
     const [query, setQuery] = useState('');
-    const [gifs, setGifs] = useState<TenorGif[]>([]);
+    const [gifs, setGifs] = useState<GiphyGif[]>([]);
     const [loading, setLoading] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const hasApiKey = !!TENOR_API_KEY;
+    const hasApiKey = !!GIPHY_API_KEY;
 
     const fetchGifs = useCallback(
       async (searchTerm: string) => {
-        if (!TENOR_API_KEY) return;
+        if (!GIPHY_API_KEY) return;
         setLoading(true);
         try {
           const endpoint = searchTerm.trim()
-            ? `${TENOR_BASE}/search?q=${encodeURIComponent(searchTerm)}&key=${TENOR_API_KEY}&limit=24&media_filter=gif`
-            : `${TENOR_BASE}/featured?key=${TENOR_API_KEY}&limit=24&media_filter=gif`;
+            ? `${GIPHY_BASE}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(searchTerm)}&limit=20&rating=g`
+            : `${GIPHY_BASE}/trending?api_key=${GIPHY_API_KEY}&limit=20&rating=g`;
 
           const res = await fetch(endpoint);
-          if (!res.ok) throw new Error(`Tenor ${res.status}`);
+          if (!res.ok) throw new Error(`GIPHY ${res.status}`);
           const json = await res.json();
 
-          const mapped: TenorGif[] = (json.results || []).map(
+          const mapped: GiphyGif[] = (json.data || []).map(
             (r: any) => ({
               id: r.id,
-              url:
-                r.media_formats?.gif?.url ||
-                r.media_formats?.mediumgif?.url ||
-                '',
-              preview:
-                r.media_formats?.nanogif?.url ||
-                r.media_formats?.tinygif?.url ||
-                r.media_formats?.gif?.url ||
-                '',
+              url: r.images?.original?.url || '',
+              preview: r.images?.fixed_width?.url || r.images?.original?.url || '',
             }),
           );
           setGifs(mapped.filter((g) => g.url));
         } catch (err) {
-          console.warn('[GifSearchPanel] Tenor fetch error:', err);
+          console.warn('[GifSearchPanel] GIPHY fetch error:', err);
           setGifs([]);
         } finally {
           setLoading(false);
@@ -144,7 +139,7 @@ export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
     }, [onSelectGif]);
 
     const renderGifItem = useCallback(
-      ({ item }: { item: TenorGif }) => (
+      ({ item }: { item: GiphyGif }) => (
         <TouchableOpacity
           style={[styles.gifCell, { backgroundColor: theme.elevated }]}
           onPress={() => onSelectGif(item.url)}
@@ -263,7 +258,7 @@ export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
         )}
 
         <Text style={[styles.poweredBy, { color: theme.textSecondary }]}>
-          Powered by Tenor
+          Powered by GIPHY
         </Text>
       </View>
     );

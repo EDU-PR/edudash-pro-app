@@ -2526,6 +2526,11 @@ function callAnthropicStreaming(
                 fullContent += summary;
                 const summaryEvent = { type: 'content_block_delta', delta: { text: summary } };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(summaryEvent)}\n\n`));
+              } else if (toolName === 'web_search') {
+                const fallback = '\n\nI tried to search the web but couldn\'t find results right now. Let me answer based on what I know.';
+                fullContent += fallback;
+                const fallbackEvent = { type: 'content_block_delta', delta: { text: fallback } };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackEvent)}\n\n`));
               }
             } catch {
               // Tool execution failed, continue
