@@ -10,6 +10,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import type { ExamQuestion, ExamSection } from '@/lib/examParser';
 import type { StudentAnswer } from '@/hooks/useExamSession';
+import { MathRenderer } from '@/components/ai/dash-assistant/MathRenderer';
 
 interface ExamQuestionCardProps {
   section: ExamSection;
@@ -40,6 +41,71 @@ function questionTypeIcon(type: ExamQuestion['type']): { name: string; label: st
     default:
       return { name: 'help-circle', label: '' };
   }
+}
+
+const LATEX_BLOCK_REGEX = /\$\$([\s\S]+?)\$\$/g;
+const LATEX_INLINE_REGEX = /\$([^\$\n]+?)\$/g;
+const BACKSLASH_BLOCK_REGEX = /\\\[([\s\S]+?)\\\]/g;
+const BACKSLASH_INLINE_REGEX = /\\\((.+?)\\\)/g;
+
+function hasLatex(text: string): boolean {
+  return LATEX_BLOCK_REGEX.test(text) || LATEX_INLINE_REGEX.test(text) ||
+         BACKSLASH_BLOCK_REGEX.test(text) || BACKSLASH_INLINE_REGEX.test(text);
+}
+
+function renderTextWithLatex(text: string, theme: Record<string, string>): React.ReactNode[] {
+  // Reset lastIndex for all regexes since they are global
+  LATEX_BLOCK_REGEX.lastIndex = 0;
+  LATEX_INLINE_REGEX.lastIndex = 0;
+  BACKSLASH_BLOCK_REGEX.lastIndex = 0;
+  BACKSLASH_INLINE_REGEX.lastIndex = 0;
+
+  if (!hasLatex(text)) return [<Text key="plain" style={{ color: theme.text }}>{text}</Text>];
+
+  const allPatterns = [
+    { regex: /\$\$([\s\S]+?)\$\$/g, display: true },
+    { regex: /\\\[([\s\S]+?)\\\]/g, display: true },
+    { regex: /\$([^\$\n]+?)\$/g, display: false },
+    { regex: /\\\((.+?)\\\)/g, display: false },
+  ];
+
+  const segments: Array<{ start: number; end: number; expr: string; display: boolean }> = [];
+
+  for (const { regex, display } of allPatterns) {
+    regex.lastIndex = 0;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      segments.push({ start: match.index, end: match.index + match[0].length, expr: match[1], display });
+    }
+  }
+
+  segments.sort((a, b) => a.start - b.start);
+  const filtered: typeof segments = [];
+  for (const seg of segments) {
+    if (filtered.length === 0 || seg.start >= filtered[filtered.length - 1].end) {
+      filtered.push(seg);
+    }
+  }
+
+  if (filtered.length === 0) return [<Text key="plain" style={{ color: theme.text }}>{text}</Text>];
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const seg of filtered) {
+    if (seg.start > lastIndex) {
+      parts.push(<Text key={key++} style={{ color: theme.text }}>{text.slice(lastIndex, seg.start)}</Text>);
+    }
+    parts.push(<MathRenderer key={key++} expression={seg.expr} displayMode={seg.display} />);
+    lastIndex = seg.end;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(<Text key={key++} style={{ color: theme.text }}>{text.slice(lastIndex)}</Text>);
+  }
+
+  return parts;
 }
 
 export function ExamQuestionCard({
@@ -78,9 +144,9 @@ export function ExamQuestionCard({
               Passage
             </Text>
           </View>
-          <Text style={[styles.readingPassageText, { color: theme.text }]}>
-            {section.readingPassage}
-          </Text>
+          <View>
+            {renderTextWithLatex(section.readingPassage!, theme)}
+          </View>
         </View>
       ) : null}
 
@@ -104,9 +170,9 @@ export function ExamQuestionCard({
           </View>
         </View>
 
-        <Text style={[styles.questionText, { color: theme.text }]}>
-          {question.question}
-        </Text>
+        <View style={styles.questionTextContainer}>
+          {renderTextWithLatex(question.question, theme)}
+        </View>
 
         {/* Multiple Choice Options */}
         {question.type === 'multiple_choice' && question.options && (
@@ -183,18 +249,12 @@ export function ExamQuestionCard({
                           <Ionicons name="checkmark" size={12} color={theme.primary} />
                         )}
                   </View>
-                  <Text
-                    style={[
-                      styles.optionText,
-                      {
-                        color: isLocked
-                          ? lockedTextColor
-                          : isSelected ? theme.primary : theme.text,
-                      },
-                    ]}
-                  >
-                    {optionLetter}. {cleanedOption}
-                  </Text>
+                  <View style={styles.optionTextContainer}>
+                    {renderTextWithLatex(
+                      `${optionLetter}. ${cleanedOption}`,
+                      { ...theme, text: isLocked ? lockedTextColor : isSelected ? theme.primary : theme.text },
+                    )}
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -347,17 +407,17 @@ export function ExamQuestionCard({
                 </Text>
               )}
             </View>
-            <Text style={[styles.feedbackText, { color: theme.text }]}>
-              {studentAnswer.feedback}
-            </Text>
+            <View>
+              {renderTextWithLatex(studentAnswer.feedback, theme)}
+            </View>
             {!studentAnswer.isCorrect && question.correctAnswer && (
               <View style={styles.correctAnswerRow}>
                 <Text style={[styles.correctAnswerLabel, { color: '#10b981' }]}>
                   Correct answer:
                 </Text>
-                <Text style={[styles.correctAnswerValue, { color: theme.text }]}>
-                  {question.correctAnswer}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  {renderTextWithLatex(question.correctAnswer!, theme)}
+                </View>
               </View>
             )}
           </View>
@@ -436,6 +496,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 16,
   },
+  questionTextContainer: {
+    marginBottom: 16,
+  },
   optionsContainer: {
     marginTop: 8,
   },
@@ -459,6 +522,12 @@ const styles = StyleSheet.create({
   optionText: {
     flex: 1,
     fontSize: 15,
+  },
+  optionTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
   answerInput: {
     borderWidth: 1,

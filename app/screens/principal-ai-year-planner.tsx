@@ -8,7 +8,7 @@
  * Refactored to use extracted components per WARP.md standards.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,8 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useTranslation } from 'react-i18next';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { exportYearPlanAsPDF, shareYearPlanPDF } from '@/features/principal/year-planner/pdfExport';
+import { assertSupabase } from '@/lib/supabase';
 
 // Extracted components and hooks
 import {
@@ -51,6 +53,45 @@ export default function PrincipalAIYearPlannerScreen() {
   
   // Modal state
   const [showConfigModal, setShowConfigModal] = useState(false);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!generatedPlan) return;
+    try {
+      const schoolName = (profile as any)?.organization_name || 'School';
+      const fileUri = await exportYearPlanAsPDF(generatedPlan, schoolName);
+      await shareYearPlanPDF(fileUri);
+    } catch (error) {
+      showAlert({ title: 'Export Failed', message: 'Could not export PDF. Please try again.', type: 'error' });
+    }
+  }, [generatedPlan, profile, showAlert]);
+
+  const handleShareTeachers = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const supabase = assertSupabase();
+      await supabase.from('academic_terms')
+        .update({ shared_with_teachers: true })
+        .eq('preschool_id', orgId)
+        .eq('academic_year', generatedPlan?.academicYear);
+      showAlert({ title: 'Shared!', message: 'Year plan is now visible to all teachers.', type: 'success' });
+    } catch {
+      showAlert({ title: 'Error', message: 'Failed to share. Please try again.', type: 'error' });
+    }
+  }, [orgId, generatedPlan, showAlert]);
+
+  const handleShareParents = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const supabase = assertSupabase();
+      await supabase.from('academic_terms')
+        .update({ shared_with_parents: true })
+        .eq('preschool_id', orgId)
+        .eq('academic_year', generatedPlan?.academicYear);
+      showAlert({ title: 'Shared!', message: 'Year plan highlights are now visible to parents.', type: 'success' });
+    } catch {
+      showAlert({ title: 'Error', message: 'Failed to share. Please try again.', type: 'error' });
+    }
+  }, [orgId, generatedPlan, showAlert]);
 
   const content = (
     <View style={styles.container}>
@@ -104,6 +145,9 @@ export default function PrincipalAIYearPlannerScreen() {
           onSave={savePlanToDatabase}
           onRegenerate={() => setShowConfigModal(true)}
           onUpdatePlan={updatePlan}
+          onExportPdf={handleExportPdf}
+          onShareTeachers={handleShareTeachers}
+          onShareParents={handleShareParents}
         />
       )}
       
