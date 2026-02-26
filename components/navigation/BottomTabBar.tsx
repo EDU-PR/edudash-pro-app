@@ -651,7 +651,9 @@ export function BottomTabBar() {
     pathname.includes('/auth-callback') ||
     pathname.includes('/invite/') ||
     // Hide on any message thread view (parent/teacher/principal variants)
-    pathname.includes('message-thread');
+    pathname.includes('message-thread') ||
+    // Hide during exam mode for a focused, full-screen experience
+    pathname.includes('exam-generation');
 
   if (shouldHide) {
     return null;
