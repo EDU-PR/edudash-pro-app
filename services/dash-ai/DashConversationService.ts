@@ -124,7 +124,7 @@ export class DashConversationService {
         .select('*')
         .eq('user_id', this.userId)
         .eq('preschool_id', this.preschoolId) // REQUIRED for tenant isolation
-        .order('updated_at', { ascending: true });
+        .order('updated_at', { ascending: false });
 
       if (error) throw error;
 
