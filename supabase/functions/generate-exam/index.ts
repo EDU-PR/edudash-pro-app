@@ -20,6 +20,21 @@ const OPENAI_API_KEY =
   Deno.env.get('OPENAI_API_KEY_2') ||
   '';
 const OPENAI_EXAM_MODEL = Deno.env.get('OPENAI_EXAM_MODEL') || 'gpt-4o-mini';
+const DEFAULT_ANTHROPIC_EXAM_MODEL = 'claude-sonnet-4-20250514';
+const ANTHROPIC_MODEL_ALIASES: Record<string, string> = {
+  'claude-3-5-sonnet-20241022': DEFAULT_ANTHROPIC_EXAM_MODEL,
+  'claude-3-5-sonnet-latest': DEFAULT_ANTHROPIC_EXAM_MODEL,
+};
+const EXAM_PRIMARY_MODEL = normalizeAnthropicModel(
+  Deno.env.get('ANTHROPIC_EXAM_MODEL') ||
+    Deno.env.get('EXPO_PUBLIC_ANTHROPIC_MODEL') ||
+    DEFAULT_ANTHROPIC_EXAM_MODEL,
+);
+const ANTHROPIC_EXAM_MODEL_FALLBACKS = String(Deno.env.get('ANTHROPIC_EXAM_MODEL_FALLBACKS') || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const FREEMIUM_PREMIUM_EXAM_LIMIT = 5;
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
@@ -222,14 +237,22 @@ function normalizeOrgId(profile: ProfileRow): string | null {
   return profile.organization_id || profile.preschool_id || null;
 }
 
+function normalizeAnthropicModel(model: string | null | undefined): string {
+  const raw = String(model || '').trim();
+  if (!raw) return DEFAULT_ANTHROPIC_EXAM_MODEL;
+  return ANTHROPIC_MODEL_ALIASES[raw] || raw;
+}
+
 function getDefaultModelForTier(tier: string | null | undefined): string {
   const t = String(tier ?? 'free').toLowerCase();
-  if (t.includes('enterprise') || t === 'superadmin' || t === 'super_admin') return 'claude-sonnet-4-20250514';
+  if (t.includes('enterprise') || t === 'superadmin' || t === 'super_admin') {
+    return DEFAULT_ANTHROPIC_EXAM_MODEL;
+  }
   if (t.includes('premium') || t.includes('pro') || t.includes('plus') || t.includes('basic')) {
-    return 'claude-3-5-sonnet-20241022';
+    return DEFAULT_ANTHROPIC_EXAM_MODEL;
   }
   if (t.includes('starter') || t === 'trial') return 'claude-3-5-haiku-20241022';
-  return 'claude-3-haiku-20240307';
+  return 'claude-3-5-haiku-20241022';
 }
 
 function normalizeTierForExamRole(role: string, profileTier: string | null, resolvedTier: string | null): string {
@@ -247,14 +270,25 @@ function normalizeTierForExamRole(role: string, profileTier: string | null, reso
   return normalizedResolvedTier || normalizedProfileTier || 'free';
 }
 
+function isFreemiumTier(tier: string | null | undefined): boolean {
+  const t = String(tier || 'free').toLowerCase();
+  return (
+    t === 'free' ||
+    t.includes('freemium') ||
+    t.includes('starter') ||
+    t.includes('trial')
+  );
+}
+
 function buildModelFallbackChain(preferredModel: string): string[] {
   const ordered = [
     preferredModel,
-    'claude-3-5-sonnet-20241022',
+    ...ANTHROPIC_EXAM_MODEL_FALLBACKS,
+    DEFAULT_ANTHROPIC_EXAM_MODEL,
     'claude-3-5-haiku-20241022',
     'claude-3-haiku-20240307',
   ];
-  return [...new Set(ordered.filter(Boolean))];
+  return [...new Set(ordered.map((model) => normalizeAnthropicModel(model)).filter(Boolean))];
 }
 
 function isCreditOrBillingError(status: number, responseText: string): boolean {
@@ -273,8 +307,120 @@ function buildLocalFallbackExam(
   grade: string,
   subject: string,
   examType: string,
+  language: string,
   contextSummary: ExamContextSummary,
 ) {
+  if (isLanguageSubject(subject)) {
+    const readingFallback = getLanguageReadingFallback(language);
+    const langLabel = resolveLanguageName(language);
+    return {
+      title: `${subject} ${examType.replace(/_/g, ' ')} (Fallback)`,
+      grade,
+      subject,
+      duration: '60 minutes',
+      totalMarks: 50,
+      sections: [
+        {
+          name: 'Section A: Reading Comprehension',
+          instructions: `Grade: ${grade}. ${readingFallback.instruction}`,
+          readingPassage: `${readingFallback.passage}\n\n${readingFallback.instruction}`,
+          questions: [
+            {
+              id: 'A1',
+              type: 'multiple_choice',
+              marks: 2,
+              question: 'Where did Mia and Tumi go on Saturday morning?',
+              options: ['To a beach', "To their grandfather's farm", 'To a shopping mall', 'To a school hall'],
+              correctAnswer: 'B',
+              explanation: 'The passage says they went to help on their grandfather\'s farm.',
+            },
+            {
+              id: 'A2',
+              type: 'multiple_choice',
+              marks: 2,
+              question: 'Which task did they do first?',
+              options: ['Planted vegetables', 'Listened to stories', 'Fed the chickens', 'Cooked soup'],
+              correctAnswer: 'C',
+              explanation: 'The first task in the story is feeding the chickens.',
+            },
+            {
+              id: 'A3',
+              type: 'multiple_choice',
+              marks: 2,
+              question: 'Why did they sit under the veranda/stoop?',
+              options: ['They were tired', 'It started raining', 'They were hiding', 'It was too hot'],
+              correctAnswer: 'B',
+              explanation: 'The passage explains that they sat there because it started raining.',
+            },
+            {
+              id: 'A4',
+              type: 'short_answer',
+              marks: 3,
+              question: 'Write one sentence describing how the family worked together in the story.',
+              correctAnswer: 'Any accurate sentence describing shared tasks and family support in the passage.',
+              explanation: 'A correct response references at least one shared activity from the passage.',
+            },
+            {
+              id: 'A5',
+              type: 'short_answer',
+              marks: 3,
+              question: `Summarize the passage in ${langLabel} using 2-3 sentences.`,
+              correctAnswer: 'A concise, accurate summary of key events from the passage.',
+              explanation: 'A strong answer includes sequence, key actions, and ending.',
+            },
+          ],
+        },
+        {
+          name: 'Section B: Language Skills',
+          questions: [
+            {
+              id: 'B1',
+              type: 'multiple_choice',
+              marks: 2,
+              question: 'Choose the best synonym for "carefully".',
+              options: ['Quickly', 'Carelessly', 'With attention', 'Loudly'],
+              correctAnswer: 'C',
+              explanation: 'Carefully means doing something with attention.',
+            },
+            {
+              id: 'B2',
+              type: 'fill_in_blank',
+              marks: 2,
+              question: 'Complete the sentence: They _____ the chickens before planting vegetables.',
+              correctAnswer: 'fed',
+              explanation: 'The passage states they fed the chickens first.',
+            },
+            {
+              id: 'B3',
+              type: 'true_false',
+              marks: 2,
+              question: 'The children went home before it started raining.',
+              options: ['True', 'False'],
+              correctAnswer: 'False',
+              explanation: 'Rain started while they were still at the farm.',
+            },
+            {
+              id: 'B4',
+              type: 'short_answer',
+              marks: 3,
+              question: 'Write one sentence using the word "together".',
+              correctAnswer: 'Any grammatical sentence that correctly uses "together".',
+              explanation: 'The sentence should be meaningful and grammatically correct.',
+            },
+            {
+              id: 'B5',
+              type: 'short_answer',
+              marks: 3,
+              question: 'Explain the mood at the end of the story.',
+              correctAnswer: 'The ending mood is warm/happy as they shared soup and laughter.',
+              explanation: 'The final lines show comfort and family joy.',
+            },
+          ],
+        },
+      ],
+    };
+  }
+
   const focusTopics = contextSummary.focusTopics.length > 0
     ? contextSummary.focusTopics.slice(0, 10)
     : [
@@ -720,6 +866,38 @@ function isLanguageSubject(subject: string): boolean {
   );
 }
 
+const LANGUAGE_ALIASES_TO_BCP47: Record<string, string> = {
+  en: 'en-ZA',
+  'en-za': 'en-ZA',
+  english: 'en-ZA',
+  af: 'af-ZA',
+  'af-za': 'af-ZA',
+  afrikaans: 'af-ZA',
+  zu: 'zu-ZA',
+  'zu-za': 'zu-ZA',
+  isizulu: 'zu-ZA',
+  xh: 'xh-ZA',
+  'xh-za': 'xh-ZA',
+  isixhosa: 'xh-ZA',
+  nso: 'nso-ZA',
+  'nso-za': 'nso-ZA',
+  sepedi: 'nso-ZA',
+  tn: 'tn-ZA',
+  'tn-za': 'tn-ZA',
+  setswana: 'tn-ZA',
+  st: 'st-ZA',
+  'st-za': 'st-ZA',
+  sesotho: 'st-ZA',
+  nr: 'nr-ZA',
+  'nr-za': 'nr-ZA',
+  ss: 'ss-ZA',
+  'ss-za': 'ss-ZA',
+  ve: 've-ZA',
+  've-za': 've-ZA',
+  ts: 'ts-ZA',
+  'ts-za': 'ts-ZA',
+};
+
 const LOCALE_TO_LANGUAGE_NAME: Record<string, string> = {
   'en-ZA': 'English',
   'af-ZA': 'Afrikaans',
@@ -734,21 +912,103 @@ const LOCALE_TO_LANGUAGE_NAME: Record<string, string> = {
   'ts-ZA': 'Xitsonga',
 };
 
-function resolveLanguageName(language: string): string {
+const LANGUAGE_MARKERS: Record<string, string[]> = {
+  'en-ZA': ['the', 'and', 'with', 'they', 'read', 'answer', 'questions', 'story'],
+  'af-ZA': ['die', 'en', 'met', 'hulle', 'lees', 'beantwoord', 'vrae', 'storie'],
+  'zu-ZA': ['funda', 'umbhalo', 'indaba', 'imibuzo', 'kanye', 'bona', 'ngoba', 'kule'],
+  'xh-ZA': ['funda', 'ibali', 'imibuzo', 'kwaye', 'bona', 'kuba', 'kule', 'ngoko'],
+  'nso-ZA': ['bala', 'kanegelo', 'dipotso', 'gomme', 'bona', 'ka', 'go', 'le'],
+  'tn-ZA': ['bala', 'potso', 'mme', 'bona', 'go', 'le', 'leina', 'palo'],
+  'st-ZA': ['bala', 'dipotso', 'mme', 'bona', 'ho', 'le', 'pale', 'kahoo'],
+};
+const STRICT_LANGUAGE_VALIDATION_LOCALES = new Set(Object.keys(LANGUAGE_MARKERS));
+
+const META_QUESTION_PATTERNS = [
+  /read (the )?(passage|story|text)/i,
+  /answer (the )?questions? (that )?follow/i,
+  /lees die (storie|teks)/i,
+  /beantwoord die vrae wat volg/i,
+  /funda (umbhalo|ibali)/i,
+  /phendula imibuzo/i,
+  /bala kanegelo/i,
+  /arabja dipotso/i,
+];
+
+const COMMON_STOP_WORDS = new Set([
+  'the', 'and', 'with', 'from', 'that', 'this', 'then', 'they', 'were', 'their', 'have', 'has', 'had',
+  'for', 'into', 'over', 'under', 'after', 'before', 'while', 'when', 'what', 'which', 'where',
+  'die', 'het', 'vir', 'hulle', 'ons', 'was', 'met', 'wat', 'wie', 'waar',
+  'funda', 'bala', 'story', 'passage', 'storie', 'teks', 'question', 'questions', 'vrae', 'imibuzo', 'dipotso',
+]);
+
+function normalizeLanguageLocale(language: string): string {
   const raw = String(language || '').trim();
-  return LOCALE_TO_LANGUAGE_NAME[raw] || raw || 'the selected language';
+  if (!raw) return 'en-ZA';
+  if (LOCALE_TO_LANGUAGE_NAME[raw]) return raw;
+  const lower = raw.toLowerCase();
+  return LANGUAGE_ALIASES_TO_BCP47[lower] || 'en-ZA';
+}
+
+function resolveLanguageName(language: string): string {
+  const locale = normalizeLanguageLocale(language);
+  return LOCALE_TO_LANGUAGE_NAME[locale] || 'English';
 }
 
 function getLanguageReadingFallback(language: string): { passage: string; instruction: string } {
-  const normalizedLanguage = normalizeText(language);
-  const safeLanguageLabel = resolveLanguageName(language);
+  const locale = normalizeLanguageLocale(language);
+  const safeLanguageLabel = resolveLanguageName(locale);
 
-  if (normalizedLanguage.includes('afrikaans') || normalizedLanguage.startsWith('af')) {
+  if (locale === 'af-ZA') {
     return {
       passage: `Lees die storie hieronder en beantwoord die vrae wat volg.
 
 Mia en haar broer, Tumi, het Saterdag vroeg op hul oupa se plaas gaan help. Hulle het eers die hoenders gevoer, daarna groente geplant en later saam met Oupa die kraal skoongemaak. Teen die middag het dit begin reen, maar hulle het onder die stoep gesit en stories geluister. Voor hulle huis toe is, het Ouma vir hulle warm sop gegee en almal het saam gelag.`,
       instruction: 'Lees die teks sorgvuldig en antwoord in Afrikaans.',
+    };
+  }
+
+  if (locale === 'zu-ZA') {
+    return {
+      passage: `Funda indaba engezansi bese uphendula imibuzo elandelayo.
+
+UMia nomfowabo uTumi bavuke ekuseni ngoMgqibelo bayosiza epulazini likakhokho wabo. Baqale ngokondla izinkukhu, base betshala imifino, kwathi kamuva bahlanza isibaya noKhokho. Emini kwaqala ukuna, ngakho bahlala ngaphansi kweveranda balalela izindaba. Ngaphambi kokubuya ekhaya, uGogo wabanika isobho esishisayo, bonke bahleka ndawonye.`,
+      instruction: 'Funda umbhalo kahle bese uphendula ngesiZulu.',
+    };
+  }
+
+  if (locale === 'xh-ZA') {
+    return {
+      passage: `Funda ibali elingezantsi uze uphendule imibuzo elandelayo.
+
+UMia nomntakwabo uTumi baye kusasa ngoMgqibelo ukuyokunceda kwifama katatomkhulu wabo. Baqale ngokondla iinkukhu, emva koko batyala imifuno, baza kamva bacoca isibaya noTat'omkhulu. Emva kwemini kwaqala ukuna, ngoko bahlala phantsi kweveranda belalela amabali. Phambi kokuba bagoduke, uMakhulu wabanika isuphu eshushu, bonke bahleka kunye.`,
+      instruction: 'Funda umbhalo ngononophelo uze uphendule ngesiXhosa.',
+    };
+  }
+
+  if (locale === 'nso-ZA') {
+    return {
+      passage: `Bala kanegelo ye e lego ka tlase gomme o arabe dipotso tše di latelago.
+
+Mia le ngwanabo Tumi ba ile ka pela ka Mokibelo go thuša polaseng ya rakgolo wa bona. Ba thomile ka go fepa dikgoho, ka morago ba bjala merogo, gomme ka morago ba hlwekiša lesaka le Rakgolo. Ka bohareng bja mosegare pula ya thoma, ka gona ba dula ka tlase ga veranda ba theeletša dikanegelo. Pele ba boela gae, Koko o ba file sopho ye e fišago, gomme bohle ba sega mmogo.`,
+      instruction: 'Bala sengwalwa ka tlhokomelo gomme o arabe ka Sepedi.',
+    };
+  }
+
+  if (locale === 'tn-ZA') {
+    return {
+      passage: `Bala kgang e e fa tlase mme o arabe dipotso tse di latelang.
+
+Mia le mogolowe Tumi ba ne ba ya ka moso ka Matlhatso go thusa kwa polasing ya rremogolo. Ba simolotse ka go fepa dikoko, ba bo ba jala merogo, mme morago ba phepafatsa lesaka le Rremogolo. Fa pula e simolola motshegare, ba ne ba nna fa tlase ga veranda ba reetsa dikgang. Pele ba boela gae, Nkoko o ne a ba naya sopho e e mogote mme botlhe ba tshega mmogo.`,
+      instruction: 'Bala temana ka kelotlhoko mme o arabe ka Setswana.',
+    };
+  }
+
+  if (locale === 'st-ZA') {
+    return {
+      passage: `Bala pale e ka tlase ebe o araba dipotso tse latelang.
+
+Mia le ngwanabo Tumi ba ile hoseng ka Moqebelo ho ya thusa polasing ya ntatemoholo. Ba ile ba qala ka ho fepa dikgoho, ba nto jala meroho, mme hamorao ba hloekisa lesaka le Ntatemoholo. Ha pula e qala motshehare, ba dula tlasa veranda ba mametse dipale. Pele ba kgutlela hae, Nkgono o ba file sopho e chesang mme bohle ba tsheha mmoho.`,
+      instruction: 'Bala temana ka hloko ebe o araba ka Sesotho.',
     };
   }
 
@@ -785,6 +1045,102 @@ function ensureLanguageReadingPassage(exam: any, subject: string, grade: string,
   first.readingPassage = `${fallback.passage}\n\n${fallback.instruction}`;
   first.instructions = `Grade: ${grade}. ${fallback.instruction}`;
   return exam;
+}
+
+function tokenizeLanguageText(value: string): string[] {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 3);
+}
+
+function detectLikelyLocale(text: string): string | null {
+  const tokens = new Set(tokenizeLanguageText(text));
+  let bestLocale: string | null = null;
+  let bestScore = 0;
+
+  Object.entries(LANGUAGE_MARKERS).forEach(([locale, markers]) => {
+    const score = markers.reduce((sum, marker) => sum + (tokens.has(marker) ? 1 : 0), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestLocale = locale;
+    }
+  });
+
+  return bestScore >= 2 ? bestLocale : null;
+}
+
+function getPassageKeywords(passage: string): Set<string> {
+  return new Set(
+    tokenizeLanguageText(passage).filter((token) => token.length >= 4 && !COMMON_STOP_WORDS.has(token)),
+  );
+}
+
+function hasKeywordOverlap(text: string, keywords: Set<string>): boolean {
+  if (!keywords.size) return true;
+  const tokens = tokenizeLanguageText(text);
+  return tokens.some((token) => keywords.has(token));
+}
+
+function validateComprehensionIntegrity(exam: any, subject: string, language: string): string[] {
+  const issues: string[] = [];
+  if (!isLanguageSubject(subject)) return issues;
+
+  const sections = Array.isArray(exam?.sections) ? exam.sections : [];
+  if (sections.length === 0) return ['No sections found for language exam.'];
+
+  const first = sections[0];
+  const sectionTitle = normalizeText(first?.title || first?.name || '');
+  const isComprehensionSection =
+    sectionTitle.includes('comprehension') ||
+    sectionTitle.includes('lees') ||
+    sectionTitle.includes('read') ||
+    sectionTitle.includes('begrip') ||
+    sectionTitle.includes('funda') ||
+    sectionTitle.includes('bala');
+
+  const passage = String(first?.readingPassage || first?.reading_passage || '').trim();
+  if (isComprehensionSection && passage.length < 120) {
+    issues.push('Comprehension section is missing a valid reading passage.');
+  }
+
+  if (passage.length >= 120) {
+    const expectedLocale = normalizeLanguageLocale(language);
+    const detectedLocale = detectLikelyLocale(passage);
+    if (
+      STRICT_LANGUAGE_VALIDATION_LOCALES.has(expectedLocale) &&
+      detectedLocale &&
+      detectedLocale !== expectedLocale
+    ) {
+      issues.push(`Reading passage language mismatch: expected ${expectedLocale}, detected ${detectedLocale}.`);
+    }
+
+    const passageKeywords = getPassageKeywords(passage);
+    const questions = Array.isArray(first?.questions) ? first.questions.slice(0, 6) : [];
+
+    questions.forEach((question: any, index: number) => {
+      const qText = String(question?.question || question?.text || '').trim();
+      if (!qText) {
+        issues.push(`Question ${index + 1} in comprehension section is empty.`);
+        return;
+      }
+
+      if (META_QUESTION_PATTERNS.some((pattern) => pattern.test(qText))) {
+        issues.push(`Question ${index + 1} is an instruction/meta prompt, not a real comprehension item.`);
+      }
+
+      const options = Array.isArray(question?.options) ? question.options : [];
+      if (options.length > 0) {
+        const combined = `${qText} ${options.map((option: unknown) => String(option || '')).join(' ')}`;
+        if (!hasKeywordOverlap(combined, passageKeywords)) {
+          issues.push(`Question ${index + 1} options are not grounded in the reading passage context.`);
+        }
+      }
+    });
+  }
+
+  return issues;
 }
 
 function computeBlueprintAudit(exam: any, grade: string, examType: string): ExamBlueprintAudit {
@@ -1554,10 +1910,12 @@ function buildUserPrompt(payload: {
   guidedMode: 'guided_first' | 'memo_first';
 }) {
   const countPolicy = getQuestionCountPolicy(payload.grade, payload.examType);
+  const locale = normalizeLanguageLocale(payload.language);
+  const languageName = resolveLanguageName(payload.language);
   const base = [
     `Generate a ${payload.examType} exam for ${payload.grade}.`,
     `Subject: ${payload.subject}.`,
-    `Language: ${payload.language}.`,
+    `Language: ${languageName} (${locale}).`,
     `Minimum total questions required: ${countPolicy.min}.`,
     `Maximum total questions allowed: ${countPolicy.max}.`,
     'Align strictly to CAPS/DBE outcomes and cognitive level for this grade.',
@@ -1567,6 +1925,7 @@ function buildUserPrompt(payload: {
       : 'Use compact paper mode with high quality question diversity.',
     'Target mark distribution: objective 45-60%, short response 25-35%, extended response 10-20%.',
     'For language subjects with comprehension, include a passage/story in section instructions.',
+    'Never use locale codes (like en-ZA/af-ZA) inside learner-facing instructions or questions.',
     'Do not duplicate option letters inside option strings.',
     'Always include explanation for each answer key item.',
   ];
@@ -1643,8 +2002,9 @@ serve(async (req: Request) => {
     const subject = String(body?.subject || '').trim();
     const examType = String(body?.examType || 'practice_test').trim();
     const customPrompt = body?.customPrompt ? String(body.customPrompt) : undefined;
-    const modelOverride = body?.model ? String(body.model) : undefined;
-    const language = body?.language ? String(body.language) : 'en-ZA';
+    const rawModelOverride = body?.model ? String(body.model).trim() : undefined;
+    const modelOverride = rawModelOverride ? normalizeAnthropicModel(rawModelOverride) : undefined;
+    const language = normalizeLanguageLocale(body?.language ? String(body.language) : 'en-ZA');
     const studentId = body?.studentId ? String(body.studentId) : undefined;
     const classId = body?.classId ? String(body.classId) : undefined;
     const schoolId = body?.schoolId ? String(body.schoolId) : undefined;
@@ -1658,6 +2018,13 @@ serve(async (req: Request) => {
     const fullPaperMode = body?.fullPaperMode !== false;
     const visualMode = body?.visualMode === 'hybrid' ? 'hybrid' : 'off';
     const guidedMode = body?.guidedMode === 'memo_first' ? 'memo_first' : 'guided_first';
+
+    if (rawModelOverride && modelOverride && rawModelOverride !== modelOverride) {
+      console.warn('[generate-exam] remapped deprecated model override', {
+        from: rawModelOverride,
+        to: modelOverride,
+      });
+    }
 
     if (!grade || !subject) {
       return jsonResponse({ error: 'Missing required fields: grade, subject' }, 400, corsHeaders);
@@ -1689,12 +2056,43 @@ serve(async (req: Request) => {
       );
     }
 
+    const { data: tierData } = await supabase.rpc('get_user_subscription_tier', {
+      user_id: scope.profile.id,
+    });
+
+    const effectiveTierForRole = normalizeTierForExamRole(
+      scope.role,
+      scope.profile.subscription_tier,
+      typeof tierData === 'string' ? tierData : null,
+    );
+    const isFreemium = isFreemiumTier(effectiveTierForRole);
+
     // Quota check — prevent unbounded exam generation
     const environment = Deno.env.get('ENVIRONMENT') || 'production';
     const devBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' &&
                       (environment === 'development' || environment === 'local');
+    let forceFreemiumFallback = false;
+    let freemiumPremiumExamCount = 0;
 
-    if (!devBypass) {
+    if (isFreemium) {
+      const premiumCountRes = await supabase
+        .from('exam_generations')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', scope.profile.id)
+        .eq('status', 'completed')
+        .not('model_used', 'like', 'fallback:%');
+
+      if (premiumCountRes.error) {
+        console.warn('[generate-exam] freemium premium-count check failed', premiumCountRes.error.message);
+      } else {
+        freemiumPremiumExamCount = Number(premiumCountRes.count || 0);
+        if (freemiumPremiumExamCount >= FREEMIUM_PREMIUM_EXAM_LIMIT) {
+          forceFreemiumFallback = true;
+        }
+      }
+    }
+
+    if (!devBypass && !forceFreemiumFallback) {
       const quota = await supabase.rpc('check_ai_usage_limit', {
         p_user_id: user.id,
         p_request_type: 'exam_generation',
@@ -1714,28 +2112,24 @@ serve(async (req: Request) => {
 
       const quotaData = quota.data as Record<string, unknown> | null;
       if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
-        return jsonResponse(
-          {
-            error: 'quota_exceeded',
-            message: "You've reached your AI usage limit for this period. Upgrade for more.",
-            details: quotaData,
-          },
-          429,
-          corsHeaders,
-        );
+        if (isFreemium) {
+          forceFreemiumFallback = true;
+        } else {
+          return jsonResponse(
+            {
+              error: 'quota_exceeded',
+              message: "You've reached your AI usage limit for this period. Upgrade for more.",
+              details: quotaData,
+            },
+            429,
+            corsHeaders,
+          );
+        }
       }
     }
 
-    const { data: tierData } = await supabase.rpc('get_user_subscription_tier', {
-      user_id: scope.profile.id,
-    });
-
-    const effectiveTierForRole = normalizeTierForExamRole(
-      scope.role,
-      scope.profile.subscription_tier,
-      typeof tierData === 'string' ? tierData : null,
-    );
-    const preferredModel = modelOverride || getDefaultModelForTier(effectiveTierForRole);
+    const tierDefaultModel = getDefaultModelForTier(effectiveTierForRole);
+    const preferredModel = normalizeAnthropicModel(modelOverride || tierDefaultModel || EXAM_PRIMARY_MODEL);
     const modelCandidates = buildModelFallbackChain(preferredModel);
     let modelUsed = preferredModel;
 
@@ -1760,6 +2154,8 @@ serve(async (req: Request) => {
       preferredModel,
       useTeacherContext,
       effectiveTierForRole,
+      forceFreemiumFallback,
+      freemiumPremiumExamCount,
       examIntentMode,
       fullPaperMode,
       visualMode,
@@ -1773,7 +2169,10 @@ serve(async (req: Request) => {
     let lastModelError = 'Failed to generate exam content';
     let anthropicCreditIssue = false;
 
-    if (ANTHROPIC_API_KEY) {
+    if (forceFreemiumFallback) {
+      localFallbackReason = `Freemium plan limit reached: you've used ${freemiumPremiumExamCount} premium exam generations. A basic fallback exam is being used. Upgrade to restore premium Sonnet exam generation.`;
+      modelUsed = 'fallback:freemium-limit-v1';
+    } else if (ANTHROPIC_API_KEY) {
       for (const candidateModel of modelCandidates) {
         const candidateResponse = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -1855,7 +2254,7 @@ serve(async (req: Request) => {
         ? 'AI provider credits are currently depleted. Generated a local fallback practice exam.'
         : 'AI providers are currently unavailable. Generated a local fallback practice exam.';
       normalizedExam = normalizeExamShape(
-        buildLocalFallbackExam(grade, subject, examType, contextSummary),
+        buildLocalFallbackExam(grade, subject, examType, language, contextSummary),
         grade,
         subject,
         examType,
@@ -1870,7 +2269,7 @@ serve(async (req: Request) => {
         modelUsed = 'fallback:local-template-v1';
         localFallbackReason = 'AI returned malformed exam JSON. Generated a local fallback practice exam.';
         normalizedExam = normalizeExamShape(
-          buildLocalFallbackExam(grade, subject, examType, contextSummary),
+          buildLocalFallbackExam(grade, subject, examType, language, contextSummary),
           grade,
           subject,
           examType,
@@ -1891,6 +2290,26 @@ serve(async (req: Request) => {
     normalizedExam = ensureLanguageReadingPassage(normalizedExam, subject, grade, language);
     normalizedExam = augmentQuestionVisuals(normalizedExam, visualMode);
     normalizedExam = recalculateExamMarks(normalizedExam);
+    const integrityIssues = validateComprehensionIntegrity(normalizedExam, subject, language);
+    if (integrityIssues.length > 0) {
+      console.warn('[generate-exam] integrity issues detected, switching to safe fallback', {
+        subject,
+        grade,
+        language,
+        issues: integrityIssues,
+      });
+      modelUsed = 'fallback:language-integrity-guardrail-v1';
+      localFallbackReason = `Generated exam failed language/comprehension checks (${integrityIssues.join(' ')}). A safe fallback exam was used.`;
+      normalizedExam = normalizeExamShape(
+        buildLocalFallbackExam(grade, subject, examType, language, contextSummary),
+        grade,
+        subject,
+        examType,
+      );
+      normalizedExam = ensureLanguageReadingPassage(normalizedExam, subject, grade, language);
+      normalizedExam = augmentQuestionVisuals(normalizedExam, visualMode);
+      normalizedExam = recalculateExamMarks(normalizedExam);
+    }
 
     if (!normalizedExam.sections.length || !normalizedExam.sections.some((section: any) => section.questions.length > 0)) {
       throw new Error(`Generated exam has no valid questions. ${lastModelError}`);
@@ -1947,7 +2366,7 @@ serve(async (req: Request) => {
     }
 
     // Record usage after successful generation
-    if (!devBypass) {
+    if (!devBypass && !forceFreemiumFallback) {
       try {
         await supabase.rpc('increment_ai_usage', {
           p_user_id: user.id,
