@@ -14,6 +14,8 @@ const NEXT_GEN_PARENT_SHARED_ROUTES = new Set([
   '/screens/exam-prep',
   '/screens/exam-generation',
   '/screens/dash-assistant',
+  '/screens/daily-exercise-player',
+  '/screens/daily-exercise-progress',
 ]);
 
 function ScreensStack() {

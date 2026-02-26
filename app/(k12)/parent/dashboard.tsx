@@ -42,6 +42,8 @@ import {
   buildK12ParentActionTarget,
   type K12ParentActionId,
 } from '@/lib/navigation/k12ParentActionMap';
+import { DailyExerciseCard } from '@/components/daily-exercises/DailyExerciseCard';
+import { ExerciseConfigModal } from '@/components/daily-exercises/ExerciseConfigModal';
 
 function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boolean }) {
   const { profile, user, loading: authLoading, profileLoading } = useAuth();
@@ -55,6 +57,7 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
 
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [showExerciseConfig, setShowExerciseConfig] = useState(false);
 
   const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.parent', { defaultValue: 'Parent' });
   const p = profile as unknown as Record<string, unknown> | undefined;
@@ -274,6 +277,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           theme={theme}
         />
 
+        <DailyExerciseCard
+          studentId={activeChild?.id}
+          studentName={activeChild?.name}
+          grade={activeChild?.grade}
+          onStartExercise={() => router.push('/screens/daily-exercise-player' as never)}
+          onViewProgress={() => router.push('/screens/daily-exercise-progress' as never)}
+          onConfigure={() => setShowExerciseConfig(true)}
+        />
+
         {/* Children Cards */}
         <View style={styles.section}>
           {dataLoading ? (
@@ -315,6 +327,12 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         />
       </ScrollView>
 
+      <ExerciseConfigModal
+        visible={showExerciseConfig}
+        onClose={() => setShowExerciseConfig(false)}
+        studentId={activeChild?.id}
+        studentName={activeChild?.name}
+      />
       <AlertModal {...alertProps} />
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} navItems={navItems} />
     </SafeAreaView>
