@@ -76,7 +76,7 @@ export function EnhancedInputArea({ placeholder = 'Message Dash...', sending = f
       }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
       if (result?.canceled) return;

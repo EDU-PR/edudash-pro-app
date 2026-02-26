@@ -260,7 +260,7 @@ export function MessageAttachmentBar({
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.8,
-        allowsEditing: true,
+        allowsEditing: false,
       });
 
       if (!result.canceled && result.assets?.length) {
