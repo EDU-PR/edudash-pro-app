@@ -62,6 +62,12 @@ interface VoiceMessageBubbleProps {
   onReactionPress?: (messageId: string, emoji: string) => void;
   /** Handler for long-press on reaction to show who reacted */
   onReactionLongPress?: (emoji: string, reactedByUserIds: string[]) => void;
+  /** Transcription text (pre-fetched from useVoiceTranscription cache) */
+  transcriptionText?: string;
+  /** Whether this message is currently being transcribed */
+  isTranscribing?: boolean;
+  /** Called when user taps the transcribe button */
+  onTranscribe?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,6 +177,9 @@ export default function VoiceMessageBubble({
   messageId,
   onReactionPress,
   onReactionLongPress,
+  transcriptionText,
+  isTranscribing = false,
+  onTranscribe,
 }: VoiceMessageBubbleProps) {
   const theme = { ...DEFAULT_THEME, ...customTheme };
   
@@ -599,6 +608,35 @@ export default function VoiceMessageBubble({
         />
       </View>
       
+      {/* Transcribe button + transcription text */}
+      {onTranscribe && !transcriptionText && !isTranscribing && (
+        <TouchableOpacity
+          style={styles.transcribeButton}
+          onPress={onTranscribe}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="document-text-outline" size={13} color={theme.textSecondary} />
+          <Text style={[styles.transcribeLabel, { color: theme.textSecondary }]}>
+            Transcribe
+          </Text>
+        </TouchableOpacity>
+      )}
+      {isTranscribing && (
+        <View style={styles.transcribingRow}>
+          <EduDashSpinner size="small" color={theme.textSecondary} />
+          <Text style={[styles.transcribeLabel, { color: theme.textSecondary }]}>
+            Transcribing...
+          </Text>
+        </View>
+      )}
+      {transcriptionText && (
+        <View style={styles.transcriptionCard}>
+          <Text style={[styles.transcriptionText, { color: theme.text }]}>
+            {transcriptionText}
+          </Text>
+        </View>
+      )}
+
       {/* Reaction display below bubble - show all reactions with counts */}
       {activeReactions.length > 0 && (
         <View
@@ -783,6 +821,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94a3b8',
     fontWeight: '600',
+  },
+  transcribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  transcribingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  transcribeLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  transcriptionCard: {
+    marginTop: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  transcriptionText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
 

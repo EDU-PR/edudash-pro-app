@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TypingIndicator } from './TypingIndicator';
+import { ConnectionStatusBar } from './ConnectionStatusBar';
 
 interface ChatHeaderProps {
   displayName: string;
@@ -70,6 +71,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       : groupSubtitle || (isOnline ? 'Online' : lastSeenText);
 
   return (
+    <>
     <LinearGradient
       colors={['#0f172a', '#1e293b']}
       style={[styles.header, { borderBottomColor: borderColor, paddingTop: insets.top + 10 }]}
@@ -127,6 +129,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         </TouchableOpacity>
       </View>
     </LinearGradient>
+    <ConnectionStatusBar />
+    </>
   );
 };
 

@@ -132,6 +132,48 @@ export class OfflineMessageQueue {
     await this.saveQueue(queue.filter((m) => m.localId !== localId));
   }
 
+  /** Get queued messages for a specific thread */
+  async getForThread(threadId: string): Promise<QueuedMessage[]> {
+    const queue = await this.loadQueue();
+    return queue.filter((m) => m.payload.threadId === threadId);
+  }
+
+  /** Flush the entire queue using a provided send function. Returns counts. */
+  async flush(
+    sendFn: (msg: QueuedMessage) => Promise<boolean>,
+  ): Promise<{ sent: number; failed: number }> {
+    const queue = await this.loadQueue();
+    let sent = 0;
+    let failed = 0;
+    const remaining: QueuedMessage[] = [];
+
+    for (const item of queue) {
+      try {
+        const ok = await sendFn(item);
+        if (ok) {
+          sent += 1;
+          this.sentCallbacks.forEach((cb) => cb(item.localId, item.localId));
+        } else {
+          failed += 1;
+          remaining.push(item);
+        }
+      } catch {
+        failed += 1;
+        remaining.push(item);
+      }
+    }
+
+    await this.saveQueue(remaining);
+    logger.debug('OfflineQueue', `Flushed: ${sent} sent, ${failed} failed`);
+    return { sent, failed };
+  }
+
+  /** Remove all messages from the queue */
+  async clear(): Promise<void> {
+    await this.saveQueue([]);
+    logger.debug('OfflineQueue', 'Queue cleared');
+  }
+
   // ─── internals ───
 
   private async processQueue(): Promise<void> {

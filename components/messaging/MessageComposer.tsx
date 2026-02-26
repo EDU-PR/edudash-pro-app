@@ -19,6 +19,7 @@ import type { ParentAlertApi } from '@/components/ui/parentAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
+import { DashAssistBar } from './DashAssistBar';
 // Safe component imports
 let VoiceRecorder: React.FC<any> | null = null;
 let EmojiPicker: React.FC<any> | null = null;
@@ -50,6 +51,10 @@ interface MessageComposerProps {
   onCancelEdit?: () => void;
   /** Optional modal alert API (used by parent flows to avoid native alerts) */
   showAlert?: ParentAlertApi;
+  /** Number of failed messages in the retry queue (for badge display) */
+  failedMessageCount?: number;
+  /** Called when send fails so the caller can enqueue into the retry system */
+  onSendError?: (content: string, error: string) => void;
 }
 
 const COMPOSER_IMAGE_ASPECT: [number, number] = [4, 3];
@@ -111,12 +116,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   editingMessage,
   onCancelEdit,
   showAlert,
+  failedMessageCount = 0,
+  onSendError,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [sendingImage, setSendingImage] = useState(false);
+  const [showAssistBar, setShowAssistBar] = useState(false);
   
   // Presence activity tracking — keeps user status 'online' while chatting
   const callCtx = useCallSafe();
@@ -179,7 +187,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       onCancelReply?.();
     }
     callCtx?.recordActivity();
-    await onSend(content);
+    try {
+      await onSend(content);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      onSendError?.(content, errMsg);
+    }
   };
 
   const handleVoiceComplete = async (uri: string, duration: number) => {
@@ -297,6 +310,42 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     }
   }, [showComposerAlert, onImageAttach]);
 
+  const handleGifPick = useCallback(async () => {
+    if (!onImageAttach) {
+      toast.info('Image attachments not supported in this chat', 'GIF');
+      return;
+    }
+    try {
+      const hasPermissionResult = await ensureImageLibraryPermission();
+      if (!hasPermissionResult) {
+        showComposerAlert(
+          'Permission Required',
+          'Please grant gallery access to pick GIFs.',
+          'warning',
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const mimeType = asset.mimeType || 'image/gif';
+        setSendingImage(true);
+        try {
+          await onImageAttach(asset.uri, mimeType);
+        } finally {
+          setSendingImage(false);
+        }
+      }
+    } catch (error) {
+      console.error('[MessageComposer] GIF pick error:', error);
+      toast.error('Failed to pick GIF. Please try again.', 'GIF');
+    }
+  }, [showComposerAlert, onImageAttach]);
+
   const handleConfirmImage = useCallback(async (uri: string) => {
     if (!onImageAttach || !pendingImage) return;
     try {
@@ -325,6 +374,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         loading={sendingImage}
       />
 
+      {/* Dash AI Assist Bar */}
+      <DashAssistBar
+        visible={showAssistBar}
+        composerText={text}
+        onAccept={(improved) => setText(improved)}
+        onClose={() => setShowAssistBar(false)}
+      />
+
       {/* Emoji Picker */}
       {EmojiPicker && (
         <EmojiPicker 
@@ -351,6 +408,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       )}
       
       <View style={styles.composerRow}>
+        {/* Failed message badge */}
+        {failedMessageCount > 0 && !isRecording && (
+          <View style={styles.failedBadge}>
+            <Ionicons name="alert-circle" size={14} color="#fff" />
+            <Text style={styles.failedBadgeText}>{failedMessageCount} failed</Text>
+          </View>
+        )}
+
         {/* Input wrapper - hide when recording */}
         {!isRecording && (
           <>
@@ -407,6 +472,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   </TouchableOpacity>
                 )}
                 
+                {/* GIF button (hide when typing) */}
+                {!text.trim() && (
+                  <TouchableOpacity
+                    style={styles.inlineBtn}
+                    onPress={handleGifPick}
+                    accessibilityLabel="Pick a GIF"
+                  >
+                    <Text style={styles.gifLabel}>GIF</Text>
+                  </TouchableOpacity>
+                )}
+
                 {/* Attachment button */}
                 <TouchableOpacity 
                   style={styles.inlineBtn}
@@ -417,6 +493,22 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
               </View>
             </View>
             
+            {/* AI Assist sparkle button (visible when text is present) */}
+            {text.trim() && (
+              <TouchableOpacity
+                style={styles.sparkleButton}
+                onPress={() => setShowAssistBar((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityLabel={showAssistBar ? 'Close AI assist' : 'Open AI assist'}
+              >
+                <Ionicons
+                  name={showAssistBar ? 'sparkles' : 'sparkles-outline'}
+                  size={20}
+                  color={showAssistBar ? '#a78bfa' : 'rgba(255,255,255,0.5)'}
+                />
+              </TouchableOpacity>
+            )}
+
             {/* Send Button - only when there's text */}
             {text.trim() && (
               <TouchableOpacity
@@ -527,6 +619,17 @@ const styles = StyleSheet.create({
   inlineBtn: {
     padding: 8,
   },
+  gifLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   actionButton: {
     width: 48,
     height: 48,
@@ -592,5 +695,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9ca3af',
     marginTop: 1,
+  },
+  failedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4,
+    marginBottom: 4,
+  },
+  failedBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  sparkleButton: {
+    width: 36,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

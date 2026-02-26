@@ -95,8 +95,12 @@ export interface Message {
   is_starred?: boolean;
   /** Pending message queued offline — not yet persisted to DB */
   _pending?: boolean;
-  /** Local ID for offline-queued messages */
+  /** Local ID for offline-queued or failed messages */
   _localId?: string;
+  /** Set when the message failed to send */
+  _failed?: boolean;
+  /** Human-readable error from the last failed attempt */
+  _failedError?: string;
   // Joined data
   sender?: {
     first_name: string;
