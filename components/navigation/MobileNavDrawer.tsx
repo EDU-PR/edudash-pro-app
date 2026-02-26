@@ -1,9 +1,16 @@
 /**
- * MobileNavDrawer - Slide-out navigation drawer for web mobile
- * Shows navigation items when hamburger menu is pressed on mobile web
+ * MobileNavDrawer - Responsive navigation drawer for web + mobile
+ *
+ * Behavior by breakpoint:
+ *  - Desktop (>1024px): fixed sidebar, always visible, no overlay
+ *  - Tablet (768-1024px): slide-in drawer with backdrop, 320px wide
+ *  - Mobile (<768px): near-full-width slide-in drawer (screen - 56px)
+ *
+ * Web-specific: hover states, cursor:pointer, Escape key, Pressable backdrop,
+ * GPU-accelerated translateX animation with will-change.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +20,7 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
@@ -21,7 +29,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutAndRedirect } from '@/lib/authActions';
 import { getRoleDisplayName } from '@/lib/roleUtils';
-import { getNavDrawerStyles, DRAWER_WIDTH } from './MobileNavDrawer.styles';
+import {
+  getNavDrawerStyles,
+  getDrawerMode,
+  getDrawerWidth,
+  type DrawerMode,
+} from './MobileNavDrawer.styles';
 import Constants from 'expo-constants';
 import {
   resolveExplicitSchoolTypeFromProfile,
@@ -66,13 +79,11 @@ function ensureGlobalSearchItem(items: NavItem[]): NavItem[] {
   return [GLOBAL_FUNCTION_SEARCH_ITEM, ...items];
 }
 
-// Default nav items by role
 const getDefaultNavItems = (
   role: string,
   memberType?: string,
   options?: { adminHomeRoute?: string }
 ): NavItem[] => {
-  // Check if user is CEO/President (member_type from organization membership)
   if (memberType === 'ceo' || memberType === 'chief_executive_officer' || memberType === 'president') {
     return [
       { id: 'home', label: 'President Dashboard', icon: 'business', route: '/screens/membership/ceo-dashboard' },
@@ -88,7 +99,6 @@ const getDefaultNavItems = (
     ];
   }
   
-  // Check if user is Youth President or Youth Executive (Deputy, Secretary, Treasurer)
   if (memberType === 'youth_president' || memberType === 'youth_deputy' || 
       memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
     const isPresident = memberType === 'youth_president';
@@ -101,7 +111,6 @@ const getDefaultNavItems = (
       { id: 'members', label: 'Youth Members', icon: 'person-circle', route: '/screens/membership/members-list' },
       { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
       { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/membership/programs' },
-      // Both President and Secretary can recruit members
       ...((isPresident || isSecretary) ? [{ id: 'invite', label: 'Recruit Members', icon: 'person-add', route: '/screens/membership/youth-invite-code' }] : []),
       { id: 'budget', label: 'Budget Requests', icon: 'wallet', route: '/screens/membership/budget-requests' },
       { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/membership/announcements' },
@@ -114,7 +123,6 @@ const getDefaultNavItems = (
     ];
   }
   
-  // Check if user is other Youth wing member (coordinator, facilitator, mentor, member)
   if (memberType?.startsWith('youth_')) {
     return [
       { id: 'home', label: 'Youth Dashboard', icon: 'people', route: '/screens/membership/youth-president-dashboard' },
@@ -127,7 +135,6 @@ const getDefaultNavItems = (
     ];
   }
 
-  // Check if user is Regional Manager
   if (memberType === 'regional_manager' || memberType === 'provincial_manager') {
     return [
       { id: 'home', label: 'Regional Dashboard', icon: 'map', route: '/screens/membership/dashboard' },
@@ -142,7 +149,6 @@ const getDefaultNavItems = (
     ];
   }
 
-  // Check if user is Branch Manager
   if (memberType === 'branch_manager') {
     return [
       { id: 'home', label: 'Branch Dashboard', icon: 'git-branch', route: '/screens/membership/dashboard' },
@@ -156,7 +162,6 @@ const getDefaultNavItems = (
     ];
   }
 
-  // Check if user is Women's League member
   if (memberType?.startsWith('women_')) {
     const isLeader = ['women_president', 'women_deputy', 'women_secretary', 'women_treasurer'].includes(memberType);
     return [
@@ -172,7 +177,6 @@ const getDefaultNavItems = (
     ];
   }
 
-  // Check if user is Veterans League member
   if (memberType?.startsWith('veterans_')) {
     const isLeader = ['veterans_president', 'veterans_coordinator'].includes(memberType);
     return [
@@ -293,6 +297,9 @@ const getDefaultNavItems = (
   }
 };
 
+const OPEN_DURATION = 250;
+const CLOSE_DURATION = 200;
+
 export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerProps) {
   const { theme, isDark } = useTheme();
   const { profile, signOut } = useAuth();
@@ -300,12 +307,16 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  
-  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const [mode, setMode] = useState<DrawerMode>(getDrawerMode);
+  const drawerWidth = getDrawerWidth(mode);
+  const isDesktop = mode === 'desktop';
+
+  const slideAnim = useRef(new Animated.Value(isDesktop ? 0 : -drawerWidth)).current;
+  const fadeAnim = useRef(new Animated.Value(isDesktop ? 1 : 0)).current;
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   
   const userRole = (profile?.role as string) || 'parent';
-  // Get member_type from organization_membership for CEO detection
   const memberType = profile?.organization_membership?.member_type;
   const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
   const adminHomeRoute = userRole === 'admin'
@@ -321,62 +332,86 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   const items = ensureGlobalSearchItem(navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute }))
     .filter((item) => (hideFeesOnDashboards ? item.id !== 'financials' : true));
   
-  // Get display role - prioritize member_type for membership organizations
   const displayRole = memberType 
     ? (memberType === 'ceo' || memberType === 'president' ? 'President' : 
        memberType.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
     : getRoleDisplayName(userRole);
   
-  // Get display name with fallback chain: full_name -> first_name + last_name -> email -> 'Guest'
   const displayName = profile?.full_name 
     || (profile?.first_name && profile?.last_name 
         ? `${profile.first_name} ${profile.last_name}` 
         : profile?.first_name || profile?.email?.split('@')[0] || 'Guest');
   
-  // Get avatar URL for profile picture
   const avatarUrl = profile?.avatar_url;
 
   useEffect(() => {
+    const handler = ({ window }: { window: { width: number; height: number } }) => {
+      setMode(getDrawerMode());
+    };
+    const sub = Dimensions.addEventListener('change', handler);
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (isDesktop) {
+      slideAnim.setValue(0);
+      fadeAnim.setValue(1);
+      return;
+    }
+
     if (isOpen) {
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 250,
+          duration: OPEN_DURATION,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 200,
+          duration: OPEN_DURATION - 50,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 200,
+          toValue: -drawerWidth,
+          duration: CLOSE_DURATION,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 150,
+          duration: CLOSE_DURATION - 50,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [isOpen, slideAnim, fadeAnim]);
+  }, [isOpen, isDesktop, slideAnim, fadeAnim, drawerWidth]);
+
+  const handleEscapeKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isDesktop) {
+        onClose();
+      }
+    },
+    [isOpen, isDesktop, onClose],
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    window.addEventListener('keydown', handleEscapeKey as any);
+    return () => window.removeEventListener('keydown', handleEscapeKey as any);
+  }, [handleEscapeKey]);
 
   const handleNavPress = (route: string) => {
-    onClose();
-    // Small delay to allow drawer animation to start
+    if (!isDesktop) onClose();
     setTimeout(() => {
       router.push(route as any);
-    }, 100);
+    }, isDesktop ? 0 : 100);
   };
 
   const handleSignOut = async () => {
-    onClose();
-    // Use centralized sign out for proper session cleanup
+    if (!isDesktop) onClose();
     await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
   };
 
@@ -384,25 +419,26 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
     return pathname === route || pathname?.startsWith(route);
   };
 
-  if (!isOpen && Platform.OS === 'web') {
-    // On web, don't render when closed to avoid z-index issues
+  if (!isDesktop && !isOpen && Platform.OS === 'web') {
     return null;
   }
 
-  const styles = getNavDrawerStyles(theme, isDark, insets);
+  const styles = getNavDrawerStyles(theme, isDark, insets, mode);
 
   return (
-    <View style={styles.container} pointerEvents={isOpen ? 'auto' : 'none'}>
-      {/* Overlay */}
-      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        <Pressable style={styles.overlayPressable} onPress={onClose} />
-      </Animated.View>
+    <View style={styles.container} pointerEvents={isDesktop || isOpen ? 'auto' : 'none'}>
+      {/* Overlay - hidden on desktop */}
+      {!isDesktop && (
+        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+          <Pressable style={styles.overlayPressable} onPress={onClose} />
+        </Animated.View>
+      )}
 
       {/* Drawer */}
       <Animated.View
         style={[
           styles.drawer,
-          { transform: [{ translateX: slideAnim }] },
+          isDesktop ? {} : { transform: [{ translateX: slideAnim }] },
         ]}
       >
         {/* Header */}
@@ -426,13 +462,15 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
                 <Text style={styles.userRole}>{displayRole}</Text>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={22} color={theme.textSecondary} />
-            </TouchableOpacity>
+            {!isDesktop && (
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={onClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -440,12 +478,22 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
         <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
           {items.map((item) => {
             const active = isActive(item.route);
+            const hovered = hoveredItem === item.id;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={item.id}
-                style={[styles.navItem, active && styles.navItemActive]}
+                style={[
+                  styles.navItem,
+                  active && styles.navItemActive,
+                  Platform.OS === 'web' && hovered && !active && { backgroundColor: theme.primary + '08' },
+                ]}
                 onPress={() => handleNavPress(item.route)}
-                activeOpacity={0.7}
+                {...(Platform.OS === 'web'
+                  ? {
+                      onHoverIn: () => setHoveredItem(item.id),
+                      onHoverOut: () => setHoveredItem(null),
+                    }
+                  : {})}
               >
                 <Ionicons
                   name={(
@@ -466,12 +514,12 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
                     <Text style={styles.badgeText}>{item.badge}</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </ScrollView>
 
-        {/* Sign Out Button - Above divider */}
+        {/* Sign Out Button */}
         <View style={styles.signOutSection}>
           <TouchableOpacity
             style={styles.signOutButton}
@@ -483,7 +531,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
           </TouchableOpacity>
         </View>
         
-        {/* Footer - Below divider with branding */}
+        {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.brandText}>Powered by EduDash Pro</Text>
           <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>

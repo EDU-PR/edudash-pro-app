@@ -140,6 +140,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
 }) => {
   const { theme } = useTheme();
   const [activeCategory, setActiveCategory] = useState('smileys');
+  const [gifModalVisible, setGifModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const slideAnim = useRef(new Animated.Value(height)).current;
   
@@ -249,7 +250,10 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
             styles.categoryTab,
             isGifActive && styles.categoryTabActive,
           ]}
-          onPress={() => setActiveCategory(GIF_TAB_ID)}
+          onPress={() => {
+            setActiveCategory(GIF_TAB_ID);
+            setGifModalVisible(true);
+          }}
           activeOpacity={0.7}
         >
           <Text
@@ -266,19 +270,25 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
         </TouchableOpacity>
       </View>
       
-      {/* Content: emojis or GIF panel */}
-      {isGifActive ? (
-        <GifSearchPanel
-          onSelectGif={(url) => {
-            if (onGifSelect) {
-              onGifSelect(url);
-            } else {
-              onEmojiSelect(url);
-            }
-          }}
-          theme={theme}
-        />
-      ) : (
+      {/* GIF full-screen modal */}
+      <GifSearchPanel
+        visible={gifModalVisible}
+        onClose={() => {
+          setGifModalVisible(false);
+          setActiveCategory('smileys');
+        }}
+        onSelectGif={(url) => {
+          if (onGifSelect) {
+            onGifSelect(url);
+          } else {
+            onEmojiSelect(url);
+          }
+        }}
+        theme={theme}
+      />
+
+      {/* Content: emojis */}
+      {!isGifActive && (
         <ScrollView
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}

@@ -1,9 +1,11 @@
 /**
  * GifSearchPanel
  *
- * Inline GIF search panel rendered inside the EmojiPicker when the GIF tab
- * is active. Uses GIPHY v1 API when an API key is configured, otherwise
- * falls back to static category cards that open the device gallery.
+ * Full-screen modal GIF search panel. When activated (via the GIF tab in the
+ * emoji picker) this opens as a page-sheet modal with search, 3-column grid,
+ * pagination and GIPHY attribution.
+ *
+ * Falls back to static category cards when no GIPHY API key is configured.
  *
  * Rating is locked to "g" (general audiences) for school safety.
  */
@@ -19,6 +21,8 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -32,8 +36,7 @@ const GIPHY_API_KEY =
   '';
 const GIPHY_BASE = 'https://api.giphy.com/v1/gifs';
 const GIF_COLUMNS = 3;
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CELL_SIZE = (SCREEN_WIDTH - 24) / GIF_COLUMNS;
+const PAGE_SIZE = 30;
 
 interface GiphyGif {
   id: string;
@@ -43,6 +46,8 @@ interface GiphyGif {
 
 interface GifSearchPanelProps {
   onSelectGif: (url: string) => void;
+  visible: boolean;
+  onClose: () => void;
   theme: {
     text: string;
     textSecondary: string;
@@ -63,21 +68,27 @@ const FALLBACK_CATEGORIES = [
 ];
 
 export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
-  ({ onSelectGif, theme }) => {
+  ({ onSelectGif, visible, onClose, theme }) => {
     const [query, setQuery] = useState('');
     const [gifs, setGifs] = useState<GiphyGif[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [offset, setOffset] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchInputRef = useRef<TextInput>(null);
     const hasApiKey = !!GIPHY_API_KEY;
 
     const fetchGifs = useCallback(
-      async (searchTerm: string) => {
+      async (searchTerm: string, pageOffset = 0) => {
         if (!GIPHY_API_KEY) return;
-        setLoading(true);
+        if (pageOffset === 0) setLoading(true);
+        else setLoadingMore(true);
+
         try {
           const endpoint = searchTerm.trim()
-            ? `${GIPHY_BASE}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(searchTerm)}&limit=20&rating=g`
-            : `${GIPHY_BASE}/trending?api_key=${GIPHY_API_KEY}&limit=20&rating=g`;
+            ? `${GIPHY_BASE}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(searchTerm)}&limit=${PAGE_SIZE}&offset=${pageOffset}&rating=g`
+            : `${GIPHY_BASE}/trending?api_key=${GIPHY_API_KEY}&limit=${PAGE_SIZE}&offset=${pageOffset}&rating=g`;
 
           const res = await fetch(endpoint);
           if (!res.ok) throw new Error(`GIPHY ${res.status}`);
@@ -90,32 +101,55 @@ export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
               preview: r.images?.fixed_width?.url || r.images?.original?.url || '',
             }),
           );
-          setGifs(mapped.filter((g) => g.url));
+          const filtered = mapped.filter((g) => g.url);
+          setHasMore(filtered.length >= PAGE_SIZE);
+          if (pageOffset === 0) {
+            setGifs(filtered);
+          } else {
+            setGifs((prev) => [...prev, ...filtered]);
+          }
+          setOffset(pageOffset + filtered.length);
         } catch (err) {
           console.warn('[GifSearchPanel] GIPHY fetch error:', err);
-          setGifs([]);
+          if (pageOffset === 0) setGifs([]);
         } finally {
           setLoading(false);
+          setLoadingMore(false);
         }
       },
       [],
     );
 
     useEffect(() => {
-      if (hasApiKey) {
-        fetchGifs('');
+      if (visible && hasApiKey) {
+        setQuery('');
+        setGifs([]);
+        setOffset(0);
+        setHasMore(true);
+        fetchGifs('', 0);
+        setTimeout(() => searchInputRef.current?.focus(), 300);
       }
-    }, [hasApiKey, fetchGifs]);
+    }, [visible, hasApiKey, fetchGifs]);
 
     const handleSearchChange = useCallback(
       (text: string) => {
         setQuery(text);
         if (!hasApiKey) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchGifs(text), 400);
+        debounceRef.current = setTimeout(() => {
+          setOffset(0);
+          setHasMore(true);
+          fetchGifs(text, 0);
+        }, 400);
       },
       [hasApiKey, fetchGifs],
     );
+
+    const handleEndReached = useCallback(() => {
+      if (!loadingMore && hasMore && hasApiKey) {
+        fetchGifs(query, offset);
+      }
+    }, [loadingMore, hasMore, hasApiKey, query, offset, fetchGifs]);
 
     const openGalleryPicker = useCallback(async () => {
       try {
@@ -130,19 +164,31 @@ export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
           allowsEditing: false,
         });
         if (!result.canceled && result.assets.length > 0) {
+          onClose();
           onSelectGif(result.assets[0].uri);
         }
       } catch (error) {
         console.error('[GifSearchPanel] Gallery pick error:', error);
         toast.error('Failed to pick image.');
       }
-    }, [onSelectGif]);
+    }, [onSelectGif, onClose]);
+
+    const handleSelectGif = useCallback(
+      (url: string) => {
+        onClose();
+        onSelectGif(url);
+      },
+      [onClose, onSelectGif],
+    );
+
+    const { width: screenWidth } = Dimensions.get('window');
+    const cellSize = (screenWidth - 24) / GIF_COLUMNS;
 
     const renderGifItem = useCallback(
       ({ item }: { item: GiphyGif }) => (
         <TouchableOpacity
-          style={[styles.gifCell, { backgroundColor: theme.elevated }]}
-          onPress={() => onSelectGif(item.url)}
+          style={[dynamicStyles.gifCell(cellSize), { backgroundColor: theme.elevated }]}
+          onPress={() => handleSelectGif(item.url)}
           activeOpacity={0.7}
         >
           <Image
@@ -152,149 +198,214 @@ export const GifSearchPanel: React.FC<GifSearchPanelProps> = React.memo(
           />
         </TouchableOpacity>
       ),
-      [onSelectGif, theme.elevated],
+      [handleSelectGif, theme.elevated, cellSize],
     );
 
-    if (!hasApiKey) {
+    const renderFooter = useCallback(() => {
+      if (!loadingMore) return null;
       return (
-        <View style={styles.fallbackContainer}>
-          <Text style={[styles.fallbackNote, { color: theme.textSecondary }]}>
-            Full GIF search coming soon
-          </Text>
-          <View style={styles.categoryGrid}>
-            {FALLBACK_CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.label}
-                style={[
-                  styles.categoryCard,
-                  { backgroundColor: theme.elevated },
-                ]}
-                onPress={openGalleryPicker}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                <Text
-                  style={[styles.categoryLabel, { color: theme.text }]}
-                  numberOfLines={1}
-                >
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[styles.galleryBtn, { borderColor: theme.border }]}
-            onPress={openGalleryPicker}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="images-outline"
-              size={18}
-              color={theme.primary}
-            />
-            <Text style={[styles.galleryBtnText, { color: theme.primary }]}>
-              Pick from Gallery
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.footerLoader}>
+          <ActivityIndicator color={theme.primary} size="small" />
         </View>
       );
-    }
+    }, [loadingMore, theme.primary]);
 
-    return (
-      <View style={styles.container}>
-        <View
-          style={[styles.searchBar, { backgroundColor: theme.elevated }]}
-        >
-          <Ionicons
-            name="search"
-            size={16}
-            color={theme.textSecondary}
-          />
-          <TextInput
-            style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search GIFs..."
-            placeholderTextColor={theme.textSecondary}
-            value={query}
-            onChangeText={handleSearchChange}
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-          {query.length > 0 && (
+    const renderContent = () => {
+      if (!hasApiKey) {
+        return (
+          <View style={styles.fallbackContainer}>
+            <Text style={[styles.fallbackNote, { color: theme.textSecondary }]}>
+              Full GIF search coming soon
+            </Text>
+            <View style={styles.categoryGrid}>
+              {FALLBACK_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat.label}
+                  style={[
+                    dynamicStyles.categoryCard(screenWidth),
+                    { backgroundColor: theme.elevated },
+                  ]}
+                  onPress={openGalleryPicker}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+                  <Text
+                    style={[styles.categoryLabel, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TouchableOpacity
-              onPress={() => {
-                setQuery('');
-                fetchGifs('');
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={[styles.galleryBtn, { borderColor: theme.border }]}
+              onPress={openGalleryPicker}
+              activeOpacity={0.7}
             >
-              <Ionicons
-                name="close-circle"
-                size={16}
-                color={theme.textSecondary}
-              />
+              <Ionicons name="images-outline" size={18} color={theme.primary} />
+              <Text style={[styles.galleryBtnText, { color: theme.primary }]}>
+                Pick from Gallery
+              </Text>
             </TouchableOpacity>
+          </View>
+        );
+      }
+
+      return (
+        <View style={styles.apiContent}>
+          <View style={[styles.searchBar, { backgroundColor: theme.elevated }]}>
+            <Ionicons name="search" size={16} color={theme.textSecondary} />
+            <TextInput
+              ref={searchInputRef}
+              style={[styles.searchInput, { color: theme.text }]}
+              placeholder="Search GIFs..."
+              placeholderTextColor={theme.textSecondary}
+              value={query}
+              onChangeText={handleSearchChange}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setQuery('');
+                  setOffset(0);
+                  setHasMore(true);
+                  fetchGifs('', 0);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {loading && gifs.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={theme.primary} />
+            </View>
+          ) : gifs.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                {query ? 'No GIFs found' : 'Loading trending GIFs...'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={gifs}
+              renderItem={renderGifItem}
+              keyExtractor={(item) => item.id}
+              numColumns={GIF_COLUMNS}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.gifGrid}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={renderFooter}
+            />
           )}
         </View>
+      );
+    };
 
-        {loading && gifs.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator color={theme.primary} />
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        onRequestClose={onClose}
+        transparent={false}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: theme.surface }]}>
+          {/* Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>GIF</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
           </View>
-        ) : gifs.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {query ? 'No GIFs found' : 'Loading trending GIFs...'}
+
+          {/* Content */}
+          {renderContent()}
+
+          {/* Attribution */}
+          <View style={[styles.attribution, { borderTopColor: theme.border }]}>
+            <Text style={[styles.poweredBy, { color: theme.textSecondary }]}>
+              Powered by GIPHY
             </Text>
           </View>
-        ) : (
-          <FlatList
-            data={gifs}
-            renderItem={renderGifItem}
-            keyExtractor={(item) => item.id}
-            numColumns={GIF_COLUMNS}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.gifGrid}
-          />
-        )}
-
-        <Text style={[styles.poweredBy, { color: theme.textSecondary }]}>
-          Powered by GIPHY
-        </Text>
-      </View>
+        </View>
+      </Modal>
     );
   },
 );
 
+const dynamicStyles = {
+  gifCell: (cellSize: number) => ({
+    width: cellSize,
+    height: cellSize,
+    margin: 2,
+    borderRadius: 8,
+    overflow: 'hidden' as const,
+  }),
+  categoryCard: (screenWidth: number) => ({
+    width: (screenWidth - 56) / 3,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  }),
+};
+
 const styles = StyleSheet.create({
-  container: {
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    backgroundColor: '#0f172a',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#f1f5f9',
+  },
+  closeBtn: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+  },
+  apiContent: {
     flex: 1,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 8,
-    marginTop: 6,
-    marginBottom: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 16,
-    gap: 6,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     paddingVertical: 2,
   },
   gifGrid: {
     paddingHorizontal: 4,
     paddingBottom: 8,
-  },
-  gifCell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
-    margin: 2,
-    borderRadius: 8,
-    overflow: 'hidden',
   },
   gifImage: {
     width: '100%',
@@ -315,10 +426,18 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
   },
+  footerLoader: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  attribution: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
   poweredBy: {
-    fontSize: 10,
-    textAlign: 'center',
-    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '500',
   },
   fallbackContainer: {
     flex: 1,
@@ -334,13 +453,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 8,
-  },
-  categoryCard: {
-    width: (SCREEN_WIDTH - 56) / 3,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   categoryEmoji: {
     fontSize: 28,

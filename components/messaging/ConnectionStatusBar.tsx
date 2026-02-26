@@ -1,14 +1,13 @@
 /**
  * ConnectionStatusBar — thin animated bar shown at the top of chat when
- * the Supabase Realtime connection is degraded or lost.
+ * the Supabase Realtime connection is lost.
  *
- * States:
- *  - connected → hidden (no bar)
- *  - connecting / reconnecting → yellow bar "Connecting..."
- *  - disconnected → red bar "No connection. Messages will be sent when you're back online."
+ * Only the `disconnected` state is surfaced — transient connecting/reconnecting
+ * states are hidden since the online/offline indicator next to the user's name
+ * already conveys presence. The bar auto-hides after 5 seconds.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRealtimeConnectionState, type ConnectionState } from '@/hooks/messaging/useRealtimeConnectionState';
@@ -18,40 +17,57 @@ interface ConnectionStatusBarProps {
   overrideState?: ConnectionState;
 }
 
-const BAR_HEIGHT = 28;
+const BAR_HEIGHT = 20;
+const AUTO_HIDE_MS = 5_000;
 
 export const ConnectionStatusBar: React.FC<ConnectionStatusBarProps> = React.memo(({ overrideState }) => {
   const { state: hookState } = useRealtimeConnectionState();
   const state = overrideState ?? hookState;
   const heightAnim = useRef(new Animated.Value(0)).current;
+  const [dismissed, setDismissed] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const visible = state !== 'connected';
+  const shouldShow = state === 'disconnected' && !dismissed;
+
+  useEffect(() => {
+    if (state === 'disconnected') {
+      setDismissed(false);
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+
+    if (shouldShow) {
+      hideTimer.current = setTimeout(() => setDismissed(true), AUTO_HIDE_MS);
+    }
+
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, [shouldShow]);
 
   useEffect(() => {
     Animated.timing(heightAnim, {
-      toValue: visible ? BAR_HEIGHT : 0,
+      toValue: shouldShow ? BAR_HEIGHT : 0,
       duration: 250,
       useNativeDriver: false,
     }).start();
-  }, [visible, heightAnim]);
+  }, [shouldShow, heightAnim]);
 
-  if (state === 'connected') {
+  if (!shouldShow) {
     return <Animated.View style={{ height: heightAnim }} />;
   }
 
-  const isDisconnected = state === 'disconnected';
-  const bgColor = isDisconnected ? '#dc2626' : '#d97706';
-  const icon = isDisconnected ? 'cloud-offline-outline' : 'sync-outline';
-  const label = isDisconnected
-    ? 'No connection. Messages will be sent when you\u2019re back online.'
-    : 'Connecting\u2026';
-
   return (
-    <Animated.View style={[styles.bar, { height: heightAnim, backgroundColor: bgColor }]}>
+    <Animated.View style={[styles.bar, { height: heightAnim }]}>
       <View style={styles.inner}>
-        <Ionicons name={icon} size={14} color="#fff" />
+        <Ionicons name="cloud-offline-outline" size={12} color="#e2e8f0" />
         <Text style={styles.label} numberOfLines={1}>
-          {label}
+          Offline · Messages will be queued
         </Text>
       </View>
     </Animated.View>
@@ -62,6 +78,7 @@ const styles = StyleSheet.create({
   bar: {
     overflow: 'hidden',
     justifyContent: 'center',
+    backgroundColor: '#475569',
   },
   inner: {
     flexDirection: 'row',
@@ -71,8 +88,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#e2e8f0',
+    fontSize: 11,
+    fontWeight: '500',
   },
 });
