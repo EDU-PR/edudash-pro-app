@@ -14,7 +14,7 @@
  * ≤400 lines (WARP.md compliant)
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Speech from 'expo-speech';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useCelebration } from '@/hooks/useCelebration';
 import type { PreschoolActivity, ActivityResult, ActivityRound } from '@/lib/activities/preschoolActivities.types';
@@ -44,15 +45,38 @@ const DASH_CHEERS = [
 interface ActivityPlayerProps {
   activity: PreschoolActivity;
   childId: string;
+  ageYears?: number;
   onComplete: (result: ActivityResult) => void;
   onClose: () => void;
   onSpeak?: (text: string) => void;
 }
 
-export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak }: ActivityPlayerProps) {
+export function ActivityPlayer({ activity, childId, ageYears, onComplete, onClose, onSpeak }: ActivityPlayerProps) {
   const { theme } = useTheme();
   const styles = createActivityPlayerStyles(theme);
   const { successHaptic, errorHaptic, milestoneHaptic, selectionHaptic } = useCelebration();
+
+  const speak = useCallback((text: string) => {
+    if (onSpeak) {
+      onSpeak(text);
+      return;
+    }
+    try {
+      Speech.speak(text, { language: 'en-ZA', rate: 0.85, pitch: 1.1 });
+    } catch {
+      // Silent fallback
+    }
+  }, [onSpeak]);
+
+  const ageAdjustments = useMemo(() => {
+    if (!ageYears) return { maxWrong: MAX_WRONG, celebrationDuration: 8000, fontSize: 'normal' as const };
+    if (ageYears <= 3) return { maxWrong: 2, celebrationDuration: 10000, fontSize: 'large' as const };
+    if (ageYears <= 4) return { maxWrong: 3, celebrationDuration: 8000, fontSize: 'large' as const };
+    if (ageYears <= 5) return { maxWrong: 3, celebrationDuration: 6000, fontSize: 'normal' as const };
+    return { maxWrong: 4, celebrationDuration: 5000, fontSize: 'normal' as const };
+  }, [ageYears]);
+
+  const emojiScale = ageYears && ageYears <= 3 ? 1.5 : 1;
 
   const [roundIndex, setRoundIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -83,13 +107,12 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
 
   // Speak the prompt when round changes + show Dash message
   useEffect(() => {
-    if (currentRound && onSpeak) {
+    if (currentRound) {
       const speakText = currentRound.prompt.replace(/[^\w\s!?.,']/g, '');
-      onSpeak(speakText);
+      speak(speakText);
 
-      // Counting mode: invite child to tap emojis after prompt
       if (activity.gameType === 'emoji_counting' && currentRound.emojiGrid?.length) {
-        setTimeout(() => onSpeak('Tap each one to count them!'), 2500);
+        setTimeout(() => speak('Tap each one to count them!'), 2500);
       }
     }
     setSelectedOptionId(null);
@@ -102,12 +125,12 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [roundIndex]);
 
-  // Never-freeze: auto-advance after 8s if celebration is showing
+  // Never-freeze: auto-advance after celebration timeout
   useEffect(() => {
     if (showCelebration) {
       celebrationTimer.current = setTimeout(() => {
         handleNext();
-      }, 8000);
+      }, ageAdjustments.celebrationDuration);
       return () => {
         if (celebrationTimer.current) clearTimeout(celebrationTimer.current);
       };
@@ -139,15 +162,15 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
   /** Counting mode: Dash says each number as child taps */
   const handleCountTap = useCallback((count: number) => {
     if (NUMBER_WORDS[count - 1]) {
-      onSpeak?.(NUMBER_WORDS[count - 1] + '!');
+      speak(NUMBER_WORDS[count - 1] + '!');
     }
-  }, [onSpeak]);
+  }, [speak]);
 
   /** Counting mode: celebrate when all emojis counted */
   const handleCountComplete = useCallback((total: number) => {
     setDashMessage(`You counted ${total}! 🌟 Now pick the right number!`);
-    onSpeak?.(`Great counting! You counted ${total}! Now pick the right number!`);
-  }, [onSpeak]);
+    speak(`Great counting! You counted ${total}! Now pick the right number!`);
+  }, [speak]);
 
   /** Auto-reveal correct answer when child is stuck */
   const autoReveal = () => {
@@ -161,7 +184,7 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
     successHaptic();
     const helpText = "That's okay! The answer is " + correct.label + ". You'll get it next time!";
     setDashMessage(helpText);
-    if (onSpeak) onSpeak(helpText);
+    speak(helpText);
   };
 
   const handleOptionPress = (optionId: string) => {
@@ -177,7 +200,7 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
       setShowCelebration(true);
       animateBounce();
       successHaptic();
-      if (onSpeak && currentRound?.celebration) onSpeak(currentRound.celebration);
+      if (currentRound?.celebration) speak(currentRound.celebration);
     } else {
       const newWrong = wrongAttempts + 1;
       const hintThreshold = currentRound?.minWrongForHint ?? 1;
@@ -191,8 +214,7 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
 
       // AnimatedOptions handles its own shake animation
 
-      // After MAX_WRONG, auto-reveal so child never gets stuck
-      if (newWrong >= MAX_WRONG) {
+      if (newWrong >= ageAdjustments.maxWrong) {
         setTimeout(() => autoReveal(), 1200);
       } else {
         setTimeout(() => setSelectedOptionId(null), 800);
@@ -205,7 +227,7 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
     setShowCelebration(true);
     animateBounce();
     successHaptic();
-    if (onSpeak && currentRound?.celebration) onSpeak(currentRound.celebration);
+    if (currentRound?.celebration) speak(currentRound.celebration);
   };
 
   const handleNext = () => {
@@ -219,7 +241,7 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
 
       animateStars();
       milestoneHaptic();
-      if (onSpeak) onSpeak(activity.dashCelebration);
+      speak(activity.dashCelebration);
 
       setTimeout(() => {
         onComplete({
@@ -283,14 +305,16 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
 
           {/* Emoji Grid — animated per-item with counting support */}
           {currentRound.emojiGrid && currentRound.emojiGrid.length > 0 && (
-            <AnimatedEmojiGrid
-              emojis={currentRound.emojiGrid}
-              gameType={activity.gameType}
-              roundId={currentRound.id}
-              onCountTap={handleCountTap}
-              onCountComplete={handleCountComplete}
-              disabled={showCelebration || autoRevealed}
-            />
+            <View style={emojiScale !== 1 ? { transform: [{ scale: emojiScale }] } : undefined}>
+              <AnimatedEmojiGrid
+                emojis={currentRound.emojiGrid}
+                gameType={activity.gameType}
+                roundId={currentRound.id}
+                onCountTap={handleCountTap}
+                onCountComplete={handleCountComplete}
+                disabled={showCelebration || autoRevealed}
+              />
+            </View>
           )}
 
           {/* Movements */}

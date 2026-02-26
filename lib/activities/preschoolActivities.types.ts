@@ -23,8 +23,8 @@ export type ActivityGameType =
 /** Difficulty levels for preschool range */
 export type PreschoolDifficulty = 'easy' | 'medium' | 'tricky';
 
-/** Age suitability within the 3-5 range */
-export type AgeRange = '3-4' | '4-5' | '3-5';
+/** Age suitability — expanded from the original 3-5 to cover 1-6 */
+export type AgeRange = '1-2' | '2-3' | '3-4' | '4-5' | '5-6' | '1-3' | '3-5' | '4-6' | '1-6';
 
 /** Learning domain aligned to early childhood development */
 export type LearningDomain =

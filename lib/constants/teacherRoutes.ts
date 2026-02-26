@@ -92,8 +92,8 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     path: '/screens/assign-lesson?mode=activity-only' as Href,
     title: 'Assign Playground Activity',
     titleKey: 'teacher.assign_playground_activity',
-    icon: 'game-controller',
-    color: '#EC4899',
+    icon: 'game-controller-outline',
+    color: '#10B981',
     category: 'lessons',
   },
   assign_homework: {

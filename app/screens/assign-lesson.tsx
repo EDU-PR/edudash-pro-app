@@ -5,8 +5,8 @@
  * Part of the lesson delivery workflow.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { Ionicons } from '@expo/vector-icons';
@@ -99,7 +99,52 @@ export default function AssignLessonScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const { assignLesson, assignLessonToClass, isAssigning } = useLessonAssignment();
-  
+
+  // Success state for inline banner
+  const [assignmentSuccess, setAssignmentSuccess] = useState(false);
+  const [showCheckmark, setShowCheckmark] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const successAnim = useRef(new Animated.Value(0)).current;
+  const checkmarkAnim = useRef(new Animated.Value(0)).current;
+  const autoNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoNavTimer.current) clearTimeout(autoNavTimer.current);
+    };
+  }, []);
+
+  const showSuccessBanner = useCallback((message: string) => {
+    setSuccessMessage(message);
+    setShowCheckmark(true);
+    Animated.timing(checkmarkAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start(() => {
+      setShowCheckmark(false);
+      setAssignmentSuccess(true);
+      Animated.timing(successAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+      autoNavTimer.current = setTimeout(() => {
+        router.back();
+      }, 3000);
+    });
+  }, [checkmarkAnim, successAnim]);
+
+  const handleAssignAnother = useCallback(() => {
+    if (autoNavTimer.current) clearTimeout(autoNavTimer.current);
+    setAssignmentSuccess(false);
+    setShowCheckmark(false);
+    setSuccessMessage('');
+    successAnim.setValue(0);
+    checkmarkAnim.setValue(0);
+    setSelectedLesson(null);
+    setSelectedStudents([]);
+    setSelectedClass(null);
+    setPlaygroundActivityId(PRESCHOOL_ACTIVITIES[0]?.id ?? null);
+    setPlaygroundDifficulty('medium');
+    setNotes('');
+    setDueDate(null);
+    setPriority('normal');
+    setStep(1);
+  }, [successAnim, checkmarkAnim]);
+
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const teacherId = profile?.id;
 
@@ -276,14 +321,11 @@ export default function AssignLessonScreen() {
       }
       
       if (success) {
-        showAlert({
-          title: '✅ Lesson Assigned',
-          message: assignToClass
-            ? `Lesson assigned to ${selectedClass?.name}${interactiveActivityId ? ' with Dash Playground activity' : ''}`
-            : `Lesson assigned to ${selectedStudents.length} student(s)${interactiveActivityId ? ' with Dash Playground activity' : ''}`,
-          type: 'success',
-          buttons: [{ text: 'OK', onPress: () => router.back() }],
-        });
+        const target = assignToClass
+          ? selectedClass?.name ?? 'class'
+          : `${selectedStudents.length} student(s)`;
+        const label = interactiveActivityId ? 'Activity' : 'Lesson';
+        showSuccessBanner(`${label} assigned to ${target}`);
       } else {
         showAlert({ title: 'Error', message: 'Failed to assign lesson', type: 'error' });
       }
@@ -882,6 +924,49 @@ export default function AssignLessonScreen() {
           </View>
         </ScrollView>
       )}
+      {/* Inline success banner */}
+      {assignmentSuccess && (
+        <Animated.View style={[styles.successOverlay, { opacity: successAnim }]}>
+          <LinearGradient colors={['#059669', '#10B981']} style={styles.successBanner}>
+            <View style={styles.successIconRow}>
+              <View style={styles.successCheckCircle}>
+                <Ionicons name="checkmark" size={32} color="#fff" />
+              </View>
+            </View>
+            <Text style={styles.successTitle}>✅ {successMessage}</Text>
+            <Text style={styles.successSubtitle}>Parents will see this in their Dash Playground</Text>
+            <View style={styles.successActions}>
+              <TouchableOpacity
+                style={styles.successActionBtn}
+                onPress={() => {
+                  if (autoNavTimer.current) clearTimeout(autoNavTimer.current);
+                  router.replace('/screens/teacher-lessons' as any);
+                }}
+              >
+                <Ionicons name="list" size={18} color="#059669" />
+                <Text style={styles.successActionText}>View Assignments</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.successActionBtn, styles.successActionBtnPrimary]}
+                onPress={handleAssignAnother}
+              >
+                <Ionicons name="add-circle" size={18} color="#fff" />
+                <Text style={[styles.successActionText, styles.successActionTextPrimary]}>Assign Another</Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
+      {/* Checkmark transition overlay (brief flash before success) */}
+      {showCheckmark && (
+        <Animated.View style={[styles.checkmarkOverlay, { opacity: checkmarkAnim }]}>
+          <View style={styles.checkmarkCircle}>
+            <Ionicons name="checkmark" size={48} color="#fff" />
+          </View>
+        </Animated.View>
+      )}
+
       <AlertModalComponent />
     </View>
   );
@@ -1408,5 +1493,85 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  successOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 24,
+  },
+  successBanner: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    gap: 12,
+  },
+  successIconRow: {
+    marginBottom: 4,
+  },
+  successCheckCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  successActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    width: '100%',
+  },
+  successActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  successActionBtnPrimary: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  successActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  successActionTextPrimary: {
+    color: '#fff',
+  },
+  checkmarkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 99,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16,185,129,0.85)',
+  },
+  checkmarkCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

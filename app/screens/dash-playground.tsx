@@ -276,9 +276,16 @@ export default function DashPlaygroundScreen() {
         domain: assignment.activity.domain,
       },
     })
-      .then(() => refetchAssignments())
+      .then(() => {
+        refetchAssignments();
+      })
       .catch((error) => {
         console.warn('[DashPlayground] Failed to persist assignment completion:', error);
+        Alert.alert(
+          'Save Failed',
+          'We couldn\'t save the activity progress to the teacher. The result was recorded locally — please try again later.',
+          [{ text: 'OK' }],
+        );
       })
       .finally(() => {
         setIsSavingCompletion(false);
