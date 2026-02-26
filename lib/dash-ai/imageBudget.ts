@@ -137,7 +137,18 @@ function buildBudgetFromServerRow(row: ServerBudgetRow, tier?: string | null): I
   };
 }
 
+async function hasValidSession(): Promise<boolean> {
+  try {
+    const { data } = await assertSupabase().auth.getSession();
+    return !!(data?.session?.user);
+  } catch {
+    return false;
+  }
+}
+
 async function getServerAutoScanBudget(tier?: string | null): Promise<ImageBudget | null> {
+  if (!(await hasValidSession())) return null;
+
   const feature = String(AUTO_SCAN_FEATURE || '').trim().toLowerCase();
   if (!feature) {
     throw new Error('AUTO_SCAN_FEATURE is not configured');
@@ -162,6 +173,8 @@ async function getServerAutoScanBudget(tier?: string | null): Promise<ImageBudge
 }
 
 async function consumeServerAutoScanBudget(tier?: string | null, count: number = 1): Promise<AutoScanConsumeResult | null> {
+  if (!(await hasValidSession())) return null;
+
   const { data, error } = await assertSupabase().rpc('consume_daily_media_budget', {
     p_feature: AUTO_SCAN_FEATURE,
     p_amount: Math.max(0, Math.round(count)),

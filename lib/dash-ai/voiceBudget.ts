@@ -117,7 +117,18 @@ function buildBudgetFromServerRow(row: ServerBudgetRow, tier?: string | null): V
   };
 }
 
+async function hasValidSession(): Promise<boolean> {
+  try {
+    const { data } = await assertSupabase().auth.getSession();
+    return !!(data?.session?.user);
+  } catch {
+    return false;
+  }
+}
+
 async function getServerVoiceBudget(tier?: string | null): Promise<VoiceBudget | null> {
+  if (!(await hasValidSession())) return null;
+
   const feature = String(VOICE_FEATURE || '').trim().toLowerCase();
   if (!feature) {
     throw new Error('VOICE_FEATURE is not configured');
@@ -142,6 +153,8 @@ async function getServerVoiceBudget(tier?: string | null): Promise<VoiceBudget |
 }
 
 async function consumeServerVoiceBudget(tier: string | null | undefined, durationMs: number): Promise<VoiceBudget | null> {
+  if (!(await hasValidSession())) return null;
+
   const { data, error } = await assertSupabase().rpc('consume_daily_media_budget', {
     p_feature: VOICE_FEATURE,
     p_amount: Math.max(0, Math.round(durationMs)),
