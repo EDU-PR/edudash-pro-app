@@ -26,13 +26,7 @@ interface ExerciseProgressViewProps {
 
 export function ExerciseProgressView({ studentId, studentName }: ExerciseProgressViewProps) {
   const { t } = useTranslation();
-  const progressResult = useDailyExerciseProgress(studentId) as Record<string, unknown>;
-
-  const progress: DailyExerciseProgress | null =
-    (progressResult.data as DailyExerciseProgress | null | undefined)
-    ?? (progressResult.progress as DailyExerciseProgress | null | undefined)
-    ?? null;
-  const isLoading = (progressResult.isLoading ?? progressResult.loading ?? false) as boolean;
+  const { data: progress, isLoading } = useDailyExerciseProgress(studentId);
 
   if (isLoading || !progress) {
     return (

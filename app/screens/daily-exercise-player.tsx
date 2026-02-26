@@ -14,19 +14,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDailyExercises, useCompleteSubjectExercise } from '@/hooks/daily-exercises';
 import { ExercisePlayer } from '@/components/daily-exercises/ExercisePlayer';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-import type { SubjectCode, DailyExerciseSet } from '@/lib/daily-exercises/types';
+import type { SubjectCode } from '@/lib/daily-exercises/types';
 
 export default function DailyExercisePlayerScreen() {
   const { profile } = useAuth();
   const params = useLocalSearchParams<{ studentId?: string }>();
   const studentId = params.studentId ?? profile?.id;
 
-  const exercisesResult = useDailyExercises(studentId) as Record<string, unknown>;
+  const { data: exerciseSet, isLoading } = useDailyExercises(studentId);
   const completeSubject = useCompleteSubjectExercise();
-
-  const exerciseSet: DailyExerciseSet | null =
-    (exercisesResult.data as DailyExerciseSet | null | undefined) ?? null;
-  const isLoading = (exercisesResult.isLoading ?? exercisesResult.loading ?? false) as boolean;
 
   const handleComplete = useCallback(
     (subjectCode: SubjectCode, score: number, timeSeconds: number) => {
@@ -62,7 +58,7 @@ export default function DailyExercisePlayerScreen() {
 
   return (
     <ExercisePlayer
-      exerciseSet={exerciseSet}
+      exerciseSet={exerciseSet ?? null}
       onExit={handleExit}
       onComplete={handleComplete}
     />

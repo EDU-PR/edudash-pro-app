@@ -15,7 +15,7 @@ import {
   useDailyExercises,
   useDailyExerciseProgress,
 } from '@/hooks/daily-exercises';
-import type { SubjectExercise, DailyExerciseConfig, DailyExerciseSet, DailyExerciseProgress } from '@/lib/daily-exercises/types';
+import type { SubjectExercise } from '@/lib/daily-exercises/types';
 
 interface DailyExerciseCardProps {
   studentId: string | undefined;
@@ -24,22 +24,6 @@ interface DailyExerciseCardProps {
   onStartExercise: () => void;
   onViewProgress: () => void;
   onConfigure: () => void;
-}
-
-function extractData<T>(result: { data?: T | null } | { config?: T | null } | { exercises?: T | null } | { progress?: T | null } | Record<string, unknown>): T | null {
-  if (!result) return null;
-  const r = result as Record<string, unknown>;
-  if ('data' in r && r.data !== undefined) return r.data as T | null;
-  if ('config' in r && r.config !== undefined) return r.config as T | null;
-  if ('exercises' in r && r.exercises !== undefined) return r.exercises as T | null;
-  if ('progress' in r && r.progress !== undefined) return r.progress as T | null;
-  return null;
-}
-
-function extractLoading(result: Record<string, unknown>): boolean {
-  if ('isLoading' in result) return result.isLoading as boolean;
-  if ('loading' in result) return result.loading as boolean;
-  return false;
 }
 
 export function DailyExerciseCard({
@@ -51,14 +35,9 @@ export function DailyExerciseCard({
   onConfigure,
 }: DailyExerciseCardProps) {
   const { t } = useTranslation();
-  const configResult = useDailyExerciseConfig(studentId) as Record<string, unknown>;
-  const exercisesResult = useDailyExercises(studentId) as Record<string, unknown>;
-  const progressResult = useDailyExerciseProgress(studentId) as Record<string, unknown>;
-
-  const config = extractData<DailyExerciseConfig>(configResult);
-  const configLoading = extractLoading(configResult);
-  const todaySet = extractData<DailyExerciseSet>(exercisesResult);
-  const progress = extractData<DailyExerciseProgress>(progressResult);
+  const { data: config, isLoading: configLoading } = useDailyExerciseConfig(studentId);
+  const { data: todaySet } = useDailyExercises(studentId);
+  const { data: progress } = useDailyExerciseProgress(studentId);
 
   const streak = progress?.streak?.current ?? 0;
 
