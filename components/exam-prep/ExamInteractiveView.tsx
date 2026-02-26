@@ -11,7 +11,7 @@
  * Decomposed into ExamHeader, ExamQuestionCard, ExamFooter.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -19,11 +19,14 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ParsedExam, ExamQuestion, ExamSection } from '@/lib/examParser';
 import { useExamSession, StudentAnswer } from '@/hooks/useExamSession';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { clampPercent } from '@/lib/progress/clampPercent';
 import { ExamHeader } from './ExamHeader';
 import { ExamQuestionCard } from './ExamQuestionCard';
 import { ExamFooter } from './ExamFooter';
@@ -256,12 +259,13 @@ export function ExamInteractiveView({
 
   if (sessionLoading || !session || !currentQuestion) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+        <StatusBar style="light" />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading exam...
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -269,7 +273,8 @@ export function ExamInteractiveView({
   const totalQuestions = allQuestions.length;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar style="light" />
       <ExamHeader
         title={exam.title}
         currentIndex={currentIndex}
@@ -288,7 +293,12 @@ export function ExamInteractiveView({
         <View
           style={[
             styles.progressFill,
-            { backgroundColor: theme.primary, width: `${getProgress()}%` },
+            {
+              backgroundColor: theme.primary,
+              width: `${clampPercent(getProgress(), {
+                source: 'ExamInteractiveView.progress',
+              })}%`,
+            },
           ]}
         />
       </View>
@@ -301,6 +311,7 @@ export function ExamInteractiveView({
           currentIndex={currentIndex}
           currentAnswer={currentAnswer}
           studentAnswer={currentStudentAnswer}
+          isLocked={!!currentStudentAnswer}
           onChangeAnswer={setCurrentAnswer}
           onSelectOption={handleSelectOption}
           theme={theme as unknown as Record<string, string>}
@@ -321,7 +332,7 @@ export function ExamInteractiveView({
         onCompleteExam={handleCompleteExam}
         theme={theme as unknown as Record<string, string>}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

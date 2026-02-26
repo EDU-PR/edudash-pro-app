@@ -9,7 +9,8 @@ export type FeeCorrectionAuditAction =
   | 'change_class'
   | 'tuition_sync'
   | 'registration_paid'
-  | 'registration_unpaid';
+  | 'registration_unpaid'
+  | 'recompute_balances';
 
 export interface FeeCorrectionAuditInput {
   organizationId?: string | null;

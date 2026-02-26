@@ -17,6 +17,7 @@ interface ExamQuestionCardProps {
   currentIndex: number;
   currentAnswer: string;
   studentAnswer?: StudentAnswer;
+  isLocked: boolean;
   onChangeAnswer: (text: string) => void;
   onSelectOption: (option: string) => void;
   theme: Record<string, string>;
@@ -47,6 +48,7 @@ export function ExamQuestionCard({
   currentIndex,
   currentAnswer,
   studentAnswer,
+  isLocked,
   onChangeAnswer,
   onSelectOption,
   theme,
@@ -117,32 +119,78 @@ export function ExamQuestionCard({
                 currentAnswer === cleanedOption ||
                 currentAnswer === optionLetter;
 
+              const isCorrectOption =
+                question.correctAnswer === cleanedOption ||
+                question.correctAnswer === option ||
+                question.correctAnswer === optionLetter;
+
+              let lockedBg = theme.background;
+              let lockedBorder = theme.border;
+              let lockedTextColor = theme.text;
+              let lockedIcon: React.ReactNode = null;
+
+              if (isLocked) {
+                if (isSelected && isCorrectOption) {
+                  lockedBg = '#10b98120';
+                  lockedBorder = '#10b981';
+                  lockedTextColor = '#10b981';
+                  lockedIcon = <Ionicons name="checkmark" size={12} color="#10b981" />;
+                } else if (isSelected && !isCorrectOption) {
+                  lockedBg = '#ef444420';
+                  lockedBorder = '#ef4444';
+                  lockedTextColor = '#ef4444';
+                  lockedIcon = <Ionicons name="close" size={12} color="#ef4444" />;
+                } else if (isCorrectOption) {
+                  lockedBg = '#10b98120';
+                  lockedBorder = '#10b981';
+                  lockedTextColor = '#10b981';
+                  lockedIcon = <Ionicons name="checkmark" size={12} color="#10b981" />;
+                }
+              }
+
               return (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.optionButton,
                     {
-                      backgroundColor: isSelected ? theme.primary + '20' : theme.background,
-                      borderColor: isSelected ? theme.primary : theme.border,
+                      backgroundColor: isLocked
+                        ? lockedBg
+                        : isSelected ? theme.primary + '20' : theme.background,
+                      borderColor: isLocked
+                        ? lockedBorder
+                        : isSelected ? theme.primary : theme.border,
+                      opacity: isLocked && !isSelected && !isCorrectOption ? 0.7 : 1,
                     },
                   ]}
-                  onPress={() => onSelectOption(cleanedOption)}
+                  onPress={() => { if (!isLocked) onSelectOption(cleanedOption); }}
+                  disabled={isLocked}
+                  activeOpacity={isLocked ? 1 : 0.7}
                 >
                   <View
                     style={[
                       styles.optionCircle,
-                      { borderColor: isSelected ? theme.primary : theme.border },
+                      {
+                        borderColor: isLocked
+                          ? lockedBorder
+                          : isSelected ? theme.primary : theme.border,
+                      },
                     ]}
                   >
-                    {isSelected && (
-                      <Ionicons name="checkmark" size={12} color={theme.primary} />
-                    )}
+                    {isLocked
+                      ? lockedIcon
+                      : isSelected && (
+                          <Ionicons name="checkmark" size={12} color={theme.primary} />
+                        )}
                   </View>
                   <Text
                     style={[
                       styles.optionText,
-                      { color: isSelected ? theme.primary : theme.text },
+                      {
+                        color: isLocked
+                          ? lockedTextColor
+                          : isSelected ? theme.primary : theme.text,
+                      },
                     ]}
                   >
                     {optionLetter}. {cleanedOption}
@@ -158,32 +206,76 @@ export function ExamQuestionCard({
           <View style={styles.optionsContainer}>
             {['True', 'False'].map((option) => {
               const isSelected = currentAnswer.toLowerCase() === option.toLowerCase();
+              const isCorrectOption =
+                question.correctAnswer?.toLowerCase() === option.toLowerCase();
+
+              let lockedBg = theme.background;
+              let lockedBorder = theme.border;
+              let lockedTextColor = theme.text;
+              let lockedIcon: React.ReactNode = null;
+
+              if (isLocked) {
+                if (isSelected && isCorrectOption) {
+                  lockedBg = '#10b98120';
+                  lockedBorder = '#10b981';
+                  lockedTextColor = '#10b981';
+                  lockedIcon = <Ionicons name="checkmark" size={12} color="#10b981" />;
+                } else if (isSelected && !isCorrectOption) {
+                  lockedBg = '#ef444420';
+                  lockedBorder = '#ef4444';
+                  lockedTextColor = '#ef4444';
+                  lockedIcon = <Ionicons name="close" size={12} color="#ef4444" />;
+                } else if (isCorrectOption) {
+                  lockedBg = '#10b98120';
+                  lockedBorder = '#10b981';
+                  lockedTextColor = '#10b981';
+                  lockedIcon = <Ionicons name="checkmark" size={12} color="#10b981" />;
+                }
+              }
+
               return (
                 <TouchableOpacity
                   key={option}
                   style={[
                     styles.optionButton,
                     {
-                      backgroundColor: isSelected ? theme.primary + '20' : theme.background,
-                      borderColor: isSelected ? theme.primary : theme.border,
+                      backgroundColor: isLocked
+                        ? lockedBg
+                        : isSelected ? theme.primary + '20' : theme.background,
+                      borderColor: isLocked
+                        ? lockedBorder
+                        : isSelected ? theme.primary : theme.border,
+                      opacity: isLocked && !isSelected && !isCorrectOption ? 0.7 : 1,
                     },
                   ]}
-                  onPress={() => onSelectOption(option)}
+                  onPress={() => { if (!isLocked) onSelectOption(option); }}
+                  disabled={isLocked}
+                  activeOpacity={isLocked ? 1 : 0.7}
                 >
                   <View
                     style={[
                       styles.optionCircle,
-                      { borderColor: isSelected ? theme.primary : theme.border },
+                      {
+                        borderColor: isLocked
+                          ? lockedBorder
+                          : isSelected ? theme.primary : theme.border,
+                      },
                     ]}
                   >
-                    {isSelected && (
-                      <Ionicons name="checkmark" size={12} color={theme.primary} />
-                    )}
+                    {isLocked
+                      ? lockedIcon
+                      : isSelected && (
+                          <Ionicons name="checkmark" size={12} color={theme.primary} />
+                        )}
                   </View>
                   <Text
                     style={[
                       styles.optionText,
-                      { color: isSelected ? theme.primary : theme.text },
+                      {
+                        color: isLocked
+                          ? lockedTextColor
+                          : isSelected ? theme.primary : theme.text,
+                      },
                     ]}
                   >
                     {option}
@@ -203,10 +295,11 @@ export function ExamQuestionCard({
               styles.answerInput,
               question.type === 'essay' && styles.essayInput,
               {
-                backgroundColor: theme.background,
+                backgroundColor: isLocked ? theme.background + '80' : theme.background,
                 borderColor: theme.border,
                 color: theme.text,
               },
+              isLocked && { opacity: 0.7 },
             ]}
             value={currentAnswer}
             onChangeText={onChangeAnswer}
@@ -214,7 +307,7 @@ export function ExamQuestionCard({
             placeholderTextColor={theme.textTertiary}
             multiline={question.type === 'essay'}
             numberOfLines={question.type === 'essay' ? 6 : 2}
-            editable
+            editable={!isLocked}
           />
         )}
 

@@ -39,6 +39,13 @@ async function settle<T>(promise: Promise<T>): Promise<SettledResult<T>> {
 function reasonToMessage(reason: unknown): string {
   if (reason instanceof Error) return reason.message;
   if (typeof reason === 'string') return reason;
+  if (reason && typeof reason === 'object') {
+    const asRecord = reason as Record<string, unknown>;
+    const nestedMessage = asRecord.message || asRecord.error || asRecord.details;
+    if (typeof nestedMessage === 'string' && nestedMessage.trim().length > 0) {
+      return nestedMessage;
+    }
+  }
   try {
     return JSON.stringify(reason);
   } catch {
@@ -90,7 +97,10 @@ export async function fetchFinancials(
     });
 
     if (hasError) {
-      logger.warn('[PrincipalHub] fetchFinancials fallback triggered', {
+      logger.warn('principalhub.financials.snapshot_fallback', {
+        preschoolId,
+        month: currentMonth,
+        previousMonth,
         errors: errorMessages,
         currentSnapshotLoaded: Boolean(currentSnapshot),
         previousSnapshotLoaded: Boolean(previousSnapshot),
@@ -105,8 +115,14 @@ export async function fetchFinancials(
       errorMessage: errorMessages.length ? errorMessages.join(' | ') : null,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load financial summary';
-    logger.error('[PrincipalHub] fetchFinancials failed, returning fallback summary', { error: message });
+    const message = reasonToMessage(error) || 'Failed to load financial summary';
+    logger.warn('principalhub.financials.snapshot_fallback', {
+      preschoolId,
+      month: currentMonth,
+      previousMonth,
+      reason: message,
+      source: 'catch_block',
+    });
     return {
       monthlyRevenue: 0,
       previousMonthRevenue: 0,

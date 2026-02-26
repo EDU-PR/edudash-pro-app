@@ -1,6 +1,7 @@
 /**
  * EmojiPicker Component
  * WhatsApp-style emoji picker for message composer
+ * Includes a GIF tab at the end of the category row.
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -16,10 +17,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { GifSearchPanel } from './GifSearchPanel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Emoji categories with emojis
 const EMOJI_CATEGORIES = [
   {
     id: 'recent',
@@ -120,10 +121,13 @@ const EMOJI_CATEGORIES = [
   },
 ];
 
+const GIF_TAB_ID = 'gif';
+
 interface EmojiPickerProps {
   visible: boolean;
   onClose: () => void;
   onEmojiSelect: (emoji: string) => void;
+  onGifSelect?: (url: string) => void;
   height?: number;
 }
 
@@ -131,6 +135,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   visible,
   onClose,
   onEmojiSelect,
+  onGifSelect,
   height = 280,
 }) => {
   const { theme } = useTheme();
@@ -158,7 +163,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   const handleEmojiPress = useCallback((emoji: string) => {
     onEmojiSelect(emoji);
   }, [onEmojiSelect]);
-  
+
+  const isGifActive = activeCategory === GIF_TAB_ID;
   const currentCategory = EMOJI_CATEGORIES.find(c => c.id === activeCategory) || EMOJI_CATEGORIES[1];
   
   const styles = StyleSheet.create({
@@ -198,20 +204,14 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     emoji: {
       fontSize: 26,
     },
-    searchBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.elevated,
-      margin: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 20,
-    },
-    searchInput: {
-      flex: 1,
-      marginLeft: 8,
-      fontSize: 14,
-      color: theme.text,
+    gifTabLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      borderWidth: 1,
+      borderRadius: 4,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      overflow: 'hidden',
     },
   });
 
@@ -243,25 +243,59 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
             />
           </TouchableOpacity>
         ))}
+        {/* GIF tab at the end */}
+        <TouchableOpacity
+          style={[
+            styles.categoryTab,
+            isGifActive && styles.categoryTabActive,
+          ]}
+          onPress={() => setActiveCategory(GIF_TAB_ID)}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.gifTabLabel,
+              {
+                color: isGifActive ? theme.primary : theme.textSecondary,
+                borderColor: isGifActive ? theme.primary : theme.textSecondary,
+              },
+            ]}
+          >
+            GIF
+          </Text>
+        </TouchableOpacity>
       </View>
       
-      {/* Emoji Grid */}
-      <ScrollView
-        ref={scrollViewRef}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.emojiGrid}
-      >
-        {currentCategory.emojis.map((emoji, index) => (
-          <TouchableOpacity
-            key={`${emoji}-${index}`}
-            style={styles.emojiButton}
-            onPress={() => handleEmojiPress(emoji)}
-            activeOpacity={0.6}
-          >
-            <Text style={styles.emoji}>{emoji}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Content: emojis or GIF panel */}
+      {isGifActive ? (
+        <GifSearchPanel
+          onSelectGif={(url) => {
+            if (onGifSelect) {
+              onGifSelect(url);
+            } else {
+              onEmojiSelect(url);
+            }
+          }}
+          theme={theme}
+        />
+      ) : (
+        <ScrollView
+          ref={scrollViewRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.emojiGrid}
+        >
+          {currentCategory.emojis.map((emoji, index) => (
+            <TouchableOpacity
+              key={`${emoji}-${index}`}
+              style={styles.emojiButton}
+              onPress={() => handleEmojiPress(emoji)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.emoji}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
     </Animated.View>
   );
 };

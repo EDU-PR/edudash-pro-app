@@ -217,7 +217,7 @@ export default function HomeworkScanner({
         mediaTypes: ['images'],
         quality: 0.9,
         base64: false,
-        allowsEditing: true,
+        allowsEditing: false,
       });
       if (result.canceled || !result.assets?.[0]?.uri) return;
       const processed = await autoCropDocument(result.assets[0].uri);

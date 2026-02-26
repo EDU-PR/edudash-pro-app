@@ -42,6 +42,7 @@ export interface StudentFeeActionsReturn {
   canManageStudentProfile: boolean;
   canDeleteFees: boolean;
   saving: boolean;
+  recomputingBalances: boolean;
   deactivatingStudent: boolean;
   syncingTuitionFees: boolean;
   updatingRegistrationStatus: boolean;
@@ -81,6 +82,7 @@ export interface StudentFeeActionsReturn {
   handleDeleteFee: (fee: StudentFee) => Promise<void>;
   handleUpdateFeeDueDate: (fee: StudentFee, dueDate: Date) => Promise<void>;
   handleReceiptAction: (fee: StudentFee) => Promise<void>;
+  handleRecomputeLearnerBalances: () => Promise<void>;
   handleSyncTuitionFeesToClass: () => Promise<void>;
   handleSetRegistrationPaidStatus: (isPaid: boolean) => Promise<void>;
   prefillRegistrationFeeForClass: (classId: string) => Promise<void>;
@@ -104,6 +106,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   }, [showAlert]);
 
   const [saving, setSaving] = useState(false);
+  const [recomputingBalances, setRecomputingBalances] = useState(false);
   const [deactivatingStudent, setDeactivatingStudent] = useState(false);
   const [syncingTuitionFees, setSyncingTuitionFees] = useState(false);
   const [updatingRegistrationStatus, setUpdatingRegistrationStatus] = useState(false);
@@ -223,6 +226,45 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       showAlert('Error', getSupabaseErrorMessage(error, 'Failed to sync tuition fees.'), 'error');
     } finally { setSyncingTuitionFees(false); setSaving(false); }
   }, [canManageStudentProfile, classes, deny, loadFees, loadStudent, organizationId, profile?.id, profile?.role, saving, showAlert, student, studentRef, syncingTuitionFees]);
+
+  const handleRecomputeLearnerBalances = useCallback(async () => {
+    if (!canManageFees) {
+      deny('Learner balance recompute is limited to finance administrators and principals.');
+      return;
+    }
+    const currentStudent = studentRef.current || student;
+    if (!currentStudent || !profile?.id || recomputingBalances || saving) return;
+
+    setRecomputingBalances(true);
+    setSaving(true);
+    try {
+      const { data, error } = await assertSupabase().rpc('recalculate_student_fee_balances', {
+        p_student_id: currentStudent.id,
+        p_actor_id: profile.id,
+        p_reason: 'manual_recompute',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const updatedCount = Number((data as { updated_count?: number } | null)?.updated_count || 0);
+      showAlert(
+        'Balances Recomputed',
+        updatedCount > 0
+          ? `Recomputed ${updatedCount} fee row(s) for this learner.`
+          : 'No fee rows needed recompute for this learner.',
+        'success',
+      );
+      await loadStudent();
+      await loadFees(currentStudent);
+    } catch (error: any) {
+      showAlert('Recompute Failed', getSupabaseErrorMessage(error, 'Could not recompute learner balances.'), 'error');
+    } finally {
+      setRecomputingBalances(false);
+      setSaving(false);
+    }
+  }, [canManageFees, deny, loadFees, loadStudent, profile?.id, recomputingBalances, saving, showAlert, student, studentRef]);
 
   const handleSetRegistrationPaidStatus = useCallback(async (isPaid: boolean) => {
     if (!canManageFees) {
@@ -459,7 +501,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
 
   return {
     canManageFees, canManageStudentProfile, canDeleteFees,
-    saving, deactivatingStudent, syncingTuitionFees, updatingRegistrationStatus, processingFeeId, processingFeeAction, modalType, setModalType, selectedFee, setSelectedFee,
+    saving, recomputingBalances, deactivatingStudent, syncingTuitionFees, updatingRegistrationStatus, processingFeeId, processingFeeAction, modalType, setModalType, selectedFee, setSelectedFee,
     showEnrollmentPicker, setShowEnrollmentPicker,
     waiveAmount, setWaiveAmount, waiveReason, setWaiveReason, waiveType, setWaiveType,
     adjustAmount, setAdjustAmount, adjustReason, setAdjustReason,
@@ -467,5 +509,6 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     classFeeHint, setClassFeeHint, loadingSuggestedFee, canSubmitClassCorrection,
     handleWaiveFee, handleAdjustFee, handleChangeClass, handleUpdateEnrollmentDate, handleDeactivateStudent,
     handleMarkPaid, handleMarkUnpaid, handleDeleteFee, handleUpdateFeeDueDate, handleReceiptAction, handleSyncTuitionFeesToClass, handleSetRegistrationPaidStatus, prefillRegistrationFeeForClass,
+    handleRecomputeLearnerBalances,
   };
 }

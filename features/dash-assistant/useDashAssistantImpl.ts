@@ -4,6 +4,16 @@
  * Custom hook that extracts business logic from DashAssistant component.
  * Handles message state, conversation management, attachments, and AI interactions.
  * Voice input enabled for paid tiers and a limited free daily budget.
+ *
+ * TODO(refactor): This file is ~3200 lines — well over the 500-line guideline.
+ * Candidate sub-modules to extract:
+ *   - useMessageState.ts           (message list, pagination, optimistic updates)
+ *   - useConversationManager.ts    (thread CRUD, title generation, switching)
+ *   - useAttachments.ts            (image/doc picker, upload, preview)
+ *   - useAIStream.ts               (SSE streaming, tool-call handling, retry logic)
+ *   - useVoiceInput.ts             (STT recording, budget tracking)
+ *   - dashAssistantPrompts.ts      (system-prompt builders)
+ * Keep the public hook signature (`useDashAssistant`) intact as a façade.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';

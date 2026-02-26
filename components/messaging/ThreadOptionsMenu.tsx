@@ -48,6 +48,10 @@ interface ThreadOptionsMenuProps {
   isGroup?: boolean;
   participantCount?: number;
   onGroupInfo?: () => void;
+  onTogglePin?: () => void;
+  isPinned?: boolean;
+  onSetNotificationMode?: (mode: 'all' | 'mentions' | 'muted') => void;
+  notificationMode?: 'all' | 'mentions' | 'muted';
 }
 
 interface OptionItemProps {
@@ -132,6 +136,10 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
   isGroup = false,
   participantCount,
   onGroupInfo,
+  onTogglePin,
+  isPinned = false,
+  onSetNotificationMode,
+  notificationMode = 'all',
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -355,6 +363,41 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                     onPress={() => handleOptionPress(onAddShortcut)}
                     theme={theme}
                   />
+                )}
+
+                {onTogglePin && (
+                  <OptionItem
+                    icon={isPinned ? 'pin' : 'pin-outline'}
+                    label={isPinned ? 'Unpin Conversation' : 'Pin Conversation'}
+                    onPress={() => handleOptionPress(onTogglePin)}
+                    theme={theme}
+                  />
+                )}
+
+                {onSetNotificationMode && (
+                  <>
+                    <OptionItem
+                      icon={notificationMode === 'all' ? 'notifications' : 'notifications-outline'}
+                      label="All Notifications"
+                      onPress={() => handleOptionPress(() => onSetNotificationMode('all'))}
+                      disabled={notificationMode === 'all'}
+                      theme={theme}
+                    />
+                    <OptionItem
+                      icon="at-outline"
+                      label="Mentions Only"
+                      onPress={() => handleOptionPress(() => onSetNotificationMode('mentions'))}
+                      disabled={notificationMode === 'mentions'}
+                      theme={theme}
+                    />
+                    <OptionItem
+                      icon="notifications-off-outline"
+                      label="Mute Conversation"
+                      onPress={() => handleOptionPress(() => onSetNotificationMode('muted'))}
+                      disabled={notificationMode === 'muted'}
+                      theme={theme}
+                    />
+                  </>
                 )}
                 
                 <View style={styles.divider} />

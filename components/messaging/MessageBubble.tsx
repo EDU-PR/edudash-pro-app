@@ -41,6 +41,11 @@ interface MessageBubbleProps {
   onCallEventPress?: (event: CallEventContent) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Called when user taps a failed message to retry */
+  onRetry?: (localId: string) => void;
+  translatedText?: string;
+  onToggleTranslation?: () => void;
+  showTranslation?: boolean;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
@@ -62,6 +67,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   onCallEventPress,
   isFirstInGroup = true,
   isLastInGroup = true,
+  onRetry,
+  translatedText,
+  onToggleTranslation,
+  showTranslation = false,
 }) => {
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const name = getSenderName(msg.sender);
@@ -341,12 +350,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               }
               return (
                 <LinkedText
-                  text={msg.content}
+                  text={showTranslation && translatedText ? translatedText : msg.content}
                   style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}
                   linkColor={isOwn ? '#bbdefb' : '#93c5fd'}
                 />
               );
             })()}
+            {translatedText && (
+              <TouchableOpacity
+                style={styles.translationBadge}
+                onPress={onToggleTranslation}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.translationBadgeIcon}>🌐</Text>
+                <Text style={[styles.translationBadgeText, { color: isOwn ? 'rgba(255,255,255,0.6)' : '#64748b' }]}>
+                  {showTranslation ? 'Show original' : 'Translated'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {/* Failed / Pending indicators */}
+            {msg._failed && (
+              <TouchableOpacity
+                style={styles.failedRow}
+                onPress={() => msg._localId && onRetry?.(msg._localId)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="alert-circle" size={14} color="#ef4444" />
+                <Text style={styles.failedLabel}>
+                  {(msg as Message & { retryCount?: number }).retryCount !== undefined &&
+                  (msg as Message & { retryCount?: number }).retryCount! >= 3
+                    ? 'Failed to send. Tap to retry or delete.'
+                    : 'Tap to retry'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {msg._pending && !msg._failed && (
+              <View style={styles.pendingRow}>
+                <Ionicons name="time-outline" size={12} color="#94a3b8" />
+                <Text style={styles.pendingLabel}>Sending…</Text>
+              </View>
+            )}
             <View style={styles.footer}>
               {msg.edited_at && (
                 <Text style={[styles.editedLabel, { color: isOwn ? 'rgba(255,255,255,0.5)' : '#64748b' }]}>edited</Text>
@@ -354,10 +397,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               <Text style={[styles.time, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
                 {formatTime(msg.created_at)}
               </Text>
-              {isOwn && (
+              {isOwn && !msg._failed && (
                 <View style={styles.ticksContainer}>
                   <MessageTicks status={status} />
                 </View>
+              )}
+              {isOwn && msg._failed && (
+                <Ionicons name="alert-circle" size={14} color="#ef4444" style={{ marginLeft: 2 }} />
               )}
             </View>
           </LinearGradient>
@@ -420,7 +466,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
          (prevProps.msg.reply_to?.sender?.last_name ?? null) === (nextProps.msg.reply_to?.sender?.last_name ?? null) &&
          prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
          prevProps.isLastInGroup === nextProps.isLastInGroup &&
-         JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
+         prevProps.msg._failed === nextProps.msg._failed &&
+         prevProps.msg._pending === nextProps.msg._pending &&
+         JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions) &&
+         prevProps.translatedText === nextProps.translatedText &&
+         prevProps.showTranslation === nextProps.showTranslation;
 });
 
 const styles = StyleSheet.create({
@@ -722,5 +772,43 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontStyle: 'italic',
     marginRight: 2,
+  },
+  failedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  failedLabel: {
+    fontSize: 11,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    opacity: 0.6,
+  },
+  pendingLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  translationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  translationBadgeIcon: {
+    fontSize: 12,
+  },
+  translationBadgeText: {
+    fontSize: 11,
+    fontStyle: 'italic',
   },
 });

@@ -226,6 +226,8 @@ interface MessagesListHeaderProps {
   }>;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  /** Opens the global message search modal */
+  onSearchPress?: () => void;
   /** @deprecated Use menuItems instead */
   onNewMessage?: () => void;
   /** @deprecated Use menuItems instead */
@@ -240,6 +242,7 @@ export function MessagesListHeader({
   menuItems,
   showBackButton = true,
   onBackPress,
+  onSearchPress,
   onNewMessage,
   onSettings,
 }: MessagesListHeaderProps) {
@@ -403,6 +406,16 @@ export function MessagesListHeader({
             )}
           </View>
           
+          {onSearchPress && (
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={onSearchPress}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="search-outline" size={20} color={theme.text} />
+            </TouchableOpacity>
+          )}
+
           {!!rightActionLabel && onRightActionPress && (
             <TouchableOpacity
               style={styles.rightActionButton}

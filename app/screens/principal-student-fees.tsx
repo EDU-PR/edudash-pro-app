@@ -43,6 +43,7 @@ const ACTION_LABELS: Record<string, string> = {
   adjust: 'Adjust Fee',
   mark_paid: 'Mark Paid',
   mark_unpaid: 'Mark Unpaid',
+  recompute_balances: 'Recompute Balances',
   delete: 'Delete Fee',
   change_class: 'Change Class',
   tuition_sync: 'Sync Tuition',
@@ -677,6 +678,37 @@ export default function StudentFeeManagementScreen() {
           </View>
         )}
 
+        <View style={styles.correctionGuideCard}>
+          <View style={styles.correctionGuideHeader}>
+            <Ionicons name="construct-outline" size={16} color={theme.primary} />
+            <Text style={styles.correctionGuideTitle}>Correction Guide</Text>
+          </View>
+          <Text style={styles.correctionGuideStep}>1. Confirm class and fee category before editing.</Text>
+          <Text style={styles.correctionGuideStep}>2. Use Mark Paid / Waive / Adjust / Reschedule to correct rows.</Text>
+          <Text style={styles.correctionGuideStep}>3. Recompute learner balances to normalize status and outstanding totals.</Text>
+          <Text style={styles.correctionGuideStep}>4. Validate the final state in Correction Timeline.</Text>
+          {!actions.canDeleteFees && (
+            <Text style={styles.correctionGuideMeta}>Delete fee rows requires principal access.</Text>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.recomputeButton,
+              (!actions.canManageFees || actions.recomputingBalances || actions.saving) && styles.controlDisabled,
+            ]}
+            onPress={() => void actions.handleRecomputeLearnerBalances()}
+            disabled={!actions.canManageFees || actions.recomputingBalances || actions.saving}
+          >
+            {actions.recomputingBalances ? (
+              <EduDashSpinner size="small" color={theme.info || theme.primary} />
+            ) : (
+              <Ionicons name="sync-outline" size={16} color={theme.info || theme.primary} />
+            )}
+            <Text style={styles.recomputeButtonText}>
+              {actions.recomputingBalances ? 'Recomputing...' : 'Recompute Learner Balances'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {actions.showEnrollmentPicker && (
           <DateTimePicker
             value={student.enrollment_date ? new Date(student.enrollment_date) : new Date()}
@@ -735,8 +767,8 @@ export default function StudentFeeManagementScreen() {
               <Ionicons name="calendar-outline" size={14} color={theme.primary} />
               <Text style={styles.contextBannerText}>
                 {showFullHistory
-                  ? 'Showing full fee history. Switch back to see only outstanding receivables.'
-                  : 'Showing all unpaid and overdue fees for this student.'}
+                  ? 'Showing full fee history. Switch back to month-scoped receivables.'
+                  : `Viewing receivables for ${receivablesMonthLabel || 'the selected month'}.`}
               </Text>
               <TouchableOpacity
                 onPress={() => setShowFullHistory((prev) => !prev)}
@@ -754,7 +786,7 @@ export default function StudentFeeManagementScreen() {
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
               <Text style={styles.emptyFeesText}>
                 {data.source === 'receivables' && !showFullHistory
-                  ? 'No outstanding receivables'
+                  ? `No receivables for ${receivablesMonthLabel || 'the selected month'}`
                   : 'No fees recorded'}
               </Text>
               {data.feeSetupStatus === 'missing' && (
