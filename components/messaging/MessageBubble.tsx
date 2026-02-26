@@ -43,6 +43,9 @@ interface MessageBubbleProps {
   isLastInGroup?: boolean;
   /** Called when user taps a failed message to retry */
   onRetry?: (localId: string) => void;
+  translatedText?: string;
+  onToggleTranslation?: () => void;
+  showTranslation?: boolean;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
@@ -65,6 +68,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   isFirstInGroup = true,
   isLastInGroup = true,
   onRetry,
+  translatedText,
+  onToggleTranslation,
+  showTranslation = false,
 }) => {
   const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string | null>(null);
   const name = getSenderName(msg.sender);
@@ -344,12 +350,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               }
               return (
                 <LinkedText
-                  text={msg.content}
+                  text={showTranslation && translatedText ? translatedText : msg.content}
                   style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}
                   linkColor={isOwn ? '#bbdefb' : '#93c5fd'}
                 />
               );
             })()}
+            {translatedText && (
+              <TouchableOpacity
+                style={styles.translationBadge}
+                onPress={onToggleTranslation}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.translationBadgeIcon}>🌐</Text>
+                <Text style={[styles.translationBadgeText, { color: isOwn ? 'rgba(255,255,255,0.6)' : '#64748b' }]}>
+                  {showTranslation ? 'Show original' : 'Translated'}
+                </Text>
+              </TouchableOpacity>
+            )}
             {/* Failed / Pending indicators */}
             {msg._failed && (
               <TouchableOpacity
@@ -450,7 +468,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
          prevProps.isLastInGroup === nextProps.isLastInGroup &&
          prevProps.msg._failed === nextProps.msg._failed &&
          prevProps.msg._pending === nextProps.msg._pending &&
-         JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
+         JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions) &&
+         prevProps.translatedText === nextProps.translatedText &&
+         prevProps.showTranslation === nextProps.showTranslation;
 });
 
 const styles = StyleSheet.create({
@@ -774,5 +794,21 @@ const styles = StyleSheet.create({
   pendingLabel: {
     fontSize: 11,
     color: '#94a3b8',
+  },
+  translationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  translationBadgeIcon: {
+    fontSize: 12,
+  },
+  translationBadgeText: {
+    fontSize: 11,
+    fontStyle: 'italic',
   },
 });
