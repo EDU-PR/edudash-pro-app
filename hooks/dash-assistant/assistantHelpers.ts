@@ -18,7 +18,7 @@ export const wantsLessonGenerator = (text: string, assistantText?: string): bool
   return false;
 };
 
-/** Filters out JSON-like or internal strings that should not be shown as follow-up chips. */
+/** Filters out JSON-like, bracket-tag, or internal strings that should not be shown as follow-up chips. */
 export const isValidFollowUp = (s: string): boolean => {
   if (!s || s.length < 6) return false;
   const lower = s.toLowerCase().trim();
@@ -27,6 +27,14 @@ export const isValidFollowUp = (s: string): boolean => {
   if (/^["']?\s*[\{\[]\s*["']?/.test(lower) || /["']?\s*[\}\]]\s*["']?$/.test(lower)) return false;
   if (/\{\s*"type"\s*:\s*"(spelling_practice|column_addition|quiz_question)"/.test(lower)) return false;
   if (/^"?prompt"?$/i.test(lower) || /^"?prompt"\s*:\s*"?/i.test(lower)) return false;
+  // Exclude bracket-wrapped tags like [WHITEBOARD], [/WHITEBOARD], [TOOL], etc.
+  if (/^\[\/?\w+\]$/.test(s.trim())) return false;
+  // Exclude strings that are mostly bracket tags
+  if (/\[\/?\w+\]/.test(s) && s.replace(/\[\/?\w+\]/g, '').trim().length < 6) return false;
+  // Exclude markdown code fences or raw code blocks
+  if (/^```/.test(s.trim()) || /```$/.test(s.trim())) return false;
+  // Exclude lines that look like tool invocations or metadata
+  if (/^(tool_use|tool_result|function_call|<tool|<\/tool)/i.test(lower)) return false;
   return true;
 };
 
