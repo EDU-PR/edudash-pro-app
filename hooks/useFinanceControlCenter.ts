@@ -346,20 +346,19 @@ export function useFinanceControlCenter() {
 
   const openQueueMonthPicker = React.useCallback((upload: FinancePendingPOPRow) => {
     const selectedMonth = queueMonthSelections[upload.id];
+    const normalizedSelected = selectedMonth
+      ? getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true })
+      : null;
     const currentMonthDate = new Date(monthIso);
     const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
     const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
     const suggestedMonth = resolveQueueDisplayMonth(upload);
-    const candidateMonths = Array.from(
-      new Set(
-        [
-          monthIso,
-          `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-          `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-          suggestedMonth,
-        ].filter(Boolean),
-      ),
-    );
+    const candidateMonths = [
+      suggestedMonth,
+      monthIso,
+      `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+      `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+    ].filter((candidate, index, list) => Boolean(candidate) && list.indexOf(candidate) === index);
 
     showAlert({
       title: 'Select Accounting Month',
@@ -368,7 +367,7 @@ export function useFinanceControlCenter() {
       buttons: [
         ...candidateMonths.map((candidate) => ({
           text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
-            selectedMonth === candidate ? ' ✓' : ''
+            normalizedSelected === candidate ? ' ✓' : ''
           }`,
           onPress: () => {
             setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
@@ -378,6 +377,30 @@ export function useFinanceControlCenter() {
       ],
     });
   }, [monthIso, queueMonthSelections, resolveQueueDisplayMonth, showAlert]);
+
+  React.useEffect(() => {
+    setQueueMonthSelections((prev) => {
+      const next: Record<string, string> = {};
+      queueRows.forEach((row) => {
+        if (String(row.status || '').toLowerCase() !== 'pending') return;
+        const resolvedMonth = resolveQueueDisplayMonth(row);
+        const existing = prev[row.id];
+        next[row.id] = existing
+          ? getMonthStartISO(existing, { recoverUtcMonthBoundary: true })
+          : resolvedMonth;
+      });
+
+      const prevKeys = Object.keys(prev).sort();
+      const nextKeys = Object.keys(next).sort();
+      if (
+        prevKeys.length === nextKeys.length &&
+        prevKeys.every((key, index) => key === nextKeys[index] && prev[key] === next[key])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [queueRows, resolveQueueDisplayMonth]);
 
   const resolveQueueStage = React.useCallback((upload: FinancePendingPOPRow): FinanceQueueStage => {
     const status = String(upload.status || '').toLowerCase();

@@ -213,9 +213,14 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
     if (source !== 'receivables') return displayFees;
     const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
     const statusPriority: Record<string, number> = { overdue: 0, partially_paid: 1, pending: 2 };
-    const filtered = displayFees.filter((fee) =>
-      unpaidStatuses.has(String(fee.status || '').toLowerCase()),
-    );
+    const filtered = displayFees.filter((fee) => {
+      if (!unpaidStatuses.has(String(fee.status || '').toLowerCase())) return false;
+      if (!activeMonthIso) return true;
+      const feeMonthIso = getMonthStartISO(fee.billing_month || fee.due_date || '', {
+        recoverUtcMonthBoundary: Boolean(fee.billing_month),
+      });
+      return feeMonthIso === activeMonthIso;
+    });
     return filtered.sort((a, b) => {
       const pa = statusPriority[a.status] ?? 3;
       const pb = statusPriority[b.status] ?? 3;
@@ -224,7 +229,7 @@ export function useStudentFeeData(studentId?: string, options?: UseStudentFeeDat
       const db = b.due_date ? new Date(b.due_date).getTime() : 0;
       return da - db;
     });
-  }, [displayFees, source]);
+  }, [activeMonthIso, displayFees, source]);
 
   const totals = useMemo(() => {
     const today = new Date();

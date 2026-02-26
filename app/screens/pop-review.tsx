@@ -525,20 +525,19 @@ export default function POPReviewScreen() {
 
   const openQueueMonthPicker = useCallback((upload: POPUpload) => {
     const selectedMonth = queueMonthSelections[upload.id];
+    const normalizedSelected = selectedMonth
+      ? getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true })
+      : null;
     const currentMonthDate = new Date(selectedControlMonth);
     const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
     const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
     const suggestedMonth = resolveQueueDisplayMonth(upload);
-    const candidateMonths = Array.from(
-      new Set(
-        [
-          selectedControlMonth,
-          `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-          `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-          suggestedMonth,
-        ].filter(Boolean),
-      ),
-    );
+    const candidateMonths = [
+      suggestedMonth,
+      selectedControlMonth,
+      `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+      `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
+    ].filter((candidate, index, list) => Boolean(candidate) && list.indexOf(candidate) === index);
 
     showAlert({
       title: 'Select Accounting Month',
@@ -547,7 +546,7 @@ export default function POPReviewScreen() {
       buttons: [
         ...candidateMonths.map((candidate) => ({
           text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
-            selectedMonth === candidate ? ' ✓' : ''
+            normalizedSelected === candidate ? ' ✓' : ''
           }`,
           onPress: () => {
             setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
@@ -557,6 +556,30 @@ export default function POPReviewScreen() {
       ],
     });
   }, [queueMonthSelections, resolveQueueDisplayMonth, selectedControlMonth, showAlert]);
+
+  useEffect(() => {
+    setQueueMonthSelections((prev) => {
+      const next: Record<string, string> = {};
+      uploads.forEach((upload) => {
+        if (String(upload.status || '').toLowerCase() !== 'pending') return;
+        const resolvedMonth = resolveQueueDisplayMonth(upload);
+        const existing = prev[upload.id];
+        next[upload.id] = existing
+          ? getMonthStartISO(existing, { recoverUtcMonthBoundary: true })
+          : resolvedMonth;
+      });
+
+      const prevKeys = Object.keys(prev).sort();
+      const nextKeys = Object.keys(next).sort();
+      if (
+        prevKeys.length === nextKeys.length &&
+        prevKeys.every((key, index) => key === nextKeys[index] && prev[key] === next[key])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [uploads, resolveQueueDisplayMonth]);
 
   const handleApprove = useCallback((upload: POPUpload) => {
     const originalCategory = upload.category_code
@@ -770,7 +793,7 @@ export default function POPReviewScreen() {
       return name || (item.uploader as { email?: string }).email || 'School admin';
     })();
     const selectedMonth = queueMonthSelections[item.id];
-    const paymentForMonth = selectedMonth || resolveQueueDisplayMonth(item);
+    const paymentForMonth = resolveQueueDisplayMonth(item);
     const categoryMeta = getCategoryMeta(item);
 
     return (
@@ -829,7 +852,7 @@ export default function POPReviewScreen() {
                 >
                   <Ionicons name="create-outline" size={12} color={theme.textSecondary} />
                   <Text style={[styles.categoryEditText, { color: theme.textSecondary }]}>
-                    {paymentForMonth ? 'Change' : 'Set'}
+                    Change
                   </Text>
                 </TouchableOpacity>
               )}
@@ -843,7 +866,7 @@ export default function POPReviewScreen() {
                 size={16}
                 color={selectedMonth ? theme.primary : theme.warning || '#F59E0B'}
               />
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Accounting month:</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Accounting Month:</Text>
               <TouchableOpacity
                 style={[
                   styles.monthPickerButton,

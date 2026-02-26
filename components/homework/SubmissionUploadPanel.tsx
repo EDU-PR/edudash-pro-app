@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { SubmissionUploadFile } from '@/hooks/homework/useHomeworkDetail';
 import { formatDateTime } from '@/hooks/homework/useHomeworkDetail';
+import { clampPercent } from '@/lib/progress/clampPercent';
 
 interface SubmissionUploadPanelProps {
   theme: any;
@@ -151,7 +152,17 @@ export function SubmissionUploadPanel({
       {isUploading && (
         <View style={styles.progressContainer}>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressBar, { width: `${uploadProgress}%`, backgroundColor: theme.primary }]} />
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  width: `${clampPercent(uploadProgress, {
+                    source: 'SubmissionUploadPanel.uploadProgress',
+                  })}%`,
+                  backgroundColor: theme.primary,
+                },
+              ]}
+            />
           </View>
           <Text style={[styles.progressText, { color: theme.textSecondary }]}>
             {uploadProgress < 100 ? `${Math.round(uploadProgress)}% uploading...` : 'Finalising...'}

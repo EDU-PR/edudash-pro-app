@@ -26,6 +26,23 @@ export { getPendingReportCount } from './types';
 const __FETCH_GUARD: Record<string, number> =
   ((global as any).__EDUDASH_FETCH_GUARD__ ??= {});
 
+const normalizeErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const asRecord = error as Record<string, unknown>;
+    const nested = asRecord.message || asRecord.error || asRecord.details;
+    if (typeof nested === 'string' && nested.trim().length > 0) {
+      return nested;
+    }
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
 export const usePrincipalHub = () => {
   const { user, profile } = useAuth();
   const { metrics: pettyCashMetrics } = usePettyCashDashboard();
@@ -142,8 +159,14 @@ export const usePrincipalHub = () => {
 
         if (!initialFetchComplete.current) initialFetchComplete.current = true;
       } catch (err) {
-        logger.error('[PrincipalHub] Fetch failed:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+        const normalizedError = normalizeErrorMessage(err) || 'Failed to load dashboard data';
+        logger.warn('principalhub.financials.snapshot_fallback', {
+          reason: normalizedError,
+          preschoolId,
+          userId,
+          source: 'usePrincipalHub.catch',
+        });
+        setError(normalizedError);
       } finally {
         if (isMountedRef.current) setLoading(false);
         inFlightRef.current = false;

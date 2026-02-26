@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAgeBandsForOrgType, normalizeSchoolType } from '@/lib/tenant/compat';
 import { getTutorChallengePlan } from '@/features/dash-assistant/tutorChallengePolicy';
+import { ratioToPercent } from '@/lib/progress/clampPercent';
 
 interface TutorHomeProps {
   styles: any;
@@ -352,9 +353,13 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const displayName =
     learnerContext?.learnerName || profile?.full_name || profile?.first_name || 'there';
   const greeting = getTimeGreeting();
-  const progressFraction = learningStats.sessionsGoal > 0
-    ? Math.min(learningStats.sessionsToday / learningStats.sessionsGoal, 1)
-    : 0;
+  const dailyProgressPercent = ratioToPercent(
+    learningStats.sessionsToday,
+    learningStats.sessionsGoal,
+    {
+      source: 'TutorHome.dailyProgress',
+    },
+  );
 
   if (collapsed) {
     return (
@@ -489,7 +494,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
               <View
                 style={[
                   localStyles.progressBarFill,
-                  { width: `${progressFraction * 100}%`, backgroundColor: theme.primary },
+                  { width: `${dailyProgressPercent}%`, backgroundColor: theme.primary },
                 ]}
               />
             </View>

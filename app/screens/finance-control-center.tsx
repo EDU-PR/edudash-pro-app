@@ -177,7 +177,10 @@ export default function FinanceControlCenterScreen() {
                 </View>
               </View>
               <Text style={styles.queueSubtext}>
-                {formatCurrency(item.payment_amount)} submitted for{' '}
+                Amount: {formatCurrency(item.payment_amount)}
+              </Text>
+              <Text style={styles.queueSubtext}>
+                Payment For:{' '}
                 {new Date(displayMonth).toLocaleDateString('en-ZA', {
                   month: 'short',
                   year: 'numeric',
@@ -202,7 +205,7 @@ export default function FinanceControlCenterScreen() {
                       ]}
                     >
                       {selectedMonth
-                        ? `Accounting month: ${new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}`
+                        ? `Accounting Month: ${new Date(selectedMonth).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}`
                         : 'Select accounting month'}
                     </Text>
                   </TouchableOpacity>

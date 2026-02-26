@@ -26,6 +26,7 @@ import { useExamSession, StudentAnswer } from '@/hooks/useExamSession';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { clampPercent } from '@/lib/progress/clampPercent';
 import { ExamHeader } from './ExamHeader';
 import { ExamQuestionCard } from './ExamQuestionCard';
 import { ExamFooter } from './ExamFooter';
@@ -292,7 +293,12 @@ export function ExamInteractiveView({
         <View
           style={[
             styles.progressFill,
-            { backgroundColor: theme.primary, width: `${getProgress()}%` },
+            {
+              backgroundColor: theme.primary,
+              width: `${clampPercent(getProgress(), {
+                source: 'ExamInteractiveView.progress',
+              })}%`,
+            },
           ]}
         />
       </View>
