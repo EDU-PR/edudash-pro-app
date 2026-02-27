@@ -493,24 +493,34 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
       <div className="frame">
         {showSidebar && (
-          <aside className="sidenav sticky" aria-label="Sidebar">
-            <div className="sidenavCol">
-              <nav className="nav">
-                {nav.map((it) => {
-                  const Icon = it.icon as any;
-                  const active = pathname === it.href || pathname?.startsWith(it.href + '/');
-                  return (
-                    <Link key={it.href} href={it.href} className={`navItem ${active ? 'navItemActive' : ''}`} aria-current={active ? 'page' : undefined}>
-                      <Icon className="navIcon" />
-                      <span>{it.label}</span>
-                      {typeof it.badge === 'number' && it.badge > 0 && (
-                        <span className="navItemBadge badgeNumber">{it.badge}</span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-              <div className="sidenavFooter">
+          <aside
+            className="sidenav sticky"
+            aria-label="Sidebar"
+            style={{
+              minHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',
+              maxHeight: 'calc(100dvh - var(--topnav-offset, 56px) - var(--space-6, 24px))',
+              overflow: 'hidden',
+            }}
+          >
+            <div className="sidenavCol" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+              <div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}>
+                <nav className="nav">
+                  {nav.map((it) => {
+                    const Icon = it.icon as any;
+                    const active = pathname === it.href || pathname?.startsWith(it.href + '/');
+                    return (
+                      <Link key={it.href} href={it.href} className={`navItem ${active ? 'navItemActive' : ''}`} aria-current={active ? 'page' : undefined}>
+                        <Icon className="navIcon" />
+                        <span>{it.label}</span>
+                        {typeof it.badge === 'number' && it.badge > 0 && (
+                          <span className="navItemBadge badgeNumber">{it.badge}</span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
+              <div className="sidenavFooter" style={{ flexShrink: 0 }}>
                 <button
                   className="navItem"
                   onClick={handleSignOut}
