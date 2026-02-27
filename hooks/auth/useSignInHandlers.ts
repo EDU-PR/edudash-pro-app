@@ -10,7 +10,7 @@ import { Keyboard, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { signInWithSession } from '@/lib/sessionManager';
-import { resetSignOutState } from '@/lib/authActions';
+import { clearAccountSwitchPending, resetSignOutState, setAccountSwitchInProgress } from '@/lib/authActions';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
@@ -77,6 +77,7 @@ export function useSignInHandlers(deps: SignInFormDeps) {
     deps.emailInputRef.current?.blur();
     deps.passwordInputRef.current?.blur();
     resetSignOutState();
+    setAccountSwitchInProgress(false);
     deps.setLoading(true);
     await new Promise((r) => setTimeout(r, 50));
 
@@ -127,6 +128,8 @@ export function useSignInHandlers(deps: SignInFormDeps) {
       }
 
       logger.debug('SignIn', 'Sign in successful:', email.trim());
+      clearAccountSwitchPending();
+      setAccountSwitchInProgress(false);
 
       // Remember me
       saveCredentials(email.trim(), password, rememberMe).catch(() => {});
@@ -148,13 +151,16 @@ export function useSignInHandlers(deps: SignInFormDeps) {
         clearAllNavigationLocks();
       } catch { /* noop */ }
 
-      // Watchdog — only stops spinner, does NOT navigate
-      clearSignInWatchdog();
-      signInWatchdogRef.current = setTimeout(() => {
-        if (!isMountedRef.current) return;
-        logger.warn('SignIn', 'Post sign-in watchdog fired — stopping spinner');
-        stopLoadingState();
-      }, 10000);
+      // Normalize auth-route params after success so guard can redirect reliably.
+      stopLoadingState();
+      if (isMountedRef.current) {
+        try {
+          router.replace('/(auth)/sign-in' as any);
+        } catch {
+          // Guard will still route once auth state propagates.
+        }
+      }
+      return;
     } catch (_error: any) {
       logger.error('SignIn', 'Sign in error:', _error?.message);
       deps.showAlert({

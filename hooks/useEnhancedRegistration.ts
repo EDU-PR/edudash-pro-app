@@ -85,6 +85,8 @@ export function useEnhancedRegistration({
   onSuccess,
   onError
 }: UseEnhancedRegistrationProps) {
+  const shouldSelectSchoolInFlow = role === 'parent' && !invitationToken && !organizationId;
+
   // Organization state for parent registration
   const [organizations, setOrganizations] = React.useState<PublicOrganization[]>([]);
   const [loadingOrganizations, setLoadingOrganizations] = React.useState(true);
@@ -100,7 +102,7 @@ export function useEnhancedRegistration({
     confirmPassword: '',
     acceptTerms: false,
     marketingConsent: false,
-    selectedOrganizationId: organizationId || COMMUNITY_SCHOOL_ID,
+    selectedOrganizationId: organizationId || (shouldSelectSchoolInFlow ? undefined : COMMUNITY_SCHOOL_ID),
     registrationChildren: [],
   });
   
@@ -152,33 +154,49 @@ export function useEnhancedRegistration({
       const fetchOrganizations = async () => {
         try {
           setLoadingOrganizations(true);
+          setOrganizationError(null);
           const { data, error } = await assertSupabase()
             .from('preschools')
             .select('id, name, school_type, city')
-            .eq('is_public', true)
             .eq('is_active', true)
             .order('name');
 
           if (error) throw error;
 
           const orgList = (data || []) as PublicOrganization[];
-          const communitySchool = orgList.find(org => org.id === COMMUNITY_SCHOOL_ID);
-          const otherOrgs = orgList.filter(org => org.id !== COMMUNITY_SCHOOL_ID);
-          
-          if (communitySchool) {
-            setOrganizations([communitySchool, ...otherOrgs]);
-          } else {
-            setOrganizations([
-              { id: COMMUNITY_SCHOOL_ID, name: 'EduDash Pro Community School', school_type: 'community_school' },
-              ...otherOrgs
-            ]);
-          }
+          const uniqueOrganizations = Array.from(new Map(orgList.map(org => [org.id, org])).values());
+          const communitySchool = uniqueOrganizations.find(org => org.id === COMMUNITY_SCHOOL_ID);
+          const otherOrgs = uniqueOrganizations.filter(org => org.id !== COMMUNITY_SCHOOL_ID);
+          const allOrganizations = communitySchool
+            ? [...otherOrgs, communitySchool]
+            : [
+                ...otherOrgs,
+                { id: COMMUNITY_SCHOOL_ID, name: 'EduDash Pro Community School', school_type: 'community_school' },
+              ];
+
+          setOrganizations(allOrganizations);
+          setFormState(prev => {
+            if (prev.selectedOrganizationId && allOrganizations.some(org => org.id === prev.selectedOrganizationId)) {
+              return prev;
+            }
+
+            // Auto-select only when there is exactly one non-community option.
+            if (otherOrgs.length === 1) {
+              return { ...prev, selectedOrganizationId: otherOrgs[0].id };
+            }
+
+            return { ...prev, selectedOrganizationId: undefined };
+          });
         } catch (err) {
           console.error('Failed to load organizations:', err);
-          setOrganizationError('Failed to load organizations');
+          setOrganizationError('Failed to load schools. You can continue with EduDash Pro Community School.');
           setOrganizations([
             { id: COMMUNITY_SCHOOL_ID, name: 'EduDash Pro Community School', school_type: 'community_school' }
           ]);
+          setFormState(prev => ({
+            ...prev,
+            selectedOrganizationId: prev.selectedOrganizationId || COMMUNITY_SCHOOL_ID,
+          }));
         } finally {
           setLoadingOrganizations(false);
         }
@@ -266,7 +284,7 @@ export function useEnhancedRegistration({
         break;
       case 'organization_selection':
         if (!formState.selectedOrganizationId) {
-          stepErrors.selectedOrganizationId = ['You must select an organization'];
+          stepErrors.selectedOrganizationId = ['Select your child\'s school to continue'];
           isValid = false;
         }
         break;

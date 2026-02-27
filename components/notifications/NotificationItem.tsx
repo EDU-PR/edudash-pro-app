@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -152,15 +152,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
     </TouchableOpacity>
   ), [onDismiss, notification, theme.error, t]);
 
-  return (
-    <Swipeable
-      renderRightActions={onDismiss ? renderRightActions : undefined}
-      rightThreshold={60}
-      overshootRight={false}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'right') onDismiss?.(notification);
-      }}
-    >
+  const itemContent = (
     <TouchableOpacity 
       style={[
         styles.container, 
@@ -288,6 +280,22 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />
       )}
     </TouchableOpacity>
+  );
+
+  if (Platform.OS === 'web' || !onDismiss) {
+    return itemContent;
+  }
+
+  return (
+    <Swipeable
+      renderRightActions={renderRightActions}
+      rightThreshold={60}
+      overshootRight={false}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') onDismiss(notification);
+      }}
+    >
+      {itemContent}
     </Swipeable>
   );
 };

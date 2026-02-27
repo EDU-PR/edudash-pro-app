@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, StyleSheet, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -10,6 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
+import { signOutAndRedirect } from '@/lib/authActions';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -117,8 +118,9 @@ export function DesktopLayout({
 
   // Determine user role from profile if not provided
   const userRole = role || (profile?.role as string) || 'parent';
+  const showDesktopHeader = userRole === 'parent' || userRole === 'principal' || userRole === 'principal_admin';
   // Keep the header avatar consistent across dashboards.
-  const headerAvatarSize = 44;
+  const headerAvatarSize = isMobileWidth ? 36 : 44;
   
   // Filter nav items by role
   const filteredNavItems = NAV_ITEMS.filter(item => 
@@ -173,11 +175,15 @@ export function DesktopLayout({
       backgroundColor: theme.surface,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
+      zIndex: 20,
     },
     headerLeft: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: 12,
+      flex: 1,
+      minWidth: 0,
+      marginRight: 8,
     },
     hamburgerButton: {
       padding: 8,
@@ -188,11 +194,14 @@ export function DesktopLayout({
       fontSize: 18,
       fontWeight: '700' as const,
       color: theme.text,
+      flexShrink: 1,
+      minWidth: 0,
     },
     headerRight: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: 8,
+      flexShrink: 0,
     },
     iconButton: {
       padding: 8,
@@ -200,11 +209,40 @@ export function DesktopLayout({
     },
   }), [theme, insets, mobileHeaderTopInsetOffset]);
 
+  const mobileRootStyle = React.useMemo(
+    () => ({
+      flex: 1,
+      backgroundColor: theme.background,
+      position: 'relative' as const,
+      ...(Platform.OS === 'web'
+        ? {
+            height: '100vh' as any,
+            maxHeight: '100vh' as any,
+            overflow: 'hidden' as any,
+          }
+        : null),
+    }),
+    [theme.background]
+  );
+
+  const mobileContentStyle = React.useMemo(
+    () => ({
+      flex: 1,
+      minHeight: 0,
+      ...(Platform.OS === 'web'
+        ? {
+            overflow: 'hidden' as any,
+          }
+        : null),
+    }),
+    []
+  );
+
   // On native platforms OR mobile-width web, render mobile layout with header
   // This ensures Chrome DevTools mobile view shows mobile layout
   if (Platform.OS !== 'web' || isMobileWidth) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' as any }}>
+      <View style={mobileRootStyle}>
         {/* Mobile Header with Hamburger or Back Button */}
         <View style={mobileStyles.mobileHeader}>
           <View style={mobileStyles.headerLeft}>
@@ -219,19 +257,21 @@ export function DesktopLayout({
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
             ) : (
-              <Pressable
-                style={({ pressed }) => [
+              <TouchableOpacity
+                style={[
                   mobileStyles.hamburgerButton,
-                  Platform.OS === 'web' && { cursor: 'pointer' },
-                  pressed && { opacity: 0.7 },
+                  Platform.OS === 'web' && ({ cursor: 'pointer' } as any),
                 ]}
-                onPress={() => setMobileDrawerOpen(true)}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMobileDrawerOpen(true);
+                }}
                 accessibilityLabel="Open menu"
                 accessibilityRole="button"
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <Ionicons name="menu" size={24} color={theme.text} />
-              </Pressable>
+              </TouchableOpacity>
             )}
             <Text style={mobileStyles.headerTitle}>{title || tenantSlug}</Text>
           </View>
@@ -278,7 +318,7 @@ export function DesktopLayout({
         </View>
 
         {/* Main Content */}
-        <View style={{ flex: 1 }}>
+        <View style={mobileContentStyle}>
           {children}
         </View>
 
@@ -357,13 +397,6 @@ export function DesktopLayout({
           </View>
         </ScrollView>
 
-        {/* Powered by (above separator line) */}
-        {!sidebarCollapsed && (
-          <View style={styles.poweredByBar}>
-            <Text style={styles.poweredBy} numberOfLines={1}>Powered by EduDash Pro</Text>
-          </View>
-        )}
-
         {/* User Profile Footer */}
         <View style={styles.sidebarFooter}>
           <TouchableOpacity
@@ -386,11 +419,57 @@ export function DesktopLayout({
               </View>
             )}
           </TouchableOpacity>
+
+          {!sidebarCollapsed && (
+            <Text style={styles.poweredBy} numberOfLines={1}>
+              Powered by EduDash Pro
+            </Text>
+          )}
+
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={() => signOutAndRedirect({ redirectTo: '/(auth)/sign-in' })}
+          >
+            <Ionicons name="log-out-outline" size={18} color={theme.error} />
+            {!sidebarCollapsed && <Text style={styles.signOutButtonText}>Sign Out</Text>}
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Main Content Area */}
       <View style={styles.mainContent}>
+        {showDesktopHeader && (
+          <View style={styles.desktopHeader}>
+            <Text style={styles.desktopHeaderTitle} numberOfLines={1}>
+              {title || tenantSlug}
+            </Text>
+            <View style={styles.desktopHeaderActions}>
+              <TouchableOpacity
+                style={styles.desktopHeaderNotificationButton}
+                onPress={() => router.push('/screens/notifications' as any)}
+              >
+                <Ionicons name="notifications-outline" size={20} color={theme.textSecondary} />
+                {notificationCount > 0 && (
+                  <View style={styles.desktopHeaderNotificationBadge}>
+                    <Text style={styles.desktopHeaderNotificationBadgeText}>
+                      {notificationCount > 99 ? '99+' : notificationCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.desktopHeaderAccountButton}
+                onPress={() => router.push('/screens/account' as any)}
+              >
+                <Avatar
+                  name={`${user?.user_metadata?.first_name || ''} ${user?.user_metadata?.last_name || ''}`.trim() || user?.email || 'User'}
+                  imageUri={(profile as any)?.avatar_url || null}
+                  size={34}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
         {children}
       </View>
     </View>
@@ -487,10 +566,9 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       borderTopWidth: 1,
       borderTopColor: theme.border,
       padding: 12,
-    },
-    poweredByBar: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      gap: 8,
+      // Keep the footer visible above the web bottom tab bar when rendered.
+      paddingBottom: 12 + (Platform.OS === 'web' ? 70 : 0),
     },
     poweredBy: {
       fontSize: 11,
@@ -504,6 +582,24 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       borderRadius: 10,
       gap: 12,
       cursor: 'pointer' as any,
+    },
+    signOutButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: collapsed ? 'center' : 'flex-start',
+      paddingVertical: 10,
+      paddingHorizontal: collapsed ? 8 : 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.error + '55',
+      backgroundColor: theme.error + '14',
+      gap: collapsed ? 0 : 8,
+      cursor: 'pointer' as any,
+    },
+    signOutButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.error,
     },
     profileInfo: {
       flex: 1,
@@ -526,5 +622,60 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       ['@media (max-width: 767px)' as any]: {
         width: '100%' as any,
       },
+    },
+    desktopHeader: {
+      height: 60,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.surface,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    desktopHeaderTitle: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '700',
+      color: theme.text,
+      marginRight: 12,
+    },
+    desktopHeaderAccountButton: {
+      borderRadius: 999,
+      cursor: 'pointer' as any,
+    },
+    desktopHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    desktopHeaderNotificationButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surfaceVariant,
+      cursor: 'pointer' as any,
+      position: 'relative' as any,
+    },
+    desktopHeaderNotificationBadge: {
+      position: 'absolute' as any,
+      top: -4,
+      right: -6,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.error,
+      borderWidth: 1,
+      borderColor: theme.surface,
+    },
+    desktopHeaderNotificationBadgeText: {
+      color: '#ffffff',
+      fontSize: 9,
+      fontWeight: '700',
     },
   });

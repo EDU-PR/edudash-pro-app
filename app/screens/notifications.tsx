@@ -12,6 +12,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
+  Platform,
   View,
   Text,
   TouchableOpacity,
@@ -541,8 +542,7 @@ export default function NotificationsScreen() {
   
   const isSelectMode = selectedIds.size > 0;
 
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+  const content = (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
       {isSelectMode ? (
         <View style={[styles.selectHeader, { backgroundColor: theme.primary, paddingTop: insets.top + 4 }]}>
@@ -609,8 +609,13 @@ export default function NotificationsScreen() {
         }
       />
     </SafeAreaView>
-    </GestureHandlerRootView>
   );
+
+  if (Platform.OS === 'web') {
+    return content;
+  }
+
+  return <GestureHandlerRootView style={{ flex: 1 }}>{content}</GestureHandlerRootView>;
 }
 
 const styles = StyleSheet.create({

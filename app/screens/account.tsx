@@ -230,13 +230,22 @@ export default function AccountScreen() {
         if (s) orgCount++;
         
         // Count organization memberships (from organization_members)
-        const { count } = await assertSupabase()
+        let countResult = await assertSupabase()
           .from('organization_members')
           .select('organization_id', { count: 'exact', head: true })
           .eq('user_id', u.id)
-          .eq('status', 'active');
+          .eq('membership_status', 'active');
+
+        // Backward-compat: some environments still expose seat_status only.
+        if (countResult.error && String((countResult.error as any)?.message || '').includes('membership_status')) {
+          countResult = await assertSupabase()
+            .from('organization_members')
+            .select('organization_id', { count: 'exact', head: true })
+            .eq('user_id', u.id)
+            .eq('seat_status', 'active');
+        }
         
-        orgCount += count || 0;
+        orgCount += countResult.count || 0;
         
         setHasMultipleOrgs(orgCount > 1);
       } catch { /* noop */ }

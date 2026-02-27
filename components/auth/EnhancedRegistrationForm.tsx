@@ -87,7 +87,7 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
       },
       organization_selection: {
         title: 'Step 2: School link',
-        description: 'Choose the correct school carefully. This controls your dashboard, messaging, and child records.',
+        description: 'Search for your child’s school, tap to select, then confirm. This links your dashboard, messaging, and child records.',
         nextAction: 'Next you will set your password and accept terms.',
         ctaLabel: 'Confirm School',
       },

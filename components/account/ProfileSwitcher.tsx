@@ -56,7 +56,7 @@ export function ProfileSwitcher({
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const pathname = usePathname();
-  const { showAlert, alertProps } = useAlertModal();
+  const { showAlert, hideAlert, alertProps } = useAlertModal();
   const pathnameRef = useRef(pathname);
 
   useEffect(() => {
@@ -66,8 +66,23 @@ export function ProfileSwitcher({
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [removeInFlight, setRemoveInFlight] = useState<string | null>(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const routeFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showProfileAlert = useCallback((config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: Array<{ text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void }>;
+  }) => {
+    showAlert({
+      title: config.title,
+      message: config.message,
+      type: config.type,
+      buttons: config.buttons,
+      renderInPlace: Platform.OS === 'web',
+    });
+  }, [showAlert]);
 
   useEffect(() => {
     return () => {
@@ -76,8 +91,17 @@ export function ProfileSwitcher({
         routeFallbackTimerRef.current = null;
       }
       setAccountSwitchInProgress(false);
+      hideAlert();
     };
-  }, []);
+  }, [hideAlert]);
+
+  useEffect(() => {
+    if (!visible) {
+      hideAlert();
+      setSwitching(null);
+      setRemoveInFlight(null);
+    }
+  }, [visible, hideAlert]);
 
   // Load stored biometric accounts
   const loadAccounts = useCallback(async () => {
@@ -212,7 +236,7 @@ export function ProfileSwitcher({
           reason: result.reason || 'restore_error',
           requires_password: !!result.requiresPassword,
         });
-        showAlert({
+        showProfileAlert({
           title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
           message: result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
           type: 'error',
@@ -356,7 +380,7 @@ export function ProfileSwitcher({
         requires_password: false,
       });
       console.error('Account switch error:', error);
-      showAlert({
+      showProfileAlert({
         title: t('common.error', { defaultValue: 'Error' }),
         message: t('account.switch_error', { defaultValue: 'Failed to switch account. Please try again.' }),
         type: 'error',
@@ -368,12 +392,102 @@ export function ProfileSwitcher({
       }
       setSwitching(null);
     }
-  }, [user?.id, onClose, onAccountSwitched, t, biometricAvailable, showAlert]);
+  }, [user?.id, onClose, onAccountSwitched, t, biometricAvailable, showProfileAlert]);
+
+  const executeRemoveAccount = useCallback(async (account: StoredAccount) => {
+    let globalRevokeStatus:
+      | 'revoked_global'
+      | 'token_missing'
+      | 'token_invalid'
+      | 'wrong_user'
+      | 'error' = 'error';
+    let globalRevokeError: string | undefined;
+    try {
+      setRemoveInFlight(account.userId);
+      track('account.remove.global_revoke_attempt', {
+        target_user_id: account.userId,
+      });
+      const revokeResult =
+        await EnhancedBiometricAuth.revokeSavedAccountSessionsGlobally(
+          account.userId,
+        );
+      globalRevokeStatus = revokeResult.globalRevokeStatus;
+      globalRevokeError = revokeResult.error;
+      track('account.remove.global_revoke_result', {
+        target_user_id: account.userId,
+        status: globalRevokeStatus,
+        error: globalRevokeError ?? null,
+      });
+    } catch (error) {
+      globalRevokeStatus = 'error';
+      globalRevokeError = String(
+        (error as any)?.message || 'Global revoke failed',
+      );
+      track('account.remove.global_revoke_result', {
+        target_user_id: account.userId,
+        status: globalRevokeStatus,
+        error: globalRevokeError,
+      });
+    }
+
+    try {
+      await EnhancedBiometricAuth.removeBiometricSession(account.userId);
+      track('account.removed_from_switcher', {
+        user_id: account.userId,
+        global_revoke_status: globalRevokeStatus,
+      });
+      await loadAccounts();
+    } catch (error) {
+      console.error('Failed to remove account:', error);
+      showProfileAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('account.remove_account_failed', {
+          defaultValue: 'Could not remove this saved account. Please try again.',
+        }),
+        type: 'error',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
+      });
+      return;
+    } finally {
+      setRemoveInFlight(null);
+    }
+
+    if (globalRevokeStatus !== 'revoked_global') {
+      showProfileAlert({
+        title: t('account.removed_local_only', {
+          defaultValue: 'Removed on this device',
+        }),
+        message: t('account.removed_local_only_message', {
+          defaultValue:
+            'This account was removed from your saved list here. To fully sign it out everywhere, sign in to that account with password and sign out globally.',
+        }),
+        type: 'warning',
+        buttons: [
+          {
+            text: t('common.ok', { defaultValue: 'OK' }),
+            style: 'default',
+          },
+          {
+            text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
+            style: 'default',
+            onPress: () => {
+              onClose();
+              signOutAndRedirect({
+                clearBiometrics: false,
+                resetApp: false,
+                redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
+              });
+            },
+          },
+        ],
+      });
+    }
+  }, [loadAccounts, onClose, showProfileAlert, t]);
 
   // Remove an account from stored list
   const handleRemoveAccount = useCallback(async (account: StoredAccount) => {
     if (account.isActive) {
-      showAlert({
+      showProfileAlert({
         title: t('account.cannot_remove_active', { defaultValue: 'Cannot Remove' }),
         message: t('account.cannot_remove_active_message', { defaultValue: 'You cannot remove the currently active account.' }),
         type: 'warning',
@@ -382,7 +496,7 @@ export function ProfileSwitcher({
       return;
     }
 
-    showAlert({
+    showProfileAlert({
       title: t('account.remove_account', { defaultValue: 'Remove Account' }),
       message: t('account.remove_account_confirm', { 
         defaultValue: `Remove ${account.email} from quick switch? You can add it back by signing in again.`,
@@ -394,87 +508,16 @@ export function ProfileSwitcher({
         {
           text: t('common.remove', { defaultValue: 'Remove' }),
           style: 'destructive',
-          onPress: async () => {
-            let globalRevokeStatus:
-              | 'revoked_global'
-              | 'token_missing'
-              | 'token_invalid'
-              | 'wrong_user'
-              | 'error' = 'error';
-            let globalRevokeError: string | undefined;
-            try {
-              track('account.remove.global_revoke_attempt', {
-                target_user_id: account.userId,
-              });
-              const revokeResult =
-                await EnhancedBiometricAuth.revokeSavedAccountSessionsGlobally(
-                  account.userId,
-                );
-              globalRevokeStatus = revokeResult.globalRevokeStatus;
-              globalRevokeError = revokeResult.error;
-              track('account.remove.global_revoke_result', {
-                target_user_id: account.userId,
-                status: globalRevokeStatus,
-                error: globalRevokeError ?? null,
-              });
-            } catch (error) {
-              globalRevokeStatus = 'error';
-              globalRevokeError = String(
-                (error as any)?.message || 'Global revoke failed',
-              );
-              track('account.remove.global_revoke_result', {
-                target_user_id: account.userId,
-                status: globalRevokeStatus,
-                error: globalRevokeError,
-              });
-            }
-
-            try {
-              await EnhancedBiometricAuth.removeBiometricSession(account.userId);
-              track('account.removed_from_switcher', {
-                user_id: account.userId,
-                global_revoke_status: globalRevokeStatus,
-              });
-              await loadAccounts();
-            } catch (error) {
-              console.error('Failed to remove account:', error);
-            }
-
-            if (globalRevokeStatus !== 'revoked_global') {
-              showAlert({
-                title: t('account.removed_local_only', {
-                  defaultValue: 'Removed on this device',
-                }),
-                message: t('account.removed_local_only_message', {
-                  defaultValue:
-                    'This account was removed from your saved list here. To fully sign it out everywhere, sign in to that account with password and sign out globally.',
-                }),
-                type: 'warning',
-                buttons: [
-                  {
-                    text: t('common.ok', { defaultValue: 'OK' }),
-                    style: 'default',
-                  },
-                  {
-                    text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
-                    style: 'default',
-                    onPress: () => {
-                      onClose();
-                      signOutAndRedirect({
-                        clearBiometrics: false,
-                        resetApp: false,
-                        redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
-                      });
-                    },
-                  },
-                ],
-              });
-            }
+          onPress: () => {
+            // Defer removal until confirm dialog has fully closed to prevent stacked modal overlays.
+            setTimeout(() => {
+              void executeRemoveAccount(account);
+            }, 0);
           },
         },
       ],
     });
-  }, [t, loadAccounts, showAlert, onClose]);
+  }, [t, showProfileAlert, executeRemoveAccount]);
 
   // Add new account — navigate to sign-in WITHOUT signing out.
   // Supabase replaces the session when signInWithPassword is called for a
@@ -540,6 +583,7 @@ export function ProfileSwitcher({
 
   const renderAccountItem = ({ item }: { item: StoredAccount }) => {
     const isSwitching = switching === item.userId;
+    const isRemoving = removeInFlight === item.userId;
     
     return (
       <View
@@ -553,7 +597,7 @@ export function ProfileSwitcher({
           style={styles.accountItemMain}
           onPress={() => handleSwitchAccount(item)}
           onLongPress={() => handleRemoveAccount(item)}
-          disabled={isSwitching}
+          disabled={isSwitching || isRemoving}
           activeOpacity={0.7}
         >
           <View style={[styles.accountAvatar, { backgroundColor: theme.primary + '30' }]}>
@@ -575,7 +619,7 @@ export function ProfileSwitcher({
         </TouchableOpacity>
 
         {/* Status or actions - separate so account actions remain tappable */}
-        {isSwitching ? (
+        {isSwitching || isRemoving ? (
           <EduDashSpinner size="small" color={theme.primary} />
         ) : item.isActive ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.primary} />
@@ -597,6 +641,7 @@ export function ProfileSwitcher({
             <TouchableOpacity
               style={[styles.removeAccountButton, { backgroundColor: theme.surfaceVariant }]}
               onPress={() => handleRemoveAccount(item)}
+              disabled={isRemoving}
               hitSlop={{ top: 10, left: 10, right: 10, bottom: 10 }}
               accessibilityRole="button"
               accessibilityLabel={t('account.remove_account', { defaultValue: 'Remove account' })}
@@ -621,9 +666,8 @@ export function ProfileSwitcher({
     </View>
   );
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+  const content = (
+    <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdropTouchable} onPress={onClose} activeOpacity={1} />
         
         <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom }]}>
@@ -704,8 +748,18 @@ export function ProfileSwitcher({
             </Text>
           )}
         </View>
-        <AlertModal {...alertProps} />
+        <AlertModal {...alertProps} renderInPlace={Platform.OS === 'web'} />
       </View>
+  );
+
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return <View style={styles.webModalHost}>{content}</View>;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      {content}
     </Modal>
   );
 }
@@ -715,6 +769,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  webModalHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9998,
+    elevation: 9998,
   },
   backdropTouchable: {
     flex: 1,

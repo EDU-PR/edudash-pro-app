@@ -12,7 +12,7 @@
  * Different from preschool dashboard which focuses on early childhood education.
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -23,6 +23,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useFinancePrivacyMode } from '@/hooks/useFinancePrivacyMode';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Extracted components
 import {
@@ -55,6 +56,7 @@ export function K12AdminDashboard() {
   const [recentRegistrations, setRecentRegistrations] = useState<Registration[]>([]);
   const [schoolName, setSchoolName] = useState<string>('Loading...');
   const { hideFeesOnDashboards } = useFinancePrivacyMode();
+  const initialLoadCompleteRef = useRef(false);
   
   const styles = useMemo(() => createStyles(theme, insets.top), [theme, insets.top]);
   
@@ -151,7 +153,17 @@ export function K12AdminDashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    initialLoadCompleteRef.current = true;
   }, [loadDashboardData]);
+
+  // Keep badge counts and KPI cards fresh after navigating back from action tiles.
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialLoadCompleteRef.current) return;
+      loadDashboardData();
+      refreshBirthdays();
+    }, [loadDashboardData, refreshBirthdays])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

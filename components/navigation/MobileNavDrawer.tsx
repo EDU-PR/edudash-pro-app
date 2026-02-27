@@ -303,6 +303,8 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const openedAtRef = useRef(0);
+  const ignoreOverlayPressUntilRef = useRef(0);
   
   const userRole = (profile?.role as string) || 'parent';
   // Get member_type from organization_membership for CEO detection
@@ -338,6 +340,10 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
 
   useEffect(() => {
     if (isOpen) {
+      const now = Date.now();
+      openedAtRef.current = now;
+      // Prevent the same opening tap from immediately closing the drawer on web/mobile.
+      ignoreOverlayPressUntilRef.current = now + 600;
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: 0,
@@ -390,12 +396,125 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   }
 
   const styles = getNavDrawerStyles(theme, isDark, insets);
+  const renderDrawerContent = () => (
+    <>
+      {/* Header */}
+      <View style={styles.drawerHeader}>
+        <View style={styles.headerContent}>
+          <View style={styles.userInfo}>
+            <View style={styles.avatar}>
+              {avatarUrl ? (
+                <Image 
+                  source={{ uri: avatarUrl }} 
+                  style={{ width: 40, height: 40, borderRadius: 20 }} 
+                />
+              ) : (
+                <Ionicons name="person" size={20} color={theme.primary} />
+              )}
+            </View>
+            <View style={styles.userText}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.userRole}>{displayRole}</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={onClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Navigation Items */}
+      <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
+        {items.map((item) => {
+          const active = isActive(item.route);
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.navItem, active && styles.navItemActive]}
+              onPress={() => handleNavPress(item.route)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={(
+                  active ||
+                  item.icon.startsWith('logo-') ||
+                  item.icon.endsWith('-outline')
+                    ? item.icon
+                    : `${item.icon}-outline`
+                ) as any}
+                size={20}
+                color={active ? theme.primary : theme.textSecondary}
+              />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+                {item.label}
+              </Text>
+              {item.badge && item.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{item.badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Sign Out Button - Above divider */}
+      <View style={styles.signOutSection}>
+        <TouchableOpacity
+          style={styles.signOutButton}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="log-out-outline" size={20} color={theme.error} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Footer - Below divider with branding */}
+      <View style={styles.footer}>
+        <Text style={styles.brandText}>Powered by EduDash Pro</Text>
+        <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
+      </View>
+    </>
+  );
+
+  if (Platform.OS === 'web' && isOpen) {
+    return (
+      <View style={styles.container} pointerEvents="auto">
+        <View style={styles.overlay}>
+          <Pressable
+            style={styles.overlayPressable}
+            onPress={() => {
+              if (Date.now() - openedAtRef.current < 220) return;
+              onClose();
+            }}
+          />
+        </View>
+        <View style={styles.drawer}>{renderDrawerContent()}</View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container} pointerEvents={isOpen ? 'auto' : 'none'}>
       {/* Overlay */}
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        <Pressable style={styles.overlayPressable} onPress={onClose} />
+        <Pressable
+          style={styles.overlayPressable}
+          onPress={() => {
+            const now = Date.now();
+            // Prevent the same tap that opened the drawer from closing it immediately on web.
+            if (now - openedAtRef.current < 220) return;
+            if (now < ignoreOverlayPressUntilRef.current) return;
+            onClose();
+          }}
+        />
       </Animated.View>
 
       {/* Drawer */}
@@ -405,89 +524,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
           { transform: [{ translateX: slideAnim }] },
         ]}
       >
-        {/* Header */}
-        <View style={styles.drawerHeader}>
-          <View style={styles.headerContent}>
-            <View style={styles.userInfo}>
-              <View style={styles.avatar}>
-                {avatarUrl ? (
-                  <Image 
-                    source={{ uri: avatarUrl }} 
-                    style={{ width: 40, height: 40, borderRadius: 20 }} 
-                  />
-                ) : (
-                  <Ionicons name="person" size={20} color={theme.primary} />
-                )}
-              </View>
-              <View style={styles.userText}>
-                <Text style={styles.userName} numberOfLines={1}>
-                  {displayName}
-                </Text>
-                <Text style={styles.userRole}>{displayRole}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={22} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Navigation Items */}
-        <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
-          {items.map((item) => {
-            const active = isActive(item.route);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.navItem, active && styles.navItemActive]}
-                onPress={() => handleNavPress(item.route)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={(
-                    active ||
-                    item.icon.startsWith('logo-') ||
-                    item.icon.endsWith('-outline')
-                      ? item.icon
-                      : `${item.icon}-outline`
-                  ) as any}
-                  size={20}
-                  color={active ? theme.primary : theme.textSecondary}
-                />
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                  {item.label}
-                </Text>
-                {item.badge && item.badge > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.badge}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Sign Out Button - Above divider */}
-        <View style={styles.signOutSection}>
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="log-out-outline" size={20} color={theme.error} />
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Footer - Below divider with branding */}
-        <View style={styles.footer}>
-          <Text style={styles.brandText}>Powered by EduDash Pro</Text>
-          <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
-        </View>
+        {renderDrawerContent()}
       </Animated.View>
     </View>
   );

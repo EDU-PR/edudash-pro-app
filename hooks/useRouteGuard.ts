@@ -13,6 +13,7 @@ import {
   isSignOutInProgress,
   isAccountSwitchPending,
   isAccountSwitchInProgress,
+  clearAccountSwitchPending,
 } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
@@ -128,19 +129,34 @@ export const useAuthGuard = () => {
     
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute) {
-      // Account-switch bypass — let user reach sign-in for new credentials
-      const isSwitching = isAccountSwitchIntent(searchParams) || isAccountSwitchPending();
+      // Account-switch bypass — only while switch flow is actively pending/in progress.
+      const hasExplicitSwitchIntent = isAccountSwitchIntent(searchParams);
+      const pendingSwitch = isAccountSwitchPending();
+      const isSwitching = hasExplicitSwitchIntent && (pendingSwitch || accountSwitchInProgress);
+      if (!hasExplicitSwitchIntent && pendingSwitch) {
+        clearAccountSwitchPending();
+      }
       if (__DEV__) {
         console.log('[AuthGuard] Auth route check', {
           pathname,
           addAccount: searchParams.addAccount,
           switch: searchParams.switch,
           fresh: searchParams.fresh,
+          pendingSwitch,
+          accountSwitchInProgress,
           isSwitching,
         });
       }
       if (isSwitching) {
         authDebug('guard.account_switch_bypass', { pathname, params: searchParams });
+        return;
+      }
+      // Stale switch params can strand users on /sign-in after successful auth.
+      // Normalize to plain sign-in so regular auth-route redirect can continue.
+      if (hasExplicitSwitchIntent && !pendingSwitch && !accountSwitchInProgress) {
+        authDebug('guard.account_switch_stale_params', { pathname, params: searchParams });
+        hasNavigated.current = true;
+        safeReplace('/(auth)/sign-in', 'stale_switch_params');
         return;
       }
       if (!authRouteSeenAt.current) authRouteSeenAt.current = Date.now();

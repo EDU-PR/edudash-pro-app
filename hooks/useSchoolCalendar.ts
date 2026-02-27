@@ -44,6 +44,72 @@ interface UseSchoolCalendarReturn {
   refetch: () => Promise<void>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toCalendarEvent(value: unknown): CalendarEvent | null {
+  if (!isRecord(value)) return null;
+  const { id, title, start_date, end_date, event_type, description } = value;
+  if (typeof id !== 'string' || typeof title !== 'string' || typeof start_date !== 'string') {
+    return null;
+  }
+  return {
+    id,
+    title,
+    start_date,
+    ...(typeof end_date === 'string' ? { end_date } : {}),
+    ...(typeof event_type === 'string' ? { event_type } : {}),
+    ...(typeof description === 'string' ? { description } : {}),
+  };
+}
+
+function toCalendarMeeting(value: unknown): CalendarMeeting | null {
+  if (!isRecord(value)) return null;
+  const { id, title, meeting_type, meeting_date, start_time, end_time, location } = value;
+  if (
+    typeof id !== 'string' ||
+    typeof title !== 'string' ||
+    typeof meeting_type !== 'string' ||
+    typeof meeting_date !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    id,
+    title,
+    meeting_type,
+    meeting_date,
+    ...(typeof start_time === 'string' ? { start_time } : {}),
+    ...(typeof end_time === 'string' ? { end_time } : {}),
+    ...(typeof location === 'string' ? { location } : {}),
+  };
+}
+
+function toCalendarExcursion(value: unknown): CalendarExcursion | null {
+  if (!isRecord(value)) return null;
+  const { id, title, destination, excursion_date, status } = value;
+  if (
+    typeof id !== 'string' ||
+    typeof title !== 'string' ||
+    typeof destination !== 'string' ||
+    typeof excursion_date !== 'string' ||
+    typeof status !== 'string'
+  ) {
+    return null;
+  }
+  return { id, title, destination, excursion_date, status };
+}
+
+function parseArray<T>(value: unknown, parser: (item: unknown) => T | null): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.reduce<T[]>((acc, item) => {
+    const parsed = parser(item);
+    if (parsed) acc.push(parsed);
+    return acc;
+  }, []);
+}
+
 export function useSchoolCalendarForParent(): UseSchoolCalendarReturn {
   return useSchoolCalendar('parent');
 }
@@ -65,11 +131,15 @@ function useSchoolCalendar(role: 'parent' | 'teacher'): UseSchoolCalendarReturn 
       const rpc = role === 'parent' ? 'get_school_calendar_for_parent' : 'get_school_calendar_for_teacher';
       const { data: res, error: rpcError } = await supabase.rpc(rpc);
       if (rpcError) throw rpcError;
-      const payload = (res ?? {}) as { events?: unknown[]; meetings?: unknown[]; excursions?: unknown[] };
+      const payload = (res ?? {}) as {
+        events?: unknown;
+        meetings?: unknown;
+        excursions?: unknown;
+      };
       setData({
-        events: Array.isArray(payload.events) ? payload.events : [],
-        meetings: Array.isArray(payload.meetings) ? payload.meetings : [],
-        excursions: Array.isArray(payload.excursions) ? payload.excursions : [],
+        events: parseArray(payload.events, toCalendarEvent),
+        meetings: parseArray(payload.meetings, toCalendarMeeting),
+        excursions: parseArray(payload.excursions, toCalendarExcursion),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar');

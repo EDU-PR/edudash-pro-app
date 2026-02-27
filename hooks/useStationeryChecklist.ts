@@ -44,6 +44,17 @@ interface ChildRow {
   organization_id?: string | null;
   preschoolName?: string | null;
   organizationName?: string | null;
+  grade?: string | null;
+  grade_level?: string | null;
+  classes?: { grade_level?: string | null } | Array<{ grade_level?: string | null }> | null;
+  age_group?: {
+    age_min?: number | null;
+    age_max?: number | null;
+  } | null;
+  age_group_ref_data?: {
+    age_min?: number | null;
+    age_max?: number | null;
+  } | null;
 }
 
 interface UpsertItemInput {
@@ -83,6 +94,108 @@ function resolveChildAge(child: ChildRow): number | null {
     age -= 1;
   }
   return age >= 0 ? age : null;
+}
+
+function resolveChildGradeToken(child: ChildRow): string | null {
+  const classGrade = Array.isArray(child.classes)
+    ? child.classes[0]?.grade_level
+    : child.classes?.grade_level;
+  const raw = String(child.grade_level || child.grade || classGrade || '').trim().toLowerCase();
+  if (!raw) return null;
+  return raw.replace(/\s+/g, ' ');
+}
+
+function estimateAgeFromGrade(gradeToken: string | null): number | null {
+  if (!gradeToken) return null;
+  if (gradeToken.includes('grade rr') || gradeToken === 'rr') return 4;
+  if (gradeToken.includes('grade r') || gradeToken === 'r') return 5;
+  const numberMatch = gradeToken.match(/grade\s*(\d{1,2})|^(\d{1,2})$/);
+  const numeric = Number(numberMatch?.[1] || numberMatch?.[2] || '');
+  if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 12) {
+    return 5 + numeric;
+  }
+  return null;
+}
+
+function resolveAgeFromAgeGroup(child: ChildRow): number | null {
+  const group = child.age_group || child.age_group_ref_data || null;
+  if (!group) return null;
+  const min = typeof group.age_min === 'number' ? group.age_min : null;
+  const max = typeof group.age_max === 'number' ? group.age_max : null;
+  if (min != null && max != null) return Math.round((min + max) / 2);
+  if (min != null) return min;
+  if (max != null) return max;
+  return null;
+}
+
+function resolveBestEffortChildAge(child: ChildRow): number | null {
+  return (
+    resolveChildAge(child) ??
+    resolveAgeFromAgeGroup(child) ??
+    estimateAgeFromGrade(resolveChildGradeToken(child))
+  );
+}
+
+function parseAgeHintFromLabel(label: string): { min: number | null; max: number | null; center: number | null } {
+  const normalized = String(label || '').toLowerCase();
+  const range = normalized.match(/(\d{1,2})\s*(?:-|to|–)\s*(\d{1,2})/);
+  if (range) {
+    const min = Number(range[1]);
+    const max = Number(range[2]);
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return { min, max, center: Math.round((min + max) / 2) };
+    }
+  }
+  const single = normalized.match(/(\d{1,2})\s*(?:year|yr|years|yrs)?/);
+  if (single) {
+    const value = Number(single[1]);
+    if (Number.isFinite(value)) return { min: value, max: value, center: value };
+  }
+  return { min: null, max: null, center: null };
+}
+
+function pickBestStationeryList(schoolLists: any[], child: ChildRow, overrideListId?: string): any | null {
+  if (!schoolLists.length) return null;
+  const overridden = schoolLists.find((list: any) => String(list.id) === overrideListId) || null;
+  if (overridden) return overridden;
+
+  const childAge = resolveBestEffortChildAge(child);
+  const gradeToken = resolveChildGradeToken(child);
+
+  if (childAge != null) {
+    const ageRangeMatch = schoolLists.find((list: any) => {
+      const min = typeof list.age_min === 'number' ? list.age_min : null;
+      const max = typeof list.age_max === 'number' ? list.age_max : null;
+      if (min == null && max == null) return false;
+      if (min != null && childAge < min) return false;
+      if (max != null && childAge > max) return false;
+      return true;
+    });
+    if (ageRangeMatch) return ageRangeMatch;
+  }
+
+  if (gradeToken) {
+    const gradeMatch = schoolLists.find((list: any) =>
+      String(list.age_group_label || '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .includes(gradeToken)
+    );
+    if (gradeMatch) return gradeMatch;
+  }
+
+  if (childAge != null) {
+    const byClosestAge = [...schoolLists].sort((a: any, b: any) => {
+      const aHint = parseAgeHintFromLabel(String(a.age_group_label || ''));
+      const bHint = parseAgeHintFromLabel(String(b.age_group_label || ''));
+      const aCenter = aHint.center ?? (typeof a.age_min === 'number' ? a.age_min : null) ?? (typeof a.age_max === 'number' ? a.age_max : null) ?? Number.POSITIVE_INFINITY;
+      const bCenter = bHint.center ?? (typeof b.age_min === 'number' ? b.age_min : null) ?? (typeof b.age_max === 'number' ? b.age_max : null) ?? Number.POSITIVE_INFINITY;
+      return Math.abs(aCenter - childAge) - Math.abs(bCenter - childAge);
+    });
+    if (byClosestAge[0]) return byClosestAge[0];
+  }
+
+  return schoolLists[schoolLists.length - 1] || schoolLists[0] || null;
 }
 
 function sortByOrder<T extends { sort_order?: number | null }>(rows: T[]): T[] {
@@ -234,19 +347,7 @@ export function useStationeryChecklist(children: ChildRow[]) {
         const listSchoolId = childSchoolIds.find((id) => (listsBySchool.get(id) || []).length > 0) || null;
         const schoolLists = listSchoolId ? listsBySchool.get(listSchoolId) || [] : [];
         const overrideListId = overrideMap.get(child.id);
-        const age = resolveChildAge(child);
-
-        let activeList = schoolLists.find((list: any) => String(list.id) === overrideListId) || null;
-        if (!activeList) {
-          activeList = schoolLists.find((list: any) => {
-            const min = typeof list.age_min === 'number' ? list.age_min : null;
-            const max = typeof list.age_max === 'number' ? list.age_max : null;
-            if (age == null) return false;
-            if (min != null && age < min) return false;
-            if (max != null && age > max) return false;
-            return true;
-          }) || schoolLists[0] || null;
-        }
+        const activeList = pickBestStationeryList(schoolLists, child, overrideListId);
 
         const listItems = activeList ? itemsByList.get(String(activeList.id)) || [] : [];
         const itemStates: StationeryChecklistItemState[] = listItems.map((item: any) => {

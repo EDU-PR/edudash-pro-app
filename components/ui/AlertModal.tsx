@@ -8,7 +8,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -110,6 +110,11 @@ interface AlertModalProps {
   buttons?: AlertButton[];
   onClose: () => void;
   type?: 'info' | 'warning' | 'success' | 'error';
+  /**
+   * Render as an absolute in-tree overlay instead of using RN Modal.
+   * Useful on web when already inside another modal (prevents nested modal backdrop issues).
+   */
+  renderInPlace?: boolean;
 }
 
 export const AlertModal: React.FC<AlertModalProps> = ({
@@ -121,22 +126,38 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   buttons = [{ text: 'OK', style: 'default' }],
   onClose,
   type = 'info',
+  renderInPlace = false,
 }) => {
   const { theme } = useTheme();
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
 
+  const blurActiveElement = React.useCallback(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const activeElement = document.activeElement as HTMLElement | null;
+    if (activeElement && typeof activeElement.blur === 'function') {
+      activeElement.blur();
+    }
+  }, []);
+
   React.useEffect(() => {
     if (visible) {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }).start();
+      blurActiveElement();
+      if (Platform.OS === 'web') {
+        // RN Web can fail to resolve this spring + native-driver combination,
+        // leaving the backdrop visible while the dialog stays at scale(0).
+        scaleAnim.setValue(1);
+      } else {
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }).start();
+      }
     } else {
       scaleAnim.setValue(0);
     }
-  }, [visible, scaleAnim]);
+  }, [visible, scaleAnim, blurActiveElement]);
 
   const getTypeColor = useCallback(() => {
     switch (type) {
@@ -163,6 +184,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   const borderColor = toOpaqueColor(theme.border, '#334155');
 
   const handleButtonPress = async (button: AlertButton) => {
+    blurActiveElement();
     onClose();
     try {
       await button.onPress?.();
@@ -216,6 +238,88 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     return 0;
   });
 
+  if (!visible) return null;
+
+  const overlayContent = (
+    <View
+      style={[
+        styles.overlay,
+        { backgroundColor: 'rgba(2, 6, 23, 0.94)' },
+        renderInPlace && styles.overlayInPlace,
+      ]}
+      pointerEvents="auto"
+    >
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        activeOpacity={1}
+        onPress={() => {
+          blurActiveElement();
+          onClose();
+        }}
+      />
+
+      <Animated.View
+        style={[
+          styles.modalContainer,
+          {
+            backgroundColor: modalSurfaceColor,
+            borderColor,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        {/* Icon */}
+        <View style={[styles.iconContainer, { backgroundColor: withAlpha(finalIconColor, 0.14, subtleSurfaceColor) }]}>
+          <Ionicons name={getTypeIcon()} size={56} color={finalIconColor} />
+        </View>
+
+        {/* Title */}
+        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+
+        {/* Message */}
+        {message && (
+          <ScrollView style={styles.messageScroll} showsVerticalScrollIndicator={false}>
+            <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
+          </ScrollView>
+        )}
+
+        {/* Action Buttons */}
+        <View style={[
+          buttons.length >= 4 ? styles.buttonContainerVertical : styles.buttonContainer,
+          buttons.length === 1 && styles.singleButtonContainer
+        ]}>
+          {sortedButtons.map((button, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.button,
+                buttons.length === 1 && styles.singleButton,
+                buttons.length >= 4 && styles.buttonFullWidth,
+                getButtonStyle(button, index),
+              ]}
+              onPress={() => handleButtonPress(button)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: getButtonTextColor(button, index) },
+                  button.style !== 'cancel' && styles.primaryButtonText,
+                ]}
+              >
+                {button.text}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Animated.View>
+    </View>
+  );
+
+  if (renderInPlace) {
+    return overlayContent;
+  }
+
   return (
     <Modal
       visible={visible}
@@ -224,69 +328,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: 'rgba(2, 6, 23, 0.94)' }]}>
-        <TouchableOpacity 
-          style={StyleSheet.absoluteFill} 
-          activeOpacity={1} 
-          onPress={onClose}
-        />
-        
-        <Animated.View
-          style={[
-            styles.modalContainer,
-            {
-              backgroundColor: modalSurfaceColor,
-              borderColor,
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
-          {/* Icon */}
-          <View style={[styles.iconContainer, { backgroundColor: withAlpha(finalIconColor, 0.14, subtleSurfaceColor) }]}>
-            <Ionicons name={getTypeIcon()} size={56} color={finalIconColor} />
-          </View>
-
-          {/* Title */}
-          <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-
-          {/* Message */}
-          {message && (
-            <ScrollView style={styles.messageScroll} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
-            </ScrollView>
-          )}
-
-          {/* Action Buttons */}
-          <View style={[
-            buttons.length >= 4 ? styles.buttonContainerVertical : styles.buttonContainer,
-            buttons.length === 1 && styles.singleButtonContainer
-          ]}>
-            {sortedButtons.map((button, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.button,
-                  buttons.length === 1 && styles.singleButton,
-                  buttons.length >= 4 && styles.buttonFullWidth,
-                  getButtonStyle(button, index),
-                ]}
-                onPress={() => handleButtonPress(button)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { color: getButtonTextColor(button, index) },
-                    button.style !== 'cancel' && styles.primaryButtonText,
-                  ]}
-                >
-                  {button.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Animated.View>
-      </View>
+      {overlayContent}
     </Modal>
   );
 };
@@ -333,6 +375,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  overlayInPlace: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 9999,
+    elevation: 9999,
   },
   modalContainer: {
     width: '100%',

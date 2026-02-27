@@ -2,7 +2,7 @@
  * MobileNavDrawer Styles
  * Extracted for WARP.md compliance
  */
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { EdgeInsets } from 'react-native-safe-area-context';
 
 export const DRAWER_WIDTH = 280;
@@ -11,6 +11,11 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
   StyleSheet.create({
     container: {
       ...StyleSheet.absoluteFillObject,
+      ...(Platform.OS === 'web'
+        ? {
+            position: 'fixed' as any,
+          }
+        : null),
       zIndex: 9999,
     },
     overlay: {

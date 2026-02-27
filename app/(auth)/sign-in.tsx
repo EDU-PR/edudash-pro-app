@@ -70,6 +70,16 @@ export default function SignIn() {
   const mountTimeRef = useRef(Date.now());
 
   const styles = useMemo(() => createSignInStyles(theme, insets), [theme, insets]);
+  const switchParam = typeof searchParams?.switch === 'string'
+    ? searchParams.switch
+    : Array.isArray(searchParams?.switch)
+      ? searchParams.switch[0]
+      : undefined;
+  const addAccountParam = typeof searchParams?.addAccount === 'string'
+    ? searchParams.addAccount
+    : Array.isArray(searchParams?.addAccount)
+      ? searchParams.addAccount[0]
+      : undefined;
 
   // ── Handlers hook ─────────────────────────
   const { handleSignIn, handleGoogleSignIn, stopLoadingState, isMountedRef } = useSignInHandlers({
@@ -113,12 +123,16 @@ export default function SignIn() {
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        const { resetSignOutState, clearAccountSwitchPending } = await import('@/lib/authActions');
+        const { resetSignOutState, clearAccountSwitchPending, setAccountSwitchInProgress } = await import('@/lib/authActions');
         resetSignOutState();
-        clearAccountSwitchPending();
+        const isExplicitSwitchFlow = switchParam === '1' || addAccountParam === '1';
+        if (!isExplicitSwitchFlow) {
+          clearAccountSwitchPending();
+          setAccountSwitchInProgress(false);
+        }
       } catch { /* noop */ }
     })();
-  }, []);
+  }, [addAccountParam, switchParam]);
 
   // ── Web back-nav guard ────────────────────
   useEffect(() => {
