@@ -55,7 +55,7 @@ export function FinanceReceivablesTab({
               key={row.student_id}
               style={styles.queueCard}
               onPress={() => router.push(
-                `/screens/principal-student-fees?studentId=${row.student_id}&monthIso=${monthIso}&source=receivables` as any
+                `/screens/principal-student-fees?studentId=${row.student_id}&monthIso=${monthIso}&source=receivables&showFullHistory=1` as any
               )}
             >
               <View style={styles.rowBetween}>

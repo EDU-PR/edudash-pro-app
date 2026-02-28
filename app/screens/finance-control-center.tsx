@@ -50,6 +50,7 @@ export default function FinanceControlCenterScreen() {
     queueMismatchOnly, setQueueMismatchOnly, queueStageSummary, visibleQueueRows,
     queueMonthSelections, resolveQueueCategory, resolveQueueDisplayMonth,
     resolveQueueStage, isQueueMismatch, openQueueCategoryPicker, openQueueMonthPicker,
+    showQueueMonthPicker, queueMonthPickerDate, closeQueueMonthPicker, applyQueueMonthSelection,
     handleQuickApprove, handleQuickReject, loadData,
     showPayModal, setShowPayModal, selectedRecipient, payAmount, setPayAmount,
     payMethod, setPayMethod, payReference, setPayReference, payNotes, setPayNotes,
@@ -502,6 +503,18 @@ export default function FinanceControlCenterScreen() {
             setShowMonthPicker(false);
             if (event.type === 'dismissed' || !selectedDate) return;
             setMonthCursor(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+          }}
+        />
+      )}
+      {showQueueMonthPicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={queueMonthPickerDate}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            closeQueueMonthPicker();
+            if (event.type === 'dismissed' || !selectedDate) return;
+            applyQueueMonthSelection(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
           }}
         />
       )}

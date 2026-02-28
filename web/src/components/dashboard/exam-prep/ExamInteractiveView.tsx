@@ -495,6 +495,12 @@ Every question you attempt is helping you learn and grow. Keep up the great work
     const answer = studentAnswers[question.id] || '';
     const questionFeedback = feedback[question.id];
     const isAnswered = answer.trim() !== '';
+    const isPartial = Boolean(questionFeedback && !questionFeedback.isCorrect && questionFeedback.marks > 0);
+    const borderColor = questionFeedback?.isCorrect
+      ? 'var(--success)'
+      : isPartial
+      ? '#f59e0b'
+      : 'var(--danger)';
 
     return (
       <div
@@ -504,10 +510,10 @@ Every question you attempt is helping you learn and grow. Keep up the great work
           background: 'var(--card)',
           borderRadius: isMobile ? '0' : 'var(--radius-2)',
           ...(submitted ? {
-            borderTop: `2px solid ${questionFeedback?.isCorrect ? 'var(--success)' : 'var(--danger)'}`,
-            borderRight: `2px solid ${questionFeedback?.isCorrect ? 'var(--success)' : 'var(--danger)'}`,
-            borderBottom: `2px solid ${questionFeedback?.isCorrect ? 'var(--success)' : 'var(--danger)'}`,
-            borderLeft: `2px solid ${questionFeedback?.isCorrect ? 'var(--success)' : 'var(--danger)'}`,
+            borderTop: `2px solid ${borderColor}`,
+            borderRight: `2px solid ${borderColor}`,
+            borderBottom: `2px solid ${borderColor}`,
+            borderLeft: `2px solid ${borderColor}`,
           } : {
             borderTop: '1px solid var(--border)',
             borderRight: '1px solid var(--border)',
@@ -687,11 +693,13 @@ Every question you attempt is helping you learn and grow. Keep up the great work
         {submitted && questionFeedback && (
           <>
             <div
-              style={{
+            style={{
                 marginTop: 'var(--space-3)',
                 padding: 'var(--space-3)',
                 background: questionFeedback.isCorrect
                   ? 'rgba(52, 199, 89, 0.1)'
+                  : isPartial
+                  ? 'rgba(245, 158, 11, 0.12)'
                   : 'rgba(255, 59, 48, 0.1)',
                 borderRadius: 'var(--radius-2)',
                 display: 'flex',
@@ -701,6 +709,8 @@ Every question you attempt is helping you learn and grow. Keep up the great work
             >
               {questionFeedback.isCorrect ? (
                 <CheckCircle2 className="w-5 h-5" style={{ color: 'var(--success)', flexShrink: 0, marginTop: 2 }} />
+              ) : isPartial ? (
+                <AlertCircle className="w-5 h-5" style={{ color: '#f59e0b', flexShrink: 0, marginTop: 2 }} />
               ) : (
                 <XCircle className="w-5 h-5" style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
               )}

@@ -59,6 +59,10 @@ export interface FeeStructureRow {
   name: string | null;
   description: string | null;
   grade_levels: string[] | null;
+  age_group?: string | null;
+  grade_level?: string | null;
+  age_min_months?: number | null;
+  age_max_months?: number | null;
   effective_from: string | null;
   created_at: string | null;
 }

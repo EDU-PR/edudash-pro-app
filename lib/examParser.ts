@@ -318,8 +318,18 @@ function calculateSectionMarks(questions: any[]): number {
  */
 export function gradeAnswer(
   question: ExamQuestion,
-  studentAnswer: string
+  studentAnswerInput: string | { answer?: string; finalAnswer?: string; working?: string }
 ): { isCorrect: boolean; feedback: string; marks: number } {
+  const studentAnswer =
+    typeof studentAnswerInput === 'string'
+      ? studentAnswerInput
+      : String(studentAnswerInput?.answer ?? studentAnswerInput?.finalAnswer ?? '');
+  const workingText =
+    typeof studentAnswerInput === 'string'
+      ? ''
+      : String(studentAnswerInput?.working ?? '');
+  const combinedAnswer = `${studentAnswer} ${workingText}`.trim();
+
   if (!studentAnswer || !studentAnswer.trim()) {
     return {
       isCorrect: false,
@@ -337,6 +347,19 @@ export function gradeAnswer(
       .replace(/^(?:\s*[a-d]\s*[\.\)\-:]\s*)+/i, '')
       .replace(/[^a-z0-9\s]/g, '')
       .replace(/\s+/g, ' ');
+
+  const extractNumericSeries = (value: string): number[] =>
+    (String(value || '').match(/-?\d+(?:\.\d+)?/g) || [])
+      .map((part) => Number(part))
+      .filter((num) => Number.isFinite(num));
+
+  const numericSeriesEqual = (a: number[], b: number[]): boolean => {
+    if (!a.length || !b.length) return false;
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => Math.abs(value - b[index]) < 1e-9);
+  };
+
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
   // Multiple choice - flexible matching
   if (question.type === 'multiple_choice' && question.correctAnswer) {
@@ -403,22 +426,94 @@ export function gradeAnswer(
   }
 
   if ((question.type === 'short_answer' || question.type === 'essay') && question.correctAnswer) {
-    const expectedTokens = normalize(question.correctAnswer)
+    const maxMarks = Math.max(1, Number(question.marks || 1));
+    const expectedSource = [question.correctAnswer, question.rubric, question.explanation]
+      .filter(Boolean)
+      .join(' ');
+    const expectedTokens = normalize(expectedSource)
       .split(' ')
       .filter((token) => token.length >= 4);
-    const studentTokens = normalize(answer).split(' ');
+    const studentTokens = normalize(combinedAnswer).split(' ');
     const matched = expectedTokens.filter((token) => studentTokens.includes(token)).length;
     const coverage = expectedTokens.length > 0 ? matched / expectedTokens.length : 0;
-    const awarded = Math.min(question.marks, Math.max(0, Math.round(question.marks * coverage)));
+    const normalizedCorrect = normalize(question.correctAnswer);
+    const normalizedStudent = normalize(answer);
+    const finalAnswerCorrect =
+      normalizedStudent === normalizedCorrect ||
+      numericSeriesEqual(
+        extractNumericSeries(studentAnswer),
+        extractNumericSeries(question.correctAnswer),
+      );
 
-    return {
-      isCorrect: coverage >= 0.6,
-      feedback:
-        coverage >= 0.6
+    const questionText = `${question.question || ''} ${question.explanation || ''}`.toLowerCase();
+    const requiresWorking =
+      question.type === 'short_answer' &&
+      maxMarks >= 3 &&
+      (/(show\s+your\s+work|show\s+working|working|calculate|work\s+out|steps?|method)/i.test(questionText) ||
+        /[+\-x×*÷/=%]/.test(questionText));
+
+    const workingProvided =
+      normalize(workingText).length >= 6 || /[=+\-*/÷×]/.test(workingText);
+
+    let awarded = 0;
+    let feedback = '';
+
+    if (requiresWorking) {
+      const methodPool = Math.max(0, maxMarks - 1);
+      const finalMarks = finalAnswerCorrect ? 1 : 0;
+      let methodMarks = 0;
+
+      if (workingProvided && methodPool > 0) {
+        if (coverage >= 0.75) methodMarks = methodPool;
+        else if (coverage >= 0.5) methodMarks = Math.max(1, Math.round(methodPool * 0.67));
+        else if (coverage >= 0.3) methodMarks = Math.max(1, Math.round(methodPool * 0.34));
+        else methodMarks = finalAnswerCorrect ? Math.max(1, Math.round(methodPool * 0.34)) : 0;
+
+        if (!finalAnswerCorrect) {
+          methodMarks = Math.min(methodMarks, Math.max(0, methodPool - 1));
+        }
+      }
+
+      awarded = clamp(finalMarks + methodMarks, 0, maxMarks);
+
+      if (finalAnswerCorrect && awarded >= maxMarks) {
+        feedback = question.explanation || 'Correct. Final answer and method are both strong.';
+      } else if (finalAnswerCorrect && !workingProvided) {
+        feedback =
+          'Partially correct. Your final answer is correct, but add working steps to earn full marks.';
+      } else if (awarded > 0) {
+        feedback =
+          question.explanation ||
+          'Partially correct. Show clearer method steps and connect them to the final answer.';
+      } else {
+        feedback =
+          question.explanation ||
+          'Needs improvement. Rework the method and show each step clearly.';
+      }
+    } else {
+      if (finalAnswerCorrect) {
+        awarded = maxMarks;
+      } else {
+        awarded = Math.round(maxMarks * coverage);
+        if (awarded === 0 && coverage > 0.2) {
+          awarded = 1;
+        }
+        awarded = clamp(awarded, 0, maxMarks);
+      }
+
+      feedback =
+        awarded >= Math.ceil(maxMarks * 0.6)
           ? question.explanation || 'Good answer. Key ideas are covered.'
           : question.explanation
           ? `Partially correct. ${question.explanation}`
-          : 'Partially correct. Add more key terms and explain your reasoning.',
+          : 'Partially correct. Add more key terms and explain your reasoning.';
+    }
+
+    const isCorrect = awarded >= Math.ceil(maxMarks * 0.6);
+
+    return {
+      isCorrect,
+      feedback,
       marks: awarded,
     };
   }

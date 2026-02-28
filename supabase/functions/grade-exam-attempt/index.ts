@@ -70,6 +70,14 @@ type ExamPayload = {
   sections?: ExamSection[];
 };
 
+type SubmittedAnswerPayload =
+  | string
+  | {
+      answer?: string;
+      finalAnswer?: string;
+      working?: string;
+    };
+
 type GradeFeedback = {
   isCorrect: boolean;
   marksAwarded: number;
@@ -154,6 +162,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function parseSubmittedAnswer(input: SubmittedAnswerPayload | undefined): {
+  finalAnswer: string;
+  working: string;
+  combined: string;
+} {
+  if (typeof input === 'string') {
+    const finalAnswer = input;
+    return {
+      finalAnswer,
+      working: '',
+      combined: finalAnswer,
+    };
+  }
+
+  const finalAnswer = String(input?.answer ?? input?.finalAnswer ?? '');
+  const working = String(input?.working ?? '');
+  return {
+    finalAnswer,
+    working,
+    combined: `${finalAnswer} ${working}`.trim(),
+  };
+}
+
 function gradeObjective(question: ExamQuestion, answerRaw: string): GradeFeedback {
   const maxMarks = Math.max(1, Number(question.marks ?? question.points ?? 1) || 1);
   const qType = normalizeQuestionType(question.type);
@@ -233,9 +264,15 @@ function gradeObjective(question: ExamQuestion, answerRaw: string): GradeFeedbac
   };
 }
 
-function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeedback {
+function gradeOpenResponse(
+  question: ExamQuestion,
+  finalAnswerRaw: string,
+  workingRaw = '',
+): GradeFeedback {
   const maxMarks = Math.max(1, Number(question.marks ?? question.points ?? 1) || 1);
-  const answer = normalizeText(answerRaw);
+  const answer = normalizeText(finalAnswerRaw);
+  const working = normalizeText(workingRaw);
+  const combined = normalizeText(`${finalAnswerRaw} ${workingRaw}`);
   const explanation = String(question.explanation || '').trim() || undefined;
   const qType = normalizeQuestionType(question.type);
   const correctRaw =
@@ -257,7 +294,7 @@ function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeed
   if ((qType === 'short_answer' || qType === 'fill_in_blank') && correct) {
     const directMatch = answer === correct;
     const numericMatch = numericSeriesEqual(
-      extractNumericSeries(answerRaw),
+      extractNumericSeries(finalAnswerRaw),
       extractNumericSeries(correctRaw),
     );
     if (directMatch || numericMatch) {
@@ -281,23 +318,84 @@ function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeed
     .trim();
 
   const expectedTokens = tokenSet(expectedSource);
-  const studentTokens = tokenSet(answer);
+  const studentTokens = tokenSet(combined);
   const matches = [...expectedTokens].filter((token) => studentTokens.has(token)).length;
   const coverage = expectedTokens.size > 0 ? matches / expectedTokens.size : 0;
-  const clarityBonus = answer.split(' ').length >= 8 ? 0.1 : 0;
+  const clarityBonus = combined.split(' ').length >= 8 ? 0.1 : 0;
   const weighted = clamp(coverage + clarityBonus, 0, 1);
 
-  const awarded = clamp(Math.round(maxMarks * weighted), 0, maxMarks);
-  const isCorrect = weighted >= 0.65;
+  const questionText = `${question.question || ''} ${question.explanation || ''}`.toLowerCase();
+  const requiresWorking =
+    qType === 'short_answer' &&
+    maxMarks >= 3 &&
+    (/(show\s+your\s+work|show\s+working|working|calculate|work\s+out|steps?|method)/i.test(questionText) ||
+      /[+\-x×*÷/=%]/.test(questionText));
+  const finalAnswerCorrect =
+    Boolean(correct) &&
+    (answer === correct ||
+      numericSeriesEqual(
+        extractNumericSeries(finalAnswerRaw),
+        extractNumericSeries(correctRaw),
+      ));
+  const workingProvided = working.length >= 6 || /[=+\-*/÷×]/.test(workingRaw);
 
+  let awarded = 0;
   let feedback = '';
-  if (isCorrect) {
-    feedback = explanation || 'Good response. You covered the key ideas.';
-  } else if (weighted >= 0.35) {
-    feedback = 'Partially correct. Add more key terms and link your answer to the main concept.';
+
+  if (requiresWorking) {
+    const methodPool = Math.max(0, maxMarks - 1);
+    const finalMarks = finalAnswerCorrect ? 1 : 0;
+    let methodMarks = 0;
+
+    if (workingProvided && methodPool > 0) {
+      if (weighted >= 0.75) methodMarks = methodPool;
+      else if (weighted >= 0.5) methodMarks = Math.max(1, Math.round(methodPool * 0.67));
+      else if (weighted >= 0.3) methodMarks = Math.max(1, Math.round(methodPool * 0.34));
+      else methodMarks = finalAnswerCorrect ? Math.max(1, Math.round(methodPool * 0.34)) : 0;
+
+      if (!finalAnswerCorrect) {
+        methodMarks = Math.min(methodMarks, Math.max(0, methodPool - 1));
+      }
+    }
+
+    awarded = clamp(finalMarks + methodMarks, 0, maxMarks);
+
+    if (finalAnswerCorrect && awarded >= maxMarks) {
+      feedback = explanation || 'Correct. Final answer and method are both strong.';
+    } else if (finalAnswerCorrect && !workingProvided) {
+      feedback =
+        'Partially correct. Final answer is correct, but include method steps to earn full marks.';
+    } else if (awarded > 0) {
+      feedback =
+        explanation ||
+        'Partially correct. Keep your method steps clearer and connect them to the final answer.';
+    } else {
+      feedback =
+        explanation ||
+        'Needs improvement. Rework the method and show each step clearly.';
+    }
   } else {
-    feedback = 'Needs improvement. Re-read the topic and include clearer key concepts in your answer.';
+    if (finalAnswerCorrect) {
+      awarded = maxMarks;
+    } else {
+      awarded = clamp(Math.round(maxMarks * weighted), 0, maxMarks);
+      if (awarded === 0 && weighted >= 0.2) {
+        awarded = 1;
+      }
+    }
+
+    if (awarded >= Math.ceil(maxMarks * 0.6)) {
+      feedback = explanation || 'Good response. You covered the key ideas.';
+    } else if (awarded > 0) {
+      feedback =
+        'Partially correct. Add more key terms and link your answer to the main concept.';
+    } else {
+      feedback =
+        'Needs improvement. Re-read the topic and include clearer key concepts in your answer.';
+    }
   }
+
+  const isCorrect = awarded >= Math.ceil(maxMarks * 0.6);
 
   return {
     isCorrect,
@@ -511,13 +609,13 @@ serve(async (req: Request) => {
         const question = sectionQuestions[questionIndex];
         const qId = String(question.id || `q_${sectionIndex + 1}_${questionIndex + 1}`);
         const qType = normalizeQuestionType(question.type);
-        const answer = String(answerMap[qId] || '');
+        const parsedAnswer = parseSubmittedAnswer(answerMap[qId] as SubmittedAnswerPayload);
         const marks = Math.max(1, Number(question.marks ?? question.points ?? 1) || 1);
 
         const feedback =
           qType === 'multiple_choice' || qType === 'true_false' || qType === 'fill_in_blank'
-            ? gradeObjective(question, answer)
-            : gradeOpenResponse(question, answer);
+            ? gradeObjective(question, parsedAnswer.finalAnswer)
+            : gradeOpenResponse(question, parsedAnswer.finalAnswer, parsedAnswer.working);
 
         questionFeedback[qId] = feedback;
         sectionEarned += feedback.marksAwarded;

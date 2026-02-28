@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -169,6 +170,12 @@ export function useFinanceControlCenter() {
   const [queueMonthSelections, setQueueMonthSelections] = React.useState<Record<string, string>>({});
   const [queueStageFilter, setQueueStageFilter] = React.useState<'all' | FinanceQueueStage>('all');
   const [queueMismatchOnly, setQueueMismatchOnly] = React.useState(false);
+  const [showQueueMonthPicker, setShowQueueMonthPicker] = React.useState(false);
+  const [queueMonthPickerUploadId, setQueueMonthPickerUploadId] = React.useState<string | null>(null);
+  const [queueMonthPickerDate, setQueueMonthPickerDate] = React.useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const [showPayModal, setShowPayModal] = React.useState(false);
   const [selectedRecipient, setSelectedRecipient] = React.useState<PayrollRosterItem | null>(null);
@@ -346,39 +353,106 @@ export function useFinanceControlCenter() {
     })
   ), [monthIso]);
 
-  const openQueueMonthPicker = React.useCallback((upload: FinancePendingPOPRow) => {
-    const selectedMonth = queueMonthSelections[upload.id];
-    const normalizedSelected = selectedMonth
-      ? getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true })
-      : null;
-    const currentMonthDate = new Date(monthIso);
-    const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
-    const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
-    const suggestedMonth = resolveQueueDisplayMonth(upload);
-    const candidateMonths = [
-      suggestedMonth,
-      monthIso,
-      `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-      `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-    ].filter((candidate, index, list) => Boolean(candidate) && list.indexOf(candidate) === index);
+  const openPaymentForMonthPicker = React.useCallback((upload: FinancePendingPOPRow) => {
+    const currentPaymentFor = getMonthStartISO(
+      upload.payment_for_month || upload.payment_date || upload.created_at || monthIso,
+      { recoverUtcMonthBoundary: true },
+    );
+    const anchor = new Date(currentPaymentFor);
+    const candidateSet = new Set<string>([currentPaymentFor, monthIso]);
+    for (let offset = -6; offset <= 6; offset += 1) {
+      const date = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+      candidateSet.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`);
+    }
+    const candidates = Array.from(candidateSet)
+      .filter(Boolean)
+      .sort();
 
     showAlert({
-      title: 'Select Accounting Month',
-      message: 'Choose the month this payment should settle against.',
+      title: 'Set Payment For Month',
+      message: 'Choose the month this payment was intended for by the parent.',
       type: 'warning',
       buttons: [
-        ...candidateMonths.map((candidate) => ({
+        ...candidates.map((candidate) => ({
           text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
-            normalizedSelected === candidate ? ' ✓' : ''
+            candidate === currentPaymentFor ? ' ✓' : ''
           }`,
-          onPress: () => {
-            setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+          onPress: async () => {
+            try {
+              const { error } = await assertSupabase()
+                .from('pop_uploads')
+                .update({
+                  payment_for_month: candidate,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', upload.id);
+              if (error) throw error;
+              setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+              await loadData(true);
+            } catch (err: any) {
+              showAlert({
+                title: 'Update Failed',
+                message: err?.message || 'Could not update Payment For month.',
+                type: 'error',
+              });
+            }
           },
         })),
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
+  }, [loadData, monthIso, showAlert]);
+
+  const openQueueMonthPicker = React.useCallback((upload: FinancePendingPOPRow) => {
+    const selectedMonth = queueMonthSelections[upload.id] || resolveQueueDisplayMonth(upload) || monthIso;
+    const normalized = getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true });
+    if (Platform.OS === 'web') {
+      const suggestedMonth = resolveQueueDisplayMonth(upload);
+      const anchor = new Date(normalized);
+      const candidateSet = new Set<string>([normalized, suggestedMonth, monthIso]);
+      for (let offset = -6; offset <= 6; offset += 1) {
+        const date = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+        candidateSet.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`);
+      }
+      const candidates = Array.from(candidateSet)
+        .filter(Boolean)
+        .sort();
+
+      showAlert({
+        title: 'Select Accounting Month',
+        message: 'Choose the month this payment should settle against.',
+        type: 'warning',
+        buttons: [
+          ...candidates.map((candidate) => ({
+            text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
+              candidate === normalized ? ' ✓' : ''
+            }`,
+            onPress: () => {
+              setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+      });
+      return;
+    }
+
+    const anchor = new Date(normalized);
+    setQueueMonthPickerUploadId(upload.id);
+    setQueueMonthPickerDate(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+    setShowQueueMonthPicker(true);
   }, [monthIso, queueMonthSelections, resolveQueueDisplayMonth, showAlert]);
+
+  const closeQueueMonthPicker = React.useCallback(() => {
+    setShowQueueMonthPicker(false);
+    setQueueMonthPickerUploadId(null);
+  }, []);
+
+  const applyQueueMonthSelection = React.useCallback((selectedDate: Date) => {
+    if (!queueMonthPickerUploadId) return;
+    const normalizedMonth = getMonthStartISO(selectedDate, { recoverUtcMonthBoundary: true });
+    setQueueMonthSelections((prev) => ({ ...prev, [queueMonthPickerUploadId]: normalizedMonth }));
+  }, [queueMonthPickerUploadId]);
 
   React.useEffect(() => {
     setQueueMonthSelections((prev) => {
@@ -721,8 +795,13 @@ export function useFinanceControlCenter() {
     queueStageSummary,
     visibleQueueRows,
     queueMonthSelections,
+    showQueueMonthPicker,
+    queueMonthPickerDate,
+    closeQueueMonthPicker,
+    applyQueueMonthSelection,
     resolveQueueCategory,
     resolveQueueDisplayMonth,
+    openPaymentForMonthPicker,
     resolveQueueStage,
     isQueueMismatch,
     openQueueCategoryPicker,

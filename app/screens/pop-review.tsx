@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dimensions, FlatList, Image, Linking, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Dimensions, FlatList, Image, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -145,6 +146,12 @@ export default function POPReviewScreen() {
   const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, FeeCategoryCode>>({});
   const [queueMonthSelections, setQueueMonthSelections] = useState<Record<string, string>>({});
+  const [showQueueMonthPicker, setShowQueueMonthPicker] = useState(false);
+  const [queueMonthPickerUploadId, setQueueMonthPickerUploadId] = useState<string | null>(null);
+  const [queueMonthPickerDate, setQueueMonthPickerDate] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const selectedControlMonth = React.useMemo(
@@ -524,38 +531,105 @@ export default function POPReviewScreen() {
   );
 
   const openQueueMonthPicker = useCallback((upload: POPUpload) => {
-    const selectedMonth = queueMonthSelections[upload.id];
-    const normalizedSelected = selectedMonth
-      ? getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true })
-      : null;
-    const currentMonthDate = new Date(selectedControlMonth);
-    const previousMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
-    const nextMonthDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
-    const suggestedMonth = resolveQueueDisplayMonth(upload);
-    const candidateMonths = [
-      suggestedMonth,
-      selectedControlMonth,
-      `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-      `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`,
-    ].filter((candidate, index, list) => Boolean(candidate) && list.indexOf(candidate) === index);
+    const selectedMonth = queueMonthSelections[upload.id] || resolveQueueDisplayMonth(upload) || selectedControlMonth;
+    const normalized = getMonthStartISO(selectedMonth, { recoverUtcMonthBoundary: true });
+    if (Platform.OS === 'web') {
+      const suggestedMonth = resolveQueueDisplayMonth(upload);
+      const anchor = new Date(normalized);
+      const candidateSet = new Set<string>([normalized, suggestedMonth, selectedControlMonth]);
+      for (let offset = -6; offset <= 6; offset += 1) {
+        const date = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+        candidateSet.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`);
+      }
+      const candidates = Array.from(candidateSet)
+        .filter(Boolean)
+        .sort();
+
+      showAlert({
+        title: 'Select Accounting Month',
+        message: 'Choose the month this POP should settle against.',
+        type: 'warning',
+        buttons: [
+          ...candidates.map((candidate) => ({
+            text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
+              candidate === normalized ? ' ✓' : ''
+            }`,
+            onPress: () => {
+              setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+      });
+      return;
+    }
+
+    const anchor = new Date(normalized);
+    setQueueMonthPickerUploadId(upload.id);
+    setQueueMonthPickerDate(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+    setShowQueueMonthPicker(true);
+  }, [queueMonthSelections, resolveQueueDisplayMonth, selectedControlMonth, showAlert]);
+
+  const openPaymentForMonthPicker = useCallback((upload: POPUpload) => {
+    const currentPaymentFor = getMonthStartISO(
+      upload.payment_for_month || upload.payment_date || upload.created_at || selectedControlMonth,
+      { recoverUtcMonthBoundary: true },
+    );
+    const anchor = new Date(currentPaymentFor);
+    const candidateSet = new Set<string>([currentPaymentFor, selectedControlMonth]);
+    for (let offset = -6; offset <= 6; offset += 1) {
+      const date = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+      candidateSet.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`);
+    }
+    const candidates = Array.from(candidateSet)
+      .filter(Boolean)
+      .sort();
 
     showAlert({
-      title: 'Select Accounting Month',
-      message: 'Choose the month this POP should settle against.',
+      title: 'Set Payment For Month',
+      message: 'Choose the month this payment was intended for by the parent.',
       type: 'warning',
       buttons: [
-        ...candidateMonths.map((candidate) => ({
+        ...candidates.map((candidate) => ({
           text: `${new Date(candidate).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}${
-            normalizedSelected === candidate ? ' ✓' : ''
+            candidate === currentPaymentFor ? ' ✓' : ''
           }`,
-          onPress: () => {
-            setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+          onPress: async () => {
+            try {
+              const { error } = await assertSupabase()
+                .from('pop_uploads')
+                .update({
+                  payment_for_month: candidate,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', upload.id);
+              if (error) throw error;
+              setQueueMonthSelections((prev) => ({ ...prev, [upload.id]: candidate }));
+              await fetchUploads();
+            } catch (err: any) {
+              showAlert({
+                title: 'Update Failed',
+                message: err?.message || 'Could not update Payment For month.',
+                type: 'error',
+              });
+            }
           },
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
-  }, [queueMonthSelections, resolveQueueDisplayMonth, selectedControlMonth, showAlert]);
+  }, [fetchUploads, selectedControlMonth, showAlert]);
+
+  const closeQueueMonthPicker = useCallback(() => {
+    setShowQueueMonthPicker(false);
+    setQueueMonthPickerUploadId(null);
+  }, []);
+
+  const applyQueueMonthSelection = useCallback((selectedDate: Date) => {
+    if (!queueMonthPickerUploadId) return;
+    const normalizedMonth = getMonthStartISO(selectedDate, { recoverUtcMonthBoundary: true });
+    setQueueMonthSelections((prev) => ({ ...prev, [queueMonthPickerUploadId]: normalizedMonth }));
+  }, [queueMonthPickerUploadId]);
 
   useEffect(() => {
     setQueueMonthSelections((prev) => {
@@ -848,7 +922,7 @@ export default function POPReviewScreen() {
               {item.status === 'pending' && (
                 <TouchableOpacity
                   style={[styles.categoryEditButton, { borderColor: theme.border }]}
-                  onPress={() => openQueueMonthPicker(item)}
+                  onPress={() => openPaymentForMonthPicker(item)}
                 >
                   <Ionicons name="create-outline" size={12} color={theme.textSecondary} />
                   <Text style={[styles.categoryEditText, { color: theme.textSecondary }]}>
@@ -1072,6 +1146,19 @@ export default function POPReviewScreen() {
                 : 'No payment uploads found'}
             </Text>
           </View>
+        ) : Platform.OS === 'web' ? (
+          <ScrollView
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
+            }
+          >
+            {filteredUploads.map((item) => (
+              <View key={item.id || `${item.student_id || 'student'}-${item.created_at || Math.random()}`}>
+                {renderUploadItem({ item })}
+              </View>
+            ))}
+          </ScrollView>
         ) : (
           <FlatList
             data={filteredUploads}
@@ -1084,6 +1171,18 @@ export default function POPReviewScreen() {
           />
         )}
       </View>
+      {showQueueMonthPicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={queueMonthPickerDate}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            closeQueueMonthPicker();
+            if (event.type === 'dismissed' || !selectedDate) return;
+            applyQueueMonthSelection(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+          }}
+        />
+      )}
 
       {/* Reject Modal */}
       <Modal visible={showRejectModal} transparent animationType="fade">

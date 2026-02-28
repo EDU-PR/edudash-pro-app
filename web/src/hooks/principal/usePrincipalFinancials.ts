@@ -168,9 +168,8 @@ export function usePrincipalFinancials(schoolId: string | undefined): UsePrincip
       const currentDate = new Date();
       const monthStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const nextMonthStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-      const monthEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
       const monthStart = monthStartDate.toISOString();
-      const monthEnd = monthEndDate.toISOString();
+      const nextMonthStart = nextMonthStartDate.toISOString();
 
       // 1. Registration fees from registration_requests
       const { data: registrations } = await supabase
@@ -246,7 +245,7 @@ export function usePrincipalFinancials(schoolId: string | undefined): UsePrincip
         .filter((f: StudentFeeRecord) => {
           if (!f.paid_date) return false;
           const paidDate = new Date(f.paid_date);
-          return paidDate >= new Date(monthStart) && paidDate <= new Date(monthEnd);
+          return paidDate >= new Date(monthStart) && paidDate < new Date(nextMonthStart);
         })
         .reduce((sum: number, f: StudentFeeRecord) => sum + (f.amount || 0), 0);
 
@@ -259,7 +258,7 @@ export function usePrincipalFinancials(schoolId: string | undefined): UsePrincip
         .eq('preschool_id', schoolId)
         .in('status', ['completed', 'approved'])
         .gte('created_at', monthStart)
-        .lte('created_at', monthEnd);
+        .lt('created_at', nextMonthStart);
 
       const paymentRecords = (payments || []) as PaymentRecord[];
       const paymentsThisMonth = paymentRecords.reduce((sum: number, p: PaymentRecord) => sum + (p.amount || 0), 0);
@@ -294,7 +293,7 @@ export function usePrincipalFinancials(schoolId: string | undefined): UsePrincip
         .eq('type', 'expense')
         .in('status', ['approved', 'completed'])
         .gte('created_at', monthStart)
-        .lte('created_at', monthEnd);
+        .lt('created_at', nextMonthStart);
 
       const expenseRecords = (expenses || []) as ExpenseRecord[];
       const expensesThisMonth = expenseRecords.reduce((sum: number, e: ExpenseRecord) => sum + Math.abs(e.amount || 0), 0);
@@ -421,7 +420,7 @@ async function fetchMonthlyTrend(
     const month = date.getMonth();
     const year = date.getFullYear();
     const monthStart = new Date(year, month, 1).toISOString();
-    const monthEnd = new Date(year, month + 1, 0).toISOString();
+    const nextMonthStart = new Date(year, month + 1, 1).toISOString();
 
     // Get revenue
     const { data: payments } = await supabase
@@ -430,7 +429,7 @@ async function fetchMonthlyTrend(
       .eq('preschool_id', schoolId)
       .in('status', ['completed', 'approved'])
       .gte('created_at', monthStart)
-      .lte('created_at', monthEnd);
+      .lt('created_at', nextMonthStart);
 
     const paymentRecords = (payments || []) as PaymentRecord[];
     const revenue = paymentRecords.reduce((sum: number, p: PaymentRecord) => sum + (p.amount || 0), 0);
@@ -443,7 +442,7 @@ async function fetchMonthlyTrend(
       .eq('type', 'expense')
       .in('status', ['approved', 'completed'])
       .gte('created_at', monthStart)
-      .lte('created_at', monthEnd);
+      .lt('created_at', nextMonthStart);
 
     const expenseRecords = (expenses || []) as ExpenseRecord[];
     const expenseTotal = expenseRecords.reduce((sum: number, e: ExpenseRecord) => sum + Math.abs(e.amount || 0), 0);

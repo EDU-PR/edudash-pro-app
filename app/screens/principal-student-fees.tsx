@@ -53,10 +53,11 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function StudentFeeManagementScreen() {
   const router = useRouter();
-  const { studentId, monthIso, source } = useLocalSearchParams<{
+  const { studentId, monthIso, source, showFullHistory: showFullHistoryParam } = useLocalSearchParams<{
     studentId?: string;
     monthIso?: string;
     source?: string;
+    showFullHistory?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
@@ -77,7 +78,7 @@ export default function StudentFeeManagementScreen() {
   const data = useStudentFeeData(studentId, { monthIso, source });
   const [correctionTimeline, setCorrectionTimeline] = useState<FeeCorrectionTimelineRow[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
-  const [showFullHistory, setShowFullHistory] = useState(false);
+  const [showFullHistory, setShowFullHistory] = useState(() => String(showFullHistoryParam || '') === '1');
   const [selectedDueDateFee, setSelectedDueDateFee] = useState<StudentFee | null>(null);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const actions = useStudentFeeActions({
@@ -101,8 +102,31 @@ export default function StudentFeeManagementScreen() {
     });
   }, [data.activeMonthIso]);
   const visibleFees = data.source === 'receivables' && !showFullHistory ? data.displayFeesForMonth : data.displayFees;
-  const overdueFees = useMemo(() => visibleFees.filter(f => f.status === 'overdue'), [visibleFees]);
-  const pendingFees = useMemo(() => visibleFees.filter(f => f.status === 'pending' || f.status === 'partially_paid'), [visibleFees]);
+  const isFeeOverdueForDisplay = useCallback((fee: StudentFee) => {
+    const normalizedStatus = String(fee.status || '').toLowerCase();
+    if (normalizedStatus === 'paid' || normalizedStatus === 'waived' || normalizedStatus === 'pending_verification') {
+      return false;
+    }
+    const dueDate = fee.due_date ? new Date(fee.due_date) : null;
+    if (!dueDate || Number.isNaN(dueDate.getTime())) return normalizedStatus === 'overdue';
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return dueDate < todayStart || normalizedStatus === 'overdue';
+  }, []);
+  const overdueFees = useMemo(
+    () => visibleFees.filter((fee) => isFeeOverdueForDisplay(fee)),
+    [isFeeOverdueForDisplay, visibleFees],
+  );
+  const pendingFees = useMemo(
+    () => visibleFees.filter((fee) => {
+      const normalizedStatus = String(fee.status || '').toLowerCase();
+      if (normalizedStatus === 'paid' || normalizedStatus === 'waived' || normalizedStatus === 'pending_verification') {
+        return false;
+      }
+      return !isFeeOverdueForDisplay(fee);
+    }),
+    [isFeeOverdueForDisplay, visibleFees],
+  );
   const paidFees = useMemo(() => visibleFees.filter(f => f.status === 'paid' || f.status === 'waived'), [visibleFees]);
   const isReceivablesView = data.source === 'receivables' && !showFullHistory;
   const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
@@ -179,6 +203,7 @@ export default function StudentFeeManagementScreen() {
   }, [actions, batchMarkingPaid, overdueFees]);
 
   const renderFeeCard = (fee: StudentFee) => {
+    const effectiveStatus = isFeeOverdueForDisplay(fee) ? 'overdue' : fee.status;
     const isMarkPaidBusy =
       actions.processingFeeId === fee.id && actions.processingFeeAction === 'mark_paid';
     const isMarkUnpaidBusy =
@@ -186,15 +211,15 @@ export default function StudentFeeManagementScreen() {
     const isDueDateUpdateBusy =
       actions.processingFeeId === fee.id && actions.processingFeeAction === 'update_due_date';
     return (
-      <View key={fee.id} style={[styles.feeCard, getFeeCardStyle(fee.status)]}>
+      <View key={fee.id} style={[styles.feeCard, getFeeCardStyle(effectiveStatus)]}>
         <View style={styles.feeHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.feeDescription}>{fee.description || fee.fee_type}</Text>
             <Text style={styles.feeDueDate}>Due: {formatDate(fee.due_date)}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(fee.status) + '20' }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(fee.status) }]}>
-              {fee.status.toUpperCase()}
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(effectiveStatus) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(effectiveStatus) }]}>
+              {String(effectiveStatus).toUpperCase()}
             </Text>
           </View>
         </View>

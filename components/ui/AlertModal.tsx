@@ -182,6 +182,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   const modalSurfaceColor = toOpaqueColor((theme as any).cardBackground || theme.surface, toOpaqueColor(theme.background, '#111827'));
   const subtleSurfaceColor = toOpaqueColor((theme as any).surfaceVariant || theme.surface, modalSurfaceColor);
   const borderColor = toOpaqueColor(theme.border, '#334155');
+  const shouldRenderInPlace = renderInPlace || Platform.OS === 'web';
 
   const handleButtonPress = async (button: AlertButton) => {
     blurActiveElement();
@@ -244,8 +245,11 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     <View
       style={[
         styles.overlay,
-        { backgroundColor: 'rgba(2, 6, 23, 0.94)' },
-        renderInPlace && styles.overlayInPlace,
+        {
+          backgroundColor:
+            Platform.OS === 'web' ? 'rgba(2, 6, 23, 0.62)' : 'rgba(2, 6, 23, 0.94)',
+        },
+        shouldRenderInPlace && styles.overlayInPlace,
       ]}
       pointerEvents="auto"
     >
@@ -264,7 +268,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
           {
             backgroundColor: modalSurfaceColor,
             borderColor,
-            transform: [{ scale: scaleAnim }],
+            transform: [{ scale: Platform.OS === 'web' ? 1 : scaleAnim }],
           },
         ]}
       >
@@ -316,7 +320,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     </View>
   );
 
-  if (renderInPlace) {
+  if (shouldRenderInPlace) {
     return overlayContent;
   }
 

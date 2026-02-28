@@ -101,7 +101,7 @@ export async function bootstrapFeesIfMissing(
 
     const { data: feeStructures, error: feeError } = await supabase
       .from('fee_structures')
-      .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+      .select('id, amount, fee_type, name, description, grade_levels, age_group, grade_level, age_min_months, age_max_months, effective_from, created_at')
       .eq('preschool_id', preschoolId)
       .eq('is_active', true)
       .order('effective_from', { ascending: false })
@@ -112,9 +112,22 @@ export async function bootstrapFeesIfMissing(
       return 'missing';
     }
 
-    const tuitionFees = (feeStructures || []).filter((fee: FeeStructureRow) =>
-      isTuitionFee(fee.fee_type, fee.name, fee.description),
-    );
+    const tuitionFees: FeeStructureRow[] = (feeStructures || [])
+      .map((fee: any) => ({
+        id: fee.id,
+        amount: Number(fee.amount || 0),
+        fee_type: fee.fee_type ?? null,
+        name: fee.name ?? null,
+        description: fee.description ?? null,
+        grade_levels: fee.grade_levels ?? null,
+        age_group: fee.age_group ?? null,
+        grade_level: fee.grade_level ?? null,
+        age_min_months: fee.age_min_months ?? null,
+        age_max_months: fee.age_max_months ?? null,
+        effective_from: fee.effective_from ?? null,
+        created_at: fee.created_at ?? null,
+      }))
+      .filter((fee) => isTuitionFee(fee.fee_type, fee.name, fee.description));
     let resolvedTuitionFees = tuitionFees;
 
     if (!tuitionFees.length) {
@@ -230,7 +243,7 @@ export async function resolveSuggestedRegistrationFee(
     const supabase = assertSupabase();
     const { data, error } = await supabase
       .from('fee_structures')
-      .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+      .select('id, amount, fee_type, name, description, grade_levels, age_group, grade_level, age_min_months, age_max_months, effective_from, created_at')
       .eq('preschool_id', organizationId)
       .eq('is_active', true)
       .order('effective_from', { ascending: false })
@@ -278,7 +291,7 @@ export async function resolveSuggestedTuitionFee(
     const supabase = assertSupabase();
     const { data, error } = await supabase
       .from('fee_structures')
-      .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+      .select('id, amount, fee_type, name, description, grade_levels, age_group, grade_level, age_min_months, age_max_months, effective_from, created_at')
       .eq('preschool_id', organizationId)
       .eq('is_active', true)
       .order('effective_from', { ascending: false })
@@ -309,8 +322,9 @@ export async function resolveSuggestedTuitionFee(
       ageGroupLabel: className || student?.class_name || undefined,
       gradeLevel: className || student?.class_name || undefined,
     });
-
-    return selected || tuitionFees[0] || null;
+    if (selected) return selected;
+    if (!student?.date_of_birth && !classNeedle) return null;
+    return tuitionFees[0] || null;
   } catch (error) {
     console.warn('[StudentFeeManagement] Failed to resolve suggested tuition fee:', error);
     return null;

@@ -14,6 +14,7 @@ import { logger } from '@/lib/logger';
 export interface StudentAnswer {
   questionId: string;
   answer: string;
+  working?: string;
   isCorrect?: boolean;
   feedback?: string;
   marks?: number;
@@ -233,8 +234,17 @@ export function useExamSession(options: UseExamSessionOptions) {
    * Update student answer
    */
   const submitAnswer = useCallback(
-    async (questionId: string, answer: string, autoGrade = true) => {
+    async (
+      questionId: string,
+      answer: string,
+      options?: {
+        autoGrade?: boolean;
+        working?: string;
+      },
+    ) => {
       if (!session) return;
+      const autoGrade = options?.autoGrade !== false;
+      const working = (options?.working || '').trim();
 
       // Find question
       const question = exam.sections
@@ -249,12 +259,16 @@ export function useExamSession(options: UseExamSessionOptions) {
       let studentAnswer: StudentAnswer = {
         questionId,
         answer,
+        working: working.length > 0 ? working : undefined,
         submittedAt: new Date().toISOString(),
       };
 
       // Auto-grade for immediate inline feedback.
       if (autoGrade) {
-        const gradeResult = gradeAnswer(question, answer);
+        const gradeResult = gradeAnswer(question, {
+          answer,
+          working,
+        });
         studentAnswer = {
           ...studentAnswer,
           isCorrect: gradeResult.isCorrect,
@@ -333,7 +347,15 @@ export function useExamSession(options: UseExamSessionOptions) {
             examId,
             exam,
             answers: Object.fromEntries(
-              Object.entries(session.answers).map(([questionId, value]) => [questionId, value.answer]),
+              Object.entries(session.answers).map(([questionId, value]) => [
+                questionId,
+                value.working
+                  ? {
+                      answer: value.answer,
+                      working: value.working,
+                    }
+                  : value.answer,
+              ]),
             ),
             studentId: studentId || undefined,
             classId: classId || undefined,

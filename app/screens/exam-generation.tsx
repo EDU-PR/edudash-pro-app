@@ -72,7 +72,7 @@ export default function ExamGenerationScreen() {
   const [blueprintAudit, setBlueprintAudit] = useState<ExamBlueprintAudit | null>(null);
   const [studyCoachPack, setStudyCoachPack] = useState<ExamStudyCoachPack | null>(null);
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
-  const [completionSummary, setCompletionSummary] = useState<string | null>(null);
+  const [completionSummary, setCompletionSummary] = useState<ExamResults | null>(null);
   // Parents mainly care about the actual exam; keep the
   // audit + study coach collapsed by default on small screens.
   const [showAudit, setShowAudit] = useState(false);
@@ -191,7 +191,8 @@ export default function ExamGenerationScreen() {
 
   const handleComplete = useCallback(
     (results: ExamResults) => {
-      setCompletionSummary(`Score: ${results.percentage}% (${results.earnedMarks}/${results.totalMarks})`);
+      setCompletionSummary(results);
+      setShowAudit(true);
     },
     []
   );
@@ -211,7 +212,9 @@ export default function ExamGenerationScreen() {
             <View style={[styles.completionBanner, { borderColor: `${theme.success}55`, backgroundColor: `${theme.success}18` }]}>
               <View style={styles.completionBannerLeft}>
                 <Ionicons name="checkmark-circle" size={18} color={theme.success} />
-                <Text style={[styles.completionText, { color: theme.success }]}>Exam submitted. {completionSummary}</Text>
+                <Text style={[styles.completionText, { color: theme.success }]}>
+                  Exam submitted. Score: {completionSummary.percentage}% ({completionSummary.earnedMarks}/{completionSummary.totalMarks})
+                </Text>
               </View>
               <TouchableOpacity style={[styles.doneButton, { borderColor: theme.success }]} onPress={() => router.back()}>
                 <Text style={[styles.doneButtonText, { color: theme.success }]}>Done</Text>
@@ -259,6 +262,42 @@ export default function ExamGenerationScreen() {
                 <Text style={[styles.metaLine, { color: theme.muted }]}>
                   Blueprint: {blueprintAudit.actualQuestions} questions ({blueprintAudit.minQuestions}-{blueprintAudit.maxQuestions}) • {blueprintAudit.totalMarks} marks
                 </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {showAudit && completionSummary ? (
+            <View style={[styles.metaCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.metaTitle, { color: theme.text }]}>Attempt summary</Text>
+              <Text style={[styles.metaLine, { color: theme.muted }]}>
+                Completion: {completionSummary.percentage}% • {completionSummary.earnedMarks}/{completionSummary.totalMarks} marks
+              </Text>
+              {completionSummary.sectionBreakdown?.length ? (
+                <View style={styles.summaryGroup}>
+                  {completionSummary.sectionBreakdown.map((section) => (
+                    <Text key={section.sectionId} style={[styles.metaLine, { color: theme.muted }]}>
+                      {section.title}: {section.earnedMarks}/{section.totalMarks}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+              {completionSummary.topicFeedback?.length ? (
+                <View style={styles.summaryGroup}>
+                  <Text style={[styles.metaLine, { color: theme.text }]}>Focus next:</Text>
+                  {completionSummary.topicFeedback.slice(0, 3).map((topic) => (
+                    <Text key={topic.topic} style={[styles.metaLine, { color: theme.muted }]}>
+                      {topic.topic}: {topic.percentage}%
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+              {completionSummary.recommendedPractice?.length ? (
+                <View style={styles.summaryGroup}>
+                  {completionSummary.recommendedPractice.slice(0, 3).map((item, idx) => (
+                    <Text key={`${idx}-${item.slice(0, 16)}`} style={[styles.metaLine, { color: theme.muted }]}>
+                      - {item}
+                    </Text>
+                  ))}
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -470,6 +509,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '500',
+  },
+  summaryGroup: {
+    marginTop: 4,
+    gap: 2,
   },
   studyCoachCard: {
     marginHorizontal: 14,

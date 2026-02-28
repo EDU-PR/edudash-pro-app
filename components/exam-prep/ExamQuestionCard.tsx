@@ -16,9 +16,11 @@ interface ExamQuestionCardProps {
   question: ExamQuestion;
   currentIndex: number;
   currentAnswer: string;
+  currentWorkingAnswer?: string;
   studentAnswer?: StudentAnswer;
   isLocked: boolean;
   onChangeAnswer: (text: string) => void;
+  onChangeWorkingAnswer?: (text: string) => void;
   onSelectOption: (option: string) => void;
   theme: Record<string, string>;
 }
@@ -47,13 +49,22 @@ export function ExamQuestionCard({
   question,
   currentIndex,
   currentAnswer,
+  currentWorkingAnswer = '',
   studentAnswer,
   isLocked,
   onChangeAnswer,
+  onChangeWorkingAnswer,
   onSelectOption,
   theme,
 }: ExamQuestionCardProps) {
   const typeInfo = questionTypeIcon(question.type);
+  const questionText = `${question.question || ''} ${question.explanation || ''}`.toLowerCase();
+  const shouldShowWorkingField =
+    (question.type === 'short_answer' || question.type === 'fill_blank' || question.type === 'fill_in_blank') &&
+    question.marks >= 3 &&
+    (/(show\s+your\s+work|working|calculate|work\s+out|steps?|method)/i.test(questionText) ||
+      /[+\-x×*÷/=%]/.test(questionText));
+  const isPartial = !!studentAnswer && !studentAnswer.isCorrect && (studentAnswer.marks || 0) > 0;
 
   return (
     <>
@@ -289,26 +300,57 @@ export function ExamQuestionCard({
         {/* Text-based Input */}
         {(question.type === 'short_answer' ||
           question.type === 'essay' ||
-          question.type === 'fill_blank') && (
-          <TextInput
-            style={[
-              styles.answerInput,
-              question.type === 'essay' && styles.essayInput,
-              {
-                backgroundColor: isLocked ? theme.background + '80' : theme.background,
-                borderColor: theme.border,
-                color: theme.text,
-              },
-              isLocked && { opacity: 0.7 },
-            ]}
-            value={currentAnswer}
-            onChangeText={onChangeAnswer}
-            placeholder="Type your answer here..."
-            placeholderTextColor={theme.textTertiary}
-            multiline={question.type === 'essay'}
-            numberOfLines={question.type === 'essay' ? 6 : 2}
-            editable={!isLocked}
-          />
+          question.type === 'fill_blank' ||
+          question.type === 'fill_in_blank') && (
+          <>
+            <TextInput
+              style={[
+                styles.answerInput,
+                question.type === 'essay' && styles.essayInput,
+                shouldShowWorkingField && styles.expandedShortAnswerInput,
+                {
+                  backgroundColor: isLocked ? theme.background + '80' : theme.background,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+                isLocked && { opacity: 0.7 },
+              ]}
+              value={currentAnswer}
+              onChangeText={onChangeAnswer}
+              placeholder={shouldShowWorkingField ? 'Final answer...' : 'Type your answer here...'}
+              placeholderTextColor={theme.textTertiary}
+              multiline={question.type === 'essay' || shouldShowWorkingField}
+              numberOfLines={question.type === 'essay' ? 6 : shouldShowWorkingField ? 4 : 2}
+              editable={!isLocked}
+            />
+
+            {shouldShowWorkingField && (
+              <View style={styles.workingWrap}>
+                <Text style={[styles.workingLabel, { color: theme.textSecondary }]}>
+                  Show your working (method)
+                </Text>
+                <TextInput
+                  style={[
+                    styles.answerInput,
+                    styles.workingInput,
+                    {
+                      backgroundColor: isLocked ? theme.background + '80' : theme.background,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    },
+                    isLocked && { opacity: 0.7 },
+                  ]}
+                  value={currentWorkingAnswer}
+                  onChangeText={onChangeWorkingAnswer}
+                  placeholder="Write your steps here..."
+                  placeholderTextColor={theme.textTertiary}
+                  multiline
+                  numberOfLines={6}
+                  editable={!isLocked}
+                />
+              </View>
+            )}
+          </>
         )}
 
         {/* Feedback after submission */}
@@ -317,30 +359,56 @@ export function ExamQuestionCard({
             style={[
               styles.feedbackCard,
               {
-                backgroundColor: studentAnswer.isCorrect ? '#10b98120' : '#ef444420',
-                borderColor: studentAnswer.isCorrect ? '#10b981' : '#ef4444',
+                backgroundColor: studentAnswer.isCorrect
+                  ? '#10b98120'
+                  : isPartial
+                  ? '#f59e0b20'
+                  : '#ef444420',
+                borderColor: studentAnswer.isCorrect
+                  ? '#10b981'
+                  : isPartial
+                  ? '#f59e0b'
+                  : '#ef4444',
               },
             ]}
           >
             <View style={styles.feedbackHeader}>
               <Ionicons
-                name={studentAnswer.isCorrect ? 'checkmark-circle' : 'close-circle'}
+                name={
+                  studentAnswer.isCorrect
+                    ? 'checkmark-circle'
+                    : isPartial
+                    ? 'alert-circle'
+                    : 'close-circle'
+                }
                 size={24}
-                color={studentAnswer.isCorrect ? '#10b981' : '#ef4444'}
+                color={studentAnswer.isCorrect ? '#10b981' : isPartial ? '#f59e0b' : '#ef4444'}
               />
               <Text
                 style={[
                   styles.feedbackTitle,
-                  { color: studentAnswer.isCorrect ? '#10b981' : '#ef4444' },
+                  {
+                    color: studentAnswer.isCorrect
+                      ? '#10b981'
+                      : isPartial
+                      ? '#f59e0b'
+                      : '#ef4444',
+                  },
                 ]}
               >
-                {studentAnswer.isCorrect ? 'Correct!' : 'Incorrect'}
+                {studentAnswer.isCorrect ? 'Correct!' : isPartial ? 'Partially correct' : 'Incorrect'}
               </Text>
               {studentAnswer.marks !== undefined && (
                 <Text
                   style={[
                     styles.feedbackMarks,
-                    { color: studentAnswer.isCorrect ? '#10b981' : '#ef4444' },
+                    {
+                      color: studentAnswer.isCorrect
+                        ? '#10b981'
+                        : isPartial
+                        ? '#f59e0b'
+                        : '#ef4444',
+                    },
                   ]}
                 >
                   {studentAnswer.marks}/{question.marks}
@@ -467,8 +535,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 8,
   },
+  expandedShortAnswerInput: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
   essayInput: {
     minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  workingWrap: {
+    marginTop: 10,
+  },
+  workingLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  workingInput: {
+    minHeight: 130,
     textAlignVertical: 'top',
   },
   feedbackCard: {

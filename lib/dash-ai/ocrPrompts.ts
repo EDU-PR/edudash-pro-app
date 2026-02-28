@@ -113,9 +113,7 @@ export const CRITERIA_RESPONSE_PROMPT = [
   '- Put supporting evidence/documents in a separate section titled exactly: "Attach all relevant documentation as evidence".',
   '- If any criterion text is unclear, mark it with [?] and ask one concise clarification question.',
   '- Do not add names, institutions, signatures, or dates unless the user explicitly provided them.',
-].join('\n');
-
-const CRITERIA_RESPONSE_PATTERNS: RegExp[] = [
+].join('\n');const CRITERIA_RESPONSE_PATTERNS: RegExp[] = [
   /\b(help|assist|draft|write|answer|respond)\b.{0,30}\b(criteria|criterion|rubric|assessment)\b/i,
   /\b(criteria|criterion|rubric|assessment)\b.{0,30}\b(answer|response|draft|write|help)\b/i,
   /\bgroup discussion response\b/i,
@@ -195,9 +193,7 @@ function extractLineBasedCriteriaHeadings(text: string): CriteriaHeading[] {
   }
 
   return headings;
-}
-
-function extractInlineCriteriaHeadings(text: string): CriteriaHeading[] {
+}function extractInlineCriteriaHeadings(text: string): CriteriaHeading[] {
   const source = String(text || '').replace(/\s+/g, ' ').trim();
   if (!source) return [];  const headings: CriteriaHeading[] = [];
   const labelRegex = /\b([a-z]|[1-9][0-9]?)\)\s*/gi;

@@ -50,6 +50,24 @@ export interface ExamResults {
   answers: Record<string, StudentAnswer>;
   completedAt: string;
   duration: number;
+  gradingStatus?: string;
+  sectionBreakdown?: Array<{
+    sectionId: string;
+    title: string;
+    earnedMarks: number;
+    totalMarks: number;
+    questionCount: number;
+    correctCount: number;
+  }>;
+  topicFeedback?: Array<{
+    topic: string;
+    earnedMarks: number;
+    totalMarks: number;
+    percentage: number;
+    priority: 'high' | 'medium' | 'low';
+  }>;
+  recommendedPractice?: string[];
+  persistenceWarning?: string | null;
 }
 
 const AUTO_SUBMIT_TYPES: ExamQuestion['type'][] = ['multiple_choice', 'true_false'];
@@ -83,6 +101,7 @@ export function ExamInteractiveView({
   });
 
   const [currentAnswer, setCurrentAnswer] = useState('');
+  const [currentWorkingAnswer, setCurrentWorkingAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ type: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [confirmIncompleteSubmit, setConfirmIncompleteSubmit] = useState(false);
@@ -120,8 +139,10 @@ export function ExamInteractiveView({
   React.useEffect(() => {
     if (currentStudentAnswer) {
       setCurrentAnswer(currentStudentAnswer.answer);
+      setCurrentWorkingAnswer(currentStudentAnswer.working || '');
     } else {
       setCurrentAnswer('');
+      setCurrentWorkingAnswer('');
     }
   }, [currentQuestion?.id, currentStudentAnswer]);
 
@@ -133,7 +154,10 @@ export function ExamInteractiveView({
 
     try {
       setSubmitting(true);
-      const result = await submitAnswer(currentQuestion.id, answer, true);
+      const result = await submitAnswer(currentQuestion.id, answer, {
+        autoGrade: true,
+        working: currentWorkingAnswer,
+      });
 
       setUiNotice({
         type: result?.isCorrect ? 'success' : 'info',
@@ -150,7 +174,7 @@ export function ExamInteractiveView({
     } finally {
       setSubmitting(false);
     }
-  }, [currentQuestion, submitAnswer]);
+  }, [currentQuestion, submitAnswer, currentWorkingAnswer]);
 
   const handleSubmitAnswer = useCallback(() => {
     doSubmitAnswer(currentAnswer);
@@ -231,6 +255,11 @@ export function ExamInteractiveView({
         answers: completedSession.answers,
         completedAt: completedSession.completedAt || new Date().toISOString(),
         duration,
+        gradingStatus: completedSession.gradingStatus,
+        sectionBreakdown: completedSession.sectionBreakdown || [],
+        topicFeedback: completedSession.topicFeedback || [],
+        recommendedPractice: completedSession.recommendedPractice || [],
+        persistenceWarning: completedSession.persistenceWarning || null,
       };
 
       if (completedSession.persistenceWarning) {
@@ -310,9 +339,11 @@ export function ExamInteractiveView({
           question={currentQuestion}
           currentIndex={currentIndex}
           currentAnswer={currentAnswer}
+          currentWorkingAnswer={currentWorkingAnswer}
           studentAnswer={currentStudentAnswer}
           isLocked={!!currentStudentAnswer}
           onChangeAnswer={setCurrentAnswer}
+          onChangeWorkingAnswer={setCurrentWorkingAnswer}
           onSelectOption={handleSelectOption}
           theme={theme as unknown as Record<string, string>}
         />
