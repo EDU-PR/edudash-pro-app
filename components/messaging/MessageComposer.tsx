@@ -406,7 +406,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                 >
                   <Ionicons
                     name={showEmojiPicker ? 'close-outline' : 'happy-outline'}
-                    size={22}
+                    size={20}
                     color="rgba(255,255,255,0.65)"
                   />
                 </TouchableOpacity>
@@ -437,7 +437,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                     style={styles.inlineBtn}
                     onPress={handleCamera}
                   >
-                    <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
+                    <Ionicons name="camera-outline" size={20} color="rgba(255,255,255,0.5)" />
                   </TouchableOpacity>
                 )}
                 
@@ -446,7 +446,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   style={styles.inlineBtn}
                   onPress={handleAttachment}
                 >
-                  <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
+                  <Ionicons name="attach-outline" size={20} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -482,7 +482,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   {sending ? (
                     <EduDashSpinner size="small" color="#fff" />
                   ) : (
-                    <Ionicons name="send" size={20} color="#fff" />
+                    <Ionicons name="send" size={18} color="#fff" />
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -514,7 +514,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                 colors={['#0776d1ff', '#043c85ff']} 
                 style={[styles.gradientButton, styles.micButton]}
               >
-                <Ionicons name="mic" size={22} color="#fff" />
+                <Ionicons name="mic" size={18} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -526,9 +526,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 6,
-    paddingTop: 4,
-    paddingBottom: 4,
+    paddingHorizontal: 5,
+    paddingTop: 3,
+    paddingBottom: 3,
   },
   composerRow: {
     flexDirection: 'row',
@@ -539,11 +539,11 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     backgroundColor: '#1e293b',
-    borderRadius: 24,
+    borderRadius: 20,
     paddingLeft: 0,
     paddingRight: 0,
     paddingVertical: 0,
-    minHeight: 46,
+    minHeight: 40,
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.18)',
     overflow: 'hidden',
@@ -556,35 +556,35 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 8,
-    paddingRight: 6,
-    paddingVertical: 4,
-    minHeight: 46,
+    paddingLeft: 6,
+    paddingRight: 5,
+    paddingVertical: 2,
+    minHeight: 40,
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: '#fff',
-    maxHeight: 100,
-    minHeight: 36,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+    maxHeight: 92,
+    minHeight: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   inlineBtnLeft: {
-    padding: 8,
+    padding: 6,
     marginRight: 2,
   },
   inlineBtn: {
-    padding: 8,
+    padding: 6,
   },
   actionButton: {
-    width: 48,
-    height: 48,
+    width: 42,
+    height: 42,
   },
   gradientButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#020617',
@@ -602,8 +602,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   micContainer: {
-    width: 46,
-    height: 46,
+    width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -612,9 +612,9 @@ const styles = StyleSheet.create({
   },
   micGlow: {
     position: 'absolute',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: CYAN_GLOW,
   },
   editBanner: {
@@ -660,8 +660,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sparkleButton: {
-    width: 36,
-    height: 48,
+    width: 32,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
   },

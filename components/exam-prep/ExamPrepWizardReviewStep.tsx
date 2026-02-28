@@ -1,6 +1,6 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { type ThemeColors } from '@/contexts/ThemeContext';
 import { LANGUAGE_OPTIONS, type ExamContextSummary } from '@/components/exam-prep/types';
@@ -17,11 +17,18 @@ interface ReviewStepProps {
   selectedExamType: string;
   selectedLanguage: keyof typeof LANGUAGE_OPTIONS;
   useTeacherContext: boolean;
+  manualScopeText: string;
+  scopeParsing: boolean;
+  scopeParseError: string | null;
+  scopeParseSourceName: string | null;
+  scopeParseConfidence: number | null;
   contextPreview: ExamContextSummary | null;
   contextLoading: boolean;
   contextError: string | null;
   onBack: () => void;
   onSetUseTeacherContext: (enabled: boolean) => void;
+  onManualScopeTextChange: (value: string) => void;
+  onParseScopeFromFile: () => void;
   onGenerateWithCurrentContext: () => void;
   onGenerateCapsOnly: () => void;
 }
@@ -79,6 +86,11 @@ function ContextPreviewCard({
             Lessons: {contextPreview?.lessonCount ?? 0}
           </Text>
         </View>
+        <View style={[styles.summaryChip, { backgroundColor: `${theme.primary}22` }]}>
+          <Text style={[styles.summaryChipText, { color: theme.primary }]}>
+            Scope topics: {contextPreview?.manualScopeTopicCount ?? 0}
+          </Text>
+        </View>
       </View>
 
       {contextPreview?.focusTopics?.length ? (
@@ -112,11 +124,18 @@ export function ExamPrepReviewStep({
   selectedExamType,
   selectedLanguage,
   useTeacherContext,
+  manualScopeText,
+  scopeParsing,
+  scopeParseError,
+  scopeParseSourceName,
+  scopeParseConfidence,
   contextPreview,
   contextLoading,
   contextError,
   onBack,
   onSetUseTeacherContext,
+  onManualScopeTextChange,
+  onParseScopeFromFile,
   onGenerateWithCurrentContext,
   onGenerateCapsOnly,
 }: ReviewStepProps): React.ReactElement {
@@ -187,6 +206,63 @@ export function ExamPrepReviewStep({
             CAPS only
           </Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={[styles.scopeCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={styles.scopeHeaderRow}>
+          <Text style={[styles.contextLabel, { color: theme.text }]}>Class scope & resources (optional)</Text>
+          <Text style={[styles.scopeCount, { color: theme.muted }]}>{manualScopeText.length}/1800</Text>
+        </View>
+        <Text style={[styles.contextSubLabel, { color: theme.muted }]}>
+          Paste class delimitation topics, textbook pages, or scope notes so this paper matches what was taught.
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.scopeParseButton,
+            {
+              borderColor: theme.border,
+              backgroundColor: scopeParsing ? `${theme.primary}22` : theme.surface,
+            },
+          ]}
+          onPress={onParseScopeFromFile}
+          disabled={scopeParsing}
+        >
+          <Ionicons name="scan-outline" size={16} color={theme.primary} />
+          <Text style={[styles.scopeParseButtonText, { color: theme.primary }]}>
+            {scopeParsing ? 'Scanning scope...' : 'Scan scope from photo/PDF'}
+          </Text>
+        </TouchableOpacity>
+        {scopeParseSourceName ? (
+          <Text style={[styles.scopeParseMeta, { color: theme.muted }]}>
+            Last scan: {scopeParseSourceName}
+            {typeof scopeParseConfidence === 'number'
+              ? ` • confidence ${Math.round(scopeParseConfidence * 100)}%`
+              : ''}
+          </Text>
+        ) : null}
+        {scopeParseError ? (
+          <View style={[styles.scopeParseErrorWrap, { borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+            <Text style={styles.scopeParseErrorText}>{scopeParseError}</Text>
+          </View>
+        ) : null}
+        <TextInput
+          value={manualScopeText}
+          onChangeText={onManualScopeTextChange}
+          placeholder="Example: Map skills (pp. 4-19), hemispheres (pp. 7-9), latitude/longitude (p. 17), line & word scale (p. 12)"
+          placeholderTextColor={theme.muted}
+          multiline
+          numberOfLines={5}
+          maxLength={1800}
+          style={[
+            styles.scopeInput,
+            {
+              color: theme.text,
+              borderColor: theme.border,
+              backgroundColor: theme.inputBackground || theme.background,
+            },
+          ]}
+          textAlignVertical="top"
+        />
       </View>
 
       <ContextPreviewCard

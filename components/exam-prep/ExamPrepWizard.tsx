@@ -6,8 +6,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
@@ -28,6 +31,7 @@ import {
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
+import { parseExamScopeFromUpload } from '@/lib/services/examScopeParsingService';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { assertSupabase } from '@/lib/supabase';
 import {
@@ -40,6 +44,45 @@ import {
 } from '@/components/exam-prep/examPrepWizard.helpers';
 import { examPrepWizardStyles as styles } from '@/components/exam-prep/examPrepWizard.styles';
 
+const MAX_MANUAL_SCOPE_CHARS = 1800;
+
+function inferMimeType(fileNameOrUri?: string): string {
+  const lower = String(fileNameOrUri || '').toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return 'image/jpeg';
+}
+
+async function assetToBase64(asset: DocumentPicker.DocumentPickerAsset): Promise<string> {
+  if (typeof (asset as { base64?: string }).base64 === 'string' && (asset as { base64?: string }).base64) {
+    return ((asset as { base64?: string }).base64 || '').trim();
+  }
+
+  const uri = String(asset.uri || '');
+  if (uri.startsWith('data:')) {
+    return uri.split(',')[1] || '';
+  }
+
+  if (Platform.OS === 'web' && (asset as { file?: File }).file instanceof File) {
+    const file = (asset as { file: File }).file;
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        resolve(result.split(',')[1] || '');
+      };
+      reader.onerror = () => reject(new Error('Could not read selected file.'));
+      reader.readAsDataURL(file);
+    });
+    return base64.trim();
+  }
+
+  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+  return base64.trim();
+}
+
 export function ExamPrepWizard(): React.ReactElement {
   const { theme, isDark } = useTheme();
   const { tier } = useSubscription();
@@ -49,6 +92,7 @@ export function ExamPrepWizard(): React.ReactElement {
     studentId?: string;
     classId?: string;
     schoolId?: string;
+    manualScopeText?: string;
   }>();
 
   const gradeParam = toSafeParam(params.grade);
@@ -56,6 +100,7 @@ export function ExamPrepWizard(): React.ReactElement {
   const studentId = toSafeParam(params.studentId);
   const classId = toSafeParam(params.classId);
   const schoolId = toSafeParam(params.schoolId);
+  const manualScopeParam = toSafeParam(params.manualScopeText);
 
   const hasPrefilledGrade = !!(gradeParam && GRADES.some((grade) => grade.value === gradeParam));
 
@@ -69,6 +114,11 @@ export function ExamPrepWizard(): React.ReactElement {
   const [subjectCategory, setSubjectCategory] = useState<SubjectCategory>('all');
 
   const [useTeacherContext, setUseTeacherContext] = useState(true);
+  const [manualScopeText, setManualScopeText] = useState<string>(manualScopeParam || '');
+  const [scopeParsing, setScopeParsing] = useState(false);
+  const [scopeParseError, setScopeParseError] = useState<string | null>(null);
+  const [scopeParseSourceName, setScopeParseSourceName] = useState<string | null>(null);
+  const [scopeParseConfidence, setScopeParseConfidence] = useState<number | null>(null);
   const [contextPreview, setContextPreview] = useState<ExamContextSummary | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
@@ -136,6 +186,7 @@ export function ExamPrepWizard(): React.ReactElement {
           classId,
           schoolId,
           useTeacherContext: true,
+          manualScopeText: manualScopeText.trim().slice(0, 1800),
           previewContext: true,
         },
       };
@@ -181,6 +232,7 @@ export function ExamPrepWizard(): React.ReactElement {
     classId,
     schoolId,
     useTeacherContext,
+    manualScopeText,
   ]);
 
   useEffect(() => {
@@ -210,6 +262,7 @@ export function ExamPrepWizard(): React.ReactElement {
   const handleStartGeneration = useCallback(
     (withTeacherContext: boolean) => {
       if (!selectedGrade || !selectedSubject || !selectedExamType) return;
+      const manualScopeForRequest = manualScopeText.trim().slice(0, 1800);
 
       const generationParams = buildExamRouteParams({
         grade: selectedGrade,
@@ -217,6 +270,7 @@ export function ExamPrepWizard(): React.ReactElement {
         examType: selectedExamType,
         language: selectedLanguage,
         useTeacherContext: withTeacherContext,
+        manualScopeText: manualScopeForRequest,
         contextIds: {
           childName,
           studentId,
@@ -227,17 +281,19 @@ export function ExamPrepWizard(): React.ReactElement {
 
       router.push(buildExamGenerationHref(generationParams));
     },
-    [selectedGrade, selectedSubject, selectedExamType, selectedLanguage, childName, studentId, classId, schoolId]
+    [selectedGrade, selectedSubject, selectedExamType, selectedLanguage, manualScopeText, childName, studentId, classId, schoolId]
   );
 
   const handleQuickStartAfrikaansLive = useCallback(() => {
     const quickGrade = selectedGrade || gradeParam || 'grade_6';
+      const manualScopeForRequest = manualScopeText.trim().slice(0, 1800);
     const quickParams = buildExamRouteParams({
       grade: quickGrade,
       subject: selectedSubject || 'Afrikaans First Additional Language',
       examType: 'practice_test',
       language: selectedLanguage || 'af-ZA',
       useTeacherContext: true,
+      manualScopeText: manualScopeForRequest,
       contextIds: {
         childName,
         studentId,
@@ -247,7 +303,64 @@ export function ExamPrepWizard(): React.ReactElement {
     });
 
     router.push(buildExamGenerationHref(quickParams));
-  }, [selectedGrade, gradeParam, selectedSubject, selectedLanguage, childName, studentId, classId, schoolId]);
+  }, [selectedGrade, gradeParam, selectedSubject, selectedLanguage, manualScopeText, childName, studentId, classId, schoolId]);
+
+  const handleParseScopeFromFile = useCallback(async () => {
+    setScopeParseError(null);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const base64 = await assetToBase64(asset);
+
+      if (!base64) {
+        setScopeParseError('Could not read selected file bytes for OCR parsing.');
+        return;
+      }
+
+      setScopeParsing(true);
+      const parsed = await parseExamScopeFromUpload({
+        fileBase64: base64,
+        mimeType: asset.mimeType || inferMimeType(asset.name || asset.uri),
+        fileName: asset.name || undefined,
+        grade: selectedGrade,
+        subject: selectedSubject,
+      });
+
+      if (!parsed.success || !parsed.scopeText) {
+        const issue = parsed.issues.find((item) => item.trim().length > 0) || 'Scope parsing failed. Please type the scope manually.';
+        setScopeParseError(issue);
+        setScopeParseSourceName(asset.name || 'Uploaded file');
+        setScopeParseConfidence(parsed.confidence);
+        return;
+      }
+
+      setManualScopeText((previous) => {
+        const current = previous.trim();
+        const next = parsed.scopeText.trim();
+        if (!current) return next.slice(0, MAX_MANUAL_SCOPE_CHARS);
+        if (current.includes(next)) return current.slice(0, MAX_MANUAL_SCOPE_CHARS);
+        return `${current}\n\n${next}`.slice(0, MAX_MANUAL_SCOPE_CHARS);
+      });
+
+      const lowConfidenceIssue = parsed.lowConfidence
+        ? 'OCR confidence is low. Review and correct extracted text before generating.'
+        : null;
+      const issue = parsed.issues.find((item) => item.trim().length > 0) || lowConfidenceIssue;
+      setScopeParseError(issue || null);
+      setScopeParseSourceName(asset.name || 'Uploaded file');
+      setScopeParseConfidence(parsed.confidence);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Scope parsing failed unexpectedly.';
+      setScopeParseError(message);
+    } finally {
+      setScopeParsing(false);
+    }
+  }, [selectedGrade, selectedSubject]);
 
   if (!canUseExamPrep) {
     return (
@@ -368,11 +481,18 @@ export function ExamPrepWizard(): React.ReactElement {
             selectedExamType={selectedExamType}
             selectedLanguage={selectedLanguage}
             useTeacherContext={useTeacherContext}
+            manualScopeText={manualScopeText}
+            scopeParsing={scopeParsing}
+            scopeParseError={scopeParseError}
+            scopeParseSourceName={scopeParseSourceName}
+            scopeParseConfidence={scopeParseConfidence}
             contextPreview={contextPreview}
             contextLoading={contextLoading}
             contextError={contextError}
             onBack={() => moveToStep('type')}
             onSetUseTeacherContext={setUseTeacherContext}
+            onManualScopeTextChange={setManualScopeText}
+            onParseScopeFromFile={handleParseScopeFromFile}
             onGenerateWithCurrentContext={() => handleStartGeneration(useTeacherContext)}
             onGenerateCapsOnly={() => handleStartGeneration(false)}
           />

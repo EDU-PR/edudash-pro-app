@@ -84,7 +84,7 @@ type RecorderPhase = 'idle' | 'recording' | 'locked' | 'preview';
 const VoiceRecorderFallback: React.FC = () => (
   <View style={styles.container}>
     <View style={[styles.micButton, { backgroundColor: '#6B7280' }]}>
-      <Ionicons name="mic-off" size={20} color="#9CA3AF" />
+      <Ionicons name="mic-off" size={18} color="#9CA3AF" />
     </View>
   </View>
 );
@@ -450,7 +450,7 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
           end={{ x: 1, y: 1 }}
           style={styles.micButton}
         >
-          <Ionicons name="mic" size={20} color="#ffffff" />
+          <Ionicons name="mic" size={17} color="#ffffff" />
         </LinearGradient>
       )}
 
@@ -591,9 +591,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   micButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: PURPLE_PRIMARY,
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    height: 46,
+    height: 42,
     paddingHorizontal: 4,
     gap: 8,
   },

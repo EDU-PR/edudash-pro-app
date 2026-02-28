@@ -377,6 +377,8 @@ export interface ExamPrepConfig {
   classId?: string;
   schoolId?: string;
   lookbackDays?: number;
+  /** Teacher-provided delimitation/scope text to ground generated papers */
+  manualScopeText?: string;
 }
 
 export interface ExamContextSummary {
@@ -386,6 +388,9 @@ export interface ExamContextSummary {
   weakTopics: string[];
   sourceAssignmentIds?: string[];
   sourceLessonIds?: string[];
+  manualScopeUsed?: boolean;
+  manualScopeTopicCount?: number;
+  manualScopeTopics?: string[];
 }
 
 export interface ExamTeacherAlignmentSummary {
@@ -435,6 +440,7 @@ export interface ExamGenerationRequest {
   schoolId?: string;
   useTeacherContext?: boolean;
   lookbackDays?: number;
+  manualScopeText?: string;
   previewContext?: boolean;
   examIntentMode?: 'teacher_weighted' | 'caps_only';
   fullPaperMode?: boolean;

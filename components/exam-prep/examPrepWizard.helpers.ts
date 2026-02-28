@@ -19,6 +19,7 @@ export type ExamRouteParams = {
   examType: string;
   language: SouthAfricanLanguage;
   useTeacherContext: '0' | '1';
+  manualScopeText?: string;
 } & ContextEntityIds;
 
 export const SUBJECT_CATEGORY_OPTIONS: Array<{ id: SubjectCategory; label: string }> = [
@@ -96,6 +97,7 @@ export function buildExamRouteParams(input: {
   examType: string;
   language: SouthAfricanLanguage;
   useTeacherContext: boolean;
+  manualScopeText?: string;
   contextIds: ContextEntityIds;
 }): ExamRouteParams {
   const params: ExamRouteParams = {
@@ -110,6 +112,9 @@ export function buildExamRouteParams(input: {
   if (input.contextIds.studentId) params.studentId = input.contextIds.studentId;
   if (input.contextIds.classId) params.classId = input.contextIds.classId;
   if (input.contextIds.schoolId) params.schoolId = input.contextIds.schoolId;
+  if (input.manualScopeText && input.manualScopeText.trim().length > 0) {
+    params.manualScopeText = input.manualScopeText;
+  }
 
   return params;
 }

@@ -80,7 +80,6 @@ export function ProfileSwitcher({
       message: config.message,
       type: config.type,
       buttons: config.buttons,
-      renderInPlace: Platform.OS === 'web',
     });
   }, [showAlert]);
 
@@ -748,7 +747,7 @@ export function ProfileSwitcher({
             </Text>
           )}
         </View>
-        <AlertModal {...alertProps} renderInPlace={Platform.OS === 'web'} />
+        <AlertModal {...alertProps} />
       </View>
   );
 

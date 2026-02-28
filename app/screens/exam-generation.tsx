@@ -49,6 +49,7 @@ export default function ExamGenerationScreen() {
     schoolId?: string;
     childName?: string;
     useTeacherContext?: string;
+    manualScopeText?: string;
   }>();
 
   const grade = toSafeParam(params.grade);
@@ -60,6 +61,7 @@ export default function ExamGenerationScreen() {
   const schoolId = toSafeParam(params.schoolId);
   const childName = toSafeParam(params.childName);
   const useTeacherContext = toBool(toSafeParam(params.useTeacherContext), true);
+  const manualScopeText = toSafeParam(params.manualScopeText)?.trim() || '';
 
   const [state, setState] = useState<GenerationState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +126,7 @@ export default function ExamGenerationScreen() {
           classId,
           schoolId,
           useTeacherContext,
+          manualScopeText: manualScopeText.length > 0 ? manualScopeText : undefined,
           examIntentMode: useTeacherContext ? 'teacher_weighted' : 'caps_only',
           fullPaperMode: true,
           visualMode: 'hybrid',
@@ -176,7 +179,7 @@ export default function ExamGenerationScreen() {
       setError(message);
       setState('error');
     }
-  }, [grade, subject, examType, language, studentId, classId, schoolId, useTeacherContext, parseExamPayload]);
+  }, [grade, subject, examType, language, studentId, classId, schoolId, useTeacherContext, manualScopeText, parseExamPayload]);
 
   useEffect(() => {
     generateExam();

@@ -123,6 +123,9 @@ type ExamContextSummary = {
   sourceAssignmentIds: string[];
   sourceLessonIds: string[];
   intentTaggedCount?: number;
+  manualScopeUsed?: boolean;
+  manualScopeTopicCount?: number;
+  manualScopeTopics?: string[];
 };
 
 type ExamTeacherAlignmentSummary = {
@@ -188,6 +191,7 @@ const SUPPORTED_QUESTION_TYPES = new Set([
   'short_answer',
   'fill_in_blank',
 ]);
+const MAX_MANUAL_SCOPE_CHARS = 4000;
 
 const EXAM_SYSTEM_PROMPT = `You are an expert South African CAPS/DBE exam generator.
 Return ONLY valid JSON and no markdown.
@@ -729,6 +733,60 @@ function sanitizeTopic(value: string | null | undefined): string | null {
   return cleaned;
 }
 
+function normalizeManualScopeText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const cleaned = value
+    .replace(/\r/g, '\n')
+    .replace(/\u2022/g, '\n- ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!cleaned) return null;
+  return cleaned.slice(0, MAX_MANUAL_SCOPE_CHARS);
+}
+
+function extractManualScopeTopics(scopeText: string | null | undefined, subject: string): string[] {
+  if (!scopeText) return [];
+
+  const rawChunks = scopeText
+    .split(/\n|;|,|\|/g)
+    .map((chunk) =>
+      chunk
+        .replace(/^[\s\-*]+/, '')
+        .replace(/^\d+[\.\)]\s*/, '')
+        .replace(/^\(\d+\)\s*/, '')
+        .trim(),
+    )
+    .filter(Boolean);
+
+  const topics: string[] = [];
+
+  rawChunks.forEach((chunk) => {
+    // Ignore lines that are only page references.
+    if (/^page\s+\d+/i.test(chunk)) return;
+    if (/^p(age)?\.?\s*\d+/i.test(chunk)) return;
+
+    const normalized = chunk
+      .replace(/\s+/g, ' ')
+      .replace(/\b(page|pg|p)\.?\s*\d+(\s*[-–]\s*\d+)?/gi, '')
+      .trim();
+
+    const topic = sanitizeTopic(normalized || chunk);
+    if (!topic) return;
+    topics.push(topic);
+  });
+
+  const unique = [...new Set(topics.map((topic) => topic.toLowerCase()))]
+    .map((key) => topics.find((topic) => topic.toLowerCase() === key) || key)
+    .filter((topic) => topic.length >= 3)
+    .slice(0, 18);
+
+  if (unique.length > 0) return unique;
+
+  const fallback = sanitizeTopic(subject);
+  return fallback ? [fallback] : [];
+}
+
 function pickTopTopics(map: Map<string, number>, limit: number): string[] {
   return [...map.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -1186,7 +1244,8 @@ function computeBlueprintAudit(exam: any, grade: string, examType: string): Exam
 
 function computeTeacherAlignmentSummary(contextSummary: ExamContextSummary): ExamTeacherAlignmentSummary {
   const intentTaggedCount = Number(contextSummary.intentTaggedCount || 0);
-  const taughtSignals = contextSummary.assignmentCount + contextSummary.lessonCount + intentTaggedCount;
+  const manualSignals = Number(contextSummary.manualScopeTopicCount || 0) > 0 ? 1 : 0;
+  const taughtSignals = contextSummary.assignmentCount + contextSummary.lessonCount + intentTaggedCount + manualSignals;
   const weakSignals = contextSummary.weakTopics.length;
   const coverageScore = Math.max(
     0,
@@ -1557,8 +1616,12 @@ async function resolveTeacherContext(
     useTeacherContext: boolean;
     lookbackDays: number;
     examIntentMode: 'teacher_weighted' | 'caps_only';
+    manualScopeText?: string | null;
   },
 ): Promise<ExamContextSummary> {
+  const manualScopeTopics = extractManualScopeTopics(payload.manualScopeText, payload.subject);
+  const hasManualScope = manualScopeTopics.length > 0;
+
   const emptySummary: ExamContextSummary = {
     assignmentCount: 0,
     lessonCount: 0,
@@ -1566,9 +1629,19 @@ async function resolveTeacherContext(
     weakTopics: [],
     sourceAssignmentIds: [],
     sourceLessonIds: [],
+    manualScopeUsed: hasManualScope,
+    manualScopeTopicCount: manualScopeTopics.length,
+    manualScopeTopics,
   };
 
-  if (!payload.useTeacherContext) return emptySummary;
+  if (!payload.useTeacherContext) {
+    if (!hasManualScope) return emptySummary;
+
+    return {
+      ...emptySummary,
+      focusTopics: manualScopeTopics.slice(0, 8),
+    };
+  }
 
   const now = Date.now();
   const lookbackMs = now - payload.lookbackDays * 24 * 60 * 60 * 1000;
@@ -1666,6 +1739,12 @@ async function resolveTeacherContext(
   const weakMap = new Map<string, number>();
   const intentTaggedIds = new Set<string>();
 
+  if (hasManualScope) {
+    manualScopeTopics.forEach((topic, index) => {
+      addWeightedTopic(focusMap, topic, 12 - Math.min(index, 6));
+    });
+  }
+
   const assignmentById = new Map<string, HomeworkRow>();
   homeworkRows.forEach((assignment) => {
     assignmentById.set(assignment.id, assignment);
@@ -1739,6 +1818,9 @@ async function resolveTeacherContext(
     sourceAssignmentIds: assignmentIds,
     sourceLessonIds: lessonIds,
     intentTaggedCount: intentTaggedIds.size,
+    manualScopeUsed: hasManualScope,
+    manualScopeTopicCount: manualScopeTopics.length,
+    manualScopeTopics,
   };
 }
 
@@ -1908,6 +1990,7 @@ function buildUserPrompt(payload: {
   useTeacherContext: boolean;
   fullPaperMode: boolean;
   guidedMode: 'guided_first' | 'memo_first';
+  manualScopeText?: string | null;
 }) {
   const countPolicy = getQuestionCountPolicy(payload.grade, payload.examType);
   const locale = normalizeLanguageLocale(payload.language);
@@ -1951,6 +2034,18 @@ function buildUserPrompt(payload: {
     );
   } else {
     base.push('Teacher artifact context is disabled. Build from CAPS baseline only.');
+  }
+
+  if (payload.contextSummary.manualScopeUsed) {
+    const manualFocus = (payload.contextSummary.manualScopeTopics || []).slice(0, 12);
+    base.push(
+      `Teacher scope upload provided (${payload.contextSummary.manualScopeTopicCount || manualFocus.length} topics).`,
+      `Treat these scope topics as highest priority: ${manualFocus.join(', ') || payload.subject}.`,
+    );
+
+    if (payload.manualScopeText) {
+      base.push(`Scope notes from teacher resources:\n${payload.manualScopeText.slice(0, 1800)}`);
+    }
   }
 
   base.push(
@@ -2005,6 +2100,7 @@ serve(async (req: Request) => {
     const rawModelOverride = body?.model ? String(body.model).trim() : undefined;
     const modelOverride = rawModelOverride ? normalizeAnthropicModel(rawModelOverride) : undefined;
     const language = normalizeLanguageLocale(body?.language ? String(body.language) : 'en-ZA');
+    const manualScopeText = normalizeManualScopeText(body?.manualScopeText);
     const studentId = body?.studentId ? String(body.studentId) : undefined;
     const classId = body?.classId ? String(body.classId) : undefined;
     const schoolId = body?.schoolId ? String(body.schoolId) : undefined;
@@ -2042,6 +2138,7 @@ serve(async (req: Request) => {
       useTeacherContext,
       lookbackDays,
       examIntentMode,
+      manualScopeText,
     });
 
     if (previewContext) {
@@ -2143,6 +2240,7 @@ serve(async (req: Request) => {
       useTeacherContext,
       fullPaperMode,
       guidedMode,
+      manualScopeText,
     });
 
     console.log('[generate-exam] generating', {
@@ -2160,6 +2258,7 @@ serve(async (req: Request) => {
       fullPaperMode,
       visualMode,
       guidedMode,
+      manualScopeUsed: contextSummary.manualScopeUsed === true,
       assignmentCount: contextSummary.assignmentCount,
       lessonCount: contextSummary.lessonCount,
     });

@@ -138,6 +138,18 @@ function tokenSet(text: string): Set<string> {
   );
 }
 
+function extractNumericSeries(value: string): number[] {
+  return (String(value || '').match(/-?\d+(?:\.\d+)?/g) || [])
+    .map((part) => Number(part))
+    .filter((num) => Number.isFinite(num));
+}
+
+function numericSeriesEqual(a: number[], b: number[]): boolean {
+  if (!a.length || !b.length) return false;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => Math.abs(value - b[index]) < 1e-9);
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -225,6 +237,10 @@ function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeed
   const maxMarks = Math.max(1, Number(question.marks ?? question.points ?? 1) || 1);
   const answer = normalizeText(answerRaw);
   const explanation = String(question.explanation || '').trim() || undefined;
+  const qType = normalizeQuestionType(question.type);
+  const correctRaw =
+    String(question.correctAnswer || question.correct_answer || question.answer || '').trim();
+  const correct = normalizeText(correctRaw);
 
   if (!answer) {
     return {
@@ -237,8 +253,27 @@ function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeed
     };
   }
 
+  // For short/fill responses, prefer deterministic checks before heuristic grading.
+  if ((qType === 'short_answer' || qType === 'fill_in_blank') && correct) {
+    const directMatch = answer === correct;
+    const numericMatch = numericSeriesEqual(
+      extractNumericSeries(answerRaw),
+      extractNumericSeries(correctRaw),
+    );
+    if (directMatch || numericMatch) {
+      return {
+        isCorrect: true,
+        marksAwarded: maxMarks,
+        maxMarks,
+        feedback: explanation || 'Correct.',
+        explanation,
+        gradingMode: 'deterministic',
+      };
+    }
+  }
+
   const expectedSource = [
-    String(question.correctAnswer || question.correct_answer || question.answer || ''),
+    correctRaw,
     String(question.rubric || ''),
     String(question.explanation || ''),
   ]
@@ -259,13 +294,9 @@ function gradeOpenResponse(question: ExamQuestion, answerRaw: string): GradeFeed
   if (isCorrect) {
     feedback = explanation || 'Good response. You covered the key ideas.';
   } else if (weighted >= 0.35) {
-    feedback =
-      explanation ||
-      'Partially correct. Add more key terms and link your answer to the main concept.';
+    feedback = 'Partially correct. Add more key terms and link your answer to the main concept.';
   } else {
-    feedback =
-      explanation ||
-      'Needs improvement. Re-read the topic and include clearer key concepts in your answer.';
+    feedback = 'Needs improvement. Re-read the topic and include clearer key concepts in your answer.';
   }
 
   return {

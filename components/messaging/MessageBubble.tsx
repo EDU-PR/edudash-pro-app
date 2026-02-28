@@ -207,6 +207,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               styles.bubble,
               isOwn ? styles.bubbleOwn : styles.bubbleOther,
               isVoice && styles.voiceBubble,
+              (msg.content?.includes('[image](') || msg.content?.includes('[video](')) && styles.mediaBubble,
               !isLastInGroup && styles.bubbleMiddle,
             ]}
           >
@@ -279,9 +280,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               const imageMatch = msg.content?.match(/\[image\]\((.+?)\)/);
               const videoMatch = msg.content?.match(/\[video\]\((.+?)\)/);
               const screenWidth = Dimensions.get('window').width;
-              const maxMediaW = Math.min(screenWidth * 0.72, 280);
+              const maxMediaW = Math.min(screenWidth * 0.7, 248);
               const maxMediaH = 320;
-              const mediaRadius = 12;
+              const mediaRadius = 10;
               if (imageMatch) {
                 const imageUrl = imageMatch[1];
                 const caption = msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim();
@@ -555,8 +556,8 @@ const styles = StyleSheet.create({
   },
   bubble: { 
     borderRadius: 18, 
-    paddingHorizontal: 14, 
-    paddingVertical: 10,
+    paddingHorizontal: 11, 
+    paddingVertical: 8,
     minWidth: 96,
     borderWidth: 1,
   },
@@ -584,6 +585,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     paddingRight: 14,
+  },
+  mediaBubble: {
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   callCard: {
     minWidth: 220,
@@ -618,19 +624,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   mediaWrap: {
-    marginTop: 2,
+    marginTop: 1,
   },
   mediaImageContainer: {
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   mediaImage: {},
   mediaVideoContainer: {
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.2)',
-    minHeight: 140,
+    minHeight: 120,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   mediaVideoPlaceholder: {
     alignItems: 'center',

@@ -38,6 +38,7 @@ const KNOWN_VALID_ROUTES = new Set([
   '/screens/settings',
   '/screens/parent-activity-feed',
   '/screens/calendar',
+  '/screens/parent-annual-calendar',
   '/screens/parent-daily-program',
 ]);
 
